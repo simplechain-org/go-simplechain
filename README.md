@@ -8,6 +8,7 @@ Binary archives are published at https://github.com/simplechain-org/go-simplecha
 
 ## Simplechain development
 
+<div align=center><img src="./images/RoadmapEn.png" width=800 alt=""/></div>
 
 ## Building the source
 
