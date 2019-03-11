@@ -10,6 +10,9 @@ Binary archives are published at https://github.com/simplechain-org/go-simplecha
 
 <div align=center><img src="./images/RoadmapEn.png" width=800 alt=""/></div>
 
+[Simplechain Community Incentive System](https://medium.com/@SimpleChain/simplechain-community-incentive-system-c664d815f163) 
+[Bug Bounty of Simplechain Community](https://medium.com/@SimpleChain/bug-bounty-of-simplechain-community-e53f1099badc?sk=00a273473370bdc7988f8b93e8f37486)
+
 ## Building the source
 
 Building sipe requires both a Go (version 1.7 or later) and a C compiler.
