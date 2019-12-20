@@ -1,5 +1,10 @@
 ## Go Simplechain
 
+[![Build Status](https://travis-ci.org/simplechain-org/go-simplechain.svg?branch=dev)](https://travis-ci.org/simplechain-org/go-simplechain)
+[![GoDoc](https://godoc.org/github.com/simplechain-org/go-simplechain?status.svg)](https://godoc.org/github.com/simplechain-org/go-simplechain)
+[![Go Report Card](https://goreportcard.com/badge/github.com/simplechain-org/go-simplechain)](https://goreportcard.com/report/github.com/simplechain-org/go-simplechain)
+
+
 Official golang implementation of the Simplechain protocol.
 
 Automated builds are available for stable releases and the unstable master branch.
