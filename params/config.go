@@ -68,7 +68,7 @@ var (
 		PetersburgBlock:     big.NewInt(7280000),
 		IstanbulBlock:       big.NewInt(9069000),
 		MuirGlacierBlock:    big.NewInt(9200000),
-		//Ethash:              new(EthashConfig),
+		Ethash:              new(EthashConfig),
 		Scrypt: new(ScryptConfig),
 	}
 
@@ -108,7 +108,7 @@ var (
 		PetersburgBlock:     big.NewInt(4939394),
 		IstanbulBlock:       big.NewInt(6485846),
 		MuirGlacierBlock:    big.NewInt(7117117),
-		//Ethash:              new(EthashConfig),
+		Ethash:              new(EthashConfig),
 		Scrypt: new(ScryptConfig),
 	}
 
