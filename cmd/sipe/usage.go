@@ -251,6 +251,18 @@ var AppHelpFlagGroups = []flagGroup{
 		},
 	},
 	{
+		Name: "STRATUM",
+		Flags: []cli.Flag{
+			utils.StratumPort,
+			utils.StratumPassword,
+			utils.StratumMaxConn,
+			utils.StratumHashRate,
+			utils.StratumFanout,
+			utils.MinerType,
+			utils.CPUAgentOff,
+		},
+	},
+	{
 		Name: "MISC",
 	},
 }

@@ -174,6 +174,7 @@ type worker struct {
 	skipSealHook func(*task) bool                   // Method to decide whether skipping the sealing.
 	fullTaskHook func()                             // Method to call before pushing the full sealing task.
 	resubmitHook func(time.Duration, time.Duration) // Method to call upon updating resubmitting interval.
+	agents       map[Agent]struct{}
 }
 
 func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus.Engine, eth Backend, mux *event.TypeMux, isLocalBlock func(*types.Block) bool, init bool) *worker {
@@ -534,9 +535,10 @@ func (w *worker) taskLoop() {
 			w.pendingTasks[w.engine.SealHash(task.block.Header())] = task
 			w.pendingMu.Unlock()
 
-			if err := w.engine.Seal(w.chain, task.block, w.resultCh, stopCh); err != nil {
-				log.Warn("Block sealing failed", "err", err)
-			}
+			//if err := w.engine.Seal(w.chain, task.block, w.resultCh, stopCh); err != nil {
+			//	log.Warn("Block sealing failed", "err", err)
+			//}
+			w.seal(task.block)
 		case <-w.exitCh:
 			interrupt()
 			return
@@ -992,5 +994,30 @@ func (w *worker) postSideBlock(event core.ChainSideEvent) {
 	select {
 	case w.chainSideCh <- event:
 	case <-w.exitCh:
+	}
+}
+
+func (w *worker) register(agent Agent) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if agent == nil {
+		return
+	}
+	w.agents[agent] = struct{}{}
+	agent.SubscribeResult(w.resultCh)
+}
+
+func (w *worker) unregister(agent Agent) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	delete(w.agents, agent)
+	agent.Stop()
+}
+func (w *worker) seal(work *types.Block) {
+	if atomic.LoadInt32(&w.running) != 1 {
+		return
+	}
+	for agent := range w.agents {
+		agent.DispatchWork(work)
 	}
 }

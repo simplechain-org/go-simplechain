@@ -182,3 +182,22 @@ func (miner *Miner) SetEtherbase(addr common.Address) {
 	miner.coinbase = addr
 	miner.worker.setEtherbase(addr)
 }
+
+type Agent interface {
+	DispatchWork(block *types.Block)
+	SubscribeResult(ch chan<- *types.Block)
+	Stop()
+	Start()
+	GetHashRate() uint64
+}
+
+func (miner *Miner) Register(agent Agent) {
+	if miner.Mining() {
+		agent.Start()
+	}
+	miner.worker.register(agent)
+}
+
+func (miner *Miner) Unregister(agent Agent) {
+	miner.worker.unregister(agent)
+}

@@ -135,6 +135,23 @@ func rlpHash(x interface{}) (h common.Hash) {
 	hw.Sum(h[:0])
 	return h
 }
+func (h *Header) HashNoNonce() common.Hash {
+	return rlpHash([]interface{}{
+		h.ParentHash,
+		h.UncleHash,
+		h.Coinbase,
+		h.Root,
+		h.TxHash,
+		h.ReceiptHash,
+		h.Bloom,
+		h.Difficulty,
+		h.Number,
+		h.GasLimit,
+		h.GasUsed,
+		h.Time,
+		h.Extra,
+	})
+}
 
 // Body is a simple (mutable, non-safe) data container for storing and moving
 // a block's data contents (transactions and uncles) together.
@@ -334,7 +351,9 @@ func (b *Block) Size() common.StorageSize {
 	b.size.Store(common.StorageSize(c))
 	return common.StorageSize(c)
 }
-
+func (b *Block) HashNoNonce() common.Hash {
+	return b.header.HashNoNonce()
+}
 // SanityCheck can be used to prevent that unbounded fields are
 // stuffed with junk data to add processing overhead
 func (b *Block) SanityCheck() error {

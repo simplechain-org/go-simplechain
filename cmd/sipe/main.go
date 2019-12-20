@@ -19,6 +19,8 @@ package main
 
 import (
 	"fmt"
+	"github.com/simplechain-org/go-simplechain/miner"
+	"github.com/simplechain-org/go-simplechain/stratum"
 	"math"
 	"os"
 	"runtime"
@@ -427,6 +429,38 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 		threads := ctx.GlobalInt(utils.MinerLegacyThreadsFlag.Name)
 		if ctx.GlobalIsSet(utils.MinerThreadsFlag.Name) {
 			threads = ctx.GlobalInt(utils.MinerThreadsFlag.Name)
+		}
+		//Use stratum if requested
+		if ctx.GlobalString(utils.MinerType.Name) == "stratum" {
+			log.Info("MinerType", "MinerType", ctx.GlobalString(utils.MinerType.Name))
+			port := ctx.GlobalString(utils.StratumPort.Name)
+			log.Info("[stratum]Server port", "port", port)
+			auth := stratum.NewSimpleAuth(ctx.GlobalString(utils.StratumPassword.Name))
+			maxConn := ctx.GlobalInt(utils.StratumMaxConn.Name)
+			var calcHashRate bool = false
+			if ctx.GlobalBool(utils.StratumHashRate.Name) {
+				calcHashRate = true
+				log.Info("calc stratum miner's hashRate")
+			}
+			fanOut:=ctx.GlobalBool(utils.StratumFanout.Name)
+			stratumServer, err := stratum.NewServer(port, uint(maxConn), auth, calcHashRate,fanOut)
+			if err != nil {
+				log.Info("[stratum]Server init error", "err", err.Error())
+				return
+			}
+			stratumAgent := miner.NewStratumAgent(ethereum.BlockChain(), ethereum.Engine())
+			stratumAgent.Register(stratumServer)
+			if !ctx.GlobalBool(utils.CPUAgentOff.Name) {
+				cpuMinerAgent := miner.NewCpuAgent(ethereum.BlockChain(), ethereum.Engine())
+				ethereum.Miner().Register(cpuMinerAgent)
+				log.Info("CPU miner agent registered")
+			}
+			ethereum.Miner().Register(stratumAgent)
+			log.Info("Stratum miner agent registered")
+		} else {
+			//cpu miner
+			cpuMinerAgent := miner.NewCpuAgent(ethereum.BlockChain(), ethereum.Engine())
+			ethereum.Miner().Register(cpuMinerAgent)
 		}
 		if err := ethereum.StartMining(threads); err != nil {
 			utils.Fatalf("Failed to start mining: %v", err)
