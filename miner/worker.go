@@ -200,6 +200,7 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 		startCh:            make(chan struct{}, 1),
 		resubmitIntervalCh: make(chan time.Duration),
 		resubmitAdjustCh:   make(chan *intervalAdjust, resubmitAdjustChanSize),
+		agents:             make(map[Agent]struct{}),
 	}
 	// Subscribe NewTxsEvent for tx pool
 	worker.txsSub = eth.TxPool().SubscribeNewTxsEvent(worker.txsCh)
@@ -266,12 +267,24 @@ func (w *worker) pendingBlock() *types.Block {
 
 // start sets the running status as 1 and triggers new work submitting.
 func (w *worker) start() {
+    w.mu.Lock()
+    defer w.mu.Unlock()
 	atomic.StoreInt32(&w.running, 1)
 	w.startCh <- struct{}{}
+	for agent := range w.agents {
+		agent.Start()
+	}
 }
 
 // stop sets the running status as 0.
 func (w *worker) stop() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if atomic.LoadInt32(&w.running) == 1 {
+		for agent := range w.agents {
+			agent.Stop()
+		}
+	}
 	atomic.StoreInt32(&w.running, 0)
 }
 
@@ -535,9 +548,6 @@ func (w *worker) taskLoop() {
 			w.pendingTasks[w.engine.SealHash(task.block.Header())] = task
 			w.pendingMu.Unlock()
 
-			//if err := w.engine.Seal(w.chain, task.block, w.resultCh, stopCh); err != nil {
-			//	log.Warn("Block sealing failed", "err", err)
-			//}
 			w.seal(task.block)
 		case <-w.exitCh:
 			interrupt()

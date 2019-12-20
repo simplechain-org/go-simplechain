@@ -369,22 +369,10 @@ func (this *Session) handleSubmit(req *Request) error {
 		this.sendResponse(result)
 		return nil
 	}
-
-	log.Info("[Session] handleSubmit", "taskId", taskId, "nonce", nonce)
-
-	log.Info("[Session] handleSubmit", "hash", hexutil.Encode(task.PowHash.Bytes()))
-
-	log.Info("[Session] handleSubmit", "difficulty", task.Difficulty)
-
 	target := new(big.Int).Div(maxUint256, task.Difficulty)
-
 	_, result := scrypt.ScryptHash(task.PowHash.Bytes(), nonce)
-
-	intResult := new(big.Int).SetBytes(result)
-
-	if intResult.Cmp(target) <= 0 {
+	if new(big.Int).SetBytes(result).Cmp(target) <= 0 {
 		this.onSubmit(nonce)
-		log.Info("[Session] handleSubmit mine succeed", "MinerName", this.minerName, "nonce", nonce)
 		this.nonceSubmitMeter()
 		response := &Response{Error: nil, Id: req.Id, Result: true, Method: method}
 		this.sendResponse(response)

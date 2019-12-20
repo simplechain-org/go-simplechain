@@ -1,7 +1,6 @@
 package stratum
 
 import (
-	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"math/big"
 	"math/rand"
 	"net"
@@ -68,14 +67,14 @@ func NewServer(address string, maxConn uint, auth Auth,calcHashRate bool, fanOut
 	}
 	_, _, err := net.SplitHostPort(address)
 	if err != nil {
-		log.Error("[stratum]Wrong address format", "error", err)
+		log.Error("[Server] wrong address format", "error", err)
 		return nil, err
 	}
 	return server, nil
 }
 
 func (this *Server) Start() {
-	log.Info("[Server]Starting")
+	log.Info("[Server] starting")
 	if atomic.LoadInt32(&this.running) == 1 {
 		log.Info("server is running,no need to start")
 		return
@@ -92,7 +91,7 @@ func (this *Server) Start() {
 	}
 	go this.listen()
 	if this.calcHashRate{
-		go this.HashRateMeter()
+		go this.hashRateMeterLoop()
 	}
 }
 
@@ -101,7 +100,7 @@ loop:
 	for {
 		select {
 		case <-this.stop:
-			log.Debug("[Server] Start done")
+			log.Debug("[Server] listen done")
 			return
 		default:
 			for {
@@ -112,7 +111,7 @@ loop:
 					continue
 				}
 				this.listener = listener
-				log.Info("[Server]Listen for accepting")
+				log.Info("[Server] listen for accepting")
 				break
 			}
 			break loop
@@ -131,7 +130,7 @@ loop:
 	for {
 		select {
 		case <-this.stop:
-			log.Debug("[Server] Start done")
+			log.Debug("[Server] listen done")
 			return
 		default:
 			this.acquire()
@@ -148,7 +147,7 @@ loop:
 
 func (this *Server) handleConn(conn net.Conn) {
 	sessionId := this.newSessionId()
-	log.Warn("[Server] Accepting New Session", "id", sessionId)
+	log.Warn("[Server] accepting New Session", "id", sessionId)
 	sessionDifficulty := big.NewInt(InitDifficulty)
 	newSession := NewSession(this.auth, sessionId, conn, sessionDifficulty)
 	newSession.RegisterAuthorizeFunc(this.onSessionAuthorize)
@@ -204,7 +203,6 @@ func (this *Server) onSessionSubmit(nonce uint64) {
 	_, result := scrypt.ScryptHash(mineTask.Hash.Bytes(), nonce)
 	intResult := new(big.Int).SetBytes(result)
 	if intResult.Cmp(serverTarget) <= 0 {
-		log.Error("[Server]onSubmit", "nonce", nonce)
 		atomic.AddUint64(&this.acceptQuantity, mineTask.Difficulty.Uint64())
 		this.submitNonce(nonce)
 	}
@@ -224,7 +222,6 @@ func (this *Server) newSessionId() string {
 
 //Called by node
 func (this *Server) Dispatch(hash common.Hash, difficulty *big.Int, nonceBegin, nonceEnd uint64) {
-	log.Info("[Server] Dispatch", "hash", hexutil.Encode(hash.Bytes()))
 	atomic.AddUint64(&this.taskId, 1)
 	this.mineTask.Store(&MineTask{Hash: hash, Difficulty: difficulty})
 	if atomic.LoadInt32(&this.authorizedLen) == 0 {
@@ -389,8 +386,8 @@ func (this *Server) ReadResult() chan uint64 {
 	return this.resultChan
 }
 
-func (this *Server) HashRateMeter() {
-	log.Info("[Server]HashRateMeter start")
+func (this *Server) hashRateMeterLoop() {
+	log.Info("[Server]hashRateMeterLoop start")
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -407,9 +404,9 @@ func (this *Server) HashRateMeter() {
 				total += v
 			}
 			atomic.StoreUint64(&this.hashRate, total/uint64(len(this.hashRateMeter)))
-			log.Info("[Server] HashRateMeter","hashRate",atomic.LoadUint64(&this.hashRate))
+			log.Info("[Server] hashRateMeterLoop","hashRate",atomic.LoadUint64(&this.hashRate))
 		case <-this.stop:
-			log.Debug("[Server] HashRateMeter done")
+			log.Debug("[Server] hashRateMeterLoop done")
 			return
 		}
 	}

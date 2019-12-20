@@ -129,7 +129,6 @@ func (self *StratumAgent) resultLoop(agentCtx context.Context) {
 			hash := work.HashNoNonce()
 			digest, result := scrypt.ScryptHash(hash[:], nonce)
 			target := new(big.Int).Div(maxUint256, work.Difficulty())
-			log.Info("[StratumAgent] received nonce", "nonce", nonce, "difficulty", work.Difficulty())
 			if big.NewInt(0).SetBytes(result).Cmp(target) < 0 {
 				header := types.CopyHeader(work.Header())
 				header.Nonce = types.EncodeNonce(nonce)
