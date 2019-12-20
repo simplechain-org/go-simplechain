@@ -353,8 +353,8 @@ func DefaultGenesisBlock() *Genesis {
 		Timestamp:  1546531200,
 		Nonce:      312,
 		ExtraData:  hexutil.MustDecode(SipeGenesisBlockExtraData),
-		GasLimit:   800000,
-		Difficulty: big.NewInt(1200),
+		GasLimit:   50000,
+		Difficulty: big.NewInt(120000),
 		Alloc:      GenesisAlloc{},
 	}
 }

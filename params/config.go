@@ -29,7 +29,7 @@ import (
 var (
 	MainnetGenesisHash = common.HexToHash("0xda24a722f45ce6cb3aa7cb735a14b830869142be54ada9f8e2c27c877def648b")
 	TestnetGenesisHash = common.HexToHash("0xfc26e8a96571fab7c359830a0651bcb442cdd63af5927fb1c74e4dddb7b759ae")
-	FoundationAddress = common.HexToAddress("0x992ec45ae0d2d2fcf97f4417cfd3f80505862fbc")
+	FoundationAddress  = common.HexToAddress("0x992ec45ae0d2d2fcf97f4417cfd3f80505862fbc")
 	//RinkebyGenesisHash = common.HexToHash("0x6341fd3daf94b748c72ced5a5b26028f2474f5f00d824504e4fa37a75767e177")
 	//GoerliGenesisHash  = common.HexToHash("0xbf7e331f7f7c1dd2e05159666b3bf8bc7a8a3a9eb1d518969eab529dd9b88c1a")
 )
@@ -68,8 +68,8 @@ var (
 		PetersburgBlock:     big.NewInt(7280000),
 		IstanbulBlock:       big.NewInt(9069000),
 		MuirGlacierBlock:    big.NewInt(9200000),
-		Ethash:              new(EthashConfig),
-		Scrypt:    			 new(ScryptConfig),
+		//Ethash:              new(EthashConfig),
+		Scrypt: new(ScryptConfig),
 	}
 
 	// MainnetTrustedCheckpoint contains the light client trusted checkpoint for the main network.
@@ -108,8 +108,8 @@ var (
 		PetersburgBlock:     big.NewInt(4939394),
 		IstanbulBlock:       big.NewInt(6485846),
 		MuirGlacierBlock:    big.NewInt(7117117),
-		Ethash:              new(EthashConfig),
-		Scrypt:    			 new(ScryptConfig),
+		//Ethash:              new(EthashConfig),
+		Scrypt: new(ScryptConfig),
 	}
 
 	// TestnetTrustedCheckpoint contains the light client trusted checkpoint for the Ropsten test network.
@@ -174,44 +174,44 @@ var (
 	}
 
 	// GoerliChainConfig contains the chain parameters to run a node on the Görli test network.
-	//GoerliChainConfig = &ChainConfig{
-	//	ChainID:             big.NewInt(5),
-	//	HomesteadBlock:      big.NewInt(0),
-	//	DAOForkBlock:        nil,
-	//	DAOForkSupport:      true,
-	//	EIP150Block:         big.NewInt(0),
-	//	EIP155Block:         big.NewInt(0),
-	//	EIP158Block:         big.NewInt(0),
-	//	ByzantiumBlock:      big.NewInt(0),
-	//	ConstantinopleBlock: big.NewInt(0),
-	//	PetersburgBlock:     big.NewInt(0),
-	//	IstanbulBlock:       big.NewInt(1561651),
-	//	Clique: &CliqueConfig{
-	//		Period: 15,
-	//		Epoch:  30000,
-	//	},
-	//}
+	GoerliChainConfig = &ChainConfig{
+		ChainID:             big.NewInt(5),
+		HomesteadBlock:      big.NewInt(0),
+		DAOForkBlock:        nil,
+		DAOForkSupport:      true,
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(1561651),
+		Clique: &CliqueConfig{
+			Period: 15,
+			Epoch:  30000,
+		},
+	}
 
 	// GoerliTrustedCheckpoint contains the light client trusted checkpoint for the Görli test network.
-	//GoerliTrustedCheckpoint = &TrustedCheckpoint{
-	//	SectionIndex: 52,
-	//	SectionHead:  common.HexToHash("0x64c3bbc896578cbf782e343db48e334177e87fb8b16106b75e1dcebf59ca59dc"),
-	//	CHTRoot:      common.HexToHash("0x5d092e644f3815de40b8c4196698d3e34a9097cf3066a499c96e83e3927d8b8d"),
-	//	BloomRoot:    common.HexToHash("0xb2ceb966b499dd9e6e5bf6adbf35440a0e15cbccc0f527f89a1c522a9f36250a"),
-	//}
+	GoerliTrustedCheckpoint = &TrustedCheckpoint{
+		SectionIndex: 52,
+		SectionHead:  common.HexToHash("0x64c3bbc896578cbf782e343db48e334177e87fb8b16106b75e1dcebf59ca59dc"),
+		CHTRoot:      common.HexToHash("0x5d092e644f3815de40b8c4196698d3e34a9097cf3066a499c96e83e3927d8b8d"),
+		BloomRoot:    common.HexToHash("0xb2ceb966b499dd9e6e5bf6adbf35440a0e15cbccc0f527f89a1c522a9f36250a"),
+	}
 
 	// GoerliCheckpointOracle contains a set of configs for the Goerli test network oracle.
-	//GoerliCheckpointOracle = &CheckpointOracleConfig{
-	//	Address: common.HexToAddress("0x18CA0E045F0D772a851BC7e48357Bcaab0a0795D"),
-	//	Signers: []common.Address{
-	//		common.HexToAddress("0x4769bcaD07e3b938B7f43EB7D278Bc7Cb9efFb38"), // Peter
-	//		common.HexToAddress("0x78d1aD571A1A09D60D9BBf25894b44e4C8859595"), // Martin
-	//		common.HexToAddress("0x286834935f4A8Cfb4FF4C77D5770C2775aE2b0E7"), // Zsolt
-	//		common.HexToAddress("0xb86e2B0Ab5A4B1373e40c51A7C712c70Ba2f9f8E"), // Gary
-	//		common.HexToAddress("0x0DF8fa387C602AE62559cC4aFa4972A7045d6707"), // Guillaume
-	//	},
-	//	Threshold: 2,
-	//}
+	GoerliCheckpointOracle = &CheckpointOracleConfig{
+		Address: common.HexToAddress("0x18CA0E045F0D772a851BC7e48357Bcaab0a0795D"),
+		Signers: []common.Address{
+			common.HexToAddress("0x4769bcaD07e3b938B7f43EB7D278Bc7Cb9efFb38"), // Peter
+			common.HexToAddress("0x78d1aD571A1A09D60D9BBf25894b44e4C8859595"), // Martin
+			common.HexToAddress("0x286834935f4A8Cfb4FF4C77D5770C2775aE2b0E7"), // Zsolt
+			common.HexToAddress("0xb86e2B0Ab5A4B1373e40c51A7C712c70Ba2f9f8E"), // Gary
+			common.HexToAddress("0x0DF8fa387C602AE62559cC4aFa4972A7045d6707"), // Guillaume
+		},
+		Threshold: 2,
+	}
 
 	// AllEthashProtocolChanges contains every protocol change (EIPs) introduced
 	// and accepted by the Ethereum core developers into the Ethash consensus.
