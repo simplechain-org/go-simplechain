@@ -419,6 +419,38 @@ var (
 		Usage: "Target gas floor for mined blocks",
 		Value: eth.DefaultConfig.Miner.GasFloor,
 	}
+	MinerType = cli.StringFlag{
+		Name:  "minertype",
+		Usage: "MinerType, `default` -> cpu, `stratum` -> stratum protocol",
+		Value: "default",
+	}
+	CPUAgentOff = cli.BoolFlag{
+		Name:  "cpuagentoff",
+		Usage: "CPUAgentOff, if turn off cpu miner agent while using stratum protocol",
+	}
+	StratumPort = cli.StringFlag{
+		Name:  "stratum.port",
+		Usage: "stratum protocol listening port",
+		Value: ":8801",
+	}
+	StratumMaxConn = cli.IntFlag{
+		Name:  "stratum.max",
+		Usage: "Stratum Max Connection, default = 100",
+		Value: 100,
+	}
+	StratumFanout = cli.BoolFlag{
+		Name:  "stratum.fanout",
+		Usage: "fanout, if turn on, stratum server send same task to each session",
+	}
+	StratumPassword = cli.StringFlag{
+		Name:  "stratum.password",
+		Usage: "stratum protocol password, default: no password",
+		Value: "",
+	}
+	StratumHashRate = cli.BoolFlag{
+		Name:  "stratum.hashrate",
+		Usage: "calc stratum miner's hashRate , if turn on,sipe can estimate stratum miner's HashRate",
+	}
 	MinerLegacyGasTargetFlag = cli.Uint64Flag{
 		Name:  "targetgaslimit",
 		Usage: "Target gas floor for mined blocks (deprecated, use --miner.gastarget)",
