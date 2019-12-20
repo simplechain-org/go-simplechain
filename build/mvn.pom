@@ -4,12 +4,12 @@
                       http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
-  <groupId>com.simplechain</groupId>
-  <artifactId>sipe</artifactId>
+  <groupId>org.ethereum</groupId>
+  <artifactId>geth</artifactId>
   <version>{{.Version}}</version>
   <packaging>aar</packaging>
 
-  <name>Android Simplechain Client</name>
+  <name>Android Ethereum Client</name>
   <description>Android port of the go-simplechain libraries and node</description>
   <url>https://github.com/simplechain-org/go-simplechain</url>
   <inceptionYear>2015</inceptionYear>
@@ -23,8 +23,8 @@
   </licenses>
 
   <organization>
-    <name>Simplechain</name>
-    <url>https://simplechain.com</url>
+    <name>Ethereum</name>
+    <url>https://ethereum.org</url>
   </organization>
 
   <developers>

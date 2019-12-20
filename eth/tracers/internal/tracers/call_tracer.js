@@ -38,18 +38,18 @@
 			var op = log.op.toString();
 		}
 		// If a new contract is being created, add to the call stack
-		if (syscall && op == 'CREATE') {
+		if (syscall && (op == 'CREATE' || op == "CREATE2")) {
 			var inOff = log.stack.peek(1).valueOf();
 			var inEnd = inOff + log.stack.peek(2).valueOf();
 
 			// Assemble the internal call report and store for completion
 			var call = {
-				type:    op,
-				from:    toHex(log.contract.getAddress()),
-				input:   toHex(log.memory.slice(inOff, inEnd)),
-				gasIn:   log.getGas(),
+				type: op,
+				from: toHex(log.contract.getAddress()),
+				input: toHex(log.memory.slice(inOff, inEnd)),
+				gasIn: log.getGas(),
 				gasCost: log.getCost(),
-				value:   '0x' + log.stack.peek(0).toString(16)
+				value: '0x' + log.stack.peek(0).toString(16)
 			};
 			this.callstack.push(call);
 			this.descended = true
@@ -58,10 +58,12 @@
 		// If a contract is being self destructed, gather that as a subcall too
 		if (syscall && op == 'SELFDESTRUCT') {
 			var left = this.callstack.length;
-			if (this.callstack[left-1].calls === undefined) {
-				this.callstack[left-1].calls = [];
+			if (this.callstack[left - 1].calls === undefined) {
+				this.callstack[left - 1].calls = [];
 			}
-			this.callstack[left-1].calls.push({type: op});
+			this.callstack[left - 1].calls.push({
+				type: op
+			});
 			return
 		}
 		// If a new method invocation is being done, add to the call stack
@@ -78,14 +80,14 @@
 
 			// Assemble the internal call report and store for completion
 			var call = {
-				type:    op,
-				from:    toHex(log.contract.getAddress()),
-				to:      toHex(to),
-				input:   toHex(log.memory.slice(inOff, inEnd)),
-				gasIn:   log.getGas(),
+				type: op,
+				from: toHex(log.contract.getAddress()),
+				to: toHex(to),
+				input: toHex(log.memory.slice(inOff, inEnd)),
+				gasIn: log.getGas(),
 				gasCost: log.getCost(),
-				outOff:  log.stack.peek(4 + off).valueOf(),
-				outLen:  log.stack.peek(5 + off).valueOf()
+				outOff: log.stack.peek(4 + off).valueOf(),
+				outLen: log.stack.peek(5 + off).valueOf()
 			};
 			if (op != 'DELEGATECALL' && op != 'STATICCALL') {
 				call.value = '0x' + log.stack.peek(2).toString(16);
@@ -116,14 +118,15 @@
 			// Pop off the last call and get the execution results
 			var call = this.callstack.pop();
 
-			if (call.type == 'CREATE') {
+			if (call.type == 'CREATE' || call.type == "CREATE2") {
 				// If the call was a CREATE, retrieve the contract address and output code
 				call.gasUsed = '0x' + bigInt(call.gasIn - call.gasCost - log.getGas()).toString(16);
-				delete call.gasIn; delete call.gasCost;
+				delete call.gasIn;
+				delete call.gasCost;
 
 				var ret = log.stack.peek(0);
 				if (!ret.equals(0)) {
-					call.to     = toHex(toAddress(ret.toString(16)));
+					call.to = toHex(toAddress(ret.toString(16)));
 					call.output = toHex(db.getCode(toAddress(ret.toString(16))));
 				} else if (call.error === undefined) {
 					call.error = "internal failure"; // TODO(karalabe): surface these faults somehow
@@ -140,18 +143,20 @@
 						call.error = "internal failure"; // TODO(karalabe): surface these faults somehow
 					}
 				}
-				delete call.gasIn; delete call.gasCost;
-				delete call.outOff; delete call.outLen;
+				delete call.gasIn;
+				delete call.gasCost;
+				delete call.outOff;
+				delete call.outLen;
 			}
 			if (call.gas !== undefined) {
 				call.gas = '0x' + bigInt(call.gas).toString(16);
 			}
 			// Inject the call into the previous one
 			var left = this.callstack.length;
-			if (this.callstack[left-1].calls === undefined) {
-				this.callstack[left-1].calls = [];
+			if (this.callstack[left - 1].calls === undefined) {
+				this.callstack[left - 1].calls = [];
 			}
-			this.callstack[left-1].calls.push(call);
+			this.callstack[left - 1].calls.push(call);
 		}
 	},
 
@@ -170,16 +175,18 @@
 			call.gas = '0x' + bigInt(call.gas).toString(16);
 			call.gasUsed = call.gas
 		}
-		delete call.gasIn; delete call.gasCost;
-		delete call.outOff; delete call.outLen;
+		delete call.gasIn;
+		delete call.gasCost;
+		delete call.outOff;
+		delete call.outLen;
 
 		// Flatten the failed call into its parent
 		var left = this.callstack.length;
 		if (left > 0) {
-			if (this.callstack[left-1].calls === undefined) {
-				this.callstack[left-1].calls = [];
+			if (this.callstack[left - 1].calls === undefined) {
+				this.callstack[left - 1].calls = [];
 			}
-			this.callstack[left-1].calls.push(call);
+			this.callstack[left - 1].calls.push(call);
 			return;
 		}
 		// Last call failed too, leave it in the stack
@@ -190,15 +197,15 @@
 	// the final result of the tracing.
 	result: function(ctx, db) {
 		var result = {
-			type:    ctx.type,
-			from:    toHex(ctx.from),
-			to:      toHex(ctx.to),
-			value:   '0x' + ctx.value.toString(16),
-			gas:     '0x' + bigInt(ctx.gas).toString(16),
+			type: ctx.type,
+			from: toHex(ctx.from),
+			to: toHex(ctx.to),
+			value: '0x' + ctx.value.toString(16),
+			gas: '0x' + bigInt(ctx.gas).toString(16),
 			gasUsed: '0x' + bigInt(ctx.gasUsed).toString(16),
-			input:   toHex(ctx.input),
-			output:  toHex(ctx.output),
-			time:    ctx.time,
+			input: toHex(ctx.input),
+			output: toHex(ctx.output),
+			time: ctx.time,
 		};
 		if (this.callstack[0].calls !== undefined) {
 			result.calls = this.callstack[0].calls;
@@ -219,17 +226,17 @@
 	// to users who don't interpret it, just display it.
 	finalize: function(call) {
 		var sorted = {
-			type:    call.type,
-			from:    call.from,
-			to:      call.to,
-			value:   call.value,
-			gas:     call.gas,
+			type: call.type,
+			from: call.from,
+			to: call.to,
+			value: call.value,
+			gas: call.gas,
 			gasUsed: call.gasUsed,
-			input:   call.input,
-			output:  call.output,
-			error:   call.error,
-			time:    call.time,
-			calls:   call.calls,
+			input: call.input,
+			output: call.output,
+			error: call.error,
+			time: call.time,
+			calls: call.calls,
 		}
 		for (var key in sorted) {
 			if (sorted[key] === undefined) {
@@ -237,7 +244,7 @@
 			}
 		}
 		if (sorted.calls !== undefined) {
-			for (var i=0; i<sorted.calls.length; i++) {
+			for (var i = 0; i < sorted.calls.length; i++) {
 				sorted.calls[i] = this.finalize(sorted.calls[i]);
 			}
 		}

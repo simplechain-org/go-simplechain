@@ -76,7 +76,7 @@ func TestWhisperBasic(t *testing.T) {
 		t.Fatalf("failed w.Envelopes().")
 	}
 
-	derived := pbkdf2.Key([]byte(peerID), nil, 65356, aesKeyLength, sha256.New)
+	derived := pbkdf2.Key(peerID, nil, 65356, aesKeyLength, sha256.New)
 	if !validateDataIntegrity(derived, aesKeyLength) {
 		t.Fatalf("failed validateSymmetricKey with param = %v.", derived)
 	}
@@ -262,13 +262,12 @@ func TestWhisperIdentityManagement(t *testing.T) {
 func TestWhisperSymKeyManagement(t *testing.T) {
 	InitSingleTest()
 
-	var err error
-	var k1, k2 []byte
-	w := New(&DefaultConfig)
-	id1 := string("arbitrary-string-1")
-	id2 := string("arbitrary-string-2")
-
-	id1, err = w.GenerateSymKey()
+	var (
+		k1, k2 []byte
+		w      = New(&DefaultConfig)
+		id2    = string("arbitrary-string-2")
+	)
+	id1, err := w.GenerateSymKey()
 	if err != nil {
 		t.Fatalf("failed GenerateSymKey with seed %d: %s.", seed, err)
 	}
@@ -465,27 +464,34 @@ func TestExpiry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed generateMessageParams with seed %d: %s.", seed, err)
 	}
-
 	params.TTL = 1
-	msg, err := NewSentMessage(params)
-	if err != nil {
-		t.Fatalf("failed to create new message with seed %d: %s.", seed, err)
-	}
-	env, err := msg.Wrap(params)
-	if err != nil {
-		t.Fatalf("failed Wrap with seed %d: %s.", seed, err)
-	}
 
-	err = w.Send(env)
-	if err != nil {
-		t.Fatalf("failed to send envelope with seed %d: %s.", seed, err)
+	messagesCount := 5
+
+	// Send a few messages one after another. Due to low PoW and expiration buckets
+	// with one second resolution, it covers a case when there are multiple items
+	// in a single expiration bucket.
+	for i := 0; i < messagesCount; i++ {
+		msg, err := NewSentMessage(params)
+		if err != nil {
+			t.Fatalf("failed to create new message with seed %d: %s.", seed, err)
+		}
+		env, err := msg.Wrap(params)
+		if err != nil {
+			t.Fatalf("failed Wrap with seed %d: %s.", seed, err)
+		}
+
+		err = w.Send(env)
+		if err != nil {
+			t.Fatalf("failed to send envelope with seed %d: %s.", seed, err)
+		}
 	}
 
 	// wait till received or timeout
 	var received, expired bool
 	for j := 0; j < 20; j++ {
 		time.Sleep(100 * time.Millisecond)
-		if len(w.Envelopes()) > 0 {
+		if len(w.Envelopes()) == messagesCount {
 			received = true
 			break
 		}

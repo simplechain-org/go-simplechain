@@ -27,6 +27,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"text/template"
 	"time"
@@ -50,10 +51,12 @@ type TestCmd struct {
 	stdout *bufio.Reader
 	stdin  io.WriteCloser
 	stderr *testlogger
+	// Err will contain the process exit error or interrupt signal error
+	Err error
 }
 
 // Run exec's the current binary using name as argv[0] which will trigger the
-// reexec init function for that name (e.g. "sipe-test" in cmd/sipe/run_test.go)
+// reexec init function for that name (e.g. "sipe-test" in cmd/geth/run_test.go)
 func (tt *TestCmd) Run(name string, args ...string) {
 	tt.stderr = &testlogger{t: tt.T}
 	tt.cmd = &exec.Cmd{
@@ -77,7 +80,7 @@ func (tt *TestCmd) Run(name string, args ...string) {
 // InputLine writes the given text to the childs stdin.
 // This method can also be called from an expect template, e.g.:
 //
-//     sipe.expect(`Passphrase: {{.InputLine "password"}}`)
+//     geth.expect(`Passphrase: {{.InputLine "password"}}`)
 func (tt *TestCmd) InputLine(s string) string {
 	io.WriteString(tt.stdin, s+"\n")
 	return ""
@@ -124,12 +127,12 @@ func (tt *TestCmd) matchExactOutput(want []byte) error {
 		// Find the mismatch position.
 		for i := 0; i < n; i++ {
 			if want[i] != buf[i] {
-				return fmt.Errorf("Output mismatch at ◊:\n---------------- (stdout text)\n%s◊%s\n---------------- (expected text)\n%s",
+				return fmt.Errorf("output mismatch at ◊:\n---------------- (stdout text)\n%s◊%s\n---------------- (expected text)\n%s",
 					buf[:i], buf[i:n], want)
 			}
 		}
 		if n < len(want) {
-			return fmt.Errorf("Not enough output, got until ◊:\n---------------- (stdout text)\n%s\n---------------- (expected text)\n%s◊%s",
+			return fmt.Errorf("not enough output, got until ◊:\n---------------- (stdout text)\n%s\n---------------- (expected text)\n%s◊%s",
 				buf, want[:n], want[n:])
 		}
 	}
@@ -182,11 +185,25 @@ func (tt *TestCmd) ExpectExit() {
 }
 
 func (tt *TestCmd) WaitExit() {
-	tt.cmd.Wait()
+	tt.Err = tt.cmd.Wait()
 }
 
 func (tt *TestCmd) Interrupt() {
-	tt.cmd.Process.Signal(os.Interrupt)
+	tt.Err = tt.cmd.Process.Signal(os.Interrupt)
+}
+
+// ExitStatus exposes the process' OS exit code
+// It will only return a valid value after the process has finished.
+func (tt *TestCmd) ExitStatus() int {
+	if tt.Err != nil {
+		exitErr := tt.Err.(*exec.ExitError)
+		if exitErr != nil {
+			if status, ok := exitErr.Sys().(syscall.WaitStatus); ok {
+				return status.ExitStatus()
+			}
+		}
+	}
+	return 0
 }
 
 // StderrText returns any stderr output written so far.
@@ -230,7 +247,6 @@ func (tl *testlogger) Write(b []byte) (n int, err error) {
 	lines := bytes.Split(b, []byte("\n"))
 	for _, line := range lines {
 		if len(line) > 0 {
-
 			tl.t.Logf("(stderr) %s", line)
 		}
 	}

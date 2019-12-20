@@ -216,25 +216,25 @@ func TestBilinearity(t *testing.T) {
 	}
 }
 
-//func TestG1Marshal(t *testing.T) {
-//	g := new(G1).ScalarBaseMult(new(big.Int).SetInt64(1))
-//	form := g.Marshal()
-//	_, err := new(G1).Unmarshal(form)
-//	if err != nil {
-//		t.Fatalf("failed to unmarshal")
-//	}
-//
-//	g.ScalarBaseMult(Order)
-//	form = g.Marshal()
-//
-//	g2 := new(G1)
-//	if _, err = g2.Unmarshal(form); err != nil {
-//		t.Fatalf("failed to unmarshal ∞")
-//	}
-//	if !g2.p.IsInfinity() {
-//		t.Fatalf("∞ unmarshaled incorrectly")
-//	}
-//}
+func TestG1Marshal(t *testing.T) {
+	g := new(G1).ScalarBaseMult(new(big.Int).SetInt64(1))
+	form := g.Marshal()
+	_, err := new(G1).Unmarshal(form)
+	if err != nil {
+		t.Fatalf("failed to unmarshal")
+	}
+
+	g.ScalarBaseMult(Order)
+	form = g.Marshal()
+
+	g2 := new(G1)
+	if _, err = g2.Unmarshal(form); err != nil {
+		t.Fatalf("failed to unmarshal ∞")
+	}
+	if !g2.p.IsInfinity() {
+		t.Fatalf("∞ unmarshaled incorrectly")
+	}
+}
 
 func TestG2Marshal(t *testing.T) {
 	g := new(G2).ScalarBaseMult(new(big.Int).SetInt64(1))

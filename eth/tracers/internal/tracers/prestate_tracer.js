@@ -21,13 +21,13 @@
 	prestate: null,
 
 	// lookupAccount injects the specified account into the prestate object.
-	lookupAccount: function(addr, db){
+	lookupAccount: function(addr, db) {
 		var acc = toHex(addr);
 		if (this.prestate[acc] === undefined) {
 			this.prestate[acc] = {
 				balance: '0x' + db.getBalance(addr).toString(16),
-				nonce:   db.getNonce(addr),
-				code:    toHex(db.getCode(addr)),
+				nonce: db.getNonce(addr),
+				code: toHex(db.getCode(addr)),
 				storage: {}
 			};
 		}
@@ -35,15 +35,12 @@
 
 	// lookupStorage injects the specified storage entry of the given account into
 	// the prestate object.
-	lookupStorage: function(addr, key, db){
+	lookupStorage: function(addr, key, db) {
 		var acc = toHex(addr);
 		var idx = toHex(key);
 
 		if (this.prestate[acc].storage[idx] === undefined) {
-			var val = toHex(db.getState(addr, key));
-			if (val != "0x0000000000000000000000000000000000000000000000000000000000000000") {
-				this.prestate[acc].storage[idx] = toHex(db.getState(addr, key));
-			}
+			this.prestate[acc].storage[idx] = toHex(db.getState(addr, key));
 		}
 	},
 
@@ -55,10 +52,10 @@
 		this.lookupAccount(ctx.from, db);
 
 		var fromBal = bigInt(this.prestate[toHex(ctx.from)].balance.slice(2), 16);
-		var toBal   = bigInt(this.prestate[toHex(ctx.to)].balance.slice(2), 16);
+		var toBal = bigInt(this.prestate[toHex(ctx.to)].balance.slice(2), 16);
 
-		this.prestate[toHex(ctx.to)].balance   = '0x'+toBal.subtract(ctx.value).toString(16);
-		this.prestate[toHex(ctx.from)].balance = '0x'+fromBal.add(ctx.value).toString(16);
+		this.prestate[toHex(ctx.to)].balance = '0x' + toBal.subtract(ctx.value).toString(16);
+		this.prestate[toHex(ctx.from)].balance = '0x' + fromBal.add(ctx.value).toString(16);
 
 		// Decrement the caller's nonce, and remove empty create targets
 		this.prestate[toHex(ctx.from)].nonce--;
@@ -74,7 +71,7 @@
 	// step is invoked for every opcode that the VM executes.
 	step: function(log, db) {
 		// Add the current account if we just started tracing
-		if (this.prestate === null){
+		if (this.prestate === null) {
 			this.prestate = {};
 			// Balance will potentially be wrong here, since this will include the value
 			// sent along with the message. We fix that in 'result()'.
@@ -82,17 +79,31 @@
 		}
 		// Whenever new state is accessed, add it to the prestate
 		switch (log.op.toString()) {
-			case "EXTCODECOPY": case "EXTCODESIZE": case "BALANCE":
+			case "EXTCODECOPY":
+			case "EXTCODESIZE":
+			case "BALANCE":
 				this.lookupAccount(toAddress(log.stack.peek(0).toString(16)), db);
 				break;
 			case "CREATE":
 				var from = log.contract.getAddress();
 				this.lookupAccount(toContract(from, db.getNonce(from)), db);
 				break;
-			case "CALL": case "CALLCODE": case "DELEGATECALL": case "STATICCALL":
+			case "CREATE2":
+				var from = log.contract.getAddress();
+				// stack: salt, size, offset, endowment
+				var offset = log.stack.peek(1).valueOf()
+				var size = log.stack.peek(2).valueOf()
+				var end = offset + size
+				this.lookupAccount(toContract2(from, log.stack.peek(3).toString(16), log.memory.slice(offset, end)), db);
+				break;
+			case "CALL":
+			case "CALLCODE":
+			case "DELEGATECALL":
+			case "STATICCALL":
 				this.lookupAccount(toAddress(log.stack.peek(1).toString(16)), db);
 				break;
-			case 'SSTORE':case 'SLOAD':
+			case 'SSTORE':
+			case 'SLOAD':
 				this.lookupStorage(log.contract.getAddress(), toWord(log.stack.peek(0).toString(16)), db);
 				break;
 		}

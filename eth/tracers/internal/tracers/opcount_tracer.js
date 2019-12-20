@@ -21,12 +21,16 @@
 	count: 0,
 
 	// step is invoked for every opcode that the VM executes.
-	step: function(log, db) { this.count++ },
+	step: function(log, db) {
+		this.count++
+	},
 
 	// fault is invoked when the actual execution of an opcode fails.
-	fault: function(log, db) { },
+	fault: function(log, db) {},
 
 	// result is invoked when all the opcodes have been iterated over and returns
 	// the final result of the tracing.
-	result: function(ctx, db) { return this.count }
+	result: function(ctx, db) {
+		return this.count
+	}
 }

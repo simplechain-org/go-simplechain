@@ -25,12 +25,11 @@
     step: function(log, db) {
         var op = log.op.toString();
         var depth = log.getDepth();
-        if (depth == this.lastDepth){
-            var key = this.lastOp+'-'+op;
-            if (this.hist[key]){
+        if (depth == this.lastDepth) {
+            var key = this.lastOp + '-' + op;
+            if (this.hist[key]) {
                 this.hist[key]++;
-            }
-            else {
+            } else {
                 this.hist[key] = 1;
             }
         }

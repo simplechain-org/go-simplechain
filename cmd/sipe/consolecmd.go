@@ -41,8 +41,9 @@ var (
 		Flags:    append(append(append(nodeFlags, rpcFlags...), consoleFlags...), whisperFlags...),
 		Category: "CONSOLE COMMANDS",
 		Description: `
-The Sipe console is an interactive shell for the JavaScript runtime environment
-which exposes a node admin interface as well as the Ðapp JavaScript API.`,
+The Geth console is an interactive shell for the JavaScript runtime environment
+which exposes a node admin interface as well as the Ðapp JavaScript API.
+See https://github.com/simplechain-org/go-simplechain/wiki/JavaScript-Console.`,
 	}
 
 	attachCommand = cli.Command{
@@ -53,9 +54,10 @@ which exposes a node admin interface as well as the Ðapp JavaScript API.`,
 		Flags:     append(consoleFlags, utils.DataDirFlag),
 		Category:  "CONSOLE COMMANDS",
 		Description: `
-The Sipe console is an interactive shell for the JavaScript runtime environment
+The Geth console is an interactive shell for the JavaScript runtime environment
 which exposes a node admin interface as well as the Ðapp JavaScript API.
-This command allows to open a console on a running sipe node.`,
+See https://github.com/simplechain-org/go-simplechain/wiki/JavaScript-Console.
+This command allows to open a console on a running geth node.`,
 	}
 
 	javascriptCommand = cli.Command{
@@ -67,7 +69,7 @@ This command allows to open a console on a running sipe node.`,
 		Category:  "CONSOLE COMMANDS",
 		Description: `
 The JavaScript VM exposes a node admin interface as well as the Ðapp
-JavaScript API.`,
+JavaScript API. See https://github.com/simplechain-org/go-simplechain/wiki/JavaScript-Console`,
 	}
 )
 
@@ -75,14 +77,15 @@ JavaScript API.`,
 // same time.
 func localConsole(ctx *cli.Context) error {
 	// Create and start the node based on the CLI flags
+	prepare(ctx)
 	node := makeFullNode(ctx)
 	startNode(ctx, node)
-	defer node.Stop()
+	defer node.Close()
 
 	// Attach to the newly started node and start the JavaScript console
 	client, err := node.Attach()
 	if err != nil {
-		utils.Fatalf("Failed to attach to the inproc sipe: %v", err)
+		utils.Fatalf("Failed to attach to the inproc geth: %v", err)
 	}
 	config := console.Config{
 		DataDir: utils.MakeDataDir(ctx),
@@ -130,7 +133,7 @@ func remoteConsole(ctx *cli.Context) error {
 	}
 	client, err := dialRPC(endpoint)
 	if err != nil {
-		utils.Fatalf("Unable to attach to remote sipe: %v", err)
+		utils.Fatalf("Unable to attach to remote geth: %v", err)
 	}
 	config := console.Config{
 		DataDir: utils.MakeDataDir(ctx),
@@ -178,12 +181,12 @@ func ephemeralConsole(ctx *cli.Context) error {
 	// Create and start the node based on the CLI flags
 	node := makeFullNode(ctx)
 	startNode(ctx, node)
-	defer node.Stop()
+	defer node.Close()
 
 	// Attach to the newly started node and start the JavaScript console
 	client, err := node.Attach()
 	if err != nil {
-		utils.Fatalf("Failed to attach to the inproc sipe: %v", err)
+		utils.Fatalf("Failed to attach to the inproc geth: %v", err)
 	}
 	config := console.Config{
 		DataDir: utils.MakeDataDir(ctx),

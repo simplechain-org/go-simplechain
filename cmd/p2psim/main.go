@@ -47,7 +47,7 @@ import (
 
 	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/p2p"
-	"github.com/simplechain-org/go-simplechain/p2p/discover"
+	"github.com/simplechain-org/go-simplechain/p2p/enode"
 	"github.com/simplechain-org/go-simplechain/p2p/simulations"
 	"github.com/simplechain-org/go-simplechain/p2p/simulations/adapters"
 	"github.com/simplechain-org/go-simplechain/rpc"
@@ -285,7 +285,7 @@ func createNode(ctx *cli.Context) error {
 		if err != nil {
 			return err
 		}
-		config.ID = discover.PubkeyID(&privKey.PublicKey)
+		config.ID = enode.PubkeyToIDV4(&privKey.PublicKey)
 		config.PrivateKey = privKey
 	}
 	if services := ctx.String("services"); services != "" {

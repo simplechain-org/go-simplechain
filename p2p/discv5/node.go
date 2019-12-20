@@ -66,23 +66,6 @@ func (n *Node) addr() *net.UDPAddr {
 	return &net.UDPAddr{IP: n.IP, Port: int(n.UDP)}
 }
 
-func (n *Node) setAddr(a *net.UDPAddr) {
-	n.IP = a.IP
-	if ipv4 := a.IP.To4(); ipv4 != nil {
-		n.IP = ipv4
-	}
-	n.UDP = uint16(a.Port)
-}
-
-// compares the given address against the stored values.
-func (n *Node) addrEqual(a *net.UDPAddr) bool {
-	ip := a.IP
-	if ipv4 := a.IP.To4(); ipv4 != nil {
-		ip = ipv4
-	}
-	return n.UDP == uint16(a.Port) && n.IP.Equal(ip)
-}
-
 // Incomplete returns true for nodes with no IP address.
 func (n *Node) Incomplete() bool {
 	return n.IP == nil
@@ -326,14 +309,6 @@ func (n NodeID) Pubkey() (*ecdsa.PublicKey, error) {
 	return p, nil
 }
 
-func (id NodeID) mustPubkey() ecdsa.PublicKey {
-	pk, err := id.Pubkey()
-	if err != nil {
-		panic(err)
-	}
-	return *pk
-}
-
 // recoverNodeID computes the public key used to sign the
 // given hash from the signature.
 func recoverNodeID(hash, sig []byte) (id NodeID, err error) {
@@ -367,8 +342,6 @@ func distcmp(target, a, b common.Hash) int {
 }
 
 // table of leading zero counts for bytes [0..255]
-//统计单字节中以二进制表示的前置零的个数
-//如 0x33 十进制 51 二进制表示 0011 0011 ，前置零个数为2 ，lzcount[51] == 2
 var lzcount = [256]int{
 	8, 7, 6, 6, 5, 5, 5, 5,
 	4, 4, 4, 4, 4, 4, 4, 4,

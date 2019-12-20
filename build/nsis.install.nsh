@@ -1,41 +1,41 @@
-Name "sipe ${MAJORVERSION}.${MINORVERSION}.${BUILDVERSION}" # VERSION variables set through command line arguments
+Name "geth ${MAJORVERSION}.${MINORVERSION}.${BUILDVERSION}" # VERSION variables set through command line arguments
 InstallDir "$InstDir"
 OutFile "${OUTPUTFILE}" # set through command line arguments
 
 # Links for "Add/Remove Programs"
 !define HELPURL "https://github.com/simplechain-org/go-simplechain/issues"
 !define UPDATEURL "https://github.com/simplechain-org/go-simplechain/releases"
-!define ABOUTURL "https://github.com/simplechain-org/go-simplechain"
+!define ABOUTURL "https://github.com/simplechain-org/go-simplechain#ethereum-go"
 !define /date NOW "%Y%m%d"
 
 PageEx license
   LicenseData {{.License}}
 PageExEnd
 
-# Install sipe binary
-Section "Sipe" SIPE_IDX
+# Install geth binary
+Section "Geth" GETH_IDX
   SetOutPath $INSTDIR
-  file {{.Sipe}}
+  file {{.Geth}}
 
   # Create start menu launcher
   createDirectory "$SMPROGRAMS\${APPNAME}"
-  createShortCut "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk" "$INSTDIR\sipe.exe" "--fast" "--cache=512"
-  createShortCut "$SMPROGRAMS\${APPNAME}\Attach.lnk" "$INSTDIR\sipe.exe" "attach" "" ""
+  createShortCut "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk" "$INSTDIR\geth.exe" "--fast" "--cache=512"
+  createShortCut "$SMPROGRAMS\${APPNAME}\Attach.lnk" "$INSTDIR\geth.exe" "attach" "" ""
   createShortCut "$SMPROGRAMS\${APPNAME}\Uninstall.lnk" "$INSTDIR\uninstall.exe" "" "" ""
 
   # Firewall - remove rules (if exists)
-  SimpleFC::AdvRemoveRule "Sipe incoming peers (TCP:30312)"
-  SimpleFC::AdvRemoveRule "Sipe outgoing peers (TCP:30312)"
-  SimpleFC::AdvRemoveRule "Sipe UDP discovery (UDP:30312)"
+  SimpleFC::AdvRemoveRule "Geth incoming peers (TCP:30303)"
+  SimpleFC::AdvRemoveRule "Geth outgoing peers (TCP:30303)"
+  SimpleFC::AdvRemoveRule "Geth UDP discovery (UDP:30303)"
 
   # Firewall - add rules
-  SimpleFC::AdvAddRule "Sipe incoming peers (TCP:30312)" ""  6 1 1 2147483647 1 "$INSTDIR\sipe.exe" "" "" "Simplechain" 30312 "" "" ""
-  SimpleFC::AdvAddRule "Sipe outgoing peers (TCP:30312)" ""  6 2 1 2147483647 1 "$INSTDIR\sipe.exe" "" "" "Simplechain" "" 30312 "" ""
-  SimpleFC::AdvAddRule "Sipe UDP discovery (UDP:30312)" "" 17 2 1 2147483647 1 "$INSTDIR\sipe.exe" "" "" "Simplechain" "" 30312 "" ""
+  SimpleFC::AdvAddRule "Geth incoming peers (TCP:30303)" ""  6 1 1 2147483647 1 "$INSTDIR\geth.exe" "" "" "Ethereum" 30303 "" "" ""
+  SimpleFC::AdvAddRule "Geth outgoing peers (TCP:30303)" ""  6 2 1 2147483647 1 "$INSTDIR\geth.exe" "" "" "Ethereum" "" 30303 "" ""
+  SimpleFC::AdvAddRule "Geth UDP discovery (UDP:30303)" "" 17 2 1 2147483647 1 "$INSTDIR\geth.exe" "" "" "Ethereum" "" 30303 "" ""
 
-  # Set default IPC endpoint
-  ${EnvVarUpdate} $0 "SIMPLECHAIN_SOCKET" "R" "HKLM" "\\.\pipe\sipe.ipc"
-  ${EnvVarUpdate} $0 "SIMPLECHAIN_SOCKET" "A" "HKLM" "\\.\pipe\sipe.ipc"
+  # Set default IPC endpoint (https://github.com/ethereum/EIPs/issues/147)
+  ${EnvVarUpdate} $0 "ETHEREUM_SOCKET" "R" "HKLM" "\\.\pipe\geth.ipc"
+  ${EnvVarUpdate} $0 "ETHEREUM_SOCKET" "A" "HKLM" "\\.\pipe\geth.ipc"
 
   # Add instdir to PATH
   Push "$INSTDIR"
@@ -54,8 +54,8 @@ Var GetInstalledSize.total
 Function GetInstalledSize
   StrCpy $GetInstalledSize.total 0
 
-  ${if} ${SectionIsSelected} ${SIPE_IDX}
-    SectionGetSize ${SIPE_IDX} $0
+  ${if} ${SectionIsSelected} ${GETH_IDX}
+    SectionGetSize ${GETH_IDX} $0
     IntOp $GetInstalledSize.total $GetInstalledSize.total + $0
   ${endif}
 

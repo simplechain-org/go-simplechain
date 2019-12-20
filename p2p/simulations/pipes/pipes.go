@@ -1,4 +1,4 @@
-// Copyright 2017 The go-simplechain Authors
+// Copyright 2018 The go-simplechain Authors
 // This file is part of the go-simplechain library.
 //
 // The go-simplechain library is free software: you can redistribute it and/or modify

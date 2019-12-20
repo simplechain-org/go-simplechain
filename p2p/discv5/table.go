@@ -14,12 +14,8 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-simplechain library. If not, see <http://www.gnu.org/licenses/>.
 
-// Package discv5 implements the RLPx v5 Topic Discovery Protocol.
-//
-// The Topic Discovery protocol provides a way to find RLPx nodes that
-// can be connected to. It uses a Kademlia-like protocol to maintain a
-// distributed database of the IDs and endpoints of all listening
-// nodes.
+// Package discv5 is a prototype implementation of Discvery v5.
+// Deprecated: do not use this package.
 package discv5
 
 import (
@@ -81,7 +77,7 @@ func (tab *Table) chooseBucketRefreshTarget() common.Hash {
 	if printTable {
 		fmt.Println()
 	}
-	for i, b := range tab.buckets {
+	for i, b := range &tab.buckets {
 		entries += len(b.entries)
 		if printTable {
 			for _, e := range b.entries {
@@ -93,7 +89,7 @@ func (tab *Table) chooseBucketRefreshTarget() common.Hash {
 	prefix := binary.BigEndian.Uint64(tab.self.sha[0:8])
 	dist := ^uint64(0)
 	entry := int(randUint(uint32(entries + 1)))
-	for _, b := range tab.buckets {
+	for _, b := range &tab.buckets {
 		if entry < len(b.entries) {
 			n := b.entries[entry]
 			dist = binary.BigEndian.Uint64(n.sha[0:8]) ^ prefix
@@ -121,9 +117,9 @@ func (tab *Table) readRandomNodes(buf []*Node) (n int) {
 	// TODO: tree-based buckets would help here
 	// Find all non-empty buckets and get a fresh slice of their entries.
 	var buckets [][]*Node
-	for _, b := range tab.buckets {
+	for _, b := range &tab.buckets {
 		if len(b.entries) > 0 {
-			buckets = append(buckets, b.entries[:])
+			buckets = append(buckets, b.entries)
 		}
 	}
 	if len(buckets) == 0 {
@@ -175,7 +171,7 @@ func (tab *Table) closest(target common.Hash, nresults int) *nodesByDistance {
 	// obviously correct. I believe that tree-based buckets would make
 	// this easier to implement efficiently.
 	close := &nodesByDistance{target: target}
-	for _, b := range tab.buckets {
+	for _, b := range &tab.buckets {
 		for _, n := range b.entries {
 			close.push(n, nresults)
 		}

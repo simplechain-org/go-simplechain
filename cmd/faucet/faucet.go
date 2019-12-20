@@ -41,6 +41,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/simplechain-org/go-simplechain/accounts"
 	"github.com/simplechain-org/go-simplechain/accounts/keystore"
 	"github.com/simplechain-org/go-simplechain/common"
@@ -54,11 +55,10 @@ import (
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/node"
 	"github.com/simplechain-org/go-simplechain/p2p"
-	"github.com/simplechain-org/go-simplechain/p2p/discover"
 	"github.com/simplechain-org/go-simplechain/p2p/discv5"
+	"github.com/simplechain-org/go-simplechain/p2p/enode"
 	"github.com/simplechain-org/go-simplechain/p2p/nat"
 	"github.com/simplechain-org/go-simplechain/params"
-	"golang.org/x/net/websocket"
 )
 
 var (
@@ -66,7 +66,7 @@ var (
 	apiPortFlag = flag.Int("apiport", 8080, "Listener port for the HTTP API connection")
 	ethPortFlag = flag.Int("ethport", 30303, "Listener port for the devp2p connection")
 	bootFlag    = flag.String("bootnodes", "", "Comma separated bootnode enode URLs to seed with")
-	netFlag     = flag.Uint64("network", 0, "Network ID to use for the Simplechain protocol")
+	netFlag     = flag.Uint64("network", 0, "Network ID to use for the Ethereum protocol")
 	statsFlag   = flag.String("ethstats", "", "Ethstats network monitoring auth string")
 
 	netnameFlag = flag.String("faucet.name", "", "Network name to assign to the faucet")
@@ -81,11 +81,16 @@ var (
 	captchaSecret = flag.String("captcha.secret", "", "Recaptcha secret key to authenticate server side")
 
 	noauthFlag = flag.Bool("noauth", false, "Enables funding requests without authentication")
-	logFlag    = flag.Int("loglevel", 3, "Log level to use for Simplechain and the faucet")
+	logFlag    = flag.Int("loglevel", 3, "Log level to use for Ethereum and the faucet")
 )
 
 var (
 	ether = new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil)
+)
+
+var (
+	gitCommit = "" // Git SHA1 commit hash of the release (set via linker flags)
+	gitDate   = "" // Git commit date YYYYMMDD of the release (set via linker flags)
 )
 
 func main() {
@@ -157,7 +162,8 @@ func main() {
 	if blob, err = ioutil.ReadFile(*accPassFlag); err != nil {
 		log.Crit("Failed to read account password contents", "file", *accPassFlag, "err", err)
 	}
-	pass := string(blob)
+	// Delete trailing newline in password
+	pass := strings.TrimSuffix(string(blob), "\n")
 
 	ks := keystore.NewKeyStore(filepath.Join(os.Getenv("HOME"), ".faucet", "keys"), keystore.StandardScryptN, keystore.StandardScryptP)
 	if blob, err = ioutil.ReadFile(*accJSONFlag); err != nil {
@@ -184,20 +190,22 @@ func main() {
 // request represents an accepted funding request.
 type request struct {
 	Avatar  string             `json:"avatar"`  // Avatar URL to make the UI nicer
-	Account common.Address     `json:"account"` // Simplechain address being funded
+	Account common.Address     `json:"account"` // Ethereum address being funded
 	Time    time.Time          `json:"time"`    // Timestamp when the request was accepted
 	Tx      *types.Transaction `json:"tx"`      // Transaction funding the account
 }
 
-// faucet represents a crypto faucet backed by an Simplechain light client.
+// faucet represents a crypto faucet backed by an Ethereum light client.
 type faucet struct {
 	config *params.ChainConfig // Chain configurations for signing
-	stack  *node.Node          // Simplechain protocol stack
-	client *ethclient.Client   // Client connection to the Simplechain chain
+	stack  *node.Node          // Ethereum protocol stack
+	client *ethclient.Client   // Client connection to the Ethereum chain
 	index  []byte              // Index page to serve up on the web
 
 	keystore *keystore.KeyStore // Keystore containing the single signer
 	account  accounts.Account   // Account funding user faucet requests
+	head     *types.Header      // Current head header of the faucet
+	balance  *big.Int           // Current balance of the faucet
 	nonce    uint64             // Current pending nonce of the faucet
 	price    *big.Int           // Current gas price to issue funds with
 
@@ -213,7 +221,7 @@ func newFaucet(genesis *core.Genesis, port int, enodes []*discv5.Node, network u
 	// Assemble the raw devp2p protocol stack
 	stack, err := node.New(&node.Config{
 		Name:    "geth",
-		Version: params.VersionWithMeta,
+		Version: params.VersionWithCommit(gitCommit, gitDate),
 		DataDir: filepath.Join(os.Getenv("HOME"), ".faucet"),
 		P2P: p2p.Config{
 			NAT:              nat.Any(),
@@ -227,7 +235,7 @@ func newFaucet(genesis *core.Genesis, port int, enodes []*discv5.Node, network u
 	if err != nil {
 		return nil, err
 	}
-	// Assemble the Simplechain light client protocol
+	// Assemble the Ethereum light client protocol
 	if err := stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
 		cfg := eth.DefaultConfig
 		cfg.SyncMode = downloader.LightSync
@@ -240,7 +248,7 @@ func newFaucet(genesis *core.Genesis, port int, enodes []*discv5.Node, network u
 	// Assemble the ethstats monitoring and reporting service'
 	if stats != "" {
 		if err := stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
-			var serv *les.LightSimplechain
+			var serv *les.LightEthereum
 			ctx.Service(&serv)
 			return ethstats.New(stats, nil, serv)
 		}); err != nil {
@@ -252,8 +260,10 @@ func newFaucet(genesis *core.Genesis, port int, enodes []*discv5.Node, network u
 		return nil, err
 	}
 	for _, boot := range enodes {
-		old, _ := discover.ParseNode(boot.String())
-		stack.Server().AddPeer(old)
+		old, err := enode.Parse(enode.ValidSchemes, boot.String())
+		if err == nil {
+			stack.Server().AddPeer(old)
+		}
 	}
 	// Attach to the client and retrieve and interesting metadatas
 	api, err := stack.Attach()
@@ -275,9 +285,9 @@ func newFaucet(genesis *core.Genesis, port int, enodes []*discv5.Node, network u
 	}, nil
 }
 
-// close terminates the Simplechain connection and tears down the faucet.
+// close terminates the Ethereum connection and tears down the faucet.
 func (f *faucet) close() error {
-	return f.stack.Stop()
+	return f.stack.Close()
 }
 
 // listenAndServe registers the HTTP handlers for the faucet and boots it up
@@ -286,8 +296,7 @@ func (f *faucet) listenAndServe(port int) error {
 	go f.loop()
 
 	http.HandleFunc("/", f.webHandler)
-	http.Handle("/api", websocket.Handler(f.apiHandler))
-
+	http.HandleFunc("/api", f.apiHandler)
 	return http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
 }
 
@@ -298,7 +307,13 @@ func (f *faucet) webHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // apiHandler handles requests for Ether grants and transaction statuses.
-func (f *faucet) apiHandler(conn *websocket.Conn) {
+func (f *faucet) apiHandler(w http.ResponseWriter, r *http.Request) {
+	upgrader := websocket.Upgrader{}
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		return
+	}
+
 	// Start tracking the connection and drop at the end
 	defer conn.Close()
 
@@ -321,35 +336,32 @@ func (f *faucet) apiHandler(conn *websocket.Conn) {
 		head    *types.Header
 		balance *big.Int
 		nonce   uint64
-		err     error
 	)
-	for {
-		// Attempt to retrieve the stats, may error on no faucet connectivity
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		head, err = f.client.HeaderByNumber(ctx, nil)
-		if err == nil {
-			balance, err = f.client.BalanceAt(ctx, f.account.Address, head.Number)
-			if err == nil {
-				nonce, err = f.client.NonceAt(ctx, f.account.Address, nil)
-			}
+	for head == nil || balance == nil {
+		// Retrieve the current stats cached by the faucet
+		f.lock.RLock()
+		if f.head != nil {
+			head = types.CopyHeader(f.head)
 		}
-		cancel()
+		if f.balance != nil {
+			balance = new(big.Int).Set(f.balance)
+		}
+		nonce = f.nonce
+		f.lock.RUnlock()
 
-		// If stats retrieval failed, wait a bit and retry
-		if err != nil {
-			if err = sendError(conn, errors.New("Faucet offline: "+err.Error())); err != nil {
+		if head == nil || balance == nil {
+			// Report the faucet offline until initial stats are ready
+			//lint:ignore ST1005 This error is to be displayed in the browser
+			if err = sendError(conn, errors.New("Faucet offline")); err != nil {
 				log.Warn("Failed to send faucet error to client", "err", err)
 				return
 			}
 			time.Sleep(3 * time.Second)
-			continue
 		}
-		// Initial stats reported successfully, proceed with user interaction
-		break
 	}
 	// Send over the initial stats and the latest header
 	if err = send(conn, map[string]interface{}{
-		"funds":    balance.Div(balance, ether),
+		"funds":    new(big.Int).Div(balance, ether),
 		"funded":   nonce,
 		"peers":    f.stack.Server().PeerCount(),
 		"requests": f.reqs,
@@ -369,7 +381,7 @@ func (f *faucet) apiHandler(conn *websocket.Conn) {
 			Tier    uint   `json:"tier"`
 			Captcha string `json:"captcha"`
 		}
-		if err = websocket.JSON.Receive(conn, &msg); err != nil {
+		if err = conn.ReadJSON(&msg); err != nil {
 			return
 		}
 		if !*noauthFlag && !strings.HasPrefix(msg.URL, "https://gist.github.com/") && !strings.HasPrefix(msg.URL, "https://twitter.com/") &&
@@ -381,6 +393,7 @@ func (f *faucet) apiHandler(conn *websocket.Conn) {
 			continue
 		}
 		if msg.Tier >= uint(*tiersFlag) {
+			//lint:ignore ST1005 This error is to be displayed in the browser
 			if err = sendError(conn, errors.New("Invalid funding tier requested")); err != nil {
 				log.Warn("Failed to send tier error to client", "err", err)
 				return
@@ -418,6 +431,7 @@ func (f *faucet) apiHandler(conn *websocket.Conn) {
 			}
 			if !result.Success {
 				log.Warn("Captcha verification failed", "err", string(result.Errors))
+				//lint:ignore ST1005 it's funny and the robot won't mind
 				if err = sendError(conn, errors.New("Beep-bop, you're a robot!")); err != nil {
 					log.Warn("Failed to send captcha failure to client", "err", err)
 					return
@@ -425,7 +439,7 @@ func (f *faucet) apiHandler(conn *websocket.Conn) {
 				continue
 			}
 		}
-		// Retrieve the Simplechain address to fund, the requesting user and a profile picture
+		// Retrieve the Ethereum address to fund, the requesting user and a profile picture
 		var (
 			username string
 			avatar   string
@@ -438,15 +452,21 @@ func (f *faucet) apiHandler(conn *websocket.Conn) {
 				return
 			}
 			continue
+		case strings.HasPrefix(msg.URL, "https://plus.google.com/"):
+			//lint:ignore ST1005 Google is a company name and should be capitalized.
+			if err = sendError(conn, errors.New("Google+ authentication discontinued as the service was sunset")); err != nil {
+				log.Warn("Failed to send Google+ deprecation to client", "err", err)
+				return
+			}
+			continue
 		case strings.HasPrefix(msg.URL, "https://twitter.com/"):
 			username, avatar, address, err = authTwitter(msg.URL)
-		case strings.HasPrefix(msg.URL, "https://plus.google.com/"):
-			username, avatar, address, err = authGooglePlus(msg.URL)
 		case strings.HasPrefix(msg.URL, "https://www.facebook.com/"):
 			username, avatar, address, err = authFacebook(msg.URL)
 		case *noauthFlag:
 			username, avatar, address, err = authNoAuth(msg.URL)
 		default:
+			//lint:ignore ST1005 This error is to be displayed in the browser
 			err = errors.New("Something funky happened, please open an issue at https://github.com/simplechain-org/go-simplechain/issues")
 		}
 		if err != nil {
@@ -495,14 +515,17 @@ func (f *faucet) apiHandler(conn *websocket.Conn) {
 				Time:    time.Now(),
 				Tx:      signed,
 			})
-			f.timeouts[username] = time.Now().Add(time.Duration(*minutesFlag*int(math.Pow(3, float64(msg.Tier)))) * time.Minute)
+			timeout := time.Duration(*minutesFlag*int(math.Pow(3, float64(msg.Tier)))) * time.Minute
+			grace := timeout / 288 // 24h timeout => 5m grace
+
+			f.timeouts[username] = time.Now().Add(timeout - grace)
 			fund = true
 		}
 		f.lock.Unlock()
 
 		// Send an error if too frequent funding, othewise a success
 		if !fund {
-			if err = sendError(conn, fmt.Errorf("%s left until next allowance", common.PrettyDuration(timeout.Sub(time.Now())))); err != nil { // nolint: gosimple
+			if err = sendError(conn, fmt.Errorf("%s left until next allowance", common.PrettyDuration(time.Until(timeout)))); err != nil { // nolint: gosimple
 				log.Warn("Failed to send funding error to client", "err", err)
 				return
 			}
@@ -517,6 +540,47 @@ func (f *faucet) apiHandler(conn *websocket.Conn) {
 		default:
 		}
 	}
+}
+
+// refresh attempts to retrieve the latest header from the chain and extract the
+// associated faucet balance and nonce for connectivity caching.
+func (f *faucet) refresh(head *types.Header) error {
+	// Ensure a state update does not run for too long
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// If no header was specified, use the current chain head
+	var err error
+	if head == nil {
+		if head, err = f.client.HeaderByNumber(ctx, nil); err != nil {
+			return err
+		}
+	}
+	// Retrieve the balance, nonce and gas price from the current head
+	var (
+		balance *big.Int
+		nonce   uint64
+		price   *big.Int
+	)
+	if balance, err = f.client.BalanceAt(ctx, f.account.Address, head.Number); err != nil {
+		return err
+	}
+	if nonce, err = f.client.NonceAt(ctx, f.account.Address, head.Number); err != nil {
+		return err
+	}
+	if price, err = f.client.SuggestGasPrice(ctx); err != nil {
+		return err
+	}
+	// Everything succeeded, update the cached stats and eject old requests
+	f.lock.Lock()
+	f.head, f.balance = head, balance
+	f.price, f.nonce = price, nonce
+	for len(f.reqs) > 0 && f.reqs[0].Tx.Nonce() < f.nonce {
+		f.reqs = f.reqs[1:]
+	}
+	f.lock.Unlock()
+
+	return nil
 }
 
 // loop keeps waiting for interesting events and pushes them out to connected
@@ -536,45 +600,27 @@ func (f *faucet) loop() {
 	go func() {
 		for head := range update {
 			// New chain head arrived, query the current stats and stream to clients
-			var (
-				balance *big.Int
-				nonce   uint64
-				price   *big.Int
-				err     error
-			)
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			balance, err = f.client.BalanceAt(ctx, f.account.Address, head.Number)
-			if err == nil {
-				nonce, err = f.client.NonceAt(ctx, f.account.Address, nil)
-				if err == nil {
-					price, err = f.client.SuggestGasPrice(ctx)
-				}
+			timestamp := time.Unix(int64(head.Time), 0)
+			if time.Since(timestamp) > time.Hour {
+				log.Warn("Skipping faucet refresh, head too old", "number", head.Number, "hash", head.Hash(), "age", common.PrettyAge(timestamp))
+				continue
 			}
-			cancel()
-
-			// If querying the data failed, try for the next block
-			if err != nil {
+			if err := f.refresh(head); err != nil {
 				log.Warn("Failed to update faucet state", "block", head.Number, "hash", head.Hash(), "err", err)
 				continue
-			} else {
-				log.Info("Updated faucet state", "block", head.Number, "hash", head.Hash(), "balance", balance, "nonce", nonce, "price", price)
 			}
 			// Faucet state retrieved, update locally and send to clients
-			balance = new(big.Int).Div(balance, ether)
-
-			f.lock.Lock()
-			f.price, f.nonce = price, nonce
-			for len(f.reqs) > 0 && f.reqs[0].Tx.Nonce() < f.nonce {
-				f.reqs = f.reqs[1:]
-			}
-			f.lock.Unlock()
-
 			f.lock.RLock()
+			log.Info("Updated faucet state", "number", head.Number, "hash", head.Hash(), "age", common.PrettyAge(timestamp), "balance", f.balance, "nonce", f.nonce, "price", f.price)
+
+			balance := new(big.Int).Div(f.balance, ether)
+			peers := f.stack.Server().PeerCount()
+
 			for _, conn := range f.conns {
 				if err := send(conn, map[string]interface{}{
 					"funds":    balance,
 					"funded":   f.nonce,
-					"peers":    f.stack.Server().PeerCount(),
+					"peers":    peers,
 					"requests": f.reqs,
 				}, time.Second); err != nil {
 					log.Warn("Failed to send stats to client", "err", err)
@@ -620,7 +666,7 @@ func send(conn *websocket.Conn, value interface{}, timeout time.Duration) error 
 		timeout = 60 * time.Second
 	}
 	conn.SetWriteDeadline(time.Now().Add(timeout))
-	return websocket.JSON.Send(conn, value)
+	return conn.WriteJSON(value)
 }
 
 // sendError transmits an error to the remote end of the websocket, also setting
@@ -636,16 +682,17 @@ func sendSuccess(conn *websocket.Conn, msg string) error {
 }
 
 // authTwitter tries to authenticate a faucet request using Twitter posts, returning
-// the username, avatar URL and Simplechain address to fund on success.
+// the username, avatar URL and Ethereum address to fund on success.
 func authTwitter(url string) (string, string, common.Address, error) {
 	// Ensure the user specified a meaningful URL, no fancy nonsense
 	parts := strings.Split(url, "/")
 	if len(parts) < 4 || parts[len(parts)-2] != "status" {
+		//lint:ignore ST1005 This error is to be displayed in the browser
 		return "", "", common.Address{}, errors.New("Invalid Twitter status URL")
 	}
 	// Twitter's API isn't really friendly with direct links. Still, we don't
 	// want to do ask read permissions from users, so just load the public posts and
-	// scrape it for the Simplechain address and profile URL.
+	// scrape it for the Ethereum address and profile URL.
 	res, err := http.Get(url)
 	if err != nil {
 		return "", "", common.Address{}, err
@@ -655,6 +702,7 @@ func authTwitter(url string) (string, string, common.Address, error) {
 	// Resolve the username from the final redirect, no intermediate junk
 	parts = strings.Split(res.Request.URL.String(), "/")
 	if len(parts) < 4 || parts[len(parts)-2] != "status" {
+		//lint:ignore ST1005 This error is to be displayed in the browser
 		return "", "", common.Address{}, errors.New("Invalid Twitter status URL")
 	}
 	username := parts[len(parts)-3]
@@ -665,7 +713,8 @@ func authTwitter(url string) (string, string, common.Address, error) {
 	}
 	address := common.HexToAddress(string(regexp.MustCompile("0x[0-9a-fA-F]{40}").Find(body)))
 	if address == (common.Address{}) {
-		return "", "", common.Address{}, errors.New("No Simplechain address found to fund")
+		//lint:ignore ST1005 This error is to be displayed in the browser
+		return "", "", common.Address{}, errors.New("No Ethereum address found to fund")
 	}
 	var avatar string
 	if parts = regexp.MustCompile("src=\"([^\"]+twimg.com/profile_images[^\"]+)\"").FindStringSubmatch(string(body)); len(parts) == 2 {
@@ -674,53 +723,20 @@ func authTwitter(url string) (string, string, common.Address, error) {
 	return username + "@twitter", avatar, address, nil
 }
 
-// authGooglePlus tries to authenticate a faucet request using GooglePlus posts,
-// returning the username, avatar URL and Simplechain address to fund on success.
-func authGooglePlus(url string) (string, string, common.Address, error) {
-	// Ensure the user specified a meaningful URL, no fancy nonsense
-	parts := strings.Split(url, "/")
-	if len(parts) < 4 || parts[len(parts)-2] != "posts" {
-		return "", "", common.Address{}, errors.New("Invalid Google+ post URL")
-	}
-	username := parts[len(parts)-3]
-
-	// Google's API isn't really friendly with direct links. Still, we don't
-	// want to do ask read permissions from users, so just load the public posts and
-	// scrape it for the Simplechain address and profile URL.
-	res, err := http.Get(url)
-	if err != nil {
-		return "", "", common.Address{}, err
-	}
-	defer res.Body.Close()
-
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return "", "", common.Address{}, err
-	}
-	address := common.HexToAddress(string(regexp.MustCompile("0x[0-9a-fA-F]{40}").Find(body)))
-	if address == (common.Address{}) {
-		return "", "", common.Address{}, errors.New("No Simplechain address found to fund")
-	}
-	var avatar string
-	if parts = regexp.MustCompile("src=\"([^\"]+googleusercontent.com[^\"]+photo.jpg)\"").FindStringSubmatch(string(body)); len(parts) == 2 {
-		avatar = parts[1]
-	}
-	return username + "@google+", avatar, address, nil
-}
-
 // authFacebook tries to authenticate a faucet request using Facebook posts,
-// returning the username, avatar URL and Simplechain address to fund on success.
+// returning the username, avatar URL and Ethereum address to fund on success.
 func authFacebook(url string) (string, string, common.Address, error) {
 	// Ensure the user specified a meaningful URL, no fancy nonsense
 	parts := strings.Split(url, "/")
 	if len(parts) < 4 || parts[len(parts)-2] != "posts" {
+		//lint:ignore ST1005 This error is to be displayed in the browser
 		return "", "", common.Address{}, errors.New("Invalid Facebook post URL")
 	}
 	username := parts[len(parts)-3]
 
 	// Facebook's Graph API isn't really friendly with direct links. Still, we don't
 	// want to do ask read permissions from users, so just load the public posts and
-	// scrape it for the Simplechain address and profile URL.
+	// scrape it for the Ethereum address and profile URL.
 	res, err := http.Get(url)
 	if err != nil {
 		return "", "", common.Address{}, err
@@ -733,7 +749,8 @@ func authFacebook(url string) (string, string, common.Address, error) {
 	}
 	address := common.HexToAddress(string(regexp.MustCompile("0x[0-9a-fA-F]{40}").Find(body)))
 	if address == (common.Address{}) {
-		return "", "", common.Address{}, errors.New("No Simplechain address found to fund")
+		//lint:ignore ST1005 This error is to be displayed in the browser
+		return "", "", common.Address{}, errors.New("No Ethereum address found to fund")
 	}
 	var avatar string
 	if parts = regexp.MustCompile("src=\"([^\"]+fbcdn.net[^\"]+)\"").FindStringSubmatch(string(body)); len(parts) == 2 {
@@ -742,13 +759,14 @@ func authFacebook(url string) (string, string, common.Address, error) {
 	return username + "@facebook", avatar, address, nil
 }
 
-// authNoAuth tries to interpret a faucet request as a plain Simplechain address,
+// authNoAuth tries to interpret a faucet request as a plain Ethereum address,
 // without actually performing any remote authentication. This mode is prone to
 // Byzantine attack, so only ever use for truly private networks.
 func authNoAuth(url string) (string, string, common.Address, error) {
 	address := common.HexToAddress(regexp.MustCompile("0x[0-9a-fA-F]{40}").FindString(url))
 	if address == (common.Address{}) {
-		return "", "", common.Address{}, errors.New("No Simplechain address found to fund")
+		//lint:ignore ST1005 This error is to be displayed in the browser
+		return "", "", common.Address{}, errors.New("No Ethereum address found to fund")
 	}
 	return address.Hex() + "@noauth", "", address, nil
 }

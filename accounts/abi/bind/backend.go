@@ -47,7 +47,7 @@ type ContractCaller interface {
 	// CodeAt returns the code of the given account. This is needed to differentiate
 	// between contract internal errors and the local chain being out of sync.
 	CodeAt(ctx context.Context, contract common.Address, blockNumber *big.Int) ([]byte, error)
-	// ContractCall executes an Simplechain contract call with the specified data as the
+	// ContractCall executes an Ethereum contract call with the specified data as the
 	// input.
 	CallContract(ctx context.Context, call simplechain.CallMsg, blockNumber *big.Int) ([]byte, error)
 }
@@ -58,7 +58,7 @@ type ContractCaller interface {
 type PendingContractCaller interface {
 	// PendingCodeAt returns the code of the given account in the pending state.
 	PendingCodeAt(ctx context.Context, contract common.Address) ([]byte, error)
-	// PendingCallContract executes an Simplechain contract call against the pending state.
+	// PendingCallContract executes an simplechain contract call against the pending state.
 	PendingCallContract(ctx context.Context, call simplechain.CallMsg) ([]byte, error)
 }
 

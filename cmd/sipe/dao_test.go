@@ -25,7 +25,6 @@ import (
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/rawdb"
-	"github.com/simplechain-org/go-simplechain/ethdb"
 	"github.com/simplechain-org/go-simplechain/params"
 )
 
@@ -104,7 +103,6 @@ func TestDAOForkBlockNewChain(t *testing.T) {
 func testDAOForkBlockNewChain(t *testing.T, test int, genesis string, expectBlock *big.Int, expectVote bool) {
 	// Create a temporary data directory to use and inspect later
 	datadir := tmpdir(t)
-
 	defer os.RemoveAll(datadir)
 
 	// Start a Geth instance with the requested flags set and immediately terminate
@@ -113,31 +111,26 @@ func testDAOForkBlockNewChain(t *testing.T, test int, genesis string, expectBloc
 		if err := ioutil.WriteFile(json, []byte(genesis), 0600); err != nil {
 			t.Fatalf("test %d: failed to write genesis file: %v", test, err)
 		}
-		runSipe(t, "--datadir", datadir, "init", json).WaitExit()
+		runGeth(t, "--datadir", datadir, "init", json).WaitExit()
 	} else {
 		// Force chain initialization
 		args := []string{"--port", "0", "--maxpeers", "0", "--nodiscover", "--nat", "none", "--ipcdisable", "--datadir", datadir}
-		sipe := runSipe(t, append(args, []string{"--exec", "2+2", "console"}...)...)
-		sipe.WaitExit()
+		geth := runGeth(t, append(args, []string{"--exec", "2+2", "console"}...)...)
+		geth.WaitExit()
 	}
 	// Retrieve the DAO config flag from the database
 	path := filepath.Join(datadir, "sipe", "chaindata")
-
-	db, err := ethdb.NewLDBDatabase(path, 0, 0)
-
+	db, err := rawdb.NewLevelDBDatabase(path, 0, 0, "")
 	if err != nil {
 		t.Fatalf("test %d: failed to open test database: %v", test, err)
 	}
 	defer db.Close()
 
 	genesisHash := common.HexToHash("0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3")
-
 	if genesis != "" {
 		genesisHash = daoGenesisHash
 	}
-
 	config := rawdb.ReadChainConfig(db, genesisHash)
-
 	if config == nil {
 		t.Errorf("test %d: failed to retrieve chain config: %v", test, err)
 		return // we want to return here, the other checks can't make it past this point (nil panic).

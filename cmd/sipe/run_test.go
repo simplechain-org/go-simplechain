@@ -17,13 +17,16 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/docker/docker/pkg/reexec"
 	"github.com/simplechain-org/go-simplechain/internal/cmdtest"
+	"github.com/simplechain-org/go-simplechain/rpc"
 )
 
 func tmpdir(t *testing.T) string {
@@ -34,7 +37,7 @@ func tmpdir(t *testing.T) string {
 	return dir
 }
 
-type testSipe struct {
+type testgeth struct {
 	*cmdtest.TestCmd
 
 	// template variables for expect
@@ -43,7 +46,7 @@ type testSipe struct {
 }
 
 func init() {
-	// Run the app if we've been exec'd as "sipe-test" in runSipe.
+	// Run the app if we've been exec'd as "sipe-test" in runGeth.
 	reexec.Register("sipe-test", func() {
 		if err := app.Run(os.Args); err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -63,8 +66,8 @@ func TestMain(m *testing.M) {
 
 // spawns geth with the given command line args. If the args don't set --datadir, the
 // child g gets a temporary data directory.
-func runSipe(t *testing.T, args ...string) *testSipe {
-	tt := &testSipe{}
+func runGeth(t *testing.T, args ...string) *testgeth {
+	tt := &testgeth{}
 	tt.TestCmd = cmdtest.NewTestCmd(t, tt)
 	for i, arg := range args {
 		switch {
@@ -90,11 +93,34 @@ func runSipe(t *testing.T, args ...string) *testSipe {
 		}()
 	}
 
-	t.Log("args=", args)
-
 	// Boot "geth". This actually runs the test binary but the TestMain
 	// function will prevent any tests from running.
 	tt.Run("sipe-test", args...)
 
 	return tt
+}
+
+// waitForEndpoint attempts to connect to an RPC endpoint until it succeeds.
+func waitForEndpoint(t *testing.T, endpoint string, timeout time.Duration) {
+	probe := func() bool {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		c, err := rpc.DialContext(ctx, endpoint)
+		if c != nil {
+			_, err = c.SupportedModules()
+			c.Close()
+		}
+		return err == nil
+	}
+
+	start := time.Now()
+	for {
+		if probe() {
+			return
+		}
+		if time.Since(start) > timeout {
+			t.Fatal("endpoint", endpoint, "did not open within", timeout)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
 }

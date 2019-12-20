@@ -23,13 +23,13 @@ import (
 	"github.com/simplechain-org/go-simplechain/common/math"
 )
 
-// Memory implements a simple memory model for the simplechain virtual machine.
+// Memory implements a simple memory model for the ethereum virtual machine.
 type Memory struct {
 	store       []byte
 	lastGasCost uint64
 }
 
-// NewMemory returns a new memory memory model.
+// NewMemory returns a new memory model.
 func NewMemory() *Memory {
 	return &Memory{}
 }
@@ -70,7 +70,7 @@ func (m *Memory) Resize(size uint64) {
 }
 
 // Get returns offset + size as a new slice
-func (m *Memory) Get(offset, size int64) (cpy []byte) {
+func (m *Memory) GetCopy(offset, size int64) (cpy []byte) {
 	if size == 0 {
 		return nil
 	}

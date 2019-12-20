@@ -14,21 +14,22 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-simplechain library. If not, see <http://www.gnu.org/licenses/>.
 
-// Package miner implements Simplechain block creation and mining.
+// Package miner implements Ethereum block creation and mining.
 package miner
 
 import (
 	"fmt"
+	"math/big"
 	"sync/atomic"
+	"time"
 
-	"github.com/simplechain-org/go-simplechain/accounts"
 	"github.com/simplechain-org/go-simplechain/common"
+	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"github.com/simplechain-org/go-simplechain/consensus"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/eth/downloader"
-	"github.com/simplechain-org/go-simplechain/ethdb"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/params"
@@ -36,171 +37,136 @@ import (
 
 // Backend wraps all methods required for mining.
 type Backend interface {
-	AccountManager() *accounts.Manager
 	BlockChain() *core.BlockChain
 	TxPool() *core.TxPool
-	ChainDb() ethdb.Database
+}
+
+// Config is the configuration parameters of mining.
+type Config struct {
+	Etherbase common.Address `toml:",omitempty"` // Public address for block mining rewards (default = first account)
+	Notify    []string       `toml:",omitempty"` // HTTP URL list to be notified of new work packages(only useful in ethash).
+	ExtraData hexutil.Bytes  `toml:",omitempty"` // Block extra data set by the miner
+	GasFloor  uint64         // Target gas floor for mined blocks.
+	GasCeil   uint64         // Target gas ceiling for mined blocks.
+	GasPrice  *big.Int       // Minimum gas price for mining a transaction
+	Recommit  time.Duration  // The time interval for miner to re-create mining work.
+	Noverify  bool           // Disable remote mining solution verification(only useful in ethash).
 }
 
 // Miner creates blocks and searches for proof-of-work values.
 type Miner struct {
-	mux *event.TypeMux
-
-	worker *worker
-
+	mux      *event.TypeMux
+	worker   *worker
 	coinbase common.Address
-	mining   int32
 	eth      Backend
 	engine   consensus.Engine
+	exitCh   chan struct{}
 
 	canStart    int32 // can start indicates whether we can start the mining operation
 	shouldStart int32 // should start indicates whether we should start after sync
-
 }
 
-var cpuMinerAgent *CpuAgent
-
-func New(eth Backend, config *params.ChainConfig, mux *event.TypeMux, engine consensus.Engine) *Miner {
+func New(eth Backend, config *Config, chainConfig *params.ChainConfig, mux *event.TypeMux, engine consensus.Engine, isLocalBlock func(block *types.Block) bool) *Miner {
 	miner := &Miner{
 		eth:      eth,
 		mux:      mux,
 		engine:   engine,
-		worker:   newWorker(config, engine, common.Address{}, eth, mux),
+		exitCh:   make(chan struct{}),
+		worker:   newWorker(config, chainConfig, engine, eth, mux, isLocalBlock, true),
 		canStart: 1,
 	}
-	// ctx.GlobalString(utils.MinerType.Name)
-	cpuMinerAgent = NewCpuAgent(eth.BlockChain(), engine)
-	miner.Register(cpuMinerAgent)
 	go miner.update()
 
 	return miner
 }
 
-// func NewStratumMiner(eth Backend, config *params.ChainConfig, mux *event.TypeMux, engine consensus.Engine) *Miner {
-// 	miner := &Miner{
-// 		eth:      eth,
-// 		mux:      mux,
-// 		engine:   engine,
-// 		worker:   newWorker(config, engine, common.Address{}, eth, mux),
-// 		canStart: 1,
-// 	}
-// 	// ctx.GlobalString(utils.MinerType.Name)
-// 	miner.Register(NewStratumAgent(eth.BlockChain(), engine))
-// 	go miner.update()
-//
-// 	return miner
-// }
-
 // update keeps track of the downloader events. Please be aware that this is a one shot type of update loop.
 // It's entered once and as soon as `Done` or `Failed` has been broadcasted the events are unregistered and
 // the loop is exited. This to prevent a major security vuln where external parties can DOS you with blocks
 // and halt your mining operation for as long as the DOS continues.
-func (self *Miner) update() {
-	events := self.mux.Subscribe(downloader.StartEvent{}, downloader.DoneEvent{}, downloader.FailedEvent{})
-out:
-	for ev := range events.Chan() {
-		switch ev.Data.(type) {
-		case downloader.StartEvent:
-			atomic.StoreInt32(&self.canStart, 0)
-			if self.Mining() {
-				self.Stop()
-				atomic.StoreInt32(&self.shouldStart, 1)
-				log.Info("Mining aborted due to sync")
-			}
-		case downloader.DoneEvent, downloader.FailedEvent:
-			shouldStart := atomic.LoadInt32(&self.shouldStart) == 1
+func (miner *Miner) update() {
+	events := miner.mux.Subscribe(downloader.StartEvent{}, downloader.DoneEvent{}, downloader.FailedEvent{})
+	defer events.Unsubscribe()
 
-			atomic.StoreInt32(&self.canStart, 1)
-			atomic.StoreInt32(&self.shouldStart, 0)
-			if shouldStart {
-				self.Start(self.coinbase)
+	for {
+		select {
+		case ev := <-events.Chan():
+			if ev == nil {
+				return
 			}
-			// unsubscribe. we're only interested in this event once
-			events.Unsubscribe()
-			// stop immediately and ignore all further pending events
-			break out
+			switch ev.Data.(type) {
+			case downloader.StartEvent:
+				atomic.StoreInt32(&miner.canStart, 0)
+				if miner.Mining() {
+					miner.Stop()
+					atomic.StoreInt32(&miner.shouldStart, 1)
+					log.Info("Mining aborted due to sync")
+				}
+			case downloader.DoneEvent, downloader.FailedEvent:
+				shouldStart := atomic.LoadInt32(&miner.shouldStart) == 1
+
+				atomic.StoreInt32(&miner.canStart, 1)
+				atomic.StoreInt32(&miner.shouldStart, 0)
+				if shouldStart {
+					miner.Start(miner.coinbase)
+				}
+				// stop immediately and ignore all further pending events
+				return
+			}
+		case <-miner.exitCh:
+			return
 		}
 	}
 }
 
-func (self *Miner) Start(coinbase common.Address) {
-	atomic.StoreInt32(&self.shouldStart, 1)
-	self.SetEtherbase(coinbase)
+func (miner *Miner) Start(coinbase common.Address) {
+	atomic.StoreInt32(&miner.shouldStart, 1)
+	miner.SetEtherbase(coinbase)
 
-	if atomic.LoadInt32(&self.canStart) == 0 {
+	if atomic.LoadInt32(&miner.canStart) == 0 {
 		log.Info("Network syncing, will start miner afterwards")
 		return
 	}
-	atomic.StoreInt32(&self.mining, 1)
-
-	log.Info("Starting mining operation")
-	self.worker.start()
-	self.worker.commitNewWork()
+	miner.worker.start()
 }
 
-func (self *Miner) Stop() {
-	self.worker.stop()
-	atomic.StoreInt32(&self.mining, 0)
-	atomic.StoreInt32(&self.shouldStart, 0)
+func (miner *Miner) Stop() {
+	miner.worker.stop()
+	atomic.StoreInt32(&miner.shouldStart, 0)
 }
 
-func (self *Miner) Register(agent Agent) {
-	if self.Mining() {
-		agent.Start()
-	}
-	self.worker.register(agent)
+func (miner *Miner) Close() {
+	miner.worker.close()
+	close(miner.exitCh)
 }
 
-func (self *Miner) Unregister(agent Agent) {
-	self.worker.unregister(agent)
+func (miner *Miner) Mining() bool {
+	return miner.worker.isRunning()
 }
 
-func (self *Miner) UnregisterCPUAgent() {
-	if cpuMinerAgent != nil {
-		cpuMinerAgent.Stop()
-		self.Unregister(cpuMinerAgent)
-	}
-}
-
-func (self *Miner) Mining() bool {
-	return atomic.LoadInt32(&self.mining) > 0
-}
-
-func (self *Miner) HashRate() (tot int64) {
-	if pow, ok := self.engine.(consensus.PoW); ok {
-		tot += int64(pow.Hashrate())
-	}
-	// do we care this might race? is it worth we're rewriting some
-	// aspects of the worker/locking up agents so we can get an accurate
-	// hashrate?
-	for agent := range self.worker.agents {
-		if _, ok := agent.(*CpuAgent); !ok {
-			tot += agent.GetHashRate()
-		}
-	}
-	return
-}
-
-func (self *Miner) StratumHashRate(minerName string) int64 {
-	for agent := range self.worker.agents {
-		if stratumAgent, ok := agent.(*StratumAgent); ok {
-			return stratumAgent.GetStratumHashRate(minerName)
-		}
+func (miner *Miner) HashRate() uint64 {
+	if pow, ok := miner.engine.(consensus.PoW); ok {
+		return uint64(pow.Hashrate())
 	}
 	return 0
 }
 
-func (self *Miner) SetExtra(extra []byte) error {
+func (miner *Miner) SetExtra(extra []byte) error {
 	if uint64(len(extra)) > params.MaximumExtraDataSize {
-		return fmt.Errorf("Extra exceeds max length. %d > %v", len(extra), params.MaximumExtraDataSize)
+		return fmt.Errorf("extra exceeds max length. %d > %v", len(extra), params.MaximumExtraDataSize)
 	}
-	self.worker.setExtra(extra)
+	miner.worker.setExtra(extra)
 	return nil
 }
 
+// SetRecommitInterval sets the interval for sealing work resubmitting.
+func (miner *Miner) SetRecommitInterval(interval time.Duration) {
+	miner.worker.setRecommitInterval(interval)
+}
+
 // Pending returns the currently pending block and associated state.
-func (self *Miner) Pending() (*types.Block, *state.StateDB) {
-	return self.worker.pending()
+func (miner *Miner) Pending() (*types.Block, *state.StateDB) {
+	return miner.worker.pending()
 }
 
 // PendingBlock returns the currently pending block.
@@ -208,11 +174,11 @@ func (self *Miner) Pending() (*types.Block, *state.StateDB) {
 // Note, to access both the pending block and the pending state
 // simultaneously, please use Pending(), as the pending state can
 // change between multiple method calls
-func (self *Miner) PendingBlock() *types.Block {
-	return self.worker.pendingBlock()
+func (miner *Miner) PendingBlock() *types.Block {
+	return miner.worker.pendingBlock()
 }
 
-func (self *Miner) SetEtherbase(addr common.Address) {
-	self.coinbase = addr
-	self.worker.setEtherbase(addr)
+func (miner *Miner) SetEtherbase(addr common.Address) {
+	miner.coinbase = addr
+	miner.worker.setEtherbase(addr)
 }

@@ -17,9 +17,8 @@
 package tests
 
 import (
-	"testing"
-
 	"math/big"
+	"testing"
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/params"
@@ -71,6 +70,9 @@ func TestDifficulty(t *testing.T) {
 	dt.config("Frontier", *params.TestnetChainConfig)
 	dt.config("MainNetwork", mainnetChainConfig)
 	dt.config("CustomMainNetwork", mainnetChainConfig)
+	dt.config("Constantinople", params.ChainConfig{
+		ConstantinopleBlock: big.NewInt(0),
+	})
 	dt.config("difficulty.json", mainnetChainConfig)
 
 	dt.walk(t, difficultyTestDir, func(t *testing.T, name string, test *DifficultyTest) {

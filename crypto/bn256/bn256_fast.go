@@ -1,35 +1,25 @@
-// Copyright 2018 The go-simplechain Authors
-// This file is part of the go-simplechain library.
-//
-// The go-simplechain library is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// The go-simplechain library is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public License
-// along with the go-simplechain library. If not, see <http://www.gnu.org/licenses/>.
+// Copyright 2018 Péter Szilágyi. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be found
+// in the LICENSE file.
 
 // +build amd64 arm64
 
 // Package bn256 implements the Optimal Ate pairing over a 256-bit Barreto-Naehrig curve.
 package bn256
 
-import "github.com/simplechain-org/go-simplechain/crypto/bn256/cloudflare"
+import (
+	bn256cf "github.com/simplechain-org/go-simplechain/crypto/bn256/cloudflare"
+)
 
 // G1 is an abstract cyclic group. The zero value is suitable for use as the
 // output of an operation, but cannot be used as an input.
-type G1 = bn256.G1
+type G1 = bn256cf.G1
 
 // G2 is an abstract cyclic group. The zero value is suitable for use as the
 // output of an operation, but cannot be used as an input.
-type G2 = bn256.G2
+type G2 = bn256cf.G2
 
 // PairingCheck calculates the Optimal Ate pairing for a set of points.
 func PairingCheck(a []*G1, b []*G2) bool {
-	return bn256.PairingCheck(a, b)
+	return bn256cf.PairingCheck(a, b)
 }
