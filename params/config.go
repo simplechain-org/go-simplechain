@@ -28,7 +28,7 @@ import (
 // Genesis hashes to enforce below configs on.
 var (
 	MainnetGenesisHash = common.HexToHash("0xda24a722f45ce6cb3aa7cb735a14b830869142be54ada9f8e2c27c877def648b")
-	TestnetGenesisHash = common.HexToHash("0xfc26e8a96571fab7c359830a0651bcb442cdd63af5927fb1c74e4dddb7b759ae")
+	TestnetGenesisHash = common.HexToHash("0x29e691699cd29f02cb227db50bc8a1ed5e6e2ec6b8e6b5773722c7af2adf71b9")
 	FoundationAddress  = common.HexToAddress("0x992ec45ae0d2d2fcf97f4417cfd3f80505862fbc")
 	//RinkebyGenesisHash = common.HexToHash("0x6341fd3daf94b748c72ced5a5b26028f2474f5f00d824504e4fa37a75767e177")
 	//GoerliGenesisHash  = common.HexToHash("0xbf7e331f7f7c1dd2e05159666b3bf8bc7a8a3a9eb1d518969eab529dd9b88c1a")
@@ -69,7 +69,7 @@ var (
 		IstanbulBlock:       big.NewInt(9069000),
 		MuirGlacierBlock:    big.NewInt(9200000),
 		Ethash:              new(EthashConfig),
-		Scrypt: new(ScryptConfig),
+		Scrypt:              new(ScryptConfig),
 	}
 
 	// MainnetTrustedCheckpoint contains the light client trusted checkpoint for the main network.
@@ -77,8 +77,8 @@ var (
 		SectionIndex: 71,
 		SectionHead:  common.HexToHash("0xa1a1b99f5d9084c3838e700e4270e9e69d4b2307140f1abb7a0abb4dc3b92d94"), //sipc 2359295高度的区块hash
 		//SectionHead:  common.HexToHash("0x03159234a3699e31d27e5d83a55cbcf8ceb1f2d90855c219c55d79089b61abd4"), //eth 9043967高度的区块hash
-		CHTRoot:      common.HexToHash("0xd0c1f3828a4dcb2ee76625fdbea85afeabfb61c04adf07439d2fc1cf00469f76"),
-		BloomRoot:    common.HexToHash("0xab8ea2be8aa24703208fee3fc0afdbb536301013f412a7282b2692d6d68f92c5"),
+		CHTRoot:   common.HexToHash("0xd0c1f3828a4dcb2ee76625fdbea85afeabfb61c04adf07439d2fc1cf00469f76"),
+		BloomRoot: common.HexToHash("0xab8ea2be8aa24703208fee3fc0afdbb536301013f412a7282b2692d6d68f92c5"),
 	}
 
 	// MainnetCheckpointOracle contains a set of configs for the main network oracle.
@@ -110,7 +110,7 @@ var (
 		IstanbulBlock:       big.NewInt(6485846),
 		MuirGlacierBlock:    big.NewInt(7117117),
 		Ethash:              new(EthashConfig),
-		Scrypt: new(ScryptConfig),
+		Scrypt:              new(ScryptConfig),
 	}
 
 	// TestnetTrustedCheckpoint contains the light client trusted checkpoint for the Ropsten test network.
