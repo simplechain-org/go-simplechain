@@ -203,7 +203,7 @@ func testGenerateBlockAndImport(t *testing.T, isClique bool) {
 		chainConfig.Clique = &params.CliqueConfig{Period: 1, Epoch: 30000}
 		engine = clique.New(chainConfig.Clique, db)
 	} else {
-		chainConfig = params.AllEthashProtocolChanges
+		chainConfig = params.AllScryptProtocolChanges
 		engine = ethash.NewFaker()
 	}
 
