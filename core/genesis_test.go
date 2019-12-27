@@ -88,7 +88,6 @@ func TestSetupGenesis(t *testing.T) {
 		{
 			name: "custom block in DB, genesis == nil",
 			fn: func(db ethdb.Database) (*params.ChainConfig, common.Hash, error) {
-				//这里是先把创世区块写入了数据库中，而提供的genesis为nil的情况
 				customg.MustCommit(db)
 				return SetupGenesisBlock(db, nil)
 			},
