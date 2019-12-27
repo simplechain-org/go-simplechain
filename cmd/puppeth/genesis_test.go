@@ -90,6 +90,13 @@ func TestParitySturebyConverter(t *testing.T) {
 		t.Fatalf("could not read file: %v", err)
 	}
 	if !bytes.Equal(expBlob, enc) {
-		t.Fatalf("chainspec mismatch")
+		t.Errorf("chainspec mismatch")
+		exp := strings.Split(string(expBlob), "\n")
+		got := strings.Split(string(enc), "\n")
+		for i := 0; i < len(exp) && i < len(got); i++ {
+			if exp[i] != got[i] {
+				t.Fatalf("got: %v\n exp: %v\n", strings.Trim(exp[i]," "),  strings.Trim(got[i]," "))
+			}
+		}
 	}
 }

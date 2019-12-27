@@ -43,7 +43,7 @@ func TestDefaultGenesisBlock(t *testing.T) {
 
 func TestSetupGenesis(t *testing.T) {
 	var (
-		customghash = common.HexToHash("0x89c99d90b79719238d2645c7642f2c9295246e80775b38cfd162b696817fbd50")
+		customghash = common.HexToHash("0xe4259a3f1ec338118c0b8c9f048035b67f0540833eec0d8bb76cd78a6eaff8e1")
 		customg     = Genesis{
 			Config: &params.ChainConfig{HomesteadBlock: big.NewInt(3)},
 			Alloc: GenesisAlloc{
@@ -88,6 +88,7 @@ func TestSetupGenesis(t *testing.T) {
 		{
 			name: "custom block in DB, genesis == nil",
 			fn: func(db ethdb.Database) (*params.ChainConfig, common.Hash, error) {
+				//这里是先把创世区块写入了数据库中，而提供的genesis为nil的情况
 				customg.MustCommit(db)
 				return SetupGenesisBlock(db, nil)
 			},
@@ -140,7 +141,7 @@ func TestSetupGenesis(t *testing.T) {
 		},
 	}
 
-	for _, test := range tests {
+	for index, test := range tests {
 		db := rawdb.NewMemoryDatabase()
 		config, hash, err := test.fn(db)
 		// Check the return values.
@@ -152,7 +153,7 @@ func TestSetupGenesis(t *testing.T) {
 			t.Errorf("%s:\nreturned %v\nwant     %v", test.name, config, test.wantConfig)
 		}
 		if hash != test.wantHash {
-			t.Errorf("%s: returned hash %s, want %s", test.name, hash.Hex(), test.wantHash.Hex())
+			t.Errorf("%s: returned hash %s, want %s %d", test.name, hash.Hex(), test.wantHash.Hex(),index)
 		} else if err == nil {
 			// Check database content.
 			stored := rawdb.ReadBlock(db, test.wantHash, 0)
