@@ -69,7 +69,7 @@ var (
 		IstanbulBlock:       big.NewInt(9069000),
 		MuirGlacierBlock:    big.NewInt(9200000),
 		Ethash:              new(EthashConfig),
-		Scrypt: new(ScryptConfig),
+		Scrypt:              new(ScryptConfig),
 	}
 
 	// MainnetTrustedCheckpoint contains the light client trusted checkpoint for the main network.
@@ -77,8 +77,8 @@ var (
 		SectionIndex: 71,
 		SectionHead:  common.HexToHash("0xa1a1b99f5d9084c3838e700e4270e9e69d4b2307140f1abb7a0abb4dc3b92d94"), //sipc 2359295高度的区块hash
 		//SectionHead:  common.HexToHash("0x03159234a3699e31d27e5d83a55cbcf8ceb1f2d90855c219c55d79089b61abd4"), //eth 9043967高度的区块hash
-		CHTRoot:      common.HexToHash("0xd0c1f3828a4dcb2ee76625fdbea85afeabfb61c04adf07439d2fc1cf00469f76"),
-		BloomRoot:    common.HexToHash("0xab8ea2be8aa24703208fee3fc0afdbb536301013f412a7282b2692d6d68f92c5"),
+		CHTRoot:   common.HexToHash("0xd0c1f3828a4dcb2ee76625fdbea85afeabfb61c04adf07439d2fc1cf00469f76"),
+		BloomRoot: common.HexToHash("0xab8ea2be8aa24703208fee3fc0afdbb536301013f412a7282b2692d6d68f92c5"),
 	}
 
 	// MainnetCheckpointOracle contains a set of configs for the main network oracle.
@@ -110,7 +110,7 @@ var (
 		IstanbulBlock:       big.NewInt(6485846),
 		MuirGlacierBlock:    big.NewInt(7117117),
 		Ethash:              new(EthashConfig),
-		Scrypt: new(ScryptConfig),
+		Scrypt:              new(ScryptConfig),
 	}
 
 	// TestnetTrustedCheckpoint contains the light client trusted checkpoint for the Ropsten test network.
