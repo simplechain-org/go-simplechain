@@ -68,7 +68,6 @@ var (
 		PetersburgBlock:     big.NewInt(0),
 		IstanbulBlock:       big.NewInt(9069000),
 		MuirGlacierBlock:    big.NewInt(9200000),
-		Ethash:              new(EthashConfig),
 		Scrypt:              new(ScryptConfig),
 	}
 
@@ -83,15 +82,15 @@ var (
 
 	// MainnetCheckpointOracle contains a set of configs for the main network oracle.
 	MainnetCheckpointOracle = &CheckpointOracleConfig{
-		Address: common.HexToAddress("0x9a9070028361F7AAbeB3f2F2Dc07F82C4a98A02a"),
+		Address: common.HexToAddress("0x6395656848bA255fdD8374503FfAA3aAF76F9C6B"),
 		Signers: []common.Address{
-			common.HexToAddress("0x1b2C260efc720BE89101890E4Db589b44E950527"), // Peter
-			common.HexToAddress("0x78d1aD571A1A09D60D9BBf25894b44e4C8859595"), // Martin
-			common.HexToAddress("0x286834935f4A8Cfb4FF4C77D5770C2775aE2b0E7"), // Zsolt
-			common.HexToAddress("0xb86e2B0Ab5A4B1373e40c51A7C712c70Ba2f9f8E"), // Gary
-			common.HexToAddress("0x0DF8fa387C602AE62559cC4aFa4972A7045d6707"), // Guillaume
+			common.HexToAddress("0x6a03FD5b4037895f6f3346f901e4e88db87b5944"), // Peter
+			common.HexToAddress("0xa8f7a303beB2B7b9B62Ec48Aa5619c3b5dF89867"), // Martin
+			common.HexToAddress("0x6345bC0e60f1c872e6a66145D178b18939a1E275"), // Zsolt
+			common.HexToAddress("0xCc82A50c595d2e610Ac117c1c569606a82398Bce"), // Gary
+			common.HexToAddress("0x268715EB4DdD4b8146393175E84590Fde86CCeae"), // Guillaume
 		},
-		Threshold: 2,
+		Threshold: 3,
 	}
 
 	// TestnetChainConfig contains the chain parameters to run a node on the Ropsten test network.
@@ -106,30 +105,29 @@ var (
 		EIP158Block:         big.NewInt(0),
 		ByzantiumBlock:      big.NewInt(0),
 		ConstantinopleBlock: big.NewInt(0),
-		PetersburgBlock:     big.NewInt(4939394),
+		PetersburgBlock:     big.NewInt(0),
 		IstanbulBlock:       big.NewInt(6485846),
 		MuirGlacierBlock:    big.NewInt(7117117),
-		Ethash:              new(EthashConfig),
 		Scrypt:              new(ScryptConfig),
 	}
 
 	// TestnetTrustedCheckpoint contains the light client trusted checkpoint for the Ropsten test network.
 	TestnetTrustedCheckpoint = &TrustedCheckpoint{
-		SectionIndex: 209,
-		SectionHead:  common.HexToHash("0x8037eb6872b69397d434121424ed8d6ab74be32bf3cb3f12dc5d9657fc146860"),
-		CHTRoot:      common.HexToHash("0xe64b7d6324e5cbdcbbc250adf4cf24a639a665aa83ccfd6a0b84a80faaaa0d41"),
-		BloomRoot:    common.HexToHash("0x80fedbef680cd70d3dc4b50b14480fba82c74361a35e8dc7be9f11e03077c840"),
+		SectionIndex: 62,
+		SectionHead:  common.HexToHash("0x6b5021f2dde59f28940ee36036db0b98437b3390e4fe641762d1aa287627c2f9"),
+		CHTRoot:      common.HexToHash("0x52fe75523f8e2864bed4a988e2330df3bdb5278477315c987a5b82d2dd03f8e9"),
+		BloomRoot:    common.HexToHash("0x6969fdea930386b669be52b82e5eb6a827b79dd22daf815c8f1dd16517c8c6f8"),
 	}
 
 	// TestnetCheckpointOracle contains a set of configs for the Ropsten test network oracle.
 	TestnetCheckpointOracle = &CheckpointOracleConfig{
-		Address: common.HexToAddress("0xEF79475013f154E6A65b54cB2742867791bf0B84"),
+		Address: common.HexToAddress("0x0A37FE53Fa04Db73028440084c01fA66Ea32123d"),
 		Signers: []common.Address{
-			common.HexToAddress("0x32162F3581E88a5f62e8A61892B42C46E2c18f7b"), // Peter
-			common.HexToAddress("0x78d1aD571A1A09D60D9BBf25894b44e4C8859595"), // Martin
-			common.HexToAddress("0x286834935f4A8Cfb4FF4C77D5770C2775aE2b0E7"), // Zsolt
-			common.HexToAddress("0xb86e2B0Ab5A4B1373e40c51A7C712c70Ba2f9f8E"), // Gary
-			common.HexToAddress("0x0DF8fa387C602AE62559cC4aFa4972A7045d6707"), // Guillaume
+			common.HexToAddress("0x4B24c89444DE633bF178E4FD36ff79Ec8d81BB3F"), // Peter
+			common.HexToAddress("0x718fBE1b6fA4D3a5896B08b5478605b687e133e9"), // Martin
+			common.HexToAddress("0x44e88f9C9e4F328510dB8A25884Fd6A552409569"), // Zsolt
+			common.HexToAddress("0xB9e8502aD72F253A071A8e27f6573402E5086465"), // Gary
+			common.HexToAddress("0x06Ce55932da405AE2a3B7a7af6021019796A7582"), // Guillaume
 		},
 		Threshold: 2,
 	}
@@ -219,7 +217,7 @@ var (
 	//
 	// This configuration is intentionally not using keyed fields to force anyone
 	// adding flags to the config to also have to set these fields.
-	AllEthashProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, new(EthashConfig), nil, nil}
+	//AllEthashProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, new(EthashConfig), nil, nil}
 
 	// AllCliqueProtocolChanges contains every protocol change (EIPs) introduced
 	// and accepted by the Ethereum core developers into the Clique consensus.
