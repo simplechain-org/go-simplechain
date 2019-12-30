@@ -43,9 +43,9 @@ func TestDefaultGenesisBlock(t *testing.T) {
 
 func TestSetupGenesis(t *testing.T) {
 	var (
-		customghash = common.HexToHash("0xe4259a3f1ec338118c0b8c9f048035b67f0540833eec0d8bb76cd78a6eaff8e1")
+		customghash = common.HexToHash("0xc2f4d611bacef727b38b3f718a3d227728fbad565fed5ffbda4b933641adacda")
 		customg     = Genesis{
-			Config: &params.ChainConfig{HomesteadBlock: big.NewInt(0)},
+			Config: &params.ChainConfig{HomesteadBlock: big.NewInt(3)},
 			Alloc: decodePrealloc(testnetAllocData),
 		}
 		oldcustomg = customg
@@ -144,7 +144,7 @@ func TestSetupGenesis(t *testing.T) {
 		// Check the return values.
 		if !reflect.DeepEqual(err, test.wantErr) {
 			spew := spew.ConfigState{DisablePointerAddresses: true, DisableCapacities: true}
-			t.Errorf("%s: returned error %#v, want %#v", test.name, spew.NewFormatter(err), spew.NewFormatter(test.wantErr))
+			t.Errorf("%s: returned error %#v, want %#v %d", test.name, spew.NewFormatter(err), spew.NewFormatter(test.wantErr),index)
 		}
 		if !reflect.DeepEqual(config, test.wantConfig) {
 			t.Errorf("%s:\nreturned %v\nwant     %v", test.name, config, test.wantConfig)
