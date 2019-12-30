@@ -53,12 +53,12 @@ func (self *StratumAgent) SubscribeResult(ch chan<- *types.Block) {
 }
 
 func (self *StratumAgent) Start() {
-	if e := recover(); e != nil {
-		switch e.(type) {
+	if err := recover(); err != nil {
+		switch e:=err.(type) {
 		case error:
 			log.Error(e.(error).Error())
 		case string:
-			log.Error(e.(string))
+			log.Error(e)
 		}
 		debug.PrintStack()
 	}

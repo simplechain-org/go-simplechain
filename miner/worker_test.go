@@ -187,13 +187,11 @@ func newTestWorker(t *testing.T, chainConfig *params.ChainConfig, engine consens
 }
 
 func TestGenerateBlockAndImportEthash(t *testing.T) {
-	//todo
-	//testGenerateBlockAndImport(t, false)
+	testGenerateBlockAndImport(t, false)
 }
 
 func TestGenerateBlockAndImportClique(t *testing.T) {
-	//todo
-	//testGenerateBlockAndImport(t, true)
+	testGenerateBlockAndImport(t, true)
 }
 
 func testGenerateBlockAndImport(t *testing.T, isClique bool) {

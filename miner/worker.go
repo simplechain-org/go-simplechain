@@ -19,6 +19,7 @@ package miner
 import (
 	"bytes"
 	"errors"
+	"github.com/simplechain-org/go-simplechain/consensus/scrypt"
 	"math/big"
 	"sync"
 	"sync/atomic"
@@ -267,8 +268,8 @@ func (w *worker) pendingBlock() *types.Block {
 
 // start sets the running status as 1 and triggers new work submitting.
 func (w *worker) start() {
-    w.mu.Lock()
-    defer w.mu.Unlock()
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	atomic.StoreInt32(&w.running, 1)
 	w.startCh <- struct{}{}
 	for agent := range w.agents {
@@ -548,7 +549,15 @@ func (w *worker) taskLoop() {
 			w.pendingTasks[w.engine.SealHash(task.block.Header())] = task
 			w.pendingMu.Unlock()
 
-			w.seal(task.block)
+			_, ok := w.engine.(*scrypt.PowScrypt)
+
+			if ok {
+				w.seal(task.block)
+			} else {
+				if err := w.engine.Seal(w.chain, task.block, w.resultCh, stopCh); err != nil {
+					log.Warn("Block sealing failed", "err", err)
+				}
+			}
 		case <-w.exitCh:
 			interrupt()
 			return

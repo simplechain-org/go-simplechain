@@ -80,7 +80,7 @@ func (this *Server) Start() {
 		return
 	}
 	atomic.StoreInt32(&this.running, 1)
-	this.stop = make(chan struct{}, 0)
+	this.stop = make(chan struct{})
 	this.resultChan = make(chan uint64, ResultChanSize)
 	this.sessions = make(map[string]*Session)
 	this.authorizes = make(map[string]*Session)

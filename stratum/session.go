@@ -131,7 +131,7 @@ func NewSession(auth Auth, sessionId string, conn net.Conn, difficulty *big.Int)
 		difficulty:    difficulty.Uint64(),
 		hashRateArray: make([]uint64, 0, HashRateLen),
 		auth:          auth,
-		stop:          make(chan struct{}, 0),
+		stop:          make(chan struct{}),
 	}
 	return session
 }

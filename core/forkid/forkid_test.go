@@ -17,117 +17,118 @@
 package forkid
 
 
-//import (
-//	"bytes"
-//	"math"
-//	"testing"
-//
-//	"github.com/simplechain-org/go-simplechain/common"
-//	"github.com/simplechain-org/go-simplechain/params"
-//	"github.com/simplechain-org/go-simplechain/rlp"
-//)
-//
-//// TestCreation tests that different genesis and fork rule combinations result in
-//// the correct fork ID.
-//func TestCreation(t *testing.T) {
-//	type testcase struct {
-//		head uint64
-//		want ID
-//	}
-//	tests := []struct {
-//		config  *params.ChainConfig
-//		genesis common.Hash
-//		cases   []testcase
-//	}{
-//		// Mainnet test cases
-//		{
-//			params.MainnetChainConfig,
-//			params.MainnetGenesisHash,
-//			[]testcase{
-//				{0, ID{Hash: checksumToBytes(0x523c0685), Next: 0x8a61c8}},      // Unsynced
-//				{1149999, ID{Hash: checksumToBytes(0x523c0685), Next: 9069000}}, // Last Frontier block
-//				{1150000, ID{Hash: checksumToBytes(0x523c0685), Next: 9069000}}, // First Homestead block
-//				{1919999, ID{Hash: checksumToBytes(0x523c0685), Next: 9069000}}, // Last Homestead block
-//				{1920000, ID{Hash: checksumToBytes(0x523c0685), Next: 9069000}}, // First DAO block
-//				{2462999, ID{Hash: checksumToBytes(0x523c0685), Next: 9069000}}, // Last DAO block
-//				{2463000, ID{Hash: checksumToBytes(0x523c0685), Next: 9069000}}, // First Tangerine block
-//				{2674999, ID{Hash: checksumToBytes(0x523c0685), Next: 9069000}}, // Last Tangerine block
-//				{2675000, ID{Hash: checksumToBytes(0x523c0685), Next: 9069000}}, // First Spurious block
-//				{4369999, ID{Hash: checksumToBytes(0x523c0685), Next: 9069000}}, // Last Spurious block
-//				{4370000, ID{Hash: checksumToBytes(0x523c0685), Next: 9069000}}, // First Byzantium block
-//				{7279999, ID{Hash: checksumToBytes(0x523c0685), Next: 9069000}}, // Last Byzantium block
-//				{7280000, ID{Hash: checksumToBytes(0x523c0685), Next: 9069000}}, // First and last Constantinople, first Petersburg block
-//				{9068999, ID{Hash: checksumToBytes(0x523c0685), Next: 9069000}}, // Last Petersburg block
-//				{9069000, ID{Hash: checksumToBytes(0x29b9b4a2), Next: 9200000}}, // First Istanbul and first Muir Glacier block
-//				{9199999, ID{Hash: checksumToBytes(0x29b9b4a2), Next: 9200000}}, // Last Istanbul and first Muir Glacier block
-//				{9200000, ID{Hash: checksumToBytes(0xd11560c1), Next: 0}},       // First Muir Glacier block
-//				{10000000, ID{Hash: checksumToBytes(0xd11560c1), Next: 0}},      // Future Muir Glacier block
-//			},
-//		},
-//		// Ropsten test cases
-//		{
-//			params.TestnetChainConfig,
-//			params.TestnetGenesisHash,
-//			[]testcase{
-//				{0, ID{Hash: checksumToBytes(0x876cd59c), Next: 4939394}},       // Unsynced, last Frontier, Homestead and first Tangerine block
-//				{9, ID{Hash: checksumToBytes(0x876cd59c), Next: 4939394}},       // Last Tangerine block
-//				{10, ID{Hash: checksumToBytes(0x876cd59c), Next: 4939394}},      // First Spurious block
-//				{1699999, ID{Hash: checksumToBytes(0x876cd59c), Next: 4939394}}, // Last Spurious block
-//				{1700000, ID{Hash: checksumToBytes(0x876cd59c), Next: 4939394}}, // First Byzantium block
-//				{4229999, ID{Hash: checksumToBytes(0x876cd59c), Next: 4939394}}, // Last Byzantium block
-//				{4230000, ID{Hash: checksumToBytes(0x876cd59c), Next: 4939394}}, // First Constantinople block
-//				{4939393, ID{Hash: checksumToBytes(0x876cd59c), Next: 4939394}}, // Last Constantinople block
-//				{4939394, ID{Hash: checksumToBytes(0xc3470161), Next: 6485846}}, // First Petersburg block
-//				{6485845, ID{Hash: checksumToBytes(0xc3470161), Next: 6485846}}, // Last Petersburg block
-//				{6485846, ID{Hash: checksumToBytes(0xf15a40d2), Next: 7117117}}, // First Istanbul block
-//				{7117116, ID{Hash: checksumToBytes(0xf15a40d2), Next: 7117117}}, // Last Istanbul block
-//				{7117117, ID{Hash: checksumToBytes(0x0476c60b), Next: 0}},       // First Muir Glacier block
-//				{7500000, ID{Hash: checksumToBytes(0x0476c60b), Next: 0}},       // Future
-//			},
-//		},
-//		// Rinkeby test cases
-//		//{
-//		//	params.RinkebyChainConfig,
-//		//	params.RinkebyGenesisHash,
-//		//	[]testcase{
-//		//		{0, ID{Hash: checksumToBytes(0x3b8e0691), Next: 1}},             // Unsynced, last Frontier block
-//		//		{1, ID{Hash: checksumToBytes(0x60949295), Next: 2}},             // First and last Homestead block
-//		//		{2, ID{Hash: checksumToBytes(0x8bde40dd), Next: 3}},             // First and last Tangerine block
-//		//		{3, ID{Hash: checksumToBytes(0xcb3a64bb), Next: 1035301}},       // First Spurious block
-//		//		{1035300, ID{Hash: checksumToBytes(0xcb3a64bb), Next: 1035301}}, // Last Spurious block
-//		//		{1035301, ID{Hash: checksumToBytes(0x8d748b57), Next: 3660663}}, // First Byzantium block
-//		//		{3660662, ID{Hash: checksumToBytes(0x8d748b57), Next: 3660663}}, // Last Byzantium block
-//		//		{3660663, ID{Hash: checksumToBytes(0xe49cab14), Next: 4321234}}, // First Constantinople block
-//		//		{4321233, ID{Hash: checksumToBytes(0xe49cab14), Next: 4321234}}, // Last Constantinople block
-//		//		{4321234, ID{Hash: checksumToBytes(0xafec6b27), Next: 5435345}}, // First Petersburg block
-//		//		{5435344, ID{Hash: checksumToBytes(0xafec6b27), Next: 5435345}}, // Last Petersburg block
-//		//		{5435345, ID{Hash: checksumToBytes(0xcbdb8838), Next: 0}},       // First Istanbul block
-//		//		{6000000, ID{Hash: checksumToBytes(0xcbdb8838), Next: 0}},       // Future Istanbul block
-//		//	},
-//		//},
-//		// Goerli test cases
-//		//{
-//		//	params.GoerliChainConfig,
-//		//	params.GoerliGenesisHash,
-//		//	[]testcase{
-//		//		{0, ID{Hash: checksumToBytes(0xa3f5ab08), Next: 1561651}},       // Unsynced, last Frontier, Homestead, Tangerine, Spurious, Byzantium, Constantinople and first Petersburg block
-//		//		{1561650, ID{Hash: checksumToBytes(0xa3f5ab08), Next: 1561651}}, // Last Petersburg block
-//		//		{1561651, ID{Hash: checksumToBytes(0xc25efa5c), Next: 0}},       // First Istanbul block
-//		//		{2000000, ID{Hash: checksumToBytes(0xc25efa5c), Next: 0}},       // Future Istanbul block
-//		//	},
-//		//},
-//	}
-//	for i, tt := range tests {
-//		for j, ttt := range tt.cases {
-//			if have := newID(tt.config, tt.genesis, ttt.head); have != ttt.want {
-//				t.Errorf("test %d, case %d: fork ID mismatch: have %x, want %x", i, j, have, ttt.want)
-//			}
-//		}
-//	}
-//}
-//
-//// TestValidation tests that a local peer correctly validates and accepts a remote
-//// fork ID.
+
+import (
+	"bytes"
+	"math"
+	"testing"
+
+	"github.com/simplechain-org/go-simplechain/common"
+	"github.com/simplechain-org/go-simplechain/params"
+	"github.com/simplechain-org/go-simplechain/rlp"
+)
+
+// TestCreation tests that different genesis and fork rule combinations result in
+// the correct fork ID.
+func TestCreation(t *testing.T) {
+	type testcase struct {
+		head uint64
+		want ID
+	}
+	tests := []struct {
+		config  *params.ChainConfig
+		genesis common.Hash
+		cases   []testcase
+	}{
+		// Mainnet test cases
+		{
+			params.MainnetChainConfig,
+			params.MainnetGenesisHash,
+			[]testcase{
+				{0, ID{Hash: checksumToBytes(0x523c0685), Next: 9069000}},      // Unsynced
+				{1149999, ID{Hash: checksumToBytes(0x523c0685), Next: 9069000}}, // Last Frontier block
+				{1150000, ID{Hash: checksumToBytes(0x523c0685), Next: 9069000}}, // First Homestead block
+				{1919999, ID{Hash: checksumToBytes(0x523c0685), Next: 9069000}}, // Last Homestead block
+				{1920000, ID{Hash: checksumToBytes(0x523c0685), Next: 9069000}}, // First DAO block
+				{2462999, ID{Hash: checksumToBytes(0x523c0685), Next: 9069000}}, // Last DAO block
+				{2463000, ID{Hash: checksumToBytes(0x523c0685), Next: 9069000}}, // First Tangerine block
+				{2674999, ID{Hash: checksumToBytes(0x523c0685), Next: 9069000}}, // Last Tangerine block
+				{2675000, ID{Hash: checksumToBytes(0x523c0685), Next: 9069000}}, // First Spurious block
+				{4369999, ID{Hash: checksumToBytes(0x523c0685), Next: 9069000}}, // Last Spurious block
+				{4370000, ID{Hash: checksumToBytes(0x523c0685), Next: 9069000}}, // First Byzantium block
+				{7279999, ID{Hash: checksumToBytes(0x523c0685), Next: 9069000}}, // Last Byzantium block
+				{7280000, ID{Hash: checksumToBytes(0x523c0685), Next: 9069000}}, // First and last Constantinople, first Petersburg block
+				{9068999, ID{Hash: checksumToBytes(0x523c0685), Next: 9069000}}, // Last Petersburg block
+				{9069000, ID{Hash: checksumToBytes(0x29b9b4a2), Next: 9200000}}, // First Istanbul and first Muir Glacier block
+				{9199999, ID{Hash: checksumToBytes(0x29b9b4a2), Next: 9200000}}, // Last Istanbul and first Muir Glacier block
+				{9200000, ID{Hash: checksumToBytes(0xd11560c1), Next: 0}},       // First Muir Glacier block
+				{10000000, ID{Hash: checksumToBytes(0xd11560c1), Next: 0}},      // Future Muir Glacier block
+			},
+		},
+		//Ropsten test cases
+		{
+			params.TestnetChainConfig,
+			params.TestnetGenesisHash,
+			[]testcase{
+				{0, ID{Hash: checksumToBytes(0x305fce07), Next: 6485846}},       // Unsynced, last Frontier, Homestead and first Tangerine block
+				{9, ID{Hash: checksumToBytes(0x305fce07), Next: 6485846}},       // Last Tangerine block
+				{10, ID{Hash: checksumToBytes(0x305fce07), Next: 6485846}},      // First Spurious block
+				{1699999, ID{Hash: checksumToBytes(0x305fce07), Next: 6485846}}, // Last Spurious block
+				{1700000, ID{Hash: checksumToBytes(0x305fce07), Next: 6485846}}, // First Byzantium block
+				{4229999, ID{Hash: checksumToBytes(0x305fce07), Next: 6485846}}, // Last Byzantium block
+				{4230000, ID{Hash: checksumToBytes(0x305fce07), Next: 6485846}}, // First Constantinople block
+				{4939393, ID{Hash: checksumToBytes(0x305fce07), Next: 6485846}}, // Last Constantinople block
+				{4939394, ID{Hash: checksumToBytes(0x305fce07), Next: 6485846}}, // First Petersburg block
+				{6485845, ID{Hash: checksumToBytes(0x305fce07), Next: 6485846}}, // Last Petersburg block
+				{6485846, ID{Hash: checksumToBytes(0x3d9aacf7), Next: 7117117}}, // First Istanbul block
+				{7117116, ID{Hash: checksumToBytes(0x3d9aacf7), Next: 7117117}}, // Last Istanbul block
+				{7117117, ID{Hash: checksumToBytes(0x4ced7d34), Next: 0}},       // First Muir Glacier block
+				{7500000, ID{Hash: checksumToBytes(0x4ced7d34), Next: 0}},       // Future
+			},
+		},
+		// Rinkeby test cases this
+		{
+			params.RinkebyChainConfig,
+			params.RinkebyGenesisHash,
+			[]testcase{
+				{0, ID{Hash: checksumToBytes(0x3b8e0691), Next: 1}},             // Unsynced, last Frontier block
+				{1, ID{Hash: checksumToBytes(0x60949295), Next: 2}},             // First and last Homestead block
+				{2, ID{Hash: checksumToBytes(0x8bde40dd), Next: 3}},             // First and last Tangerine block
+				{3, ID{Hash: checksumToBytes(0xcb3a64bb), Next: 1035301}},       // First Spurious block
+				{1035300, ID{Hash: checksumToBytes(0xcb3a64bb), Next: 1035301}}, // Last Spurious block
+				{1035301, ID{Hash: checksumToBytes(0x8d748b57), Next: 4321234}}, // First Byzantium block
+				{3660662, ID{Hash: checksumToBytes(0x8d748b57), Next: 4321234}}, // Last Byzantium block
+				{3660663, ID{Hash: checksumToBytes(0x8d748b57), Next: 4321234}}, // First Constantinople block
+				{4321233, ID{Hash: checksumToBytes(0x8d748b57), Next: 4321234}}, // Last Constantinople block
+				{4321234, ID{Hash: checksumToBytes(0xa9761b66), Next: 5435345}}, // First Petersburg block
+				{5435344, ID{Hash: checksumToBytes(0xa9761b66), Next: 5435345}}, // Last Petersburg block
+				{5435345, ID{Hash: checksumToBytes(0xf1395ae5), Next: 0}},       // First Istanbul block
+				{6000000, ID{Hash: checksumToBytes(0xf1395ae5), Next: 0}},       // Future Istanbul block
+			},
+		},
+		// Goerli test cases
+		{
+			params.GoerliChainConfig,
+			params.GoerliGenesisHash,
+			[]testcase{
+				{0, ID{Hash: checksumToBytes(0xa3f5ab08), Next: 1561651}},       // Unsynced, last Frontier, Homestead, Tangerine, Spurious, Byzantium, Constantinople and first Petersburg block
+				{1561650, ID{Hash: checksumToBytes(0xa3f5ab08), Next: 1561651}}, // Last Petersburg block
+				{1561651, ID{Hash: checksumToBytes(0xc25efa5c), Next: 0}},       // First Istanbul block
+				{2000000, ID{Hash: checksumToBytes(0xc25efa5c), Next: 0}},       // Future Istanbul block
+			},
+		},
+	}
+	for i, tt := range tests {
+		for j, ttt := range tt.cases {
+			if have := newID(tt.config, tt.genesis, ttt.head); have != ttt.want {
+				t.Errorf("test %d, case %d: fork ID mismatch: have %x, want %x", i, j, have, ttt.want)
+			}
+		}
+	}
+}
+
+// TestValidation tests that a local peer correctly validates and accepts a remote
+// fork ID.
 //func TestValidation(t *testing.T) {
 //	tests := []struct {
 //		head uint64
@@ -203,26 +204,26 @@ package forkid
 //		}
 //	}
 //}
-//
-//// Tests that IDs are properly RLP encoded (specifically important because we
-//// use uint32 to store the hash, but we need to encode it as [4]byte).
-//func TestEncoding(t *testing.T) {
-//	tests := []struct {
-//		id   ID
-//		want []byte
-//	}{
-//		{ID{Hash: checksumToBytes(0), Next: 0}, common.Hex2Bytes("c6840000000080")},
-//		{ID{Hash: checksumToBytes(0xdeadbeef), Next: 0xBADDCAFE}, common.Hex2Bytes("ca84deadbeef84baddcafe,")},
-//		{ID{Hash: checksumToBytes(math.MaxUint32), Next: math.MaxUint64}, common.Hex2Bytes("ce84ffffffff88ffffffffffffffff")},
-//	}
-//	for i, tt := range tests {
-//		have, err := rlp.EncodeToBytes(tt.id)
-//		if err != nil {
-//			t.Errorf("test %d: failed to encode forkid: %v", i, err)
-//			continue
-//		}
-//		if !bytes.Equal(have, tt.want) {
-//			t.Errorf("test %d: RLP mismatch: have %x, want %x", i, have, tt.want)
-//		}
-//	}
-//}
+
+// Tests that IDs are properly RLP encoded (specifically important because we
+// use uint32 to store the hash, but we need to encode it as [4]byte).
+func TestEncoding(t *testing.T) {
+	tests := []struct {
+		id   ID
+		want []byte
+	}{
+		{ID{Hash: checksumToBytes(0), Next: 0}, common.Hex2Bytes("c6840000000080")},
+		{ID{Hash: checksumToBytes(0xdeadbeef), Next: 0xBADDCAFE}, common.Hex2Bytes("ca84deadbeef84baddcafe,")},
+		{ID{Hash: checksumToBytes(math.MaxUint32), Next: math.MaxUint64}, common.Hex2Bytes("ce84ffffffff88ffffffffffffffff")},
+	}
+	for i, tt := range tests {
+		have, err := rlp.EncodeToBytes(tt.id)
+		if err != nil {
+			t.Errorf("test %d: failed to encode forkid: %v", i, err)
+			continue
+		}
+		if !bytes.Equal(have, tt.want) {
+			t.Errorf("test %d: RLP mismatch: have %x, want %x", i, have, tt.want)
+		}
+	}
+}
