@@ -137,7 +137,7 @@ func NewNode(datadir string, config *NodeConfig) (stack *Node, _ error) {
 		return nil, err
 	}
 
-	debug.Memsize.Add("node", rawStack)
+	//debug.Memsize.Add("node", rawStack)
 
 	var genesis *core.Genesis
 	if config.EthereumGenesis != "" {
