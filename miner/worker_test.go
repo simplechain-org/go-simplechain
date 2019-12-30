@@ -208,7 +208,6 @@ func testGenerateBlockAndImport(t *testing.T, isClique bool) {
 		chainConfig = params.AllScryptProtocolChanges
 		engine = scrypt.NewFaker()
 	}
-
 	w, b := newTestWorker(t, chainConfig, engine, db, 0)
 	defer w.close()
 
@@ -216,6 +215,11 @@ func testGenerateBlockAndImport(t *testing.T, isClique bool) {
 	b.genesis.MustCommit(db2)
 	chain, _ := core.NewBlockChain(db2, nil, b.chain.Config(), engine, vm.Config{}, nil)
 	defer chain.Stop()
+
+	if !isClique {
+		cpuMinerAgent := NewCpuAgent(chain, engine)
+		w.register(cpuMinerAgent)
+	}
 
 	loopErr := make(chan error)
 	newBlock := make(chan struct{})
