@@ -19,8 +19,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/simplechain-org/go-simplechain/miner"
-	"github.com/simplechain-org/go-simplechain/stratum"
 	"math"
 	"os"
 	"runtime"
@@ -29,6 +27,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/simplechain-org/go-simplechain/miner"
+	"github.com/simplechain-org/go-simplechain/stratum"
 
 	"github.com/elastic/gosigar"
 	"github.com/simplechain-org/go-simplechain/accounts"
@@ -449,8 +450,8 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 				calcHashRate = true
 				log.Info("calc stratum miner's hashRate")
 			}
-			fanOut:=ctx.GlobalBool(utils.StratumFanout.Name)
-			stratumServer, err := stratum.NewServer(port, uint(maxConn), auth, calcHashRate,fanOut)
+			fanOut := ctx.GlobalBool(utils.StratumFanout.Name)
+			stratumServer, err := stratum.NewServer(port, uint(maxConn), auth, calcHashRate, fanOut)
 			if err != nil {
 				log.Info("[stratum]Server init error", "err", err.Error())
 				return

@@ -20,11 +20,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/simplechain-org/go-simplechain/consensus/scrypt"
 	"math/big"
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/simplechain-org/go-simplechain/consensus/scrypt"
 
 	"github.com/simplechain-org/go-simplechain"
 	"github.com/simplechain-org/go-simplechain/common"

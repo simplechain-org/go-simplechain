@@ -19,13 +19,14 @@ package downloader
 import (
 	"errors"
 	"fmt"
-	"github.com/simplechain-org/go-simplechain"
 	"math/big"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/simplechain-org/go-simplechain"
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/rawdb"

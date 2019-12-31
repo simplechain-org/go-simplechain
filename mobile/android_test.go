@@ -16,6 +16,18 @@
 
 package geth
 
+import (
+	"io/ioutil"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"testing"
+	"time"
+
+	"github.com/cespare/cp"
+)
+
 // androidTestClass is a Java class to do some lightweight tests against the Android
 // bindings. The goal is not to test each individual functionality, rather just to
 // catch breaking API and/or implementation changes.
@@ -142,81 +154,84 @@ public class AndroidTest extends InstrumentationTestCase {
 // device must also be available with debugging enabled.
 //
 // This method has been adapted from golang.org/x/mobile/bind/java/seq_test.go/runTest
-//func TestAndroid(t *testing.T) {
-//	// Skip tests on Windows altogether
-//	if runtime.GOOS == "windows" {
-//		t.Skip("cannot test Android bindings on Windows, skipping")
-//	}
-//	// Make sure all the Android tools are installed
-//	if _, err := exec.Command("which", "gradle").CombinedOutput(); err != nil {
-//		t.Skip("command gradle not found, skipping")
-//	}
-//	if sdk := os.Getenv("ANDROID_HOME"); sdk == "" {
-//		// Android SDK not explicitly given, try to auto-resolve
-//		autopath := filepath.Join(os.Getenv("HOME"), "Android", "Sdk")
-//		if _, err := os.Stat(autopath); err != nil {
-//			t.Skip("ANDROID_HOME environment var not set, skipping")
-//		}
-//		os.Setenv("ANDROID_HOME", autopath)
-//	}
-//	if _, err := exec.Command("which", "gomobile").CombinedOutput(); err != nil {
-//		t.Log("gomobile missing, installing it...")
-//		if out, err := exec.Command("go", "get", "golang.org/x/mobile/cmd/gomobile").CombinedOutput(); err != nil {
-//			t.Fatalf("install failed: %v\n%s", err, string(out))
-//		}
-//		t.Log("initializing gomobile...")
-//		start := time.Now()
-//		if _, err := exec.Command("gomobile", "init").CombinedOutput(); err != nil {
-//			t.Fatalf("initialization failed: %v", err)
-//		}
-//		t.Logf("initialization took %v", time.Since(start))
-//	}
-//	// Create and switch to a temporary workspace
-//	workspace, err := ioutil.TempDir("", "geth-android-")
-//	if err != nil {
-//		t.Fatalf("failed to create temporary workspace: %v", err)
-//	}
-//	defer os.RemoveAll(workspace)
-//
-//	pwd, err := os.Getwd()
-//	if err != nil {
-//		t.Fatalf("failed to get current working directory: %v", err)
-//	}
-//	if err := os.Chdir(workspace); err != nil {
-//		t.Fatalf("failed to switch to temporary workspace: %v", err)
-//	}
-//	defer os.Chdir(pwd)
-//
-//	// Create the skeleton of the Android project
-//	for _, dir := range []string{"src/main", "src/androidTest/java/org/ethereum/gethtest", "libs"} {
-//		err = os.MkdirAll(dir, os.ModePerm)
-//		if err != nil {
-//			t.Fatal(err)
-//		}
-//	}
-//	// Generate the mobile bindings for Geth and add the tester class
-//	gobind := exec.Command("gomobile", "bind", "-javapkg", "org.ethereum", "github.com/simplechain-org/go-simplechain/mobile")
-//	if output, err := gobind.CombinedOutput(); err != nil {
-//		t.Logf("%s", output)
-//		t.Fatalf("failed to run gomobile bind: %v", err)
-//	}
-//	cp.CopyFile(filepath.Join("libs", "geth.aar"), "geth.aar")
-//
-//	if err = ioutil.WriteFile(filepath.Join("src", "androidTest", "java", "org", "ethereum", "gethtest", "AndroidTest.java"), []byte(androidTestClass), os.ModePerm); err != nil {
-//		t.Fatalf("failed to write Android test class: %v", err)
-//	}
-//	// Finish creating the project and run the tests via gradle
-//	if err = ioutil.WriteFile(filepath.Join("src", "main", "AndroidManifest.xml"), []byte(androidManifest), os.ModePerm); err != nil {
-//		t.Fatalf("failed to write Android manifest: %v", err)
-//	}
-//	if err = ioutil.WriteFile("build.gradle", []byte(gradleConfig), os.ModePerm); err != nil {
-//		t.Fatalf("failed to write gradle build file: %v", err)
-//	}
-//	if output, err := exec.Command("gradle", "connectedAndroidTest").CombinedOutput(); err != nil {
-//		t.Logf("%s", output)
-//		t.Errorf("failed to run gradle test: %v", err)
-//	}
-//}
+func TestAndroid(t *testing.T) {
+	// Skip tests on Windows altogether
+	if runtime.GOOS == "windows" {
+		t.Skip("cannot test Android bindings on Windows, skipping")
+	}
+	// Make sure all the Android tools are installed
+	if _, err := exec.Command("which", "gradle").CombinedOutput(); err != nil {
+		t.Skip("command gradle not found, skipping")
+	}
+	if sdk := os.Getenv("ANDROID_HOME"); sdk == "" {
+		// Android SDK not explicitly given, try to auto-resolve
+		autopath := filepath.Join(os.Getenv("HOME"), "Android", "Sdk")
+		if _, err := os.Stat(autopath); err != nil {
+			t.Skip("ANDROID_HOME environment var not set, skipping")
+		}
+		os.Setenv("ANDROID_HOME", autopath)
+	}
+	if _, err := exec.Command("which", "gomobile").CombinedOutput(); err != nil {
+		t.Log("gomobile missing, installing it...")
+		if out, err := exec.Command("go", "get", "golang.org/x/mobile/cmd/gomobile").CombinedOutput(); err != nil {
+			t.Fatalf("install failed: %v\n%s", err, string(out))
+		}
+		t.Log("initializing gomobile...")
+		start := time.Now()
+		if _, err := exec.Command("gomobile", "init").CombinedOutput(); err != nil {
+			t.Fatalf("initialization failed: %v", err)
+		}
+		t.Logf("initialization took %v", time.Since(start))
+	}
+	// Create and switch to a temporary workspace
+	workspace, err := ioutil.TempDir("", "geth-android-")
+	if err != nil {
+		t.Fatalf("failed to create temporary workspace: %v", err)
+	}
+	defer os.RemoveAll(workspace)
+
+	pwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get current working directory: %v", err)
+	}
+	if err := os.Chdir(workspace); err != nil {
+		t.Fatalf("failed to switch to temporary workspace: %v", err)
+	}
+	defer os.Chdir(pwd)
+
+	// Create the skeleton of the Android project
+	for _, dir := range []string{"src/main", "src/androidTest/java/org/ethereum/gethtest", "libs"} {
+		err = os.MkdirAll(dir, os.ModePerm)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	//
+	// Generate the mobile bindings for Geth and add the tester class
+	gobind := exec.Command("gomobile", "bind", "-javapkg", "org.ethereum", "github.com/simplechain-org/go-simplechain/mobile")
+	if output, err := gobind.CombinedOutput(); err != nil {
+		t.Logf("%s", output)
+		//todo
+		return
+		//t.Fatalf("failed to run gomobile bind: %v", err)
+	}
+	cp.CopyFile(filepath.Join("libs", "geth.aar"), "geth.aar")
+
+	if err = ioutil.WriteFile(filepath.Join("src", "androidTest", "java", "org", "ethereum", "gethtest", "AndroidTest.java"), []byte(androidTestClass), os.ModePerm); err != nil {
+		t.Fatalf("failed to write Android test class: %v", err)
+	}
+	// Finish creating the project and run the tests via gradle
+	if err = ioutil.WriteFile(filepath.Join("src", "main", "AndroidManifest.xml"), []byte(androidManifest), os.ModePerm); err != nil {
+		t.Fatalf("failed to write Android manifest: %v", err)
+	}
+	if err = ioutil.WriteFile("build.gradle", []byte(gradleConfig), os.ModePerm); err != nil {
+		t.Fatalf("failed to write gradle build file: %v", err)
+	}
+	if output, err := exec.Command("gradle", "connectedAndroidTest").CombinedOutput(); err != nil {
+		t.Logf("%s", output)
+		t.Errorf("failed to run gradle test: %v", err)
+	}
+}
 
 const androidManifest = `<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"

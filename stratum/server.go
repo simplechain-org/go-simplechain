@@ -4,15 +4,15 @@ import (
 	"math/big"
 	"math/rand"
 	"net"
-
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/satori/go.uuid"
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/consensus/scrypt"
 	"github.com/simplechain-org/go-simplechain/log"
+
+	uuid "github.com/satori/go.uuid"
 )
 
 const (
@@ -32,38 +32,38 @@ type MineTask struct {
 }
 
 type Server struct {
-	fanOut        bool // if true, send same task for every session
-	maxConn       uint
-	address       string
-	sessions      map[string]*Session
-	authorizes    map[string]*Session
-	sessionLock   sync.RWMutex
-	sessionsLen   int32
-	authorizedLen int32
-	calcHashRate  bool
-	listener      net.Listener
-	rateLimiter   chan struct{}
-	resultChan    chan uint64
-	mineTask      atomic.Value
-	taskId        uint64
-	rand          *rand.Rand
-	stop          chan struct{}
-	closed        int64
-	running       int32
+	fanOut         bool // if true, send same task for every session
+	maxConn        uint
+	address        string
+	sessions       map[string]*Session
+	authorizes     map[string]*Session
+	sessionLock    sync.RWMutex
+	sessionsLen    int32
+	authorizedLen  int32
+	calcHashRate   bool
+	listener       net.Listener
+	rateLimiter    chan struct{}
+	resultChan     chan uint64
+	mineTask       atomic.Value
+	taskId         uint64
+	rand           *rand.Rand
+	stop           chan struct{}
+	closed         int64
+	running        int32
 	acceptQuantity uint64
 	hashRateMeter  []uint64
-	hashRate   uint64
-	auth   Auth
+	hashRate       uint64
+	auth           Auth
 }
 
-func NewServer(address string, maxConn uint, auth Auth,calcHashRate bool, fanOut bool) (*Server, error) {
+func NewServer(address string, maxConn uint, auth Auth, calcHashRate bool, fanOut bool) (*Server, error) {
 	server := &Server{
 		address:      address,
 		maxConn:      maxConn,
 		fanOut:       fanOut,
 		calcHashRate: calcHashRate,
 		running:      0,
-		auth:auth,
+		auth:         auth,
 	}
 	_, _, err := net.SplitHostPort(address)
 	if err != nil {
@@ -90,12 +90,12 @@ func (this *Server) Start() {
 		this.rateLimiter <- struct{}{}
 	}
 	go this.listen()
-	if this.calcHashRate{
+	if this.calcHashRate {
 		go this.hashRateMeterLoop()
 	}
 }
 
-func (this *Server) listen(){
+func (this *Server) listen() {
 loop:
 	for {
 		select {
@@ -164,7 +164,7 @@ func (this *Server) handleConn(conn net.Conn) {
 			PowHash:      mineTask.(*MineTask).Hash,
 			NonceBegin:   uint64(rand.Int63()),
 			NonceEnd:     UINT64MAX,
-			Difficulty:   big.NewInt(int64(InitDifficulty)),
+			Difficulty:   big.NewInt(InitDifficulty),
 			Timestamp:    time.Now().UnixNano(),
 			IfClearTask:  true,
 			Submitted:    false,
@@ -320,8 +320,8 @@ func (this *Server) dispatchWork(nonceBegin, nonceEnd uint64, miners int) {
 
 func (this *Server) GetHashRate() uint64 {
 	var hashRate uint64
-	hashRate=atomic.LoadUint64(&this.hashRate)
-	if hashRate!=0{
+	hashRate = atomic.LoadUint64(&this.hashRate)
+	if hashRate != 0 {
 		return hashRate
 	}
 	this.sessionLock.Lock()
@@ -404,7 +404,7 @@ func (this *Server) hashRateMeterLoop() {
 				total += v
 			}
 			atomic.StoreUint64(&this.hashRate, total/uint64(len(this.hashRateMeter)))
-			log.Info("[Server] hashRateMeterLoop","hashRate",atomic.LoadUint64(&this.hashRate))
+			log.Info("[Server] hashRateMeterLoop", "hashRate", atomic.LoadUint64(&this.hashRate))
 		case <-this.stop:
 			log.Debug("[Server] hashRateMeterLoop done")
 			return

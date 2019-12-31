@@ -19,7 +19,12 @@ package miner
 import (
 	"bytes"
 	"errors"
-	"github.com/deckarep/golang-set"
+	"math/big"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	mapset "github.com/deckarep/golang-set"
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/consensus"
 	"github.com/simplechain-org/go-simplechain/consensus/misc"
@@ -30,10 +35,6 @@ import (
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/params"
-	"math/big"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
 const (

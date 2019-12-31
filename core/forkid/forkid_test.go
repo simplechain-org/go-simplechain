@@ -16,8 +16,6 @@
 
 package forkid
 
-
-
 import (
 	"bytes"
 	"math"
@@ -45,7 +43,7 @@ func TestCreation(t *testing.T) {
 			params.MainnetChainConfig,
 			params.MainnetGenesisHash,
 			[]testcase{
-				{0, ID{Hash: checksumToBytes(0x523c0685), Next: 9069000}},      // Unsynced
+				{0, ID{Hash: checksumToBytes(0x523c0685), Next: 9069000}},       // Unsynced
 				{1149999, ID{Hash: checksumToBytes(0x523c0685), Next: 9069000}}, // Last Frontier block
 				{1150000, ID{Hash: checksumToBytes(0x523c0685), Next: 9069000}}, // First Homestead block
 				{1919999, ID{Hash: checksumToBytes(0x523c0685), Next: 9069000}}, // Last Homestead block

@@ -54,7 +54,7 @@ func (self *StratumAgent) SubscribeResult(ch chan<- *types.Block) {
 
 func (self *StratumAgent) Start() {
 	if err := recover(); err != nil {
-		switch e:=err.(type) {
+		switch e := err.(type) {
 		case error:
 			log.Error(e.(error).Error())
 		case string:
@@ -97,7 +97,6 @@ done:
 func (self *StratumAgent) GetHashRate() uint64 {
 	return self.server.GetHashRate()
 }
-
 
 func (self *StratumAgent) update(ctx context.Context) {
 	for {
