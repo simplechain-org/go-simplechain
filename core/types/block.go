@@ -354,6 +354,7 @@ func (b *Block) Size() common.StorageSize {
 func (b *Block) HashNoNonce() common.Hash {
 	return b.header.HashNoNonce()
 }
+
 // SanityCheck can be used to prevent that unbounded fields are
 // stuffed with junk data to add processing overhead
 func (b *Block) SanityCheck() error {

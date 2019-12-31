@@ -19,8 +19,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/simplechain-org/go-simplechain/miner"
-	"github.com/simplechain-org/go-simplechain/stratum"
 	"math"
 	"os"
 	"runtime"
@@ -30,7 +28,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/elastic/gosigar"
 	"github.com/simplechain-org/go-simplechain/accounts"
 	"github.com/simplechain-org/go-simplechain/accounts/keystore"
 	"github.com/simplechain-org/go-simplechain/cmd/utils"
@@ -43,7 +40,11 @@ import (
 	"github.com/simplechain-org/go-simplechain/les"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/metrics"
+	"github.com/simplechain-org/go-simplechain/miner"
 	"github.com/simplechain-org/go-simplechain/node"
+	"github.com/simplechain-org/go-simplechain/stratum"
+
+	"github.com/elastic/gosigar"
 	cli "gopkg.in/urfave/cli.v1"
 )
 
@@ -449,8 +450,8 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 				calcHashRate = true
 				log.Info("calc stratum miner's hashRate")
 			}
-			fanOut:=ctx.GlobalBool(utils.StratumFanout.Name)
-			stratumServer, err := stratum.NewServer(port, uint(maxConn), auth, calcHashRate,fanOut)
+			fanOut := ctx.GlobalBool(utils.StratumFanout.Name)
+			stratumServer, err := stratum.NewServer(port, uint(maxConn), auth, calcHashRate, fanOut)
 			if err != nil {
 				log.Info("[stratum]Server init error", "err", err.Error())
 				return

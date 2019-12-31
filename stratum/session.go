@@ -32,10 +32,10 @@ var (
 )
 
 type Session struct {
-	sessionId string
-	minerName string
-	minerIp string
-	conn net.Conn
+	sessionId  string
+	minerName  string
+	minerIp    string
+	conn       net.Conn
 	difficulty uint64
 	latestTask atomic.Value //*StratumTask
 	closed     int64
@@ -46,7 +46,7 @@ type Session struct {
 	hashRate    uint64 //3m
 	hashRate30s uint64 //30s
 
-	hashRateArray []uint64
+	hashRateArray    []uint64
 	hashRateArrayMux sync.Mutex
 
 	cancel context.CancelFunc

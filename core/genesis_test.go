@@ -46,7 +46,7 @@ func TestSetupGenesis(t *testing.T) {
 		customghash = common.HexToHash("0xc2f4d611bacef727b38b3f718a3d227728fbad565fed5ffbda4b933641adacda")
 		customg     = Genesis{
 			Config: &params.ChainConfig{HomesteadBlock: big.NewInt(3)},
-			Alloc: decodePrealloc(testnetAllocData),
+			Alloc:  decodePrealloc(testnetAllocData),
 		}
 		oldcustomg = customg
 	)
@@ -144,13 +144,13 @@ func TestSetupGenesis(t *testing.T) {
 		// Check the return values.
 		if !reflect.DeepEqual(err, test.wantErr) {
 			spew := spew.ConfigState{DisablePointerAddresses: true, DisableCapacities: true}
-			t.Errorf("%s: returned error %#v, want %#v %d", test.name, spew.NewFormatter(err), spew.NewFormatter(test.wantErr),index)
+			t.Errorf("%s: returned error %#v, want %#v %d", test.name, spew.NewFormatter(err), spew.NewFormatter(test.wantErr), index)
 		}
 		if !reflect.DeepEqual(config, test.wantConfig) {
 			t.Errorf("%s:\nreturned %v\nwant     %v", test.name, config, test.wantConfig)
 		}
 		if hash != test.wantHash {
-			t.Errorf("%s: returned hash %s, want %s %d", test.name, hash.Hex(), test.wantHash.Hex(),index)
+			t.Errorf("%s: returned hash %s, want %s %d", test.name, hash.Hex(), test.wantHash.Hex(), index)
 		} else if err == nil {
 			// Check database content.
 			stored := rawdb.ReadBlock(db, test.wantHash, 0)
