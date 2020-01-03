@@ -48,17 +48,21 @@ func TestChainIndexerWithChildren(t *testing.T) {
 // multiple backends. The section size and required confirmation count parameters
 // are randomized.
 func testChainIndexer(t *testing.T, count int) {
+	//内存型db
 	db := rawdb.NewMemoryDatabase()
+
 	defer db.Close()
 
 	// Create a chain of indexers and ensure they all report empty
 	backends := make([]*testChainIndexBackend, count)
+
 	for i := 0; i < count; i++ {
 		var (
 			sectionSize = uint64(rand.Intn(100) + 1)
 			confirmsReq = uint64(rand.Intn(10))
 		)
 		backends[i] = &testChainIndexBackend{t: t, processCh: make(chan uint64)}
+
 		backends[i].indexer = NewChainIndexer(db, rawdb.NewTable(db, string([]byte{byte(i)})), backends[i], sectionSize, confirmsReq, 0, fmt.Sprintf("indexer-%d", i))
 
 		if sections, _, _ := backends[i].indexer.Sections(); sections != 0 {
