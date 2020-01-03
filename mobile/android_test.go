@@ -235,7 +235,7 @@ func TestAndroid(t *testing.T) {
 
 const androidManifest = `<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-          package="org.ethereum.gethtest"
+         package="org.ethereum.gethtest"
 	  android:versionCode="1"
 	  android:versionName="1.0">
 
@@ -243,27 +243,27 @@ const androidManifest = `<?xml version="1.0" encoding="utf-8"?>
 </manifest>`
 
 const gradleConfig = `buildscript {
-    repositories {
-        jcenter()
-    }
-    dependencies {
-        classpath 'com.android.tools.build:gradle:2.2.3'
-    }
+   repositories {
+       jcenter()
+   }
+   dependencies {
+       classpath 'com.android.tools.build:gradle:2.2.3'
+   }
 }
 allprojects {
-    repositories { jcenter() }
+   repositories { jcenter() }
 }
 apply plugin: 'com.android.library'
 android {
-    compileSdkVersion 'android-19'
-    buildToolsVersion '21.1.2'
-    defaultConfig { minSdkVersion 15 }
+   compileSdkVersion 'android-19'
+   buildToolsVersion '21.1.2'
+   defaultConfig { minSdkVersion 15 }
 }
 repositories {
-    flatDir { dirs 'libs' }
+   flatDir { dirs 'libs' }
 }
 dependencies {
-    compile 'com.android.support:appcompat-v7:19.0.0'
-    compile(name: "geth", ext: "aar")
+   compile 'com.android.support:appcompat-v7:19.0.0'
+   compile(name: "geth", ext: "aar")
 }
 `

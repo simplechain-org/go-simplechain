@@ -27,7 +27,6 @@ import (
 	"time"
 
 	"github.com/simplechain-org/go-simplechain"
-
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/rawdb"
 	"github.com/simplechain-org/go-simplechain/core/types"

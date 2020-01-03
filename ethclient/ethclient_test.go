@@ -25,11 +25,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/simplechain-org/go-simplechain/consensus/scrypt"
-
 	"github.com/simplechain-org/go-simplechain"
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/consensus/ethash"
+	"github.com/simplechain-org/go-simplechain/consensus/scrypt"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/rawdb"
 	"github.com/simplechain-org/go-simplechain/core/types"
