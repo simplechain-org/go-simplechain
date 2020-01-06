@@ -46,7 +46,7 @@ func TestSetupGenesis(t *testing.T) {
 		customghash = common.HexToHash("0xc2f4d611bacef727b38b3f718a3d227728fbad565fed5ffbda4b933641adacda")
 		customg     = Genesis{
 			Config: &params.ChainConfig{HomesteadBlock: big.NewInt(3)},
-			Alloc:  decodePrealloc(testnetAllocData),
+			Alloc:  decodePrealloc(SipeTestnetAllocData),
 		}
 		oldcustomg = customg
 	)

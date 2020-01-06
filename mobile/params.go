@@ -42,13 +42,13 @@ func TestnetGenesis() string {
 }
 
 // RinkebyGenesis returns the JSON spec to use for the Rinkeby test network
-func RinkebyGenesis() string {
-	enc, err := json.Marshal(core.DefaultRinkebyGenesisBlock())
-	if err != nil {
-		panic(err)
-	}
-	return string(enc)
-}
+//func RinkebyGenesis() string {
+//	enc, err := json.Marshal(core.DefaultRinkebyGenesisBlock())
+//	if err != nil {
+//		panic(err)
+//	}
+//	return string(enc)
+//}
 
 // FoundationBootnodes returns the enode URLs of the P2P bootstrap nodes operated
 // by the foundation running the V5 discovery protocol.
