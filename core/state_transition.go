@@ -191,11 +191,11 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 	msg := st.msg
 	sender := vm.AccountRef(msg.From())
 	homestead := st.evm.ChainConfig().IsHomestead(st.evm.BlockNumber)
-	istanbul := st.evm.ChainConfig().IsIstanbul(st.evm.BlockNumber)
+	isMoon := st.evm.ChainConfig().IsMoon(st.evm.BlockNumber)
 	contractCreation := msg.To() == nil
 
 	// Pay intrinsic gas
-	gas, err := IntrinsicGas(st.data, contractCreation, homestead, istanbul)
+	gas, err := IntrinsicGas(st.data, contractCreation, homestead, isMoon)
 	if err != nil {
 		return nil, 0, false, err
 	}

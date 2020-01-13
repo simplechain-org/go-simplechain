@@ -47,7 +47,7 @@ func run(evm *EVM, contract *Contract, input []byte, readOnly bool) ([]byte, err
 		if evm.chainRules.IsByzantium {
 			precompiles = PrecompiledContractsByzantium
 		}
-		if evm.chainRules.IsIstanbul {
+		if evm.chainRules.IsMoon {
 			precompiles = PrecompiledContractsIstanbul
 		}
 		if p := precompiles[*contract.CodeAddr]; p != nil {
@@ -209,7 +209,7 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 		if evm.chainRules.IsByzantium {
 			precompiles = PrecompiledContractsByzantium
 		}
-		if evm.chainRules.IsIstanbul {
+		if evm.chainRules.IsMoon {
 			precompiles = PrecompiledContractsIstanbul
 		}
 		if precompiles[addr] == nil && evm.chainRules.IsEIP158 && value.Sign() == 0 {

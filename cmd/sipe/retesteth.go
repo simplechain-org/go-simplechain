@@ -132,7 +132,7 @@ type CParamsParams struct {
 	ByzantiumForkBlock         *math.HexOrDecimal64  `json:"byzantiumForkBlock"`
 	ConstantinopleForkBlock    *math.HexOrDecimal64  `json:"constantinopleForkBlock"`
 	ConstantinopleFixForkBlock *math.HexOrDecimal64  `json:"constantinopleFixForkBlock"`
-	IstanbulBlock              *math.HexOrDecimal64  `json:"istanbulForkBlock"`
+	MoonBlock                  *math.HexOrDecimal64  `json:"istanbulForkBlock"`
 	ChainID                    *math.HexOrDecimal256 `json:"chainID"`
 	MaximumExtraDataSize       math.HexOrDecimal64   `json:"maximumExtraDataSize"`
 	TieBreakingGas             bool                  `json:"tieBreakingGas"`
@@ -319,8 +319,7 @@ func (api *RetestethAPI) SetChainParams(ctx context.Context, chainParams ChainPa
 		eip158Block         *big.Int
 		byzantiumBlock      *big.Int
 		constantinopleBlock *big.Int
-		petersburgBlock     *big.Int
-		istanbulBlock       *big.Int
+		moonBlock           *big.Int
 	)
 	if chainParams.Params.HomesteadForkBlock != nil {
 		homesteadBlock = big.NewInt(int64(*chainParams.Params.HomesteadForkBlock))
@@ -341,14 +340,8 @@ func (api *RetestethAPI) SetChainParams(ctx context.Context, chainParams ChainPa
 	if chainParams.Params.ConstantinopleForkBlock != nil {
 		constantinopleBlock = big.NewInt(int64(*chainParams.Params.ConstantinopleForkBlock))
 	}
-	if chainParams.Params.ConstantinopleFixForkBlock != nil {
-		petersburgBlock = big.NewInt(int64(*chainParams.Params.ConstantinopleFixForkBlock))
-	}
-	if constantinopleBlock != nil && petersburgBlock == nil {
-		petersburgBlock = big.NewInt(100000000000)
-	}
-	if chainParams.Params.IstanbulBlock != nil {
-		istanbulBlock = big.NewInt(int64(*chainParams.Params.IstanbulBlock))
+	if chainParams.Params.MoonBlock != nil {
+		moonBlock = big.NewInt(int64(*chainParams.Params.MoonBlock))
 	}
 
 	genesis := &core.Genesis{
@@ -362,8 +355,7 @@ func (api *RetestethAPI) SetChainParams(ctx context.Context, chainParams ChainPa
 			EIP158Block:         eip158Block,
 			ByzantiumBlock:      byzantiumBlock,
 			ConstantinopleBlock: constantinopleBlock,
-			PetersburgBlock:     petersburgBlock,
-			IstanbulBlock:       istanbulBlock,
+			MoonBlock:           moonBlock,
 		},
 		Nonce:      uint64(chainParams.Genesis.Nonce),
 		Timestamp:  uint64(chainParams.Genesis.Timestamp),

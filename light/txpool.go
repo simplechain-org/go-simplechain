@@ -313,7 +313,7 @@ func (pool *TxPool) setNewHead(head *types.Header) {
 
 	// Update fork indicator by next pending block number
 	next := new(big.Int).Add(head.Number, big.NewInt(1))
-	pool.istanbul = pool.config.IsIstanbul(next)
+	pool.istanbul = pool.config.IsMoon(next)
 }
 
 // Stop stops the light transaction pool
