@@ -94,15 +94,9 @@ func NewEVMInterpreter(evm *EVM, cfg Config) *EVMInterpreter {
 		var jt JumpTable
 		switch {
 		case evm.chainRules.IsMoon:
-			jt = istanbulInstructionSet
-		case evm.chainRules.IsConstantinople:
-			jt = constantinopleInstructionSet
-		case evm.chainRules.IsByzantium:
-			jt = byzantiumInstructionSet
-		case evm.chainRules.IsEIP158:
-			jt = spuriousDragonInstructionSet
+			jt = moonInstructionSet
 		case evm.chainRules.IsEIP150:
-			jt = tangerineWhistleInstructionSet
+			jt = constantinopleInstructionSet
 		case evm.chainRules.IsHomestead:
 			jt = homesteadInstructionSet
 		default:
@@ -214,7 +208,7 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 			return nil, fmt.Errorf("stack limit reached %d (%d)", sLen, operation.maxStack)
 		}
 		// If the operation is valid, enforce and write restrictions
-		if in.readOnly && in.evm.chainRules.IsByzantium {
+		if in.readOnly {
 			// If the interpreter is operating in readonly mode, make sure no
 			// state-modifying operation is performed. The 3rd stack item
 			// for a call operation is the value. Transferring value from one

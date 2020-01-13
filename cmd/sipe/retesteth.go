@@ -129,8 +129,6 @@ type CParamsParams struct {
 	EIP150ForkBlock            *math.HexOrDecimal64  `json:"EIP150ForkBlock"`
 	EIP158ForkBlock            *math.HexOrDecimal64  `json:"EIP158ForkBlock"`
 	DaoHardforkBlock           *math.HexOrDecimal64  `json:"daoHardforkBlock"`
-	ByzantiumForkBlock         *math.HexOrDecimal64  `json:"byzantiumForkBlock"`
-	ConstantinopleForkBlock    *math.HexOrDecimal64  `json:"constantinopleForkBlock"`
 	ConstantinopleFixForkBlock *math.HexOrDecimal64  `json:"constantinopleFixForkBlock"`
 	MoonBlock                  *math.HexOrDecimal64  `json:"istanbulForkBlock"`
 	ChainID                    *math.HexOrDecimal256 `json:"chainID"`
@@ -235,7 +233,7 @@ func (e *NoRewardEngine) Finalize(chain consensus.ChainReader, header *types.Hea
 		e.inner.Finalize(chain, header, statedb, txs, uncles)
 	} else {
 		e.accumulateRewards(chain.Config(), statedb, header, uncles)
-		header.Root = statedb.IntermediateRoot(chain.Config().IsEIP158(header.Number))
+		header.Root = statedb.IntermediateRoot(true)
 	}
 }
 
@@ -245,7 +243,7 @@ func (e *NoRewardEngine) FinalizeAndAssemble(chain consensus.ChainReader, header
 		return e.inner.FinalizeAndAssemble(chain, header, statedb, txs, uncles, receipts)
 	} else {
 		e.accumulateRewards(chain.Config(), statedb, header, uncles)
-		header.Root = statedb.IntermediateRoot(chain.Config().IsEIP158(header.Number))
+		header.Root = statedb.IntermediateRoot(true)
 
 		// Header seems complete, assemble into a block and return
 		return types.NewBlock(header, txs, uncles, receipts), nil
@@ -312,14 +310,10 @@ func (api *RetestethAPI) SetChainParams(ctx context.Context, chainParams ChainPa
 		chainId.Set((*big.Int)(chainParams.Params.ChainID))
 	}
 	var (
-		homesteadBlock      *big.Int
-		daoForkBlock        *big.Int
-		eip150Block         *big.Int
-		eip155Block         *big.Int
-		eip158Block         *big.Int
-		byzantiumBlock      *big.Int
-		constantinopleBlock *big.Int
-		moonBlock           *big.Int
+		homesteadBlock *big.Int
+		daoForkBlock   *big.Int
+		eip150Block    *big.Int
+		moonBlock      *big.Int
 	)
 	if chainParams.Params.HomesteadForkBlock != nil {
 		homesteadBlock = big.NewInt(int64(*chainParams.Params.HomesteadForkBlock))
@@ -330,32 +324,18 @@ func (api *RetestethAPI) SetChainParams(ctx context.Context, chainParams ChainPa
 	if chainParams.Params.EIP150ForkBlock != nil {
 		eip150Block = big.NewInt(int64(*chainParams.Params.EIP150ForkBlock))
 	}
-	if chainParams.Params.EIP158ForkBlock != nil {
-		eip158Block = big.NewInt(int64(*chainParams.Params.EIP158ForkBlock))
-		eip155Block = eip158Block
-	}
-	if chainParams.Params.ByzantiumForkBlock != nil {
-		byzantiumBlock = big.NewInt(int64(*chainParams.Params.ByzantiumForkBlock))
-	}
-	if chainParams.Params.ConstantinopleForkBlock != nil {
-		constantinopleBlock = big.NewInt(int64(*chainParams.Params.ConstantinopleForkBlock))
-	}
 	if chainParams.Params.MoonBlock != nil {
 		moonBlock = big.NewInt(int64(*chainParams.Params.MoonBlock))
 	}
 
 	genesis := &core.Genesis{
 		Config: &params.ChainConfig{
-			ChainID:             chainId,
-			HomesteadBlock:      homesteadBlock,
-			DAOForkBlock:        daoForkBlock,
-			DAOForkSupport:      false,
-			EIP150Block:         eip150Block,
-			EIP155Block:         eip155Block,
-			EIP158Block:         eip158Block,
-			ByzantiumBlock:      byzantiumBlock,
-			ConstantinopleBlock: constantinopleBlock,
-			MoonBlock:           moonBlock,
+			ChainID:        chainId,
+			HomesteadBlock: homesteadBlock,
+			DAOForkBlock:   daoForkBlock,
+			DAOForkSupport: false,
+			EIP150Block:    eip150Block,
+			MoonBlock:      moonBlock,
 		},
 		Nonce:      uint64(chainParams.Genesis.Nonce),
 		Timestamp:  uint64(chainParams.Genesis.Timestamp),
@@ -652,10 +632,10 @@ func (api *RetestethAPI) AccountRange(ctx context.Context,
 			}
 			// Ensure any modifications are committed to the state
 			// Only delete empty objects if EIP158/161 (a.k.a Spurious Dragon) is in effect
-			root = statedb.IntermediateRoot(vmenv.ChainConfig().IsEIP158(block.Number()))
+			root = statedb.IntermediateRoot(true)
 			if idx == int(txIndex) {
 				// This is to make sure root can be opened by OpenTrie
-				root, err = statedb.Commit(api.chainConfig.IsEIP158(block.Number()))
+				root, err = statedb.Commit(true)
 				if err != nil {
 					return AccountRangeResult{}, err
 				}
@@ -762,10 +742,10 @@ func (api *RetestethAPI) StorageRangeAt(ctx context.Context,
 			}
 			// Ensure any modifications are committed to the state
 			// Only delete empty objects if EIP158/161 (a.k.a Spurious Dragon) is in effect
-			_ = statedb.IntermediateRoot(vmenv.ChainConfig().IsEIP158(block.Number()))
+			_ = statedb.IntermediateRoot(true)
 			if idx == int(txIndex) {
 				// This is to make sure root can be opened by OpenTrie
-				_, err = statedb.Commit(vmenv.ChainConfig().IsEIP158(block.Number()))
+				_, err = statedb.Commit(true)
 				if err != nil {
 					return StorageRangeResult{}, err
 				}
