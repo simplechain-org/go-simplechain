@@ -17,7 +17,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"math/big"
@@ -32,7 +31,6 @@ import (
 	"github.com/simplechain-org/go-simplechain/common/math"
 	"github.com/simplechain-org/go-simplechain/consensus"
 	"github.com/simplechain-org/go-simplechain/consensus/ethash"
-	"github.com/simplechain-org/go-simplechain/consensus/misc"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/rawdb"
 	"github.com/simplechain-org/go-simplechain/core/state"
@@ -311,15 +309,11 @@ func (api *RetestethAPI) SetChainParams(ctx context.Context, chainParams ChainPa
 	}
 	var (
 		homesteadBlock *big.Int
-		daoForkBlock   *big.Int
 		eip150Block    *big.Int
 		moonBlock      *big.Int
 	)
 	if chainParams.Params.HomesteadForkBlock != nil {
 		homesteadBlock = big.NewInt(int64(*chainParams.Params.HomesteadForkBlock))
-	}
-	if chainParams.Params.DaoHardforkBlock != nil {
-		daoForkBlock = big.NewInt(int64(*chainParams.Params.DaoHardforkBlock))
 	}
 	if chainParams.Params.EIP150ForkBlock != nil {
 		eip150Block = big.NewInt(int64(*chainParams.Params.EIP150ForkBlock))
@@ -332,8 +326,6 @@ func (api *RetestethAPI) SetChainParams(ctx context.Context, chainParams ChainPa
 		Config: &params.ChainConfig{
 			ChainID:        chainId,
 			HomesteadBlock: homesteadBlock,
-			DAOForkBlock:   daoForkBlock,
-			DAOForkSupport: false,
 			EIP150Block:    eip150Block,
 			MoonBlock:      moonBlock,
 		},
@@ -443,26 +435,23 @@ func (api *RetestethAPI) mineBlock() error {
 	if api.engine != nil {
 		api.engine.Prepare(api.blockchain, header)
 	}
-	// If we are care about TheDAO hard-fork check whether to override the extra-data or not
-	if daoBlock := api.chainConfig.DAOForkBlock; daoBlock != nil {
-		// Check whether the block is among the fork extra-override range
-		limit := new(big.Int).Add(daoBlock, params.DAOForkExtraRange)
-		if header.Number.Cmp(daoBlock) >= 0 && header.Number.Cmp(limit) < 0 {
-			// Depending whether we support or oppose the fork, override differently
-			if api.chainConfig.DAOForkSupport {
-				header.Extra = common.CopyBytes(params.DAOForkBlockExtra)
-			} else if bytes.Equal(header.Extra, params.DAOForkBlockExtra) {
-				header.Extra = []byte{} // If miner opposes, don't let it use the reserved extra-data
-			}
-		}
-	}
+	//// If we are care about TheDAO hard-fork check whether to override the extra-data or not
+	//	// Check whether the block is among the fork extra-override range
+	//	limit := new(big.Int).Add(daoBlock, params.DAOForkExtraRange)
+	//	if header.Number.Cmp(daoBlock) >= 0 && header.Number.Cmp(limit) < 0 {
+	//		// Depending whether we support or oppose the fork, override differently
+	//		if api.chainConfig.DAOForkSupport {
+	//			header.Extra = common.CopyBytes(params.DAOForkBlockExtra)
+	//		} else if bytes.Equal(header.Extra, params.DAOForkBlockExtra) {
+	//			header.Extra = []byte{} // If miner opposes, don't let it use the reserved extra-data
+	//		}
+	//	}
+
 	statedb, err := api.blockchain.StateAt(parent.Root())
 	if err != nil {
 		return err
 	}
-	if api.chainConfig.DAOForkSupport && api.chainConfig.DAOForkBlock != nil && api.chainConfig.DAOForkBlock.Cmp(header.Number) == 0 {
-		misc.ApplyDAOHardFork(statedb)
-	}
+
 	gasPool := new(core.GasPool).AddGas(header.GasLimit)
 	txCount := 0
 	var txs []*types.Transaction
