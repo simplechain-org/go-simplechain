@@ -95,12 +95,8 @@ func NewEVMInterpreter(evm *EVM, cfg Config) *EVMInterpreter {
 		switch {
 		case evm.chainRules.IsMoon:
 			jt = moonInstructionSet
-		case evm.chainRules.IsEIP150:
-			jt = constantinopleInstructionSet
-		case evm.chainRules.IsHomestead:
-			jt = homesteadInstructionSet
 		default:
-			jt = frontierInstructionSet
+			jt = constantinopleInstructionSet
 		}
 		for i, eip := range cfg.ExtraEips {
 			if err := EnableEIP(eip, &jt); err != nil {
