@@ -286,7 +286,7 @@ func (c *ChainConfig) CheckConfigForkOrder() error {
 
 func (c *ChainConfig) checkCompatible(newcfg *ChainConfig, head *big.Int) *ConfigCompatError {
 	if isForkIncompatible(c.MoonBlock, newcfg.MoonBlock, head) {
-		return newCompatError("Istanbul fork block", c.MoonBlock, newcfg.MoonBlock)
+		return newCompatError("MoonBlock fork block", c.MoonBlock, newcfg.MoonBlock)
 	}
 	if isForkIncompatible(c.EWASMBlock, newcfg.EWASMBlock, head) {
 		return newCompatError("ewasm fork block", c.EWASMBlock, newcfg.EWASMBlock)

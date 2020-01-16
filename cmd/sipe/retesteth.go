@@ -123,7 +123,7 @@ type ChainParams struct {
 
 type CParamsParams struct {
 	AccountStartNonce      math.HexOrDecimal64   `json:"accountStartNonce"`
-	MoonBlock              *math.HexOrDecimal64  `json:"istanbulForkBlock"`
+	MoonBlock              *math.HexOrDecimal64  `json:"moonForkBlock"`
 	ChainID                *math.HexOrDecimal256 `json:"chainID"`
 	MaximumExtraDataSize   math.HexOrDecimal64   `json:"maximumExtraDataSize"`
 	TieBreakingGas         bool                  `json:"tieBreakingGas"`
