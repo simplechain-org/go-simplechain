@@ -311,10 +311,8 @@ func CalcDifficulty(config *params.ChainConfig, time uint64, parent *types.Heade
 	switch {
 	case config.IsMoon(next):
 		return calcDifficultyEip2384(time, parent)
-	case config.IsHomestead(next):
-		return calcDifficultyHomestead(time, parent)
 	default:
-		return calcDifficultyFrontier(time, parent)
+		return calcDifficultyConstantinople(time, parent)
 	}
 }
 

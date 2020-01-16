@@ -49,19 +49,17 @@ var CheckpointOracles = map[common.Hash]*CheckpointOracleConfig{
 var (
 	// MainnetChainConfig is the chain parameters to run a node on the main network.
 	MainnetChainConfig = &ChainConfig{
-		ChainID:        big.NewInt(1),
-		HomesteadBlock: big.NewInt(0),
-		MoonBlock:      big.NewInt(3000000),
-		Scrypt:         new(ScryptConfig),
+		ChainID:   big.NewInt(1),
+		MoonBlock: big.NewInt(3000000),
+		Scrypt:    new(ScryptConfig),
 	}
 
 	// MainnetTrustedCheckpoint contains the light client trusted checkpoint for the main network.
 	MainnetTrustedCheckpoint = &TrustedCheckpoint{
 		SectionIndex: 71,
 		SectionHead:  common.HexToHash("0xa1a1b99f5d9084c3838e700e4270e9e69d4b2307140f1abb7a0abb4dc3b92d94"), //sipc 2359295高度的区块hash
-		//SectionHead:  common.HexToHash("0x03159234a3699e31d27e5d83a55cbcf8ceb1f2d90855c219c55d79089b61abd4"), //eth 9043967高度的区块hash
-		CHTRoot:   common.HexToHash("0xd0c1f3828a4dcb2ee76625fdbea85afeabfb61c04adf07439d2fc1cf00469f76"),
-		BloomRoot: common.HexToHash("0xab8ea2be8aa24703208fee3fc0afdbb536301013f412a7282b2692d6d68f92c5"),
+		CHTRoot:      common.HexToHash("0xd0c1f3828a4dcb2ee76625fdbea85afeabfb61c04adf07439d2fc1cf00469f76"),
+		BloomRoot:    common.HexToHash("0xab8ea2be8aa24703208fee3fc0afdbb536301013f412a7282b2692d6d68f92c5"),
 	}
 
 	// MainnetCheckpointOracle contains a set of configs for the main network oracle.
@@ -79,10 +77,9 @@ var (
 
 	// TestnetChainConfig contains the chain parameters to run a node on the Ropsten test network.
 	TestnetChainConfig = &ChainConfig{
-		ChainID:        big.NewInt(3),
-		HomesteadBlock: big.NewInt(0),
-		MoonBlock:      big.NewInt(0),
-		Scrypt:         new(ScryptConfig),
+		ChainID:   big.NewInt(3),
+		MoonBlock: big.NewInt(0),
+		Scrypt:    new(ScryptConfig),
 	}
 
 	// TestnetTrustedCheckpoint contains the light client trusted checkpoint for the Ropsten test network.
@@ -106,28 +103,21 @@ var (
 		Threshold: 2,
 	}
 
-	// AllEthashProtocolChanges contains every protocol change (EIPs) introduced
-	// and accepted by the Ethereum core developers into the Ethash consensus.
-	//
-	// This configuration is intentionally not using keyed fields to force anyone
-	// adding flags to the config to also have to set these fields.
-	//AllEthashProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, new(EthashConfig), nil, nil}
-
 	// AllCliqueProtocolChanges contains every protocol change (EIPs) introduced
 	// and accepted by the Ethereum core developers into the Clique consensus.
 	//
 	// This configuration is intentionally not using keyed fields to force anyone
 	// adding flags to the config to also have to set these fields.
-	AllCliqueProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), big.NewInt(0), nil, nil, &CliqueConfig{Period: 0, Epoch: 30000}, nil}
+	AllCliqueProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, nil, &CliqueConfig{Period: 0, Epoch: 30000}, nil}
 
 	// AllScryptProtocolChanges contains every protocol change (EIPs) introduced
 	// and accepted by the Ethereum core developers into the Scrypt consensus.
 	//
 	// This configuration is intentionally not using keyed fields to force anyone
 	// adding flags to the config to also have to set these fields.
-	AllScryptProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), big.NewInt(0), nil, nil, nil, new(ScryptConfig)}
+	AllScryptProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, nil, nil, new(ScryptConfig)}
 
-	TestChainConfig = &ChainConfig{big.NewInt(1), big.NewInt(0), big.NewInt(0), nil, new(EthashConfig), nil, nil}
+	TestChainConfig = &ChainConfig{big.NewInt(1), big.NewInt(0), nil, new(EthashConfig), nil, nil}
 	TestRules       = TestChainConfig.Rules(new(big.Int))
 )
 
@@ -181,8 +171,6 @@ type CheckpointOracleConfig struct {
 type ChainConfig struct {
 	ChainID *big.Int `json:"chainId"` // chainId identifies the current chain and is used for replay protection
 
-	HomesteadBlock *big.Int `json:"homesteadBlock,omitempty"` // Homestead switch block (nil = no fork, 0 = already homestead)
-
 	MoonBlock  *big.Int `json:"MoonBlock,omitempty"`  // Moon switch block (nil = no fork, 0 = already on moon)
 	EWASMBlock *big.Int `json:"ewasmBlock,omitempty"` // EWASM switch block (nil = no fork, 0 = already activated)
 
@@ -232,17 +220,11 @@ func (c *ChainConfig) String() string {
 	default:
 		engine = "unknown"
 	}
-	return fmt.Sprintf("{ChainID: %v Homestead: %v Moon: %v, Engine: %v}",
+	return fmt.Sprintf("{ChainID: %v Moon: %v, Engine: %v}",
 		c.ChainID,
-		c.HomesteadBlock,
 		c.MoonBlock,
 		engine,
 	)
-}
-
-// IsHomestead returns whether num is either equal to the homestead block or greater.
-func (c *ChainConfig) IsHomestead(num *big.Int) bool {
-	return isForked(c.HomesteadBlock, num)
 }
 
 // IsMoon returns whether num is either equal to the Istanbul fork block or greater.
@@ -282,7 +264,6 @@ func (c *ChainConfig) CheckConfigForkOrder() error {
 	}
 	var lastFork fork
 	for _, cur := range []fork{
-		{"homesteadBlock", c.HomesteadBlock},
 		{"moonBlock", c.MoonBlock},
 	} {
 		if lastFork.name != "" {
@@ -304,9 +285,6 @@ func (c *ChainConfig) CheckConfigForkOrder() error {
 }
 
 func (c *ChainConfig) checkCompatible(newcfg *ChainConfig, head *big.Int) *ConfigCompatError {
-	if isForkIncompatible(c.HomesteadBlock, newcfg.HomesteadBlock, head) {
-		return newCompatError("Homestead fork block", c.HomesteadBlock, newcfg.HomesteadBlock)
-	}
 	if isForkIncompatible(c.MoonBlock, newcfg.MoonBlock, head) {
 		return newCompatError("Istanbul fork block", c.MoonBlock, newcfg.MoonBlock)
 	}
@@ -377,9 +355,8 @@ func (err *ConfigCompatError) Error() string {
 // Rules is a one time interface meaning that it shouldn't be used in between transition
 // phases.
 type Rules struct {
-	ChainID     *big.Int
-	IsHomestead bool
-	IsMoon      bool
+	ChainID *big.Int
+	IsMoon  bool
 }
 
 // Rules ensures c's ChainID is not nil.
@@ -389,8 +366,7 @@ func (c *ChainConfig) Rules(num *big.Int) Rules {
 		chainID = new(big.Int)
 	}
 	return Rules{
-		ChainID:     new(big.Int).Set(chainID),
-		IsHomestead: c.IsHomestead(num),
-		IsMoon:      c.IsMoon(num),
+		ChainID: new(big.Int).Set(chainID),
+		IsMoon:  c.IsMoon(num),
 	}
 }

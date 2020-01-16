@@ -123,7 +123,6 @@ type ChainParams struct {
 
 type CParamsParams struct {
 	AccountStartNonce      math.HexOrDecimal64   `json:"accountStartNonce"`
-	HomesteadForkBlock     *math.HexOrDecimal64  `json:"homesteadForkBlock"`
 	MoonBlock              *math.HexOrDecimal64  `json:"istanbulForkBlock"`
 	ChainID                *math.HexOrDecimal256 `json:"chainID"`
 	MaximumExtraDataSize   math.HexOrDecimal64   `json:"maximumExtraDataSize"`
@@ -303,22 +302,16 @@ func (api *RetestethAPI) SetChainParams(ctx context.Context, chainParams ChainPa
 	if chainParams.Params.ChainID != nil {
 		chainId.Set((*big.Int)(chainParams.Params.ChainID))
 	}
-	var (
-		homesteadBlock *big.Int
-		moonBlock      *big.Int
-	)
-	if chainParams.Params.HomesteadForkBlock != nil {
-		homesteadBlock = big.NewInt(int64(*chainParams.Params.HomesteadForkBlock))
-	}
+	var moonBlock *big.Int
+
 	if chainParams.Params.MoonBlock != nil {
 		moonBlock = big.NewInt(int64(*chainParams.Params.MoonBlock))
 	}
 
 	genesis := &core.Genesis{
 		Config: &params.ChainConfig{
-			ChainID:        chainId,
-			HomesteadBlock: homesteadBlock,
-			MoonBlock:      moonBlock,
+			ChainID:   chainId,
+			MoonBlock: moonBlock,
 		},
 		Nonce:      uint64(chainParams.Genesis.Nonce),
 		Timestamp:  uint64(chainParams.Genesis.Timestamp),
