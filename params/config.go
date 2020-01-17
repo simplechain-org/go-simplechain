@@ -171,7 +171,7 @@ type CheckpointOracleConfig struct {
 type ChainConfig struct {
 	ChainID *big.Int `json:"chainId"` // chainId identifies the current chain and is used for replay protection
 
-	MoonBlock  *big.Int `json:"MoonBlock,omitempty"`  // Moon switch block (nil = no fork, 0 = already on moon)
+	MoonBlock  *big.Int `json:"moonBlock,omitempty"`  // Moon switch block (nil = no fork, 0 = already on moon)
 	EWASMBlock *big.Int `json:"ewasmBlock,omitempty"` // EWASM switch block (nil = no fork, 0 = already activated)
 
 	// Various consensus engines
