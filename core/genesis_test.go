@@ -130,7 +130,7 @@ func TestSetupGenesis(t *testing.T) {
 			wantHash:   customghash,
 			wantConfig: customg.Config,
 			wantErr: &params.ConfigCompatError{
-				What:         "Homestead fork block",
+				What:         "MoonBlock fork block",
 				StoredConfig: big.NewInt(2),
 				NewConfig:    big.NewInt(3),
 				RewindTo:     1,
