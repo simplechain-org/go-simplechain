@@ -76,9 +76,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		allLogs = append(allLogs, receipt.Logs...)
 	}
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
-	p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles())
-
-	return receipts, allLogs, *usedGas, nil
+	return receipts, allLogs, *usedGas, p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles(), receipts)
 }
 
 // ApplyTransaction attempts to apply a transaction to the given state database

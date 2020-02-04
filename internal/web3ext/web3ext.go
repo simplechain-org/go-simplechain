@@ -23,6 +23,7 @@ var Modules = map[string]string{
 	"chequebook": ChequebookJs,
 	"clique":     CliqueJs,
 	"ethash":     EthashJs,
+	"dpos":       DPoS_JS,
 	"debug":      DebugJs,
 	"eth":        EthJs,
 	"miner":      MinerJs,
@@ -140,6 +141,35 @@ web3._extend({
 			name: 'submitHashRate',
 			call: 'ethash_submitHashRate',
 			params: 2,
+		}),
+	]
+});
+`
+
+const DPoS_JS = `
+web3._extend({
+	property: 'dpos',
+	methods: [
+		new web3._extend.Method({
+			name: 'getSnapshot',
+			call: 'dpos_getSnapshot',
+			params: 1,
+			inputFormatter: [null]
+		}),
+		new web3._extend.Method({
+			name: 'getSnapshotAtHash',
+			call: 'dpos_getSnapshotAtHash',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'getSnapshotAtNumber',
+			call: 'dpos_getSnapshotAtNumber',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'getSnapshotByHeaderTime',
+			call: 'dpos_getSnapshotByHeaderTime',
+			params: 2
 		}),
 	]
 });

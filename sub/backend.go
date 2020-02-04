@@ -20,6 +20,7 @@ package sub
 import (
 	"errors"
 	"fmt"
+	"github.com/simplechain-org/go-simplechain/consensus/dpos"
 	"math/big"
 	"runtime"
 	"sync"
@@ -247,6 +248,8 @@ func CreateConsensusEngine(ctx *node.ServiceContext, chainConfig *params.ChainCo
 	// If proof-of-authority is requested, set it up
 	if chainConfig.Clique != nil {
 		return clique.New(chainConfig.Clique, db)
+	} else if chainConfig.DPoS != nil {
+		return dpos.New(chainConfig.DPoS, db)
 	}
 
 	if chainConfig.Scrypt != nil {
@@ -482,6 +485,14 @@ func (s *Ethereum) StartMining(threads int) error {
 				return fmt.Errorf("signer missing: %v", err)
 			}
 			clique.Authorize(eb, wallet.SignData)
+		}
+		if dpos, ok := s.engine.(*dpos.DPoS); ok {
+			wallet, err := s.accountManager.Find(accounts.Account{Address: eb})
+			if wallet == nil || err != nil {
+				log.Error("Etherbase account unavailable locally", "err", err)
+				return fmt.Errorf("signer missing: %v", err)
+			}
+			dpos.Authorize(eb, wallet.SignData, wallet.SignTx)
 		}
 		// If mining is started, we can disable the transaction rejection mechanism
 		// introduced to speed sync times.

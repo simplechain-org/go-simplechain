@@ -21,7 +21,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/simplechain-org/go-simplechain/eth/tracers/internal/tracers"
+	"github.com/simplechain-org/go-simplechain/sub/tracers/internal/tracers"
 )
 
 // all contains all the built in JavaScript tracers by name.

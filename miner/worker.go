@@ -19,6 +19,7 @@ package miner
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"math/big"
 	"sync"
 	"sync/atomic"
@@ -312,6 +313,13 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 	timer := time.NewTimer(0)
 	<-timer.C // discard the initial tick
 
+	// set the delay equal to period if use dpos consensus
+	dposDelay := time.Duration(300) * time.Second
+	if w.chainConfig.DPoS != nil && w.chainConfig.DPoS.Period > 0 {
+		dposDelay = time.Duration(w.chainConfig.DPoS.Period) * time.Second
+	}
+	dposTimer := time.NewTimer(dposDelay)
+
 	// commit aborts in-flight transaction execution with given signal and resubmits a new one.
 	commit := func(noempty bool, s int32) {
 		if interrupt != nil {
@@ -365,6 +373,13 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 			clearPending(head.Block.NumberU64())
 			timestamp = time.Now().Unix()
 			commit(false, commitInterruptNewHead)
+
+		case <-dposTimer.C:
+			// try to seal block in each period, even no new block received in dpos
+			if w.isRunning() && w.chainConfig.DPoS != nil && w.chainConfig.DPoS.Period > 0 {
+				commit(false, commitInterruptNewHead)
+				dposTimer.Reset(dposDelay)
+			}
 
 		case <-timer.C:
 			// If mining is running resubmit a new work cycle periodically to pull in
@@ -988,6 +1003,13 @@ func (w *worker) commit(uncles []*types.Header, interval func(), update bool, st
 		case w.taskCh <- &task{receipts: receipts, state: s, block: block, createdAt: time.Now()}:
 			w.unconfirmed.Shift(block.NumberU64() - 1)
 
+			if w.chainConfig.DPoS != nil && w.chainConfig.DPoS.PBFTEnable {
+				err = w.sendConfirmTx(block.NumberU64() - 1)
+				if err != nil {
+					log.Info("Fail to Sign the transaction by coinbase", "err", err)
+				}
+			}
+
 			feesWei := new(big.Int)
 			for i, tx := range block.Transactions() {
 				feesWei.Add(feesWei, new(big.Int).Mul(new(big.Int).SetUint64(receipts[i].GasUsed), tx.GasPrice()))
@@ -1038,4 +1060,38 @@ func (w *worker) seal(work *types.Block) {
 	for agent := range w.agents {
 		agent.DispatchWork(work)
 	}
+}
+
+func (w *worker) sendConfirmTx(blockNumber uint64) error {
+	wallets := w.eth.AccountManager().Wallets()
+	// wallets check
+	if len(wallets) == 0 {
+		return nil
+	}
+	for _, wallet := range wallets {
+		if len(wallet.Accounts()) == 0 {
+			continue
+		} else {
+			for _, account := range wallet.Accounts() {
+				if account.Address == w.coinbase {
+					// coinbase account found
+					// send custom tx
+					nonce := w.snapshotState.GetNonce(account.Address)
+					tmpTx := types.NewTransaction(nonce, account.Address, big.NewInt(0), uint64(100000), big.NewInt(10000), []byte(fmt.Sprintf("dpos:1:event:confirm:%d", blockNumber)))
+					signedTx, err := wallet.SignTx(account, tmpTx, w.eth.BlockChain().Config().ChainID)
+					if err != nil {
+						return err
+					} else {
+						err = w.eth.TxPool().AddLocal(signedTx)
+						if err != nil {
+							return err
+						}
+					}
+					return nil
+				}
+			}
+		}
+
+	}
+	return nil
 }
