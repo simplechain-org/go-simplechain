@@ -2,6 +2,7 @@ package types
 
 import (
 	"crypto/ecdsa"
+	"encoding/binary"
 	"errors"
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/crypto"
@@ -98,6 +99,9 @@ func (tx *ReceptTransaction) Hash() (h common.Hash) {
 	b = append(b, tx.Data.To.Bytes()...)
 	b = append(b, tx.Data.BlockHash.Bytes()...)
 	b = append(b, common.LeftPadBytes(tx.Data.DestinationId.Bytes(), 32)...)
+	b = append(b, common.LeftPadBytes(Uint64ToBytes(tx.Data.BlockNumber),8)...)
+	b = append(b, common.LeftPadBytes(Uint32ToBytes(tx.Data.Index),4)...)
+	//todo blocknumber index
 	b = append(b, tx.Data.Input...)
 	hash.Write(b)
 	hash.Sum(h[:0])
@@ -197,6 +201,8 @@ func (rws *ReceptTransactionWithSignatures) Hash() (h common.Hash) {
 	b = append(b, rws.Data.To.Bytes()...)
 	b = append(b, rws.Data.BlockHash.Bytes()...)
 	b = append(b, common.LeftPadBytes(rws.Data.DestinationId.Bytes(), 32)...)
+	b = append(b, common.LeftPadBytes(Uint64ToBytes(rws.Data.BlockNumber),8)...)
+	b = append(b, common.LeftPadBytes(Uint32ToBytes(rws.Data.Index),4)...)
 	b = append(b, rws.Data.Input...)
 	hash.Write(b)
 	hash.Sum(h[:0])
@@ -290,7 +296,7 @@ func (rws *ReceptTransactionWithSignatures) Transaction(
 }
 
 func (rws *ReceptTransactionWithSignatures) ConstructData(gasUsed *big.Int) ([]byte, error) {
-	transferFnSignature := []byte("makerFinish(bytes32,bytes32,address,bytes32,uint256,uint256,uint256[],bytes32[],bytes32[])")
+	transferFnSignature := []byte("makerFinish(bytes32,bytes32,address,bytes32,uint64,uint32,uint256,uint256,uint256[],bytes32[],bytes32[],bytes)")
 	hash := sha3.NewKeccak256()
 	hash.Write(transferFnSignature)
 	methodID := hash.Sum(nil)[:4]
@@ -302,6 +308,8 @@ func (rws *ReceptTransactionWithSignatures) ConstructData(gasUsed *big.Int) ([]b
 	//BlockNumber := new(big.Int).SetUint64(rtx.Data.BlockNumber)
 	//paddedBlockNumber := common.LeftPadBytes(BlockNumber.Bytes(), 32)
 	//paddedDestinationId := common.LeftPadBytes(rws.Data.DestinationId.Bytes(), 32)
+	paddedBlockNumber := common.LeftPadBytes(Uint64ToBytes(rws.Data.BlockNumber), 32)
+	paddedIndex := common.LeftPadBytes(Uint32ToBytes(rws.Data.Index), 32)
 	paddedRemoteChainId := common.LeftPadBytes(rws.ChainId().Bytes(), 32)
 	paddedGasUsed := common.LeftPadBytes(gasUsed.Bytes(), 32)
 
@@ -311,8 +319,8 @@ func (rws *ReceptTransactionWithSignatures) ConstructData(gasUsed *big.Int) ([]b
 	data = append(data, paddedTxHash...)
 	data = append(data, paddedAddress...)
 	data = append(data, paddedBlockHash...)
-	//data = append(data, paddedBlockNumber...)
-	//data = append(data, paddedDestinationId...)
+	data = append(data, paddedBlockNumber...)
+	data = append(data, paddedIndex...)
 	data = append(data, paddedRemoteChainId...)
 	data = append(data, paddedGasUsed...)
 
@@ -323,8 +331,8 @@ func (rws *ReceptTransactionWithSignatures) ConstructData(gasUsed *big.Int) ([]b
 		return nil, errors.New("signature error")
 	}
 
-	// 9开头
-	bv := common.LeftPadBytes(new(big.Int).SetUint64(32*9).Bytes(), 32)
+	// 11开头
+	bv := common.LeftPadBytes(new(big.Int).SetUint64(32*11).Bytes(), 32)
 	br := common.LeftPadBytes(new(big.Int).SetUint64(uint64(32*(9+sLength+1))).Bytes(), 32)
 	bs := common.LeftPadBytes(new(big.Int).SetUint64(uint64(32*(9+(sLength+1)*2))).Bytes(), 32)
 	bl := common.LeftPadBytes(new(big.Int).SetUint64(uint64(sLength)).Bytes(), 32)
@@ -426,3 +434,15 @@ func suggestPrice(networkId uint64, block *Block) (*big.Int, error) {
 //	}
 //	return gas, nil
 //}
+
+func Uint64ToBytes(i uint64) []byte {
+	var buf = make([]byte, 8)
+	binary.BigEndian.PutUint64(buf, i)
+	return buf
+}
+
+func Uint32ToBytes(i uint) []byte {
+	var buf = make([]byte, 4)
+	binary.BigEndian.PutUint32(buf, uint32(i))
+	return buf
+}
