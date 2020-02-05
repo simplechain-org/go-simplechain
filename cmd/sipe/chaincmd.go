@@ -48,6 +48,7 @@ var (
 		ArgsUsage: "<genesisPath>",
 		Flags: []cli.Flag{
 			utils.DataDirFlag,
+			utils.RoleFlag,
 		},
 		Category: "BLOCKCHAIN COMMANDS",
 		Description: `

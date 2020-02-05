@@ -97,11 +97,13 @@ type ProtocolManager struct {
 	// wait group is used for graceful shutdowns during downloading
 	// and processing
 	wg sync.WaitGroup
+
+	serverPool *serverPool
 }
 
 // NewProtocolManager returns a new Ethereum sub protocol manager. The Ethereum sub protocol manages peers capable
 // with the Ethereum network.
-func NewProtocolManager(config *params.ChainConfig, checkpoint *params.TrustedCheckpoint, mode downloader.SyncMode, networkID uint64, mux *event.TypeMux, txpool txPool, engine consensus.Engine, blockchain *core.BlockChain, chaindb ethdb.Database, cacheLimit int, whitelist map[uint64]common.Hash) (*ProtocolManager, error) {
+func NewProtocolManager(config *params.ChainConfig, checkpoint *params.TrustedCheckpoint, mode downloader.SyncMode, networkID uint64, mux *event.TypeMux, txpool txPool, engine consensus.Engine, blockchain *core.BlockChain, chaindb ethdb.Database, cacheLimit int, whitelist map[uint64]common.Hash, serverPool *serverPool) (*ProtocolManager, error) {
 	// Create the protocol manager with the base fields
 	manager := &ProtocolManager{
 		networkID:   networkID,
@@ -115,6 +117,7 @@ func NewProtocolManager(config *params.ChainConfig, checkpoint *params.TrustedCh
 		noMorePeers: make(chan struct{}),
 		txsyncCh:    make(chan *txsync),
 		quitSync:    make(chan struct{}),
+		serverPool:  serverPool,
 	}
 	if mode == downloader.FullSync {
 		// The database seems empty as the current block is the genesis. Yet the fast
@@ -197,7 +200,6 @@ func (pm *ProtocolManager) makeProtocol(version uint) p2p.Protocol {
 	if !ok {
 		panic("makeProtocol for unknown version")
 	}
-
 	return p2p.Protocol{
 		Name:    protocolName,
 		Version: version,
@@ -206,9 +208,15 @@ func (pm *ProtocolManager) makeProtocol(version uint) p2p.Protocol {
 			peer := pm.newPeer(int(version), p, rw)
 			select {
 			case pm.newPeerCh <- peer:
+				peer.poolEntry = pm.serverPool.connect(peer, peer.Node())
+				if peer.poolEntry == nil {
+					return p2p.DiscRequested
+				}
 				pm.wg.Add(1)
 				defer pm.wg.Done()
-				return pm.handle(peer)
+				err := pm.handle(peer)
+				pm.serverPool.disconnect(peer.poolEntry)
+				return err
 			case <-pm.quitSync:
 				return p2p.DiscQuitting
 			}
@@ -353,6 +361,10 @@ func (pm *ProtocolManager) handle(p *peer) error {
 		if err := p.RequestHeadersByNumber(number, 1, 0, false); err != nil {
 			return err
 		}
+	}
+	// pool entry can be nil during the unit test.
+	if p.poolEntry != nil {
+		pm.serverPool.registered(p.poolEntry)
 	}
 	// Handle incoming messages until the connection is torn down
 	for {

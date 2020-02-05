@@ -160,4 +160,6 @@ type Config struct {
 
 	// MuirGlacier block override (TODO: remove after the fork)
 	OverrideMuirGlacier *big.Int
+
+	Role common.ChainRole
 }

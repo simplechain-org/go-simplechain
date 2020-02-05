@@ -21,6 +21,7 @@ import (
 	"crypto/ecdsa"
 	"errors"
 	"fmt"
+	"github.com/simplechain-org/go-simplechain/sub"
 	"io"
 	"io/ioutil"
 	"math/big"
@@ -780,6 +781,13 @@ var (
 		Name:  "vm.evm",
 		Usage: "External EVM configuration (default = built-in interpreter)",
 		Value: "",
+	}
+	role = eth.DefaultConfig.Role
+
+	RoleFlag = TextMarshalerFlag{
+		Name:  "role",
+		Usage: "it can be one of (mainchain,subchain,anchor)",
+		Value: &role,
 	}
 )
 
@@ -1564,18 +1572,87 @@ func RegisterEthService(stack *node.Node, cfg *eth.Config) {
 			return les.New(ctx, cfg)
 		})
 	} else {
-		err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
-			fullNode, err := eth.New(ctx, cfg)
-			if fullNode != nil && cfg.LightServ > 0 {
-				ls, _ := les.NewLesServer(fullNode, cfg)
-				fullNode.AddLesServer(ls)
-			}
-			return fullNode, err
-		})
+		if cfg.Role.IsMainChain() {
+			//mainchain
+			err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
+				fullNode, err := eth.New(ctx, cfg)
+				if fullNode != nil && cfg.LightServ > 0 {
+					ls, _ := les.NewLesServer(fullNode, cfg)
+					fullNode.AddLesServer(ls)
+				}
+				return fullNode, err
+			})
+		} else if cfg.Role.IsSubChain() {
+			//subchain
+			err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
+				subConfig := ToSubChainConfig(cfg)
+				fullNode, err := sub.New(ctx, subConfig)
+				if fullNode != nil && cfg.LightServ > 0 {
+					ls, _ := les.NewLesServer(fullNode, cfg)
+					fullNode.AddLesServer(ls)
+				}
+				return fullNode, err
+			})
+		} else if cfg.Role.IsAnchor() {
+			//mainchain
+			err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
+				fullNode, err := eth.New(ctx, cfg)
+				return fullNode, err
+			})
+			//subchain
+			err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
+				subConfig := ToSubChainConfig(cfg)
+				fullNode, err := sub.New(ctx, subConfig)
+				return fullNode, err
+			})
+		}
 	}
 	if err != nil {
 		Fatalf("Failed to register the Ethereum service: %v", err)
 	}
+}
+
+func ToSubChainConfig(cfg *eth.Config) *sub.Config {
+	subConfig := &sub.Config{
+		Whitelist: make(map[uint64]common.Hash),
+	}
+	subConfig.Genesis = cfg.Genesis
+	subConfig.NetworkId = cfg.NetworkId
+	subConfig.SyncMode = cfg.SyncMode
+	subConfig.NoPruning = cfg.NoPruning
+	subConfig.NoPrefetch = cfg.NoPrefetch
+	subConfig.LightEgress = cfg.LightEgress
+	subConfig.LightIngress = cfg.LightIngress
+	subConfig.LightPeers = cfg.LightPeers
+	subConfig.LightServ = cfg.LightServ
+	subConfig.UltraLightFraction = cfg.UltraLightFraction
+	subConfig.UltraLightOnlyAnnounce = cfg.UltraLightOnlyAnnounce
+	subConfig.UltraLightServers = cfg.UltraLightServers
+	subConfig.SkipBcVersionCheck = cfg.SkipBcVersionCheck
+	subConfig.DatabaseCache = cfg.DatabaseCache
+	subConfig.DatabaseFreezer = cfg.DatabaseFreezer
+	subConfig.DatabaseHandles = cfg.DatabaseHandles
+	subConfig.TrieCleanCache = cfg.TrieCleanCache
+	subConfig.TrieDirtyCache = cfg.TrieDirtyCache
+	subConfig.TrieTimeout = cfg.TrieTimeout
+	subConfig.Miner = cfg.Miner
+	subConfig.Ethash = cfg.Ethash
+	subConfig.TxPool = cfg.TxPool
+	subConfig.GPO = cfg.GPO
+	subConfig.EnablePreimageRecording = cfg.EnablePreimageRecording
+	subConfig.DocRoot = cfg.DocRoot
+	subConfig.EWASMInterpreter = cfg.EWASMInterpreter
+	subConfig.EVMInterpreter = cfg.EVMInterpreter
+	subConfig.RPCGasCap = cfg.RPCGasCap
+	subConfig.Checkpoint = cfg.Checkpoint
+	subConfig.CheckpointOracle = cfg.CheckpointOracle
+	subConfig.OverrideIstanbul = cfg.OverrideIstanbul
+	subConfig.OverrideMuirGlacier = cfg.OverrideMuirGlacier
+	for k, v := range cfg.Whitelist {
+		subConfig.Whitelist[k] = v
+	}
+	subConfig.Role = cfg.Role
+	return subConfig
 }
 
 // RegisterShhService configures Whisper and adds it to the given node.

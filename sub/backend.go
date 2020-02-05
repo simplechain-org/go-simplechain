@@ -20,6 +20,7 @@ package sub
 import (
 	"errors"
 	"fmt"
+	"github.com/simplechain-org/go-simplechain/cross"
 	"math/big"
 	"runtime"
 	"sync"
@@ -96,6 +97,8 @@ type Ethereum struct {
 	netRPCService *ethapi.PublicNetAPI
 
 	lock sync.RWMutex // Protects the variadic fields (e.g. gas price and etherbase)
+
+	serverPool *serverPool
 }
 
 func (s *Ethereum) AddLesServer(ls LesServer) {
@@ -155,6 +158,8 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 		etherbase:      config.Miner.Etherbase,
 		bloomRequests:  make(chan chan *bloombits.Retrieval),
 		bloomIndexer:   NewBloomIndexer(chainDb, params.BloomBitsBlocks, params.BloomConfirms),
+		//todo ulcServers
+		serverPool: newServerPool(chainDb, nil),
 	}
 
 	bcVersion := rawdb.ReadDatabaseVersion(chainDb)
@@ -209,7 +214,7 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 	if checkpoint == nil {
 		checkpoint = params.TrustedCheckpoints[genesisHash]
 	}
-	if eth.protocolManager, err = NewProtocolManager(chainConfig, checkpoint, config.SyncMode, config.NetworkId, eth.eventMux, eth.txPool, eth.engine, eth.blockchain, chainDb, cacheLimit, config.Whitelist); err != nil {
+	if eth.protocolManager, err = NewProtocolManager(chainConfig, checkpoint, config.SyncMode, config.NetworkId, eth.eventMux, eth.txPool, eth.engine, eth.blockchain, chainDb, cacheLimit, config.Whitelist, eth.serverPool); err != nil {
 		return nil, err
 	}
 	eth.miner = miner.New(eth, &config.Miner, chainConfig, eth.EventMux(), eth.engine, eth.isLocalBlock)
@@ -221,6 +226,11 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 		gpoParams.Default = config.Miner.GasPrice
 	}
 	eth.APIBackend.gpo = gasprice.NewOracle(eth.APIBackend, gpoParams)
+
+
+	eth.msgHander=cross.NewMsgHandler(eth,cross.RoleMainHandler,config.Role,eth.ctxStore,eth.rtxStore,eth.blockchain,eth.statementDb,serverPool.MainchainChan, serverPool.SubChainChan,config.MainChainCtxAddress,config.SubChainCtxAddress)
+	eth.msgHander.SetProtocolManager(eth.protocolManager)
+	eth.protocolManager.SetMsgHandler(eth.msgHander)
 
 	return eth, nil
 }
@@ -521,6 +531,7 @@ func (s *Ethereum) NetVersion() uint64                 { return s.networkID }
 func (s *Ethereum) Downloader() *downloader.Downloader { return s.protocolManager.downloader }
 func (s *Ethereum) Synced() bool                       { return atomic.LoadUint32(&s.protocolManager.acceptTxs) == 1 }
 func (s *Ethereum) ArchiveMode() bool                  { return s.config.NoPruning }
+func (s *Ethereum) GetSynced() func() bool             { return s.Synced }
 
 // Protocols implements node.Service, returning all the currently configured
 // network protocols to start.
@@ -560,6 +571,8 @@ func (s *Ethereum) Start(srvr *p2p.Server) error {
 	if s.lesServer != nil {
 		s.lesServer.Start(srvr)
 	}
+	//search topic
+	s.serverPool.start(srvr, subchainTopic(s.blockchain.Genesis().Hash()))
 	return nil
 }
 
