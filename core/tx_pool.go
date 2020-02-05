@@ -33,6 +33,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/metrics"
 	"github.com/simplechain-org/go-simplechain/params"
+	"github.com/simplechain-org/go-simplechain/consensus"
 )
 
 const (
@@ -122,9 +123,16 @@ const (
 type blockChain interface {
 	CurrentBlock() *types.Block
 	GetBlock(hash common.Hash, number uint64) *types.Block
+	GetBlockByHash(hash common.Hash) *types.Block
+	GetBlockNumber(hash common.Hash) *uint64
+	// GetHeader returns the hash corresponding to their hash.
+	GetHeader(common.Hash, uint64) *types.Header
 	StateAt(root common.Hash) (*state.StateDB, error)
 
 	SubscribeChainHeadEvent(ch chan<- ChainHeadEvent) event.Subscription
+
+	Engine() consensus.Engine
+
 }
 
 // TxPoolConfig are the configuration parameters of the transaction pool.

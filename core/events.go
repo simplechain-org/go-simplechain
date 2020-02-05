@@ -46,3 +46,33 @@ type ChainSideEvent struct {
 }
 
 type ChainHeadEvent struct{ Block *types.Block }
+
+type NewCTxsEvent struct{ Txs []*types.CrossTransaction }
+
+type NewCTxEvent struct{ Txs *types.CrossTransaction }
+
+type NewRTxEvent struct {
+	Txs *types.ReceptTransaction
+	//Record *types.CrossRecord
+}
+
+type NewRTxsEvent struct{ Txs []*types.ReceptTransaction }
+
+type NewCWssEvent struct {Txs []*types.CrossTransactionWithSignatures}
+
+type NewCWsEvent struct {Txs *types.CrossTransactionWithSignatures}
+
+type NewRWsEvent struct {Tws *types.ReceptTransactionWithSignatures}
+
+type NewRWssEvent struct {Tws []*types.ReceptTransactionWithSignatures}
+
+type TransationRemoveEvent struct {
+	Transactions types.Transactions
+}
+type TransationFinishEvent struct {
+	Finish []*types.FinishInfo
+}
+
+type NewCtxStatusEvent struct {
+	Status map[uint64]*Statistics
+}
