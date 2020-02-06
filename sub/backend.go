@@ -20,7 +20,6 @@ package sub
 import (
 	"errors"
 	"fmt"
-	"github.com/simplechain-org/go-simplechain/cross"
 	"math/big"
 	"runtime"
 	"sync"
@@ -227,10 +226,14 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 	}
 	eth.APIBackend.gpo = gasprice.NewOracle(eth.APIBackend, gpoParams)
 
+	//主链消息通道
+	//ctx.MainCh
+	//子链消息通道
+	//ctx.SubCh
 
-	eth.msgHander=cross.NewMsgHandler(eth,cross.RoleMainHandler,config.Role,eth.ctxStore,eth.rtxStore,eth.blockchain,eth.statementDb,serverPool.MainchainChan, serverPool.SubChainChan,config.MainChainCtxAddress,config.SubChainCtxAddress)
-	eth.msgHander.SetProtocolManager(eth.protocolManager)
-	eth.protocolManager.SetMsgHandler(eth.msgHander)
+	//eth.msgHander=cross.NewMsgHandler(eth,cross.RoleMainHandler,config.Role,eth.ctxStore,eth.rtxStore,eth.blockchain,eth.statementDb,serverPool.MainchainChan, serverPool.SubChainChan,config.MainChainCtxAddress,config.SubChainCtxAddress)
+	//eth.msgHander.SetProtocolManager(eth.protocolManager)
+	//eth.protocolManager.SetMsgHandler(eth.msgHander)
 
 	return eth, nil
 }
