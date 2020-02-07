@@ -59,10 +59,10 @@ type MsgHandler struct {
 	takerSignedSub       event.Subscription
 	availableTakerCh     chan core.NewRWssEvent
 	availableTakerSub    event.Subscription
-	makerFinishEventCh   chan core.TransationFinishEvent
-	makerFinishEventSub  event.Subscription
-	transactionRemoveCh  chan core.TransationRemoveEvent
-	transactionRemoveSub event.Subscription
+	//makerFinishEventCh   chan core.TransationFinishEvent
+	//makerFinishEventSub  event.Subscription
+	//transactionRemoveCh  chan core.TransationRemoveEvent
+	//transactionRemoveSub event.Subscription
 
 	rtxsinLogCh  chan core.NewRTxsEvent //通过该通道删除ctx_pool中的记录，TODO 普通节点无该功能
 	rtxsinLogSub event.Subscription
@@ -107,9 +107,9 @@ func (this *MsgHandler) Start() {
 	this.takerSignedSub = this.rtxStore.SubscribeRWssResultEvent(this.takerSignedCh)
 	this.availableTakerCh = make(chan core.NewRWssEvent,txChanSize)
 	this.availableTakerSub = this.rtxStore.SubscribeNewRWssEvent(this.availableTakerCh)
-	this.transactionRemoveCh = make(chan core.TransationRemoveEvent, txChanSize)
+	//this.transactionRemoveCh = make(chan core.TransationRemoveEvent, txChanSize)
 	//this.transactionRemoveSub = this.blockchain.SubscribeTransactionRemoveEvent(this.transactionRemoveCh)
-	this.makerFinishEventCh = make(chan core.TransationFinishEvent, txChanSize)
+	//this.makerFinishEventCh = make(chan core.TransationFinishEvent, txChanSize)
 	//this.makerFinishEventSub = this.blockchain.SubscribeTransactionFinishEvent(this.makerFinishEventCh)
 
 	//单子已接
@@ -131,11 +131,12 @@ func (this *MsgHandler) loop() {
 				break
 			}
 			if this.role.IsAnchor() {
-				if err := this.ctxStore.AddLocal(ev.Txs); err == nil {
-					this.pm.BroadcastCtx(ev.Txs)
-				} else {
-					log.Warn("Add local rtx", "err", err)
+				for _,tx:=range ev.Txs{
+					if err := this.ctxStore.AddLocal(tx); err != nil {
+						log.Warn("Add local rtx", "err", err)
+					}
 				}
+				this.pm.BroadcastCtx(ev.Txs)
 			}
 		case <-this.makerStartEventSub.Err():
 			return
@@ -178,11 +179,12 @@ func (this *MsgHandler) loop() {
 				break
 			}
 			if this.role.IsAnchor() {
-				if err := this.rtxStore.AddLocal(ev.Txs); err == nil {
-					this.pm.BroadcastRtx(ev.Txs)
-				} else {
-					log.Warn("Add local rtx", "err", err)
+				for _,tx:=range ev.Txs {
+					if err := this.rtxStore.AddLocal(tx); err != nil {
+						log.Warn("Add local rtx", "err", err)
+					}
 				}
+				this.pm.BroadcastRtx(ev.Txs)
 			}
 		case <-this.takerEventSub.Err():
 			return
@@ -198,18 +200,18 @@ func (this *MsgHandler) loop() {
 			//}
 		case <-this.rtxsinLogSub.Err():
 			return
-		case ev := <-this.transactionRemoveCh:
-			for _, v := range ev.Transactions {
-				this.ctxStore.RemoveFromLocalsByTransaction(v.Hash())
-			}
-		case <-this.transactionRemoveSub.Err():
-			return
-		case ev := <-this.makerFinishEventCh:
-			if err := this.RecordStatement(ev.Finish); err != nil {
-				log.Info("RecordStatement","err",err)
-			}
-		case <-this.makerFinishEventSub.Err():
-			return
+		//case ev := <-this.transactionRemoveCh:
+		//	for _, v := range ev.Transactions {
+		//		this.ctxStore.RemoveFromLocalsByTransaction(v.Hash())
+		//	}
+		//case <-this.transactionRemoveSub.Err():
+		//	return
+		//case ev := <-this.makerFinishEventCh:
+		//	if err := this.RecordStatement(ev.Finish); err != nil {
+		//		log.Info("RecordStatement","err",err)
+		//	}
+		//case <-this.makerFinishEventSub.Err():
+		//	return
 
 		}
 	}
@@ -223,8 +225,8 @@ func (this *MsgHandler) Stop() {
 	this.takerEventSub.Unsubscribe()
 	this.takerSignedSub.Unsubscribe()
 	this.rtxsinLogSub.Unsubscribe()
-	this.transactionRemoveSub.Unsubscribe()
-	this.makerFinishEventSub.Unsubscribe()
+	//this.transactionRemoveSub.Unsubscribe()
+	//this.makerFinishEventSub.Unsubscribe()
 	this.availableTakerSub.Unsubscribe()
 	close(this.quitSync)
 	log.Info("Simplechain MsgHandler stopped")
@@ -349,7 +351,7 @@ func (this *MsgHandler) ReadCrossMessage() {
 			//	log.Info("ReadCrossMessage", "networkID", this.pm.NetworkId(), "destId", rws.Data.DestinationId.Uint64())
 			//}
 			if ok && rws.Data.DestinationId.Uint64() == this.pm.NetworkId() {
-				if _, ok := this.rtxStore.ReadFromLocals(rws.Data.CTxId); !ok {
+				if local := this.rtxStore.ReadFromLocals(rws.Data.CTxId); local!=nil {
 					errs := this.rtxStore.AddLocals(rws)
 					for _, err := range errs {
 						if err != nil {
@@ -445,59 +447,59 @@ func (this *MsgHandler) WriteCrossMessage(v interface{}) {
 }
 
 func (this *MsgHandler) RecordStatement(finishes []*types.FinishInfo) error {
-	var count,pass int
-	for _,v := range finishes {
-		ctxId := v.TxId
-		ctx := this.ctxStore.ReadFromLocals(ctxId)
-		if ctx == nil {
-			pass ++
-			continue
-			//return errors.New(fmt.Sprintf("no ctx for %v", ctxId))
-		}
-
-		rtx, ok := this.rtxStore.ReadFromLocals(ctxId)
-		if !ok {
-			pass ++
-			continue
-			//return errors.New(fmt.Sprintf("no rtx for %v", ctxId))
-		}
-		if err := this.rtxStore.RemoveLocals(rtx); err != nil {
-			pass ++
-			continue
-		}
-		//if this.statementDb == nil {
-		//	pass ++
-		//	continue
-		//	//return errors.New("MsgHandler statementDb is nil")
-		//}
-		//if this.statementDb.Has(ctxId) {
-		//	pass ++
-		//	continue
-		//	//return errors.New("db has record")
-		//}
-		//statement := &types.Statement{
-		//	CtxId:        ctxId,
-		//	Maker:        ctx.Data.From,
-		//	Taker:        rtx.Data.To,
-		//	Value:        ctx.Data.Value,
-		//	DestValue:    ctx.Data.DestinationValue,
-		//	MakerChainId: rtx.Data.DestinationId,
-		//	TakerChainId: ctx.Data.DestinationId,
-		//	MakerHash:    ctx.Data.TxHash,
-		//	TakerHash:    rtx.Data.TxHash,
-		//}
-		//err := this.statementDb.Write(statement)
-		//if err != nil {
-		//	pass ++
-		//	continue
-		//	//return err
-		//}
-		//count ++
-	}
-	if err := this.ctxStore.RemoveLocals(finishes); err != nil {
-		return errors.New("rm ctx error")
-	}
-	log.Info("MsgHandler make record success","count",count,"pass",pass)
+	//var count,pass int
+	//for _,v := range finishes {
+	//	ctxId := v.TxId
+	//	ctx := this.ctxStore.ReadFromLocals(ctxId)
+	//	if ctx == nil {
+	//		pass ++
+	//		continue
+	//		//return errors.New(fmt.Sprintf("no ctx for %v", ctxId))
+	//	}
+	//
+	//	rtx, ok := this.rtxStore.ReadFromLocals(ctxId)
+	//	if !ok {
+	//		pass ++
+	//		continue
+	//		//return errors.New(fmt.Sprintf("no rtx for %v", ctxId))
+	//	}
+	//	if err := this.rtxStore.RemoveLocals(rtx); err != nil {
+	//		pass ++
+	//		continue
+	//	}
+	//	//if this.statementDb == nil {
+	//	//	pass ++
+	//	//	continue
+	//	//	//return errors.New("MsgHandler statementDb is nil")
+	//	//}
+	//	//if this.statementDb.Has(ctxId) {
+	//	//	pass ++
+	//	//	continue
+	//	//	//return errors.New("db has record")
+	//	//}
+	//	//statement := &types.Statement{
+	//	//	CtxId:        ctxId,
+	//	//	Maker:        ctx.Data.From,
+	//	//	Taker:        rtx.Data.To,
+	//	//	Value:        ctx.Data.Value,
+	//	//	DestValue:    ctx.Data.DestinationValue,
+	//	//	MakerChainId: rtx.Data.DestinationId,
+	//	//	TakerChainId: ctx.Data.DestinationId,
+	//	//	MakerHash:    ctx.Data.TxHash,
+	//	//	TakerHash:    rtx.Data.TxHash,
+	//	//}
+	//	//err := this.statementDb.Write(statement)
+	//	//if err != nil {
+	//	//	pass ++
+	//	//	continue
+	//	//	//return err
+	//	//}
+	//	//count ++
+	//}
+	//if err := this.ctxStore.RemoveLocals(finishes); err != nil {
+	//	return errors.New("rm ctx error")
+	//}
+	//log.Info("MsgHandler make record success","count",count,"pass",pass)
 	return nil
 }
 

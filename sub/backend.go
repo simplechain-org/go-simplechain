@@ -18,21 +18,20 @@
 package sub
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"github.com/simplechain-org/go-simplechain/common/math"
-	"github.com/simplechain-org/go-simplechain/core/state"
-	"github.com/simplechain-org/go-simplechain/cross"
+	"github.com/simplechain-org/go-simplechain/eth"
 	"math/big"
 	"runtime"
 	"sync"
 	"sync/atomic"
-	"context"
 
 	"github.com/simplechain-org/go-simplechain/accounts"
 	"github.com/simplechain-org/go-simplechain/accounts/abi/bind"
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
+	"github.com/simplechain-org/go-simplechain/common/math"
 	"github.com/simplechain-org/go-simplechain/consensus"
 	"github.com/simplechain-org/go-simplechain/consensus/clique"
 	"github.com/simplechain-org/go-simplechain/consensus/ethash"
@@ -40,11 +39,13 @@ import (
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/bloombits"
 	"github.com/simplechain-org/go-simplechain/core/rawdb"
+	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/core/vm"
+	"github.com/simplechain-org/go-simplechain/cross"
 	"github.com/simplechain-org/go-simplechain/eth/downloader"
 	"github.com/simplechain-org/go-simplechain/eth/filters"
-	"github.com/simplechain-org/go-simplechain/sub/gasprice"
+	"github.com/simplechain-org/go-simplechain/eth/gasprice"
 	"github.com/simplechain-org/go-simplechain/ethdb"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/internal/ethapi"
@@ -69,7 +70,7 @@ type LesServer interface {
 
 // Ethereum implements the Ethereum full node service.
 type Ethereum struct {
-	config *Config
+	config *eth.Config
 
 	// Channel for shutting down the service
 	shutdownChan chan bool
@@ -103,7 +104,7 @@ type Ethereum struct {
 
 	serverPool *serverPool
 
-	msgHander   types.MsgHandler
+	msgHandler types.MsgHandler
 
 	chainConfig *params.ChainConfig
 	ctxStore    *core.CtxStore
@@ -125,7 +126,7 @@ func (s *Ethereum) SetContractBackend(backend bind.ContractBackend) {
 
 // New creates a new Ethereum object (including the
 // initialisation of the common Ethereum object)
-func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
+func New(ctx *node.ServiceContext, config *eth.Config) (*Ethereum, error) {
 	// Ensure configuration values are compatible and sane
 	if config.SyncMode == downloader.LightSync {
 		return nil, errors.New("can't run eth.Ethereum in light sync mode, use les.LightEthereum")
@@ -221,14 +222,12 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 	if err != nil {
 		return nil, err
 	}
-	//todo
-	eth.ctxStore = core.NewCtxStore(config.CtxStore, eth.chainConfig, eth.blockchain, makerDb,common.Address{})
+	eth.ctxStore = core.NewCtxStore(config.CtxStore, eth.chainConfig, eth.blockchain, makerDb,config.SubChainCtxAddress)
 
 	if config.RtxStore.Journal != "" {
 		config.RtxStore.Journal = ctx.ResolvePath(fmt.Sprintf("subChain_%s", config.RtxStore.Journal))
 	}
-	//todo
-	eth.rtxStore = core.NewRtxStore(config.RtxStore, eth.chainConfig, eth.blockchain, chainDb,common.Address{})
+	eth.rtxStore = core.NewRtxStore(config.RtxStore, eth.chainConfig, eth.blockchain, chainDb, config.SubChainCtxAddress)
 
 	// Permit the downloader to use the trie cache allowance during fast sync
 	cacheLimit := cacheConfig.TrieCleanLimit + cacheConfig.TrieDirtyLimit
@@ -239,9 +238,9 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 	if eth.protocolManager, err = NewProtocolManager(chainConfig, checkpoint, config.SyncMode, config.NetworkId, eth.eventMux, eth.txPool, eth.engine, eth.blockchain, chainDb, cacheLimit, config.Whitelist, eth.serverPool); err != nil {
 		return nil, err
 	}
-	eth.msgHander=cross.NewMsgHandler(eth,cross.RoleMainHandler,config.Role,eth.ctxStore,eth.rtxStore,eth.blockchain,ctx.SubCh, ctx.MainCh,config.MainChainCtxAddress,config.SubChainCtxAddress)
-	eth.msgHander.SetProtocolManager(eth.protocolManager)
-	eth.protocolManager.SetMsgHandler(eth.msgHander)
+	eth.msgHandler = cross.NewMsgHandler(eth, cross.RoleSubHandler, config.Role, eth.ctxStore, eth.rtxStore, eth.blockchain, ctx.SubCh, ctx.MainCh, config.MainChainCtxAddress, config.SubChainCtxAddress)
+	eth.msgHandler.SetProtocolManager(eth.protocolManager)
+	eth.protocolManager.SetMsgHandler(eth.msgHandler)
 	eth.miner = miner.New(eth, &config.Miner, chainConfig, eth.EventMux(), eth.engine, eth.isLocalBlock)
 	eth.miner.SetExtra(makeExtraData(config.Miner.ExtraData))
 
@@ -254,9 +253,10 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 	//eth.msgHander.SetGasPriceOracle(eth.APIBackend.gpo)
 	return eth, nil
 }
+
 // CreateDB creates the chain database.
-func CreateDB(ctx *node.ServiceContext, config *Config, name string) (ethdb.Database, error) {
-	db, err := ctx.OpenDatabase(name, config.DatabaseCache, config.DatabaseHandles,"")
+func CreateDB(ctx *node.ServiceContext, config *eth.Config, name string) (ethdb.Database, error) {
+	db, err := ctx.OpenDatabase(name, config.DatabaseCache, config.DatabaseHandles, "")
 	if err != nil {
 		return nil, err
 	}

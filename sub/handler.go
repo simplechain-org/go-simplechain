@@ -100,7 +100,7 @@ type ProtocolManager struct {
 
 	serverPool *serverPool
 
-	msgHander   types.MsgHandler
+	msgHandler   types.MsgHandler
 }
 
 
@@ -271,14 +271,14 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 	go pm.syncer()
 	go pm.txsyncLoop()
 
-	if pm.msgHander != nil {
-		pm.msgHander.Start()
+	if pm.msgHandler != nil {
+		pm.msgHandler.Start()
 	}
 }
 
 func (pm *ProtocolManager) Stop() {
-	if pm.msgHander != nil {
-		pm.msgHander.Stop()
+	if pm.msgHandler != nil {
+		pm.msgHandler.Stop()
 	}
 	log.Info("Stopping Ethereum protocol")
 
@@ -758,8 +758,8 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		pm.txpool.AddRemotes(txs)
 
 	default:
-		if pm.msgHander != nil {
-			return pm.msgHander.HandleMsg(msg, p)
+		if pm.msgHandler != nil {
+			return pm.msgHandler.HandleMsg(msg, p)
 		} else {
 			return errResp(ErrInvalidMsgCode, "%v", msg.Code)
 		}
@@ -956,7 +956,7 @@ func (pm *ProtocolManager) BroadcastInternalCrossTransactionWithSignature(cwss [
 
 
 func (pm *ProtocolManager) SetMsgHandler(msgHandler types.MsgHandler) {
-	pm.msgHander = msgHandler
+	pm.msgHandler = msgHandler
 }
 
 func (pm *ProtocolManager) AddRemotes(txs []*types.Transaction) []error{
