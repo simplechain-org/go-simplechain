@@ -20,10 +20,14 @@ package eth
 import (
 	"errors"
 	"fmt"
+	"github.com/simplechain-org/go-simplechain/common/math"
+	"github.com/simplechain-org/go-simplechain/core/state"
+	"github.com/simplechain-org/go-simplechain/cross"
 	"math/big"
 	"runtime"
 	"sync"
 	"sync/atomic"
+	"context"
 
 	"github.com/simplechain-org/go-simplechain/accounts"
 	"github.com/simplechain-org/go-simplechain/accounts/abi/bind"
@@ -96,6 +100,12 @@ type Ethereum struct {
 	netRPCService *ethapi.PublicNetAPI
 
 	lock sync.RWMutex // Protects the variadic fields (e.g. gas price and etherbase)
+
+	genesisHash common.Hash
+	ctxStore    *core.CtxStore
+	rtxStore    *core.RtxStore
+	msgHander   *cross.MsgHandler
+	chainConfig *params.ChainConfig
 }
 
 func (s *Ethereum) AddLesServer(ls LesServer) {
@@ -154,6 +164,7 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 		etherbase:      config.Miner.Etherbase,
 		bloomRequests:  make(chan chan *bloombits.Retrieval),
 		bloomIndexer:   NewBloomIndexer(chainDb, params.BloomBitsBlocks, params.BloomConfirms),
+		chainConfig:chainConfig,
 	}
 
 	bcVersion := rawdb.ReadDatabaseVersion(chainDb)
@@ -202,6 +213,19 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 	}
 	eth.txPool = core.NewTxPool(config.TxPool, chainConfig, eth.blockchain)
 
+	makerDb, err := CreateDB(ctx, config, common.MainMakerData)
+	if err != nil {
+		return nil, err
+	}
+    //todo
+	eth.ctxStore = core.NewCtxStore(config.CtxStore, eth.chainConfig, eth.blockchain,makerDb,common.Address{})
+
+	if config.RtxStore.Journal != "" {
+		config.RtxStore.Journal = ctx.ResolvePath(fmt.Sprintf("mainChain_%s", config.RtxStore.Journal))
+	}
+	//todo
+	eth.rtxStore = core.NewRtxStore(config.RtxStore, eth.chainConfig, eth.blockchain, chainDb,common.Address{})
+
 	// Permit the downloader to use the trie cache allowance during fast sync
 	cacheLimit := cacheConfig.TrieCleanLimit + cacheConfig.TrieDirtyLimit
 	checkpoint := config.Checkpoint
@@ -211,6 +235,13 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 	if eth.protocolManager, err = NewProtocolManager(chainConfig, checkpoint, config.SyncMode, config.NetworkId, eth.eventMux, eth.txPool, eth.engine, eth.blockchain, chainDb, cacheLimit, config.Whitelist); err != nil {
 		return nil, err
 	}
+
+	eth.msgHander=cross.NewMsgHandler(eth,cross.RoleMainHandler,config.Role,eth.ctxStore,eth.rtxStore,eth.blockchain,ctx.MainCh, ctx.SubCh,config.MainChainCtxAddress,config.SubChainCtxAddress)
+
+	eth.msgHander.SetProtocolManager(eth.protocolManager)
+
+	eth.protocolManager.SetMsgHandler(eth.msgHander)
+
 	eth.miner = miner.New(eth, &config.Miner, chainConfig, eth.EventMux(), eth.engine, eth.isLocalBlock)
 	eth.miner.SetExtra(makeExtraData(config.Miner.ExtraData))
 
@@ -220,8 +251,20 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 		gpoParams.Default = config.Miner.GasPrice
 	}
 	eth.APIBackend.gpo = gasprice.NewOracle(eth.APIBackend, gpoParams)
-
+	eth.msgHander.SetGasPriceOracle(eth.APIBackend.gpo)
 	return eth, nil
+}
+
+// CreateDB creates the chain database.
+func CreateDB(ctx *node.ServiceContext, config *Config, name string) (ethdb.Database, error) {
+	db, err := ctx.OpenDatabase(name, config.DatabaseCache, config.DatabaseHandles,"")
+	if err != nil {
+		return nil, err
+	}
+	//if db, ok := db.(*ethdb.LDBDatabase); ok {
+	//	db.Meter("eth/db/" + name + "/")
+	//}
+	return db, nil
 }
 
 func makeExtraData(extra []byte) []byte {
@@ -580,4 +623,48 @@ func (s *Ethereum) Stop() error {
 	s.chainDb.Close()
 	close(s.shutdownChan)
 	return nil
+}
+func (s *Ethereum) BlockByNumber(ctx context.Context, blockNr rpc.BlockNumber) (*types.Block, error) {
+	// Pending block is only known by the miner
+	if blockNr == rpc.PendingBlockNumber {
+		block := s.miner.PendingBlock()
+		return block, nil
+	}
+	// Otherwise resolve and return the block
+	if blockNr == rpc.LatestBlockNumber {
+		return s.blockchain.CurrentBlock(), nil
+	}
+	return s.blockchain.GetBlockByNumber(uint64(blockNr)), nil
+}
+func (s *Ethereum) HeaderByNumber(ctx context.Context, blockNr rpc.BlockNumber) (*types.Header, error) {
+	// Pending block is only known by the miner
+	if blockNr == rpc.PendingBlockNumber {
+		block := s.miner.PendingBlock()
+		return block.Header(), nil
+	}
+	// Otherwise resolve and return the block
+	if blockNr == rpc.LatestBlockNumber {
+		return s.blockchain.CurrentBlock().Header(), nil
+	}
+	return s.blockchain.GetHeaderByNumber(uint64(blockNr)), nil
+}
+func (s *Ethereum) StateAndHeaderByNumber(ctx context.Context, blockNr rpc.BlockNumber) (*state.StateDB, *types.Header, error) {
+	// Pending state is only known by the miner
+	if blockNr == rpc.PendingBlockNumber {
+		block, state := s.miner.Pending()
+		return state, block.Header(), nil
+	}
+	// Otherwise resolve the block number and return its state
+	header, err := s.HeaderByNumber(ctx, blockNr)
+	if header == nil || err != nil {
+		return nil, nil, err
+	}
+	stateDb, err := s.blockchain.StateAt(header.Root)
+	return stateDb, header, err
+}
+func (s *Ethereum) GetEVM(ctx context.Context, msg core.Message, state *state.StateDB, header *types.Header, vmCfg vm.Config) (*vm.EVM, func() error, error) {
+	state.SetBalance(msg.From(), math.MaxBig256)
+	vmError := func() error { return nil }
+	context := core.NewEVMContext(msg, header, s.blockchain, nil)
+	return vm.NewEVM(context, state, s.chainConfig, vmCfg), vmError, nil
 }

@@ -31,7 +31,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/core/vm"
 	"github.com/simplechain-org/go-simplechain/eth/downloader"
-	"github.com/simplechain-org/go-simplechain/eth/gasprice"
+	"github.com/simplechain-org/go-simplechain/sub/gasprice"
 	"github.com/simplechain-org/go-simplechain/ethdb"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/params"

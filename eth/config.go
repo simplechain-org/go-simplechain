@@ -162,4 +162,12 @@ type Config struct {
 	OverrideMuirGlacier *big.Int
 
 	Role common.ChainRole
+
+	CtxStore core.CtxStoreConfig
+
+	RtxStore core.RtxStoreConfig
+
+	MainChainCtxAddress common.Address
+
+	SubChainCtxAddress common.Address
 }

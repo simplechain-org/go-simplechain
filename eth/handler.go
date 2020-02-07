@@ -97,6 +97,8 @@ type ProtocolManager struct {
 	// wait group is used for graceful shutdowns during downloading
 	// and processing
 	wg sync.WaitGroup
+
+	msgHander types.MsgHandler
 }
 
 // NewProtocolManager returns a new Ethereum sub protocol manager. The Ethereum sub protocol manages peers capable
@@ -259,9 +261,15 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 	// start sync handlers
 	go pm.syncer()
 	go pm.txsyncLoop()
+	if pm.msgHander!=nil{
+		pm.msgHander.Start()
+	}
 }
 
 func (pm *ProtocolManager) Stop() {
+	if pm.msgHander!=nil{
+		pm.msgHander.Stop()
+	}
 	log.Info("Stopping Ethereum protocol")
 
 	pm.txsSub.Unsubscribe()        // quits txBroadcastLoop
@@ -736,7 +744,11 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		pm.txpool.AddRemotes(txs)
 
 	default:
-		return errResp(ErrInvalidMsgCode, "%v", msg.Code)
+		if pm.msgHander!=nil{
+			return pm.msgHander.HandleMsg(msg,p)
+		}else{
+			return errResp(ErrInvalidMsgCode, "%v", msg.Code)
+		}
 	}
 	return nil
 }
@@ -844,4 +856,97 @@ func (pm *ProtocolManager) NodeInfo() *NodeInfo {
 		Config:     pm.blockchain.Config(),
 		Head:       currentBlock.Hash(),
 	}
+}
+
+//广播多签完成的Ctx
+func (pm *ProtocolManager) BroadcastCWss(cwss []*types.CrossTransactionWithSignatures) {
+	var txset = make(map[*peer][]*types.CrossTransactionWithSignatures)
+
+	// Broadcast transactions to a batch of peers not knowing about it
+	for _, cws := range cwss {
+		peers := pm.peers.PeersWithoutCWss(cws.ID())
+		for _, peer := range peers {
+			txset[peer] = append(txset[peer], cws)
+		}
+		log.Trace("Broadcast transaction", "hash", cws.ID(), "recipients", len(peers))
+	}
+	// FIXME include this again: peers = peers[:int(math.Sqrt(float64(len(peers))))]
+	for peer, css := range txset {
+		peer.AsyncSendCrossTransactionWithSignatures(css)
+		log.Debug("BroadcastCWss", "peer", peer.id, "len", len(cwss))
+	}
+}
+
+//锚定节点广播签名Ctx
+func (pm *ProtocolManager) BroadcastCtx(ctxs []*types.CrossTransaction) {
+	for _, ctx := range ctxs {
+		var txset = make(map[*peer]*types.CrossTransaction)
+		// Broadcast ctx to a batch of peers not knowing about it
+		peers := pm.peers.PeersWithoutCTx(ctx.SignHash())
+		for _, peer := range peers {
+			txset[peer] = ctx
+		}
+		for peer, rt := range txset {
+			peer.AsyncSendCrossTransaction(rt)
+			log.Debug("Broadcast CrossTransaction", "hash", ctx.SignHash(), "peer", peer.id)
+		}
+	}
+}
+
+//锚定节点广播签名Rtx
+func (pm *ProtocolManager) BroadcastRtx(rtxs []*types.ReceptTransaction) {
+	for _, rtx := range rtxs {
+		var txset = make(map[*peer]*types.ReceptTransaction)
+		// Broadcast rtx to a batch of peers not knowing about it
+		peers := pm.peers.PeersWithoutRTx(rtx.SignHash())
+		for _, peer := range peers {
+			txset[peer] = rtx
+		}
+		log.Trace("Broadcast transaction", "hash", rtx.Hash(), "recipients", len(peers))
+		for peer, rt := range txset {
+			peer.AsyncSendReceptTransaction(rt)
+		}
+	}
+}
+
+//inside the chain
+func (pm *ProtocolManager) BroadcastInternalCrossTransactionWithSignature(cwss []*types.CrossTransactionWithSignatures) {
+
+	var txset = make(map[*peer][]*types.CrossTransactionWithSignatures)
+
+	// Broadcast CrossTransaction to a batch of peers not knowing about it
+	for _, cws := range cwss {
+		peers := pm.peers.PeersWithoutInternalCrossTransactionWithSignatures(cws.ID())
+		for _, peer := range peers {
+			txset[peer] = append(txset[peer], cws)
+		}
+		log.Trace("Broadcast CrossTransaction", "hash", cws.ID(), "recipients", len(peers))
+	}
+	for peer, css := range txset {
+		peer.AsyncSendInternalCrossTransactionWithSignatures(css)
+		log.Trace("Broadcast internal CrossTransactionWithSignature", "peer", peer.id, "len", len(cwss))
+	}
+}
+func (pm *ProtocolManager) SetMsgHandler(msgHandler types.MsgHandler) {
+	pm.msgHander = msgHandler
+}
+func (pm *ProtocolManager) AddRemotes(txs []*types.Transaction) []error {
+	return pm.txpool.AddRemotes(txs)
+}
+func (pm *ProtocolManager) CanAcceptTxs() bool {
+	if atomic.LoadUint32(&pm.acceptTxs) == 0 {
+		return false
+	}
+	return true
+}
+func (pm *ProtocolManager) NetworkId() uint64 {
+	return pm.networkID
+}
+
+func (pm *ProtocolManager) GetNonce(address common.Address) uint64 {
+	return pm.txpool.GetCurrentNonce(address)
+}
+
+func (pm *ProtocolManager) Pending() (map[common.Address]types.Transactions, error) {
+	return pm.txpool.Pending()
 }

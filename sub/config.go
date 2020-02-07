@@ -28,7 +28,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/consensus/ethash"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/eth/downloader"
-	"github.com/simplechain-org/go-simplechain/eth/gasprice"
+	"github.com/simplechain-org/go-simplechain/sub/gasprice"
 	"github.com/simplechain-org/go-simplechain/miner"
 	"github.com/simplechain-org/go-simplechain/params"
 )
@@ -162,4 +162,12 @@ type Config struct {
 	OverrideMuirGlacier *big.Int
 
 	Role common.ChainRole
+
+	CtxStore core.CtxStoreConfig
+
+	RtxStore core.RtxStoreConfig
+
+	MainChainCtxAddress common.Address
+
+	SubChainCtxAddress common.Address
 }

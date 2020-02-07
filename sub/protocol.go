@@ -60,6 +60,10 @@ const (
 	NodeDataMsg        = 0x0e
 	GetReceiptsMsg     = 0x0f
 	ReceiptsMsg        = 0x10
+	CtxSignMsg          = 0x0c //多重签名过程中传消息
+	CtxSignsMsg         = 0x0d //完成签名后的消息在对面链广播
+	RtxSignMsg          = 0x0e //多重签名过程中传消息
+	CtxSignsInternalMsg = 0x0f //完成签名后的消息在本链内传播
 )
 
 type errCode int
@@ -104,6 +108,9 @@ type txPool interface {
 	// SubscribeNewTxsEvent should return an event subscription of
 	// NewTxsEvent and send events to the given channel.
 	SubscribeNewTxsEvent(chan<- core.NewTxsEvent) event.Subscription
+
+	// GetLatestNonceFromQueueAndPending.
+	GetCurrentNonce(address common.Address) uint64
 }
 
 // statusData63 is the network packet for the status message for eth/63.
@@ -202,3 +209,45 @@ type blockBody struct {
 
 // blockBodiesData is the network packet for block content distribution.
 type blockBodiesData []*blockBody
+
+type ctxStore interface {
+
+	// AddRemotes should add the given transactions to the pool.
+	AddRemote(*types.CrossTransaction) error
+
+	// AddRemotes should add the given transactions to the pool.
+	AddLocal(*types.CrossTransaction) error
+
+	AddCWss([]*types.CrossTransactionWithSignatures) []error
+
+	ValidateCtx(*types.CrossTransaction) error
+
+	RemoveRemotes(common.Hash) error
+
+	RemoveLocals(common.Hash) error
+
+	RemoveFromLocalsByTransaction(common.Hash) error
+
+	SubscribeCWssResultEvent(chan<- core.NewCWsEvent) event.Subscription
+
+	//SubscribeNewCWssEvent(chan<- core.NewCWssEvent) event.Subscription
+
+	ReadFromLocals(common.Hash) *types.CrossTransactionWithSignatures
+}
+
+type rtxStore interface {
+
+	AddRemote(*types.ReceptTransaction) error
+
+	AddLocal(*types.ReceptTransaction) error
+
+	AddLocals([]*types.ReceptTransactionWithSignatures) []error
+
+	RemoveLocals([]*types.ReceptTransactionWithSignatures) error
+
+	ReadFromLocals(ctxId common.Hash) *types.ReceptTransactionWithSignatures
+
+	ValidateRtx(rtx *types.ReceptTransaction) error
+
+	SubscribeRWssResultEvent(chan<- core.NewRWsEvent) event.Subscription
+}

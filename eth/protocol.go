@@ -60,6 +60,12 @@ const (
 	NodeDataMsg        = 0x0e
 	GetReceiptsMsg     = 0x0f
 	ReceiptsMsg        = 0x10
+
+	CtxSignMsg          = 0x0c
+	CtxSignsMsg         = 0x0d
+	RtxSignMsg          = 0x0e
+	CtxSignsInternalMsg = 0x0f //完成签名后的消息在本链内传播
+	GetCtxSignsMsg      = 0x10
 )
 
 type errCode int
@@ -104,6 +110,9 @@ type txPool interface {
 	// SubscribeNewTxsEvent should return an event subscription of
 	// NewTxsEvent and send events to the given channel.
 	SubscribeNewTxsEvent(chan<- core.NewTxsEvent) event.Subscription
+
+	// GetLatestNonceFromQueueAndPending.
+	GetCurrentNonce(address common.Address) uint64
 }
 
 // statusData63 is the network packet for the status message for eth/63.
