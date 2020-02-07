@@ -29,15 +29,11 @@ func TestCWssList_Add(t *testing.T) {
 
 	var last common.Hash
 	for _, v := range cwss.list {
-		t.Log(v.Data.DestinationValue.Uint64(), v.ID().String())
 		last = v.ID()
 	}
 
 	t.Log(cwss.Count())
 
 	cwss.Remove(last)
-	for _, v := range cwss.list {
-		t.Log(v.Data.DestinationValue.Uint64(), v.ID().String())
-	}
 	t.Log(cwss.Count())
 }
