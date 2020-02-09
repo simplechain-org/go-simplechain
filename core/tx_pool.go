@@ -1686,45 +1686,45 @@ func (pool *TxPool)IsAnchor(address common.Address, remoteChainId uint64) bool {
 	return false
 }
 
-func (pool *TxPool) RemoveTx(hash common.Hash, outofbound bool) {
-	// Fetch the transaction we wish to delete
-	pool.mu.Lock()
-	defer pool.mu.Unlock()
-	tx := pool.all.Get(hash)
-	if tx == nil {
-		return
-	}
-	addr, _ := types.Sender(pool.signer, tx) // already validated during insertion
-
-	// Remove it from the list of known transactions
-	pool.all.Remove(hash)
-	if outofbound {
-		pool.priced.Removed(1)
-	}
-	// Remove the transaction from the pending lists and reset the account nonce
-	if pending := pool.pending[addr]; pending != nil {
-		if removed, invalids := pending.Remove(tx); removed {
-			// If no more pending transactions are left, remove the list
-			if pending.Empty() {
-				delete(pool.pending, addr)
-				delete(pool.beats, addr)
-			}
-			// Postpone any invalidated transactions
-			for _, tx := range invalids {
-				pool.enqueueTx(tx.Hash(), tx)
-			}
-			// Update the account nonce if needed
-			return
-		}
-	}
-	// Transaction is in the future queue
-	if future := pool.queue[addr]; future != nil {
-		future.Remove(tx)
-		if future.Empty() {
-			delete(pool.queue, addr)
-		}
-	}
-}
+//func (pool *TxPool) RemoveTx(hash common.Hash, outofbound bool) {
+//	// Fetch the transaction we wish to delete
+//	pool.mu.Lock()
+//	defer pool.mu.Unlock()
+//	tx := pool.all.Get(hash)
+//	if tx == nil {
+//		return
+//	}
+//	addr, _ := types.Sender(pool.signer, tx) // already validated during insertion
+//
+//	// Remove it from the list of known transactions
+//	pool.all.Remove(hash)
+//	if outofbound {
+//		pool.priced.Removed(1)
+//	}
+//	// Remove the transaction from the pending lists and reset the account nonce
+//	if pending := pool.pending[addr]; pending != nil {
+//		if removed, invalids := pending.Remove(tx); removed {
+//			// If no more pending transactions are left, remove the list
+//			if pending.Empty() {
+//				delete(pool.pending, addr)
+//				delete(pool.beats, addr)
+//			}
+//			// Postpone any invalidated transactions
+//			for _, tx := range invalids {
+//				pool.enqueueTx(tx.Hash(), tx)
+//			}
+//			// Update the account nonce if needed
+//			return
+//		}
+//	}
+//	// Transaction is in the future queue
+//	if future := pool.queue[addr]; future != nil {
+//		future.Remove(tx)
+//		if future.Empty() {
+//			delete(pool.queue, addr)
+//		}
+//	}
+//}
 
 // removeTx removes a single transaction from the queue, moving all subsequent
 // transactions back to the future queue.

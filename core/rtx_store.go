@@ -409,7 +409,7 @@ func (store *RtxStore) validateRtx(rtx *types.ReceptTransaction) error {
 		statedb, err := store.chain.StateAt(newHead.Root)
 		if err != nil {
 			log.Error("Failed to reset txpool state", "err", err)
-			return fmt.Errorf("stateAt err",err.Error())
+			return fmt.Errorf("stateAt err:%s",err.Error())
 		}
 		anchors,signedCount := QueryAnchor(store.chainConfig,store.chain,statedb,newHead,store.CrossDemoAddress,rtx.Data.DestinationId.Uint64())
 		store.config.Anchors = anchors

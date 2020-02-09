@@ -247,7 +247,7 @@ func (store *CtxStore) AddLocal(ctx *types.CrossTransaction) error {
 			return fmt.Errorf("rlp failed, id: %s", ctx.ID().String())
 		}
 		if hash != ctx.Data.BlockHash {
-			return fmt.Errorf("blockchain Reorg","ctxId",ctx.ID().String(),"hash",hash.String(),"BlockHash",ctx.Data.BlockHash.String())
+			return fmt.Errorf("blockchain Reorg,ctxId:%s,hash:%s,BlockHash:%s",ctx.ID().String(),hash.String(),ctx.Data.BlockHash.String())
 		}
 	}
 
@@ -455,7 +455,7 @@ func (store *CtxStore) validateCtx(ctx *types.CrossTransaction) error {
 		statedb, err := store.chain.StateAt(newHead.Root)
 		if err != nil {
 			log.Error("Failed to reset txpool state", "err", err)
-			return fmt.Errorf("stateAt err",err.Error())
+			return fmt.Errorf("stateAt err:%s",err.Error())
 		}
 		anchors,signedCount := QueryAnchor(store.chainConfig,store.chain,statedb,newHead,store.CrossDemoAddress,ctx.Data.DestinationId.Uint64())
 		store.config.Anchors = anchors

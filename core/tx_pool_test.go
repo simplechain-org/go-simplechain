@@ -33,6 +33,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/params"
+	"github.com/simplechain-org/go-simplechain/consensus"
 )
 
 // testTxPoolConfig is a transaction pool configuration without stateful disk
@@ -66,6 +67,22 @@ func (bc *testBlockChain) StateAt(common.Hash) (*state.StateDB, error) {
 
 func (bc *testBlockChain) SubscribeChainHeadEvent(ch chan<- ChainHeadEvent) event.Subscription {
 	return bc.chainHeadFeed.Subscribe(ch)
+}
+
+func (bc *testBlockChain) GetBlockByHash(hash common.Hash) *types.Block {
+	return nil
+}
+
+func (bc *testBlockChain) GetBlockNumber(hash common.Hash) *uint64 {
+	return nil
+}
+// GetHeader returns the hash corresponding to their hash.
+func (bc *testBlockChain) GetHeader(common.Hash, uint64) *types.Header {
+	return nil
+}
+
+func (bc *testBlockChain) Engine() consensus.Engine {
+	return nil
 }
 
 func transaction(nonce uint64, gaslimit uint64, key *ecdsa.PrivateKey) *types.Transaction {
@@ -1827,4 +1844,12 @@ func benchmarkPoolBatchInsert(b *testing.B, size int) {
 	for _, batch := range batches {
 		pool.AddRemotes(batch)
 	}
+}
+
+func TestIsAnchor(t *testing.T)  {
+	pool, _ := setupTxPool()
+	//todo anchor from contract
+	pool.anchors[1024] = append(pool.anchors[1024],common.HexToAddress("0x0000000000000000000000000000000000000000"))
+	isAnchor := pool.IsAnchor(common.HexToAddress("0x0000000000000000000000000000000000000000"),1024)
+	t.Log(isAnchor)
 }
