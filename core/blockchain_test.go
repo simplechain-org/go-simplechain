@@ -2362,3 +2362,7 @@ func TestDeleteCreateRevert(t *testing.T) {
 		t.Fatalf("block %d: failed to insert into chain: %v", n, err)
 	}
 }
+
+func TestStoreContractLog(t *testing.T)  {
+	//todo
+}
