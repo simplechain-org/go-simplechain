@@ -18,6 +18,9 @@ package les
 
 import (
 	"crypto/ecdsa"
+	"github.com/simplechain-org/go-simplechain/consensus"
+	"github.com/simplechain-org/go-simplechain/ethdb"
+	"github.com/simplechain-org/go-simplechain/event"
 	"time"
 
 	"github.com/simplechain-org/go-simplechain/accounts/abi/bind"
@@ -55,7 +58,18 @@ type LesServer struct {
 	threadsBusy                            int // Request serving threads count when system is busy(block insertion).
 }
 
-func NewLesServer(e *eth.Ethereum, config *eth.Config) (*LesServer, error) {
+// add new for mainchain and subchain
+type Simplechain interface {
+	BlockChain() *core.BlockChain
+	TxPool() *core.TxPool
+	EventMux() *event.TypeMux
+	Engine() consensus.Engine
+	ChainDb() ethdb.Database
+	ArchiveMode() bool
+	GetSynced() func() bool
+}
+
+func NewLesServer(e Simplechain, config *eth.Config) (*LesServer, error) {
 	// Collect les protocol version information supported by local node.
 	lesTopics := make([]discv5.Topic, len(AdvertiseProtocolVersions))
 	for i, pv := range AdvertiseProtocolVersions {
@@ -87,7 +101,7 @@ func NewLesServer(e *eth.Ethereum, config *eth.Config) (*LesServer, error) {
 		threadsBusy:  config.LightServ/100 + 1,
 		threadsIdle:  threads,
 	}
-	srv.handler = newServerHandler(srv, e.BlockChain(), e.ChainDb(), e.TxPool(), e.Synced)
+	srv.handler = newServerHandler(srv, e.BlockChain(), e.ChainDb(), e.TxPool(), e.GetSynced())
 	srv.costTracker, srv.minCapacity = newCostTracker(e.ChainDb(), config)
 	srv.freeCapacity = srv.minCapacity
 
