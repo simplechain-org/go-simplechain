@@ -87,13 +87,13 @@ type peer struct {
 	td   *big.Int
 	lock sync.RWMutex
 
-	knownTxs    mapset.Set                // Set of transaction hashes known to be known by this peer
-	knownBlocks mapset.Set                // Set of block hashes known to be known by this peer
-	queuedTxs   chan []*types.Transaction // Queue of transactions to broadcast to the peer
-	queuedProps chan *propEvent           // Queue of blocks to broadcast to the peer
-	queuedAnns  chan *types.Block         // Queue of blocks to announce to the peer
-	term        chan struct{}             // Termination channel to stop the
-	poolEntry   *poolEntry
+	knownTxs      mapset.Set                // Set of transaction hashes known to be known by this peer
+	knownBlocks   mapset.Set                // Set of block hashes known to be known by this peer
+	queuedTxs     chan []*types.Transaction // Queue of transactions to broadcast to the peer
+	queuedProps   chan *propEvent           // Queue of blocks to broadcast to the peer
+	queuedAnns    chan *types.Block         // Queue of blocks to announce to the peer
+	term          chan struct{}             // Termination channel to stop the
+	poolEntry     *poolEntry
 	queuedCWss    chan []*types.CrossTransactionWithSignatures
 	knownCWss     mapset.Set
 	queuedCtxSign chan *types.CrossTransaction
@@ -107,16 +107,16 @@ type peer struct {
 
 func newPeer(version int, p *p2p.Peer, rw p2p.MsgReadWriter) *peer {
 	return &peer{
-		Peer:        p,
-		rw:          rw,
-		version:     version,
-		id:          fmt.Sprintf("%x", p.ID().Bytes()[:8]),
-		knownTxs:    mapset.NewSet(),
-		knownBlocks: mapset.NewSet(),
-		queuedTxs:   make(chan []*types.Transaction, maxQueuedTxs),
-		queuedProps: make(chan *propEvent, maxQueuedProps),
-		queuedAnns:  make(chan *types.Block, maxQueuedAnns),
-		term:        make(chan struct{}),
+		Peer:                                     p,
+		rw:                                       rw,
+		version:                                  version,
+		id:                                       fmt.Sprintf("%x", p.ID().Bytes()[:8]),
+		knownTxs:                                 mapset.NewSet(),
+		knownBlocks:                              mapset.NewSet(),
+		queuedTxs:                                make(chan []*types.Transaction, maxQueuedTxs),
+		queuedProps:                              make(chan *propEvent, maxQueuedProps),
+		queuedAnns:                               make(chan *types.Block, maxQueuedAnns),
+		term:                                     make(chan struct{}),
 		queuedCWss:                               make(chan []*types.CrossTransactionWithSignatures, maxQueuedTxs),
 		knownCWss:                                mapset.NewSet(),
 		queuedCtxSign:                            make(chan *types.CrossTransaction, maxQueuedTxs),
@@ -399,41 +399,22 @@ func (p *peer) Handshake(network uint64, td *big.Int, head common.Hash, genesis 
 	errc := make(chan error, 2)
 
 	var (
-		status63 statusData63 // safe to read after two values have been received from errc
 		status   statusData   // safe to read after two values have been received from errc
 	)
 	go func() {
-		switch {
-		case p.version == eth63:
-			errc <- p2p.Send(p.rw, StatusMsg, &statusData63{
-				ProtocolVersion: uint32(p.version),
-				NetworkId:       network,
-				TD:              td,
-				CurrentBlock:    head,
-				GenesisBlock:    genesis,
-			})
-		case p.version == eth64:
-			errc <- p2p.Send(p.rw, StatusMsg, &statusData{
-				ProtocolVersion: uint32(p.version),
-				NetworkID:       network,
-				TD:              td,
-				Head:            head,
-				Genesis:         genesis,
-				ForkID:          forkID,
-			})
-		default:
-			panic(fmt.Sprintf("unsupported eth protocol version: %d", p.version))
-		}
+
+		errc <- p2p.Send(p.rw, StatusMsg, &statusData{
+			ProtocolVersion: uint32(p.version),
+			NetworkID:       network,
+			TD:              td,
+			Head:            head,
+			Genesis:         genesis,
+			ForkID:          forkID,
+		})
+
 	}()
 	go func() {
-		switch {
-		case p.version == eth63:
-			errc <- p.readStatusLegacy(network, &status63, genesis)
-		case p.version == eth64:
-			errc <- p.readStatus(network, &status, genesis, forkFilter)
-		default:
-			panic(fmt.Sprintf("unsupported eth protocol version: %d", p.version))
-		}
+		errc <- p.readStatus(network, &status, genesis, forkFilter)
 	}()
 	timeout := time.NewTimer(handshakeTimeout)
 	defer timeout.Stop()
@@ -447,14 +428,9 @@ func (p *peer) Handshake(network uint64, td *big.Int, head common.Hash, genesis 
 			return p2p.DiscReadTimeout
 		}
 	}
-	switch {
-	case p.version == eth63:
-		p.td, p.head = status63.TD, status63.CurrentBlock
-	case p.version == eth64:
-		p.td, p.head = status.TD, status.Head
-	default:
-		panic(fmt.Sprintf("unsupported eth protocol version: %d", p.version))
-	}
+
+	p.td, p.head = status.TD, status.Head
+
 	return nil
 }
 

@@ -22,7 +22,6 @@ package sub
 import (
 	"crypto/ecdsa"
 	"crypto/rand"
-	"fmt"
 	"math/big"
 	"sort"
 	"sync"
@@ -68,7 +67,7 @@ func newTestProtocolManager(mode downloader.SyncMode, blocks int, generator func
 	if _, err := blockchain.InsertChain(chain); err != nil {
 		panic(err)
 	}
-	pm, err := NewProtocolManager(gspec.Config, nil, mode, DefaultConfig.NetworkId, evmux, &testTxPool{added: newtx}, engine, blockchain, db, 1, nil,nil)
+	pm, err := NewProtocolManager(gspec.Config, nil, mode, DefaultConfig.NetworkId, evmux, &testTxPool{added: newtx}, engine, blockchain, db, 1, nil, nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -186,27 +185,16 @@ func newTestPeer(name string, version int, pm *ProtocolManager, shake bool) (*te
 // remote side as we are simulating locally.
 func (p *testPeer) handshake(t *testing.T, td *big.Int, head common.Hash, genesis common.Hash, forkID forkid.ID, forkFilter forkid.Filter) {
 	var msg interface{}
-	switch {
-	case p.version == eth63:
-		msg = &statusData63{
-			ProtocolVersion: uint32(p.version),
-			NetworkId:       DefaultConfig.NetworkId,
-			TD:              td,
-			CurrentBlock:    head,
-			GenesisBlock:    genesis,
-		}
-	case p.version == eth64:
-		msg = &statusData{
-			ProtocolVersion: uint32(p.version),
-			NetworkID:       DefaultConfig.NetworkId,
-			TD:              td,
-			Head:            head,
-			Genesis:         genesis,
-			ForkID:          forkID,
-		}
-	default:
-		panic(fmt.Sprintf("unsupported eth protocol version: %d", p.version))
+
+	msg = &statusData{
+		ProtocolVersion: uint32(p.version),
+		NetworkID:       DefaultConfig.NetworkId,
+		TD:              td,
+		Head:            head,
+		Genesis:         genesis,
+		ForkID:          forkID,
 	}
+
 	if err := p2p.ExpectMsg(p.app, StatusMsg, msg); err != nil {
 		t.Fatalf("status recv: %v", err)
 	}
