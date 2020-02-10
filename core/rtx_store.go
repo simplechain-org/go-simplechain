@@ -69,7 +69,7 @@ type RtxStore struct {
 
 	journal *RtxJournal
 	//records map[common.Hash]*types.CrossRecord
-	db ethdb.Database // database to store cws
+	db ethdb.KeyValueStore // database to store cws
 
 	//locals map[common.Hash]*types.ReceptTransactionWithSignatures
 	//online map[common.Hash]*types.ReceptTransactionWithSignatures
@@ -78,7 +78,7 @@ type RtxStore struct {
 	CrossDemoAddress common.Address
 }
 
-func NewRtxStore(config RtxStoreConfig, chainconfig *params.ChainConfig, chain blockChain, chainDb ethdb.Database,address common.Address) *RtxStore {
+func NewRtxStore(config RtxStoreConfig, chainconfig *params.ChainConfig, chain blockChain, chainDb ethdb.KeyValueStore,address common.Address) *RtxStore {
 	// Sanitize the input to ensure no vulnerable gas prices are set
 	config = (&config).sanitize()
 
