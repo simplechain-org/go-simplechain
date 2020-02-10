@@ -3,24 +3,24 @@ package core
 import (
 	"bytes"
 	"container/heap"
+	"context"
 	"errors"
 	"fmt"
+	"github.com/simplechain-org/go-simplechain/ethdb"
 	"math/big"
 	"sync"
 	"time"
-	"context"
 
 	"github.com/simplechain-org/go-simplechain/common"
+	"github.com/simplechain-org/go-simplechain/common/hexutil"
+	"github.com/simplechain-org/go-simplechain/common/math"
 	"github.com/simplechain-org/go-simplechain/core/types"
-	"github.com/simplechain-org/go-simplechain/ethdb/leveldb"
+	"github.com/simplechain-org/go-simplechain/core/vm"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/rlp"
-	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"github.com/simplechain-org/go-simplechain/rpctx"
-	"github.com/simplechain-org/go-simplechain/common/math"
-	"github.com/simplechain-org/go-simplechain/core/vm"
 )
 
 type CtxStoreConfig struct {
@@ -76,7 +76,7 @@ type CtxStore struct {
 	resultFeed  event.Feed
 	resultScope event.SubscriptionScope
 	//database to store cws
-	db               *leveldb.Database //database to store cws
+	db               ethdb.KeyValueStore //database to store cws
 	ctxDb            *CtxDb
 	mu               sync.RWMutex
 	wg               sync.WaitGroup // for shutdown sync
@@ -84,7 +84,7 @@ type CtxStore struct {
 	CrossDemoAddress common.Address
 }
 
-func NewCtxStore(config CtxStoreConfig, chainconfig *params.ChainConfig, chain blockChain, makerDb *leveldb.Database,address common.Address) *CtxStore {
+func NewCtxStore(config CtxStoreConfig, chainconfig *params.ChainConfig, chain blockChain, makerDb ethdb.KeyValueStore,address common.Address) *CtxStore {
 	config = (&config).sanitize()
 	signer := types.MakeCtxSigner(chainconfig)
 	config.ChainId = chainconfig.ChainID
