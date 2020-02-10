@@ -96,7 +96,8 @@ type ProtocolManager struct {
 
 	// wait group is used for graceful shutdowns during downloading
 	// and processing
-	wg sync.WaitGroup
+	wg       sync.WaitGroup
+	raftMode bool
 }
 
 // NewProtocolManager returns a new Ethereum sub protocol manager. The Ethereum sub protocol manages peers capable
@@ -115,6 +116,7 @@ func NewProtocolManager(config *params.ChainConfig, checkpoint *params.TrustedCh
 		noMorePeers: make(chan struct{}),
 		txsyncCh:    make(chan *txsync),
 		quitSync:    make(chan struct{}),
+		raftMode:    config.Raft,
 	}
 	if mode == downloader.FullSync {
 		// The database seems empty as the current block is the genesis. Yet the fast
@@ -252,9 +254,16 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 	pm.txsSub = pm.txpool.SubscribeNewTxsEvent(pm.txsCh)
 	go pm.txBroadcastLoop()
 
-	// broadcast mined blocks
-	pm.minedBlockSub = pm.eventMux.Subscribe(core.NewMinedBlockEvent{})
-	go pm.minedBroadcastLoop()
+	if !pm.raftMode {
+		// broadcast mined blocks
+		pm.minedBlockSub = pm.eventMux.Subscribe(core.NewMinedBlockEvent{})
+		go pm.minedBroadcastLoop()
+	} else {
+		// We set this immediately in raft mode to make sure the miner never drops
+		// incoming txes. Raft mode doesn't use the fetcher or downloader, and so
+		// this would never be set otherwise.
+		atomic.StoreUint32(&pm.acceptTxs, 1)
+	}
 
 	// start sync handlers
 	go pm.syncer()
@@ -265,8 +274,9 @@ func (pm *ProtocolManager) Stop() {
 	log.Info("Stopping Ethereum protocol")
 
 	pm.txsSub.Unsubscribe()        // quits txBroadcastLoop
-	pm.minedBlockSub.Unsubscribe() // quits blockBroadcastLoop
-
+	if !pm.raftMode {
+		pm.minedBlockSub.Unsubscribe() // quits blockBroadcastLoop
+	}
 	// Quit the sync loop.
 	// After this send has completed, no new peers will be accepted.
 	pm.noMorePeers <- struct{}{}
@@ -375,6 +385,17 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		return errResp(ErrMsgTooLarge, "%v > %v", msg.Size, protocolMaxMsgSize)
 	}
 	defer msg.Discard()
+
+	if pm.raftMode {
+		if msg.Code != TxMsg &&
+			msg.Code != GetBlockHeadersMsg && msg.Code != BlockHeadersMsg &&
+			msg.Code != GetBlockBodiesMsg && msg.Code != BlockBodiesMsg {
+
+			log.Info("raft: ignoring message", "code", msg.Code)
+
+			return nil
+		}
+	}
 
 	// Handle the message depending on its contents
 	switch {

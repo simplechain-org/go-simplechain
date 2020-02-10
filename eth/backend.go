@@ -20,7 +20,6 @@ package eth
 import (
 	"errors"
 	"fmt"
-	"github.com/simplechain-org/go-simplechain/consensus/dpos"
 	"math/big"
 	"runtime"
 	"sync"
@@ -32,6 +31,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"github.com/simplechain-org/go-simplechain/consensus"
 	"github.com/simplechain-org/go-simplechain/consensus/clique"
+	"github.com/simplechain-org/go-simplechain/consensus/dpos"
 	"github.com/simplechain-org/go-simplechain/consensus/ethash"
 	"github.com/simplechain-org/go-simplechain/consensus/scrypt"
 	"github.com/simplechain-org/go-simplechain/core"
@@ -66,7 +66,8 @@ type LesServer interface {
 
 // Ethereum implements the Ethereum full node service.
 type Ethereum struct {
-	config *Config
+	config      *Config
+	chainConfig *params.ChainConfig
 
 	// Channel for shutting down the service
 	shutdownChan chan bool
@@ -145,6 +146,7 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 
 	eth := &Ethereum{
 		config:         config,
+		chainConfig:    chainConfig,
 		chainDb:        chainDb,
 		eventMux:       ctx.EventMux,
 		accountManager: ctx.AccountManager,
@@ -189,6 +191,7 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 	eth.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, chainConfig, eth.engine, vmConfig, eth.shouldPreserve)
 	if err != nil {
 		return nil, err
+
 	}
 	// Rewind the chain in case of an incompatible config upgrade.
 	if compat, ok := genesisErr.(*params.ConfigCompatError); ok {
@@ -281,6 +284,10 @@ func CreateConsensusEngine(ctx *node.ServiceContext, chainConfig *params.ChainCo
 		log.Warn("Ethash used in shared mode")
 		return ethash.NewShared()
 	default:
+		if chainConfig.Raft {
+			return ethash.NewFullFaker()
+		}
+
 		engine := ethash.New(ethash.Config{
 			CacheDir:       ctx.ResolvePath(config.CacheDir),
 			CachesInMem:    config.CachesInMem,
@@ -592,4 +599,10 @@ func (s *Ethereum) Stop() error {
 	s.chainDb.Close()
 	close(s.shutdownChan)
 	return nil
+}
+
+func (s *Ethereum) ChainConfig() *params.ChainConfig { return s.chainConfig }
+
+func (s *Ethereum) CalcGasLimit(block *types.Block) uint64 {
+	return core.CalcGasLimit(block, s.config.Miner.GasFloor, s.config.Miner.GasCeil)
 }

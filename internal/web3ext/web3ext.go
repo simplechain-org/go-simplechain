@@ -24,6 +24,7 @@ var Modules = map[string]string{
 	"clique":     CliqueJs,
 	"ethash":     EthashJs,
 	"dpos":       DPoS_JS,
+	"raft":       Raft_JS,
 	"debug":      DebugJs,
 	"eth":        EthJs,
 	"miner":      MinerJs,
@@ -173,6 +174,40 @@ web3._extend({
 		}),
 	]
 });
+`
+
+const Raft_JS = `
+web3._extend({
+       property: 'raft',
+       methods:
+       [
+       ],
+       properties:
+       [
+               new web3._extend.Property({
+                       name: 'role',
+                       getter: 'raft_role'
+               }),
+               new web3._extend.Method({
+                       name: 'addPeer',
+                       call: 'raft_addPeer',
+                       params: 1
+               }),
+               new web3._extend.Method({
+                       name: 'removePeer',
+                       call: 'raft_removePeer',
+                       params: 1
+               }),
+               new web3._extend.Property({
+                       name: 'leader',
+                       getter: 'raft_leader'
+               }),
+               new web3._extend.Property({
+                       name: 'cluster',
+                       getter: 'raft_cluster'
+               }),
+       ]
+})
 `
 
 const AdminJs = `

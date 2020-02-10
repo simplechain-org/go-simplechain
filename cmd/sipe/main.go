@@ -154,6 +154,10 @@ var (
 		utils.EWASMInterpreterFlag,
 		utils.EVMInterpreterFlag,
 		configFileFlag,
+		utils.RaftModeFlag,
+		utils.RaftBlockTimeFlag,
+		utils.RaftJoinExistingFlag,
+		utils.RaftPortFlag,
 	}
 
 	rpcFlags = []cli.Flag{

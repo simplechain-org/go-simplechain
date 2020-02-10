@@ -720,6 +720,31 @@ var (
 		Usage: "Restrict connection between two whisper light clients",
 	}
 
+	// Raft flags
+	RaftModeFlag = cli.BoolFlag{
+		Name:  "raft",
+		Usage: "If enabled, uses Raft instead of Quorum Chain for consensus",
+	}
+	RaftBlockTimeFlag = cli.IntFlag{
+		Name:  "raftblocktime",
+		Usage: "Amount of time between raft block creations in milliseconds",
+		Value: 50,
+	}
+	RaftJoinExistingFlag = cli.IntFlag{
+		Name:  "raftjoinexisting",
+		Usage: "The raft ID to assume when joining an pre-existing cluster",
+		Value: 0,
+	}
+	EmitCheckpointsFlag = cli.BoolFlag{
+		Name:  "emitcheckpoints",
+		Usage: "If enabled, emit specially formatted logging checkpoints",
+	}
+	RaftPortFlag = cli.IntFlag{
+		Name:  "raftport",
+		Usage: "The port to bind for the raft transport",
+		Value: 50400,
+	}
+
 	// Metrics flags
 	MetricsEnabledFlag = cli.BoolFlag{
 		Name:  "metrics",
@@ -1521,8 +1546,11 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 }
 
 // RegisterEthService adds an Ethereum client to the stack.
-func RegisterEthService(stack *node.Node, cfg *eth.Config) {
-	var err error
+func RegisterEthService(stack *node.Node, cfg *eth.Config) <-chan *eth.Ethereum {
+	var (
+		err      error
+		nodeChan = make(chan *eth.Ethereum, 1)
+	)
 	if cfg.SyncMode == downloader.LightSync {
 		err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
 			return les.New(ctx, cfg)
@@ -1534,12 +1562,14 @@ func RegisterEthService(stack *node.Node, cfg *eth.Config) {
 				ls, _ := les.NewLesServer(fullNode, cfg)
 				fullNode.AddLesServer(ls)
 			}
+			nodeChan <- fullNode
 			return fullNode, err
 		})
 	}
 	if err != nil {
 		Fatalf("Failed to register the Ethereum service: %v", err)
 	}
+	return nodeChan
 }
 
 // RegisterShhService configures Whisper and adds it to the given node.

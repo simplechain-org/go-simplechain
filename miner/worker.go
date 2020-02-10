@@ -205,6 +205,11 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 		resubmitAdjustCh:   make(chan *intervalAdjust, resubmitAdjustChanSize),
 		agents:             make(map[Agent]struct{}),
 	}
+
+	if chainConfig.Raft {
+		return worker
+	}
+
 	// Subscribe NewTxsEvent for tx pool
 	worker.txsSub = eth.TxPool().SubscribeNewTxsEvent(worker.txsCh)
 	// Subscribe events for blockchain
