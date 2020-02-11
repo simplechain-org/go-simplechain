@@ -149,7 +149,7 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*Ethereum, error) {
 	if err != nil {
 		return nil, err
 	}
-	chainConfig, genesisHash, genesisErr := core.SetupGenesisBlockWithOverride(chainDb, config.Genesis, config.OverrideIstanbul, config.OverrideMuirGlacier)
+	chainConfig, genesisHash, genesisErr := core.SetupGenesisBlockWithOverride(chainDb, config.Genesis, config.OverrideMoon)
 	if _, ok := genesisErr.(*params.ConfigCompatError); genesisErr != nil && !ok {
 		return nil, genesisErr
 	}
@@ -222,7 +222,7 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*Ethereum, error) {
 	if err != nil {
 		return nil, err
 	}
-	eth.ctxStore = core.NewCtxStore(config.CtxStore, eth.chainConfig, eth.blockchain, makerDb,config.SubChainCtxAddress)
+	eth.ctxStore = core.NewCtxStore(config.CtxStore, eth.chainConfig, eth.blockchain, makerDb, config.SubChainCtxAddress)
 
 	if config.RtxStore.Journal != "" {
 		config.RtxStore.Journal = ctx.ResolvePath(fmt.Sprintf("subChain_%s", config.RtxStore.Journal))
