@@ -147,12 +147,10 @@ func enableWhisper(ctx *cli.Context) bool {
 
 func makeFullNode(ctx *cli.Context) *node.Node {
 	stack, cfg := makeConfigNode(ctx)
-	if ctx.GlobalIsSet(utils.OverrideIstanbulFlag.Name) {
-		cfg.Eth.OverrideIstanbul = new(big.Int).SetUint64(ctx.GlobalUint64(utils.OverrideIstanbulFlag.Name))
+	if ctx.GlobalIsSet(utils.OverrideMoonFlag.Name) {
+		cfg.Eth.OverrideMoon = new(big.Int).SetUint64(ctx.GlobalUint64(utils.OverrideMoonFlag.Name))
 	}
-	if ctx.GlobalIsSet(utils.OverrideMuirGlacierFlag.Name) {
-		cfg.Eth.OverrideMuirGlacier = new(big.Int).SetUint64(ctx.GlobalUint64(utils.OverrideMuirGlacierFlag.Name))
-	}
+
 	utils.RegisterEthService(stack, &cfg.Eth)
 
 	// Whisper must be explicitly enabled by specifying at least 1 whisper flag or in dev mode

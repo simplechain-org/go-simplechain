@@ -19,7 +19,7 @@ package params
 // MainnetBootnodes are the enode URLs of the P2P bootstrap nodes running on
 // the main Simplechain network.
 var MainnetBootnodes = []string{
-	// SimpleChain Foundation Go Bootnodes
+	//SimpleChain Foundation Go Bootnodes
 	"enode://b9f34d999d0a719967f2b3e55f34b3938a9ff4c0c87e8064a3cd4102ad54ea89834f881177ffa0759e298c3e7e561426d366183836d8c81b0c7fb520fedf73db@47.89.225.204:30312",  // US
 	"enode://0681859a0f82761367b30ff517c32d20c6ddd8fd4140eb874051a4e9a66a7905e0f6bb6ed801cf57ec062f6ba4701643ee86ce51e8973c2795dd1e08772b3525@47.74.66.59:30312",    // AU
 	"enode://9a5f410b4b789494d4d703b85f84532167a1797abc5b60a68d79d35d208dee879c2bfbd76606aa7df8eefc6b2ee4e866c465397dd16e68ea0e1dc408a0e14357@47.91.16.204:30312",   // JPN

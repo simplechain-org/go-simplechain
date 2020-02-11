@@ -17,7 +17,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"math/big"
@@ -32,7 +31,6 @@ import (
 	"github.com/simplechain-org/go-simplechain/common/math"
 	"github.com/simplechain-org/go-simplechain/consensus"
 	"github.com/simplechain-org/go-simplechain/consensus/ethash"
-	"github.com/simplechain-org/go-simplechain/consensus/misc"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/rawdb"
 	"github.com/simplechain-org/go-simplechain/core/state"
@@ -124,26 +122,19 @@ type ChainParams struct {
 }
 
 type CParamsParams struct {
-	AccountStartNonce          math.HexOrDecimal64   `json:"accountStartNonce"`
-	HomesteadForkBlock         *math.HexOrDecimal64  `json:"homesteadForkBlock"`
-	EIP150ForkBlock            *math.HexOrDecimal64  `json:"EIP150ForkBlock"`
-	EIP158ForkBlock            *math.HexOrDecimal64  `json:"EIP158ForkBlock"`
-	DaoHardforkBlock           *math.HexOrDecimal64  `json:"daoHardforkBlock"`
-	ByzantiumForkBlock         *math.HexOrDecimal64  `json:"byzantiumForkBlock"`
-	ConstantinopleForkBlock    *math.HexOrDecimal64  `json:"constantinopleForkBlock"`
-	ConstantinopleFixForkBlock *math.HexOrDecimal64  `json:"constantinopleFixForkBlock"`
-	IstanbulBlock              *math.HexOrDecimal64  `json:"istanbulForkBlock"`
-	ChainID                    *math.HexOrDecimal256 `json:"chainID"`
-	MaximumExtraDataSize       math.HexOrDecimal64   `json:"maximumExtraDataSize"`
-	TieBreakingGas             bool                  `json:"tieBreakingGas"`
-	MinGasLimit                math.HexOrDecimal64   `json:"minGasLimit"`
-	MaxGasLimit                math.HexOrDecimal64   `json:"maxGasLimit"`
-	GasLimitBoundDivisor       math.HexOrDecimal64   `json:"gasLimitBoundDivisor"`
-	MinimumDifficulty          math.HexOrDecimal256  `json:"minimumDifficulty"`
-	DifficultyBoundDivisor     math.HexOrDecimal256  `json:"difficultyBoundDivisor"`
-	DurationLimit              math.HexOrDecimal256  `json:"durationLimit"`
-	BlockReward                math.HexOrDecimal256  `json:"blockReward"`
-	NetworkID                  math.HexOrDecimal256  `json:"networkID"`
+	AccountStartNonce      math.HexOrDecimal64   `json:"accountStartNonce"`
+	MoonBlock              *math.HexOrDecimal64  `json:"moonForkBlock"`
+	ChainID                *math.HexOrDecimal256 `json:"chainID"`
+	MaximumExtraDataSize   math.HexOrDecimal64   `json:"maximumExtraDataSize"`
+	TieBreakingGas         bool                  `json:"tieBreakingGas"`
+	MinGasLimit            math.HexOrDecimal64   `json:"minGasLimit"`
+	MaxGasLimit            math.HexOrDecimal64   `json:"maxGasLimit"`
+	GasLimitBoundDivisor   math.HexOrDecimal64   `json:"gasLimitBoundDivisor"`
+	MinimumDifficulty      math.HexOrDecimal256  `json:"minimumDifficulty"`
+	DifficultyBoundDivisor math.HexOrDecimal256  `json:"difficultyBoundDivisor"`
+	DurationLimit          math.HexOrDecimal256  `json:"durationLimit"`
+	BlockReward            math.HexOrDecimal256  `json:"blockReward"`
+	NetworkID              math.HexOrDecimal256  `json:"networkID"`
 }
 
 type CParamsGenesis struct {
@@ -235,7 +226,7 @@ func (e *NoRewardEngine) Finalize(chain consensus.ChainReader, header *types.Hea
 		e.inner.Finalize(chain, header, statedb, txs, uncles)
 	} else {
 		e.accumulateRewards(chain.Config(), statedb, header, uncles)
-		header.Root = statedb.IntermediateRoot(chain.Config().IsEIP158(header.Number))
+		header.Root = statedb.IntermediateRoot(true)
 	}
 }
 
@@ -245,7 +236,7 @@ func (e *NoRewardEngine) FinalizeAndAssemble(chain consensus.ChainReader, header
 		return e.inner.FinalizeAndAssemble(chain, header, statedb, txs, uncles, receipts)
 	} else {
 		e.accumulateRewards(chain.Config(), statedb, header, uncles)
-		header.Root = statedb.IntermediateRoot(chain.Config().IsEIP158(header.Number))
+		header.Root = statedb.IntermediateRoot(true)
 
 		// Header seems complete, assemble into a block and return
 		return types.NewBlock(header, txs, uncles, receipts), nil
@@ -311,59 +302,16 @@ func (api *RetestethAPI) SetChainParams(ctx context.Context, chainParams ChainPa
 	if chainParams.Params.ChainID != nil {
 		chainId.Set((*big.Int)(chainParams.Params.ChainID))
 	}
-	var (
-		homesteadBlock      *big.Int
-		daoForkBlock        *big.Int
-		eip150Block         *big.Int
-		eip155Block         *big.Int
-		eip158Block         *big.Int
-		byzantiumBlock      *big.Int
-		constantinopleBlock *big.Int
-		petersburgBlock     *big.Int
-		istanbulBlock       *big.Int
-	)
-	if chainParams.Params.HomesteadForkBlock != nil {
-		homesteadBlock = big.NewInt(int64(*chainParams.Params.HomesteadForkBlock))
-	}
-	if chainParams.Params.DaoHardforkBlock != nil {
-		daoForkBlock = big.NewInt(int64(*chainParams.Params.DaoHardforkBlock))
-	}
-	if chainParams.Params.EIP150ForkBlock != nil {
-		eip150Block = big.NewInt(int64(*chainParams.Params.EIP150ForkBlock))
-	}
-	if chainParams.Params.EIP158ForkBlock != nil {
-		eip158Block = big.NewInt(int64(*chainParams.Params.EIP158ForkBlock))
-		eip155Block = eip158Block
-	}
-	if chainParams.Params.ByzantiumForkBlock != nil {
-		byzantiumBlock = big.NewInt(int64(*chainParams.Params.ByzantiumForkBlock))
-	}
-	if chainParams.Params.ConstantinopleForkBlock != nil {
-		constantinopleBlock = big.NewInt(int64(*chainParams.Params.ConstantinopleForkBlock))
-	}
-	if chainParams.Params.ConstantinopleFixForkBlock != nil {
-		petersburgBlock = big.NewInt(int64(*chainParams.Params.ConstantinopleFixForkBlock))
-	}
-	if constantinopleBlock != nil && petersburgBlock == nil {
-		petersburgBlock = big.NewInt(100000000000)
-	}
-	if chainParams.Params.IstanbulBlock != nil {
-		istanbulBlock = big.NewInt(int64(*chainParams.Params.IstanbulBlock))
+	var moonBlock *big.Int
+
+	if chainParams.Params.MoonBlock != nil {
+		moonBlock = big.NewInt(int64(*chainParams.Params.MoonBlock))
 	}
 
 	genesis := &core.Genesis{
 		Config: &params.ChainConfig{
-			ChainID:             chainId,
-			HomesteadBlock:      homesteadBlock,
-			DAOForkBlock:        daoForkBlock,
-			DAOForkSupport:      false,
-			EIP150Block:         eip150Block,
-			EIP155Block:         eip155Block,
-			EIP158Block:         eip158Block,
-			ByzantiumBlock:      byzantiumBlock,
-			ConstantinopleBlock: constantinopleBlock,
-			PetersburgBlock:     petersburgBlock,
-			IstanbulBlock:       istanbulBlock,
+			ChainID:   chainId,
+			MoonBlock: moonBlock,
 		},
 		Nonce:      uint64(chainParams.Genesis.Nonce),
 		Timestamp:  uint64(chainParams.Genesis.Timestamp),
@@ -424,7 +372,7 @@ func (api *RetestethAPI) SendRawTransaction(ctx context.Context, rawTx hexutil.B
 		// Return nil is not by mistake - some tests include sending transaction where gasLimit overflows uint64
 		return common.Hash{}, nil
 	}
-	signer := types.MakeSigner(api.chainConfig, big.NewInt(int64(api.blockNumber)))
+	signer := types.MakeSigner(api.chainConfig)
 	sender, err := types.Sender(signer, tx)
 	if err != nil {
 		return common.Hash{}, err
@@ -471,26 +419,23 @@ func (api *RetestethAPI) mineBlock() error {
 	if api.engine != nil {
 		api.engine.Prepare(api.blockchain, header)
 	}
-	// If we are care about TheDAO hard-fork check whether to override the extra-data or not
-	if daoBlock := api.chainConfig.DAOForkBlock; daoBlock != nil {
-		// Check whether the block is among the fork extra-override range
-		limit := new(big.Int).Add(daoBlock, params.DAOForkExtraRange)
-		if header.Number.Cmp(daoBlock) >= 0 && header.Number.Cmp(limit) < 0 {
-			// Depending whether we support or oppose the fork, override differently
-			if api.chainConfig.DAOForkSupport {
-				header.Extra = common.CopyBytes(params.DAOForkBlockExtra)
-			} else if bytes.Equal(header.Extra, params.DAOForkBlockExtra) {
-				header.Extra = []byte{} // If miner opposes, don't let it use the reserved extra-data
-			}
-		}
-	}
+	//// If we are care about TheDAO hard-fork check whether to override the extra-data or not
+	//	// Check whether the block is among the fork extra-override range
+	//	limit := new(big.Int).Add(daoBlock, params.DAOForkExtraRange)
+	//	if header.Number.Cmp(daoBlock) >= 0 && header.Number.Cmp(limit) < 0 {
+	//		// Depending whether we support or oppose the fork, override differently
+	//		if api.chainConfig.DAOForkSupport {
+	//			header.Extra = common.CopyBytes(params.DAOForkBlockExtra)
+	//		} else if bytes.Equal(header.Extra, params.DAOForkBlockExtra) {
+	//			header.Extra = []byte{} // If miner opposes, don't let it use the reserved extra-data
+	//		}
+	//	}
+
 	statedb, err := api.blockchain.StateAt(parent.Root())
 	if err != nil {
 		return err
 	}
-	if api.chainConfig.DAOForkSupport && api.chainConfig.DAOForkBlock != nil && api.chainConfig.DAOForkBlock.Cmp(header.Number) == 0 {
-		misc.ApplyDAOHardFork(statedb)
-	}
+
 	gasPool := new(core.GasPool).AddGas(header.GasLimit)
 	txCount := 0
 	var txs []*types.Transaction
@@ -648,7 +593,7 @@ func (api *RetestethAPI) AccountRange(ctx context.Context,
 			return AccountRangeResult{}, err
 		}
 		// Recompute transactions up to the target index.
-		signer := types.MakeSigner(api.blockchain.Config(), block.Number())
+		signer := types.MakeSigner(api.blockchain.Config())
 		for idx, tx := range block.Transactions() {
 			// Assemble the transaction call message and return if the requested offset
 			msg, _ := tx.AsMessage(signer)
@@ -660,10 +605,10 @@ func (api *RetestethAPI) AccountRange(ctx context.Context,
 			}
 			// Ensure any modifications are committed to the state
 			// Only delete empty objects if EIP158/161 (a.k.a Spurious Dragon) is in effect
-			root = statedb.IntermediateRoot(vmenv.ChainConfig().IsEIP158(block.Number()))
+			root = statedb.IntermediateRoot(true)
 			if idx == int(txIndex) {
 				// This is to make sure root can be opened by OpenTrie
-				root, err = statedb.Commit(api.chainConfig.IsEIP158(block.Number()))
+				root, err = statedb.Commit(true)
 				if err != nil {
 					return AccountRangeResult{}, err
 				}
@@ -758,7 +703,7 @@ func (api *RetestethAPI) StorageRangeAt(ctx context.Context,
 			return StorageRangeResult{}, err
 		}
 		// Recompute transactions up to the target index.
-		signer := types.MakeSigner(api.blockchain.Config(), block.Number())
+		signer := types.MakeSigner(api.blockchain.Config())
 		for idx, tx := range block.Transactions() {
 			// Assemble the transaction call message and return if the requested offset
 			msg, _ := tx.AsMessage(signer)
@@ -770,10 +715,10 @@ func (api *RetestethAPI) StorageRangeAt(ctx context.Context,
 			}
 			// Ensure any modifications are committed to the state
 			// Only delete empty objects if EIP158/161 (a.k.a Spurious Dragon) is in effect
-			_ = statedb.IntermediateRoot(vmenv.ChainConfig().IsEIP158(block.Number()))
+			_ = statedb.IntermediateRoot(true)
 			if idx == int(txIndex) {
 				// This is to make sure root can be opened by OpenTrie
-				_, err = statedb.Commit(vmenv.ChainConfig().IsEIP158(block.Number()))
+				_, err = statedb.Commit(true)
 				if err != nil {
 					return StorageRangeResult{}, err
 				}

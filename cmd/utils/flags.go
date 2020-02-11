@@ -226,13 +226,9 @@ var (
 		Name:  "whitelist",
 		Usage: "Comma separated block number-to-hash mappings to enforce (<number>=<hash>)",
 	}
-	OverrideIstanbulFlag = cli.Uint64Flag{
-		Name:  "override.istanbul",
+	OverrideMoonFlag = cli.Uint64Flag{
+		Name:  "override.moon",
 		Usage: "Manually specify Istanbul fork-block, overriding the bundled setting",
-	}
-	OverrideMuirGlacierFlag = cli.Uint64Flag{
-		Name:  "override.muirglacier",
-		Usage: "Manually specify Muir Glacier fork-block, overriding the bundled setting",
 	}
 	// Light server and client settings
 	LightLegacyServFlag = cli.IntFlag{ // Deprecated in favor of light.serve, remove in 2021
