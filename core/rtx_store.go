@@ -144,11 +144,17 @@ func NewRtxStore(config RtxStoreConfig, chainconfig *params.ChainConfig, chain b
 }
 
 func (store *RtxStore) Stop() {
+	//log.Info("RtxStore loop exists 1")
 	store.resultScope.Close()
+	//log.Info("RtxStore loop exists 2")
 	store.rwsScope.Close()
+	//log.Info("RtxStore loop exists 3")
 	store.db.Close()
+	//log.Info("RtxStore loop exists 4")
 	close(store.stopCh)
+	//log.Info("RtxStore loop exists 5")
 	store.wg.Wait()
+	//log.Info("RtxStore loop exists 6")
 	if store.journal != nil {
 		store.journal.close()
 	}
@@ -241,6 +247,7 @@ func (store *RtxStore) loop() {
 		select {
 		// Be unsubscribed due to system stopped
 		case <-store.stopCh:
+			//log.Info("RtxStore loop exists")
 			return
 
 		case <-expire.C:

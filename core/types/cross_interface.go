@@ -26,6 +26,7 @@ type MsgHandler interface {
 	Stop()
 	HandleMsg(msg p2p.Msg, p Peer) error
 	SetProtocolManager(pm ProtocolManager)
+	SetGasPriceOracle(gpo GasPriceOracle)
 }
 
 type ProtocolManager interface {
