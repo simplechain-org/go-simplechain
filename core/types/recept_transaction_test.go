@@ -2,6 +2,7 @@ package types
 
 import (
 	"bytes"
+	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"math/big"
 	"testing"
 
@@ -121,4 +122,16 @@ func TestReceptTransactionWithSignatures_ConstructData(t *testing.T) {
 	if !bytes.Equal(data, should) {
 		t.Errorf("encoded RLP mismatch, got %x", data)
 	}
+}
+
+func TestMethId(t *testing.T) {
+	t.Log(hexutil.Encode(MethId("makerStart(uint256,uint256,bytes)")))
+}
+
+func TestEventTopic(t *testing.T) {
+	t.Log(EventTopic("MakerTx(bytes32,address,uint256,uint256,uint256,bytes)"))
+	t.Log(EventTopic("TakerTx(bytes32,address,uint256,address,uint256,uint256,bytes)"))
+	t.Log(EventTopic("MakerFinish(bytes32,address)"))
+	t.Log(EventTopic("AddAnchors(uint256)"))
+	t.Log(EventTopic("RemoveAnchors(uint256)"))
 }

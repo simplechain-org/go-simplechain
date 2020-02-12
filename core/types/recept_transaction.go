@@ -1,6 +1,7 @@
 package types
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"encoding/binary"
 	"errors"
@@ -9,6 +10,9 @@ import (
 	"github.com/simplechain-org/go-simplechain/crypto/sha3"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/params"
+	"github.com/simplechain-org/go-simplechain/accounts/abi"
+	"github.com/simplechain-org/go-simplechain/common/hexutil"
+	"io/ioutil"
 	"math/big"
 	"sort"
 	"sync"
@@ -296,64 +300,98 @@ func (rws *ReceptTransactionWithSignatures) Transaction(
 }
 
 func (rws *ReceptTransactionWithSignatures) ConstructData(gasUsed *big.Int) ([]byte, error) {
-	transferFnSignature := []byte("makerFinish(bytes32,bytes32,address,bytes32,uint64,uint32,uint256,uint256,uint256[],bytes32[],bytes32[],bytes)")
-	hash := sha3.NewKeccak256()
-	hash.Write(transferFnSignature)
-	methodID := hash.Sum(nil)[:4]
+	//paddedCtxId := common.LeftPadBytes(rws.Data.CTxId.Bytes(), 32)
+	//paddedTxHash := common.LeftPadBytes(rws.Data.TxHash.Bytes(), 32)
+	//paddedAddress := common.LeftPadBytes(rws.Data.To.Bytes(), 32)
+	//paddedBlockHash := common.LeftPadBytes(rws.Data.BlockHash.Bytes(), 32)
+	////BlockNumber := new(big.Int).SetUint64(rtx.Data.BlockNumber)
+	////paddedBlockNumber := common.LeftPadBytes(BlockNumber.Bytes(), 32)
+	////paddedDestinationId := common.LeftPadBytes(rws.Data.DestinationId.Bytes(), 32)
+	//paddedBlockNumber := common.LeftPadBytes(Uint64ToBytes(rws.Data.BlockNumber), 32)
+	//paddedIndex := common.LeftPadBytes(Uint32ToBytes(rws.Data.Index), 32)
+	//paddedRemoteChainId := common.LeftPadBytes(rws.ChainId().Bytes(), 32)
+	//paddedGasUsed := common.LeftPadBytes(gasUsed.Bytes(), 32)
+	//
+	//var data []byte
+	//data = append(data, methodID...)
+	//data = append(data, paddedCtxId...)
+	//data = append(data, paddedTxHash...)
+	//data = append(data, paddedAddress...)
+	//data = append(data, paddedBlockHash...)
+	//data = append(data, paddedBlockNumber...)
+	//data = append(data, paddedIndex...)
+	//data = append(data, paddedRemoteChainId...)
+	//data = append(data, paddedGasUsed...)
+	//
+	//sLength := len(rws.Data.S)
+	//rLength := len(rws.Data.R)
+	//vLength := len(rws.Data.V)
+	//if sLength != rLength || sLength != vLength {
+	//	return nil, errors.New("signature error")
+	//}
+	//
+	//// 11开头
+	//bv := common.LeftPadBytes(new(big.Int).SetUint64(32*11).Bytes(), 32)
+	//br := common.LeftPadBytes(new(big.Int).SetUint64(uint64(32*(9+sLength+1))).Bytes(), 32)
+	//bs := common.LeftPadBytes(new(big.Int).SetUint64(uint64(32*(9+(sLength+1)*2))).Bytes(), 32)
+	//bl := common.LeftPadBytes(new(big.Int).SetUint64(uint64(sLength)).Bytes(), 32)
+	//data = append(data, bv...)
+	//data = append(data, br...)
+	//data = append(data, bs...)
+	//data = append(data, bl...)
+	//
+	//for i := 0; i < sLength; i++ {
+	//	data = append(data, common.LeftPadBytes(rws.Data.V[i].Bytes(), 32)...)
+	//}
+	//data = append(data, bl...)
+	//for i := 0; i < sLength; i++ {
+	//	data = append(data, common.LeftPadBytes(rws.Data.R[i].Bytes(), 32)...)
+	//}
+	//data = append(data, bl...)
+	//for i := 0; i < sLength; i++ {
+	//	data = append(data, common.LeftPadBytes(rws.Data.S[i].Bytes(), 32)...)
+	//}
+	//data = append(data, rws.Data.Input...) //makeFinish input字段
+	data, err := ioutil.ReadFile("../../contracts/crossdemo/crossdemo.abi")
+	if err != nil {
+		return nil,err
+	}
+	abi, err := abi.JSON(bytes.NewReader(data))
+	if err != nil {
+		return nil,err
+	}
+	type Recept struct {
+		txId 		common.Hash
+		txHash 		common.Hash
+		to			common.Address
+		blockHash	common.Hash
+		blockNumber uint64
+		index		uint32
+		input		[]byte
+		v       	[]*big.Int
+		r       	[]*big.Int
+		s       	[]*big.Int
+	}
+	var rep Recept
+	rep.txId = rws.Data.CTxId
+	rep.txHash = rws.Data.TxHash
+	rep.to = rws.Data.To
+	rep.blockHash = rws.Data.BlockHash
+	rep.blockNumber = rws.Data.BlockNumber
+	rep.index = uint32(rws.Data.Index)
+	rep.input = rws.Data.Input
+	rep.v = rws.Data.V
+	rep.r = rws.Data.R
+	rep.s = rws.Data.S
 
-	paddedCtxId := common.LeftPadBytes(rws.Data.CTxId.Bytes(), 32)
-	paddedTxHash := common.LeftPadBytes(rws.Data.TxHash.Bytes(), 32)
-	paddedAddress := common.LeftPadBytes(rws.Data.To.Bytes(), 32)
-	paddedBlockHash := common.LeftPadBytes(rws.Data.BlockHash.Bytes(), 32)
-	//BlockNumber := new(big.Int).SetUint64(rtx.Data.BlockNumber)
-	//paddedBlockNumber := common.LeftPadBytes(BlockNumber.Bytes(), 32)
-	//paddedDestinationId := common.LeftPadBytes(rws.Data.DestinationId.Bytes(), 32)
-	paddedBlockNumber := common.LeftPadBytes(Uint64ToBytes(rws.Data.BlockNumber), 32)
-	paddedIndex := common.LeftPadBytes(Uint32ToBytes(rws.Data.Index), 32)
-	paddedRemoteChainId := common.LeftPadBytes(rws.ChainId().Bytes(), 32)
-	paddedGasUsed := common.LeftPadBytes(gasUsed.Bytes(), 32)
+	out, err := abi.Pack("makerFinish", rep, rws.Data.DestinationId, gasUsed)
 
-	var data []byte
-	data = append(data, methodID...)
-	data = append(data, paddedCtxId...)
-	data = append(data, paddedTxHash...)
-	data = append(data, paddedAddress...)
-	data = append(data, paddedBlockHash...)
-	data = append(data, paddedBlockNumber...)
-	data = append(data, paddedIndex...)
-	data = append(data, paddedRemoteChainId...)
-	data = append(data, paddedGasUsed...)
-
-	sLength := len(rws.Data.S)
-	rLength := len(rws.Data.R)
-	vLength := len(rws.Data.V)
-	if sLength != rLength || sLength != vLength {
-		return nil, errors.New("signature error")
+	if err != nil {
+		return nil,err
 	}
 
-	// 11开头
-	bv := common.LeftPadBytes(new(big.Int).SetUint64(32*11).Bytes(), 32)
-	br := common.LeftPadBytes(new(big.Int).SetUint64(uint64(32*(9+sLength+1))).Bytes(), 32)
-	bs := common.LeftPadBytes(new(big.Int).SetUint64(uint64(32*(9+(sLength+1)*2))).Bytes(), 32)
-	bl := common.LeftPadBytes(new(big.Int).SetUint64(uint64(sLength)).Bytes(), 32)
-	data = append(data, bv...)
-	data = append(data, br...)
-	data = append(data, bs...)
-	data = append(data, bl...)
-
-	for i := 0; i < sLength; i++ {
-		data = append(data, common.LeftPadBytes(rws.Data.V[i].Bytes(), 32)...)
-	}
-	data = append(data, bl...)
-	for i := 0; i < sLength; i++ {
-		data = append(data, common.LeftPadBytes(rws.Data.R[i].Bytes(), 32)...)
-	}
-	data = append(data, bl...)
-	for i := 0; i < sLength; i++ {
-		data = append(data, common.LeftPadBytes(rws.Data.S[i].Bytes(), 32)...)
-	}
-	data = append(data, rws.Data.Input...) //makeFinish input字段
-	return data, nil
+	input := hexutil.Bytes(out)
+	return input, nil
 }
 
 type transactionsByGasPrice []*Transaction
@@ -445,4 +483,18 @@ func Uint32ToBytes(i uint) []byte {
 	var buf = make([]byte, 4)
 	binary.BigEndian.PutUint32(buf, uint32(i))
 	return buf
+}
+
+func MethId(name string) []byte {
+	transferFnSignature := []byte(name)
+	hash := sha3.NewKeccak256()
+	hash.Write(transferFnSignature)
+	return hash.Sum(nil)[:4]
+}
+
+func EventTopic(name string) string {
+	transferFnSignature := []byte(name)
+	hash := sha3.NewKeccak256()
+	hash.Write(transferFnSignature)
+	return hexutil.Encode(hash.Sum(nil))
 }
