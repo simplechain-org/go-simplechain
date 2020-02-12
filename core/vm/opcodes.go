@@ -103,6 +103,7 @@ const (
 	GASLIMIT
 	CHAINID     = 0x46
 	SELFBALANCE = 0x47
+	NONCE       = 0x48
 )
 
 // 0x50 range - 'storage' and execution.
@@ -281,6 +282,7 @@ var opCodeToString = map[OpCode]string{
 	GASLIMIT:    "GASLIMIT",
 	CHAINID:     "CHAINID",
 	SELFBALANCE: "SELFBALANCE",
+	NONCE:       "NONCE",
 
 	// 0x50 range - 'storage' and execution.
 	POP: "POP",
@@ -433,6 +435,7 @@ var stringToOp = map[string]OpCode{
 	"CALLDATASIZE":   CALLDATASIZE,
 	"CALLDATACOPY":   CALLDATACOPY,
 	"CHAINID":        CHAINID,
+	"NONCE":          NONCE,
 	"DELEGATECALL":   DELEGATECALL,
 	"STATICCALL":     STATICCALL,
 	"CODESIZE":       CODESIZE,

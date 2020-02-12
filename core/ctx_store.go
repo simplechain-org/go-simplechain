@@ -76,7 +76,7 @@ type CtxStore struct {
 	resultFeed  event.Feed
 	resultScope event.SubscriptionScope
 	//database to store cws
-	db               ethdb.Database //database to store cws
+	db               ethdb.KeyValueStore //database to store cws
 	ctxDb            *CtxDb
 	mu               sync.RWMutex
 	wg               sync.WaitGroup // for shutdown sync
@@ -84,7 +84,7 @@ type CtxStore struct {
 	CrossDemoAddress common.Address
 }
 
-func NewCtxStore(config CtxStoreConfig, chainconfig *params.ChainConfig, chain blockChain, makerDb ethdb.Database,address common.Address) *CtxStore {
+func NewCtxStore(config CtxStoreConfig, chainconfig *params.ChainConfig, chain blockChain, makerDb ethdb.KeyValueStore,address common.Address) *CtxStore {
 	config = (&config).sanitize()
 	signer := types.MakeCtxSigner(chainconfig)
 	config.ChainId = chainconfig.ChainID
