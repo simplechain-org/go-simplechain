@@ -98,7 +98,7 @@ type ProtocolManager struct {
 	// and processing
 	wg sync.WaitGroup
 
-	msgHander types.MsgHandler
+	msgHandler types.MsgHandler
 }
 
 // NewProtocolManager returns a new Ethereum sub protocol manager. The Ethereum sub protocol manages peers capable
@@ -261,26 +261,25 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 	// start sync handlers
 	go pm.syncer()
 	go pm.txsyncLoop()
-	if pm.msgHander!=nil{
-		pm.msgHander.Start()
+	if pm.msgHandler!=nil{
+		pm.msgHandler.Start()
 	}
 }
 
 func (pm *ProtocolManager) Stop() {
-	if pm.msgHander!=nil{
-		pm.msgHander.Stop()
-	}
-	log.Info("Stopping Ethereum protocol")
+
+	log.Info("Stopping Simplechain protocol")
 
 	pm.txsSub.Unsubscribe()        // quits txBroadcastLoop
 	pm.minedBlockSub.Unsubscribe() // quits blockBroadcastLoop
-
 	// Quit the sync loop.
 	// After this send has completed, no new peers will be accepted.
 	pm.noMorePeers <- struct{}{}
+	log.Info("Stopping Simplechain protocol 2")
 
 	// Quit fetcher, txsyncLoop.
 	close(pm.quitSync)
+	log.Info("Stopping Simplechain protocol 3")
 
 	// Disconnect existing sessions.
 	// This also closes the gate for any new registrations on the peer set.
@@ -288,10 +287,18 @@ func (pm *ProtocolManager) Stop() {
 	// will exit when they try to register.
 	pm.peers.Close()
 
+	log.Info("Stopping Simplechain protocol 4")
+
 	// Wait for all peer handler goroutines and the loops to come down.
 	pm.wg.Wait()
 
-	log.Info("Ethereum protocol stopped")
+	log.Info("Stopping Simplechain protocol 5")
+
+	if pm.msgHandler!=nil{
+		pm.msgHandler.Stop()
+	}
+
+	log.Info("Simplechain protocol stopped")
 }
 
 func (pm *ProtocolManager) newPeer(pv int, p *p2p.Peer, rw p2p.MsgReadWriter) *peer {
@@ -365,7 +372,7 @@ func (pm *ProtocolManager) handle(p *peer) error {
 	// Handle incoming messages until the connection is torn down
 	for {
 		if err := pm.handleMsg(p); err != nil {
-			p.Log().Debug("Ethereum message handling failed", "err", err)
+			p.Log().Info("Ethereum message handling failed", "err", err)
 			return err
 		}
 	}
@@ -744,8 +751,8 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		pm.txpool.AddRemotes(txs)
 
 	default:
-		if pm.msgHander!=nil{
-			return pm.msgHander.HandleMsg(msg,p)
+		if pm.msgHandler!=nil{
+			return pm.msgHandler.HandleMsg(msg,p)
 		}else{
 			return errResp(ErrInvalidMsgCode, "%v", msg.Code)
 		}
@@ -928,7 +935,7 @@ func (pm *ProtocolManager) BroadcastInternalCrossTransactionWithSignature(cwss [
 	}
 }
 func (pm *ProtocolManager) SetMsgHandler(msgHandler types.MsgHandler) {
-	pm.msgHander = msgHandler
+	pm.msgHandler = msgHandler
 }
 func (pm *ProtocolManager) AddRemotes(txs []*types.Transaction) []error {
 	return pm.txpool.AddRemotes(txs)

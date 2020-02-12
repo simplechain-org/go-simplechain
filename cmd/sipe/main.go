@@ -153,8 +153,11 @@ var (
 		utils.GpoPercentileFlag,
 		utils.EWASMInterpreterFlag,
 		utils.EVMInterpreterFlag,
-		configFileFlag,
 		utils.RoleFlag,
+		utils.AnchorAccountsFlag,
+		utils.ContractMainFlag,
+		utils.ContractSubFlag,
+		configFileFlag,
 	}
 
 	rpcFlags = []cli.Flag{
