@@ -666,6 +666,11 @@ func (ethash *Ethash) APIs(chain consensus.ChainReader) []rpc.API {
 	}
 }
 
+// Protocol implements consensus.Engine.Protocol
+func (ethash *Ethash) Protocol() consensus.Protocol {
+	return consensus.EthProtocol
+}
+
 // SeedHash is the seed to use for generating a verification cache and the mining
 // dataset.
 func SeedHash(block uint64) []byte {

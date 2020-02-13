@@ -278,6 +278,9 @@ func (w *worker) start() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	atomic.StoreInt32(&w.running, 1)
+	if istanbul, ok := w.engine.(consensus.Istanbul); ok {
+		istanbul.Start(w.chain, w.chain.CurrentBlock, w.chain.HasBadBlock)
+	}
 	w.startCh <- struct{}{}
 	for agent := range w.agents {
 		agent.Start()
@@ -292,6 +295,9 @@ func (w *worker) stop() {
 		for agent := range w.agents {
 			agent.Stop()
 		}
+	}
+	if istanbul, ok := w.engine.(consensus.Istanbul); ok {
+		istanbul.Stop()
 	}
 	atomic.StoreInt32(&w.running, 0)
 }
@@ -375,6 +381,11 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 			commit(false, commitInterruptNewHead)
 
 		case head := <-w.chainHeadCh:
+			if ist, ok := w.engine.(consensus.Istanbul); ok {
+				if err := ist.NewChainHead(); err != nil {
+					log.Warn("new istanbul chain head failed", "error", err.Error())
+				}
+			}
 			clearPending(head.Block.NumberU64())
 			timestamp = time.Now().Unix()
 			commit(false, commitInterruptNewHead)

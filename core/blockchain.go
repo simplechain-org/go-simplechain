@@ -691,6 +691,11 @@ func (bc *BlockChain) HasBlock(hash common.Hash, number uint64) bool {
 	return rawdb.HasBody(bc.db, hash, number)
 }
 
+// HasBadBlock returns whether the block with the hash is a bad block. dep: Istanbul
+func (bc *BlockChain) HasBadBlock(hash common.Hash) bool {
+	return bc.badBlocks.Contains(hash)
+}
+
 // HasFastBlock checks if a fast block is fully present in the database or not.
 func (bc *BlockChain) HasFastBlock(hash common.Hash, number uint64) bool {
 	if !bc.HasBlock(hash, number) {

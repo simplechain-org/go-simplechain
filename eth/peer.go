@@ -194,6 +194,10 @@ func (p *peer) MarkTransaction(hash common.Hash) {
 	p.knownTxs.Add(hash)
 }
 
+func (p *peer) Send(msgcode uint64, data interface{}) error {
+	return p2p.Send(p.rw, msgcode, data)
+}
+
 // SendTransactions sends transactions to the peer and includes the hashes
 // in its transaction hash set for future reference.
 func (p *peer) SendTransactions(txs types.Transactions) error {
@@ -372,7 +376,7 @@ func (p *peer) Handshake(network uint64, td *big.Int, head common.Hash, genesis 
 				CurrentBlock:    head,
 				GenesisBlock:    genesis,
 			})
-		case p.version == eth64:
+		case p.version == eth64, p.version == istanbul65:
 			errc <- p2p.Send(p.rw, StatusMsg, &statusData{
 				ProtocolVersion: uint32(p.version),
 				NetworkID:       network,
@@ -389,7 +393,7 @@ func (p *peer) Handshake(network uint64, td *big.Int, head common.Hash, genesis 
 		switch {
 		case p.version == eth63:
 			errc <- p.readStatusLegacy(network, &status63, genesis)
-		case p.version == eth64:
+		case p.version == eth64, p.version == istanbul65:
 			errc <- p.readStatus(network, &status, genesis, forkFilter)
 		default:
 			panic(fmt.Sprintf("unsupported eth protocol version: %d", p.version))
@@ -410,7 +414,7 @@ func (p *peer) Handshake(network uint64, td *big.Int, head common.Hash, genesis 
 	switch {
 	case p.version == eth63:
 		p.td, p.head = status63.TD, status63.CurrentBlock
-	case p.version == eth64:
+	case p.version == eth64, p.version == istanbul65:
 		p.td, p.head = status.TD, status.Head
 	default:
 		panic(fmt.Sprintf("unsupported eth protocol version: %d", p.version))
@@ -530,6 +534,18 @@ func (ps *peerSet) Unregister(id string) error {
 	p.close()
 
 	return nil
+}
+
+// Peers returns all registered peers
+func (ps *peerSet) Peers() map[string]*peer {
+	ps.lock.RLock()
+	defer ps.lock.RUnlock()
+
+	set := make(map[string]*peer)
+	for id, p := range ps.peers {
+		set[id] = p
+	}
+	return set
 }
 
 // Peer retrieves the registered peer with the given id.

@@ -191,7 +191,7 @@ func (p *testPeer) handshake(t *testing.T, td *big.Int, head common.Hash, genesi
 			CurrentBlock:    head,
 			GenesisBlock:    genesis,
 		}
-	case p.version == eth64:
+	case p.version == eth64,p.version == istanbul65:
 		msg = &statusData{
 			ProtocolVersion: uint32(p.version),
 			NetworkID:       DefaultConfig.NetworkId,

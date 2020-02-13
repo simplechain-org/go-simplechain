@@ -20,6 +20,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/simplechain-org/go-simplechain/consensus/clique"
+	"github.com/simplechain-org/go-simplechain/consensus/dpos"
+	"github.com/simplechain-org/go-simplechain/consensus/ethash"
+	"github.com/simplechain-org/go-simplechain/consensus/scrypt"
+	"github.com/simplechain-org/go-simplechain/crypto"
 	"math"
 	"math/big"
 	"sync"
@@ -98,6 +103,7 @@ type ProtocolManager struct {
 	// and processing
 	wg       sync.WaitGroup
 	raftMode bool
+	engine   consensus.Engine // used for istanbul consensus
 }
 
 // NewProtocolManager returns a new Ethereum sub protocol manager. The Ethereum sub protocol manages peers capable
@@ -117,7 +123,13 @@ func NewProtocolManager(config *params.ChainConfig, checkpoint *params.TrustedCh
 		txsyncCh:    make(chan *txsync),
 		quitSync:    make(chan struct{}),
 		raftMode:    config.Raft,
+		engine:      engine,
 	}
+
+	if istanbul, ok := manager.engine.(consensus.Istanbul); ok {
+		istanbul.SetBroadcaster(manager)
+	}
+
 	if mode == downloader.FullSync {
 		// The database seems empty as the current block is the genesis. Yet the fast
 		// block is ahead, so fast sync was enabled for this node at a certain point.
@@ -195,13 +207,14 @@ func NewProtocolManager(config *params.ChainConfig, checkpoint *params.TrustedCh
 }
 
 func (pm *ProtocolManager) makeProtocol(version uint) p2p.Protocol {
-	length, ok := protocolLengths[version]
+	proto := pm.engine.Protocol()
+	length, ok := proto.Lengths[version]
 	if !ok {
 		panic("makeProtocol for unknown version")
 	}
 
 	return p2p.Protocol{
-		Name:    protocolName,
+		Name:    proto.Name,
 		Version: version,
 		Length:  length,
 		Run: func(p *p2p.Peer, rw p2p.MsgReadWriter) error {
@@ -273,7 +286,7 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 func (pm *ProtocolManager) Stop() {
 	log.Info("Stopping Ethereum protocol")
 
-	pm.txsSub.Unsubscribe()        // quits txBroadcastLoop
+	pm.txsSub.Unsubscribe() // quits txBroadcastLoop
 	if !pm.raftMode {
 		pm.minedBlockSub.Unsubscribe() // quits blockBroadcastLoop
 	}
@@ -394,6 +407,15 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			log.Info("raft: ignoring message", "code", msg.Code)
 
 			return nil
+		}
+	}
+
+	if istanbul, ok := pm.engine.(consensus.Istanbul); ok {
+		pubKey := p.Node().Pubkey()
+		addr := crypto.PubkeyToAddress(*pubKey)
+		handled, err := istanbul.HandleMsg(addr, msg)
+		if handled {
+			return err
 		}
 	}
 
@@ -853,6 +875,7 @@ type NodeInfo struct {
 	Genesis    common.Hash         `json:"genesis"`    // SHA3 hash of the host's genesis block
 	Config     *params.ChainConfig `json:"config"`     // Chain configuration for the fork rules
 	Head       common.Hash         `json:"head"`       // SHA3 hash of the host's best owned block
+	Consensus  string              `json:"consensus"`  // Consensus mechanism in use
 }
 
 // NodeInfo retrieves some protocol metadata about the running host node.
@@ -864,5 +887,45 @@ func (pm *ProtocolManager) NodeInfo() *NodeInfo {
 		Genesis:    pm.blockchain.Genesis().Hash(),
 		Config:     pm.blockchain.Config(),
 		Head:       currentBlock.Hash(),
+		Consensus:  pm.getConsensusAlgorithm(),
 	}
+}
+
+func (pm *ProtocolManager) Enqueue(id string, block *types.Block) {
+	pm.fetcher.Enqueue(id, block)
+}
+
+func (pm *ProtocolManager) FindPeers(targets map[common.Address]bool) map[common.Address]consensus.Peer {
+	m := make(map[common.Address]consensus.Peer)
+	for _, p := range pm.peers.Peers() {
+		pubKey := p.Node().Pubkey()
+		addr := crypto.PubkeyToAddress(*pubKey)
+		if targets[addr] {
+			m[addr] = p
+		}
+	}
+	return m
+}
+
+func (pm *ProtocolManager) getConsensusAlgorithm() string {
+	var consensusAlgo string
+	if pm.raftMode { // raft does not use consensus interface
+		consensusAlgo = "raft"
+	} else {
+		switch pm.engine.(type) {
+		case consensus.Istanbul:
+			consensusAlgo = "istanbul"
+		case *clique.Clique:
+			consensusAlgo = "clique"
+		case *ethash.Ethash:
+			consensusAlgo = "ethash"
+		case *scrypt.PowScrypt:
+			consensusAlgo = "scrypt"
+		case *dpos.DPoS:
+			consensusAlgo = "dpos"
+		default:
+			consensusAlgo = "unknown"
+		}
+	}
+	return consensusAlgo
 }

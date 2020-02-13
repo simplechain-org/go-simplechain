@@ -99,6 +99,14 @@ type headerMarshaling struct {
 // Hash returns the block hash of the header, which is simply the keccak256 hash of its
 // RLP encoding.
 func (h *Header) Hash() common.Hash {
+	// If the mix digest is equivalent to the predefined Istanbul digest, use Istanbul
+	// specific hash calculation.
+	if h.MixDigest == IstanbulDigest {
+		// Seal is reserved in extra-data. To prove block is signed by the proposer.
+		if istanbulHeader := IstanbulFilteredHeader(h, true); istanbulHeader != nil {
+			return rlpHash(istanbulHeader)
+		}
+	}
 	return rlpHash(h)
 }
 
@@ -270,6 +278,10 @@ func CopyHeader(h *Header) *Header {
 		copy(cpy.Extra, h.Extra)
 	}
 	return &cpy
+}
+
+func (b *Block) String() string {
+	return fmt.Sprintf("{Header: %v}", b.header)
 }
 
 // DecodeRLP decodes the Ethereum
