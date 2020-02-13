@@ -43,6 +43,7 @@ func (config *RtxStoreConfig) sanitize() RtxStoreConfig {
 	conf := *config
 	if conf.ReJournal < time.Second {
 		log.Warn("Sanitizing invalid rtxstore journal time", "provided", conf.ReJournal, "updated", time.Second)
+		conf.ReJournal = time.Second
 	}
 	return conf
 }

@@ -1114,10 +1114,8 @@ type RPCTransaction struct {
 // representation, with the given location metadata set (if available).
 func newRPCTransaction(tx *types.Transaction, blockHash common.Hash, blockNumber uint64, index uint64) *RPCTransaction {
 	var signer types.Signer = types.FrontierSigner{}
-	log.Info("newRPCTransaction FrontierSigner")
 	if tx.Protected() {
 		signer = types.NewEIP155Signer(tx.ChainId())
-		log.Info("newRPCTransaction NewEIP155Signer")
 	}
 	from, _ := types.Sender(signer, tx)
 	v, r, s := tx.RawSignatureValues()
@@ -1309,10 +1307,8 @@ func (s *PublicTransactionPoolAPI) GetTransactionReceipt(ctx context.Context, ha
 	receipt := receipts[index]
 
 	var signer types.Signer = types.FrontierSigner{}
-	log.Info("GetTransactionReceipt FrontierSigner")
 	if tx.Protected() {
 		signer = types.NewEIP155Signer(tx.ChainId())
-		log.Info("GetTransactionReceipt NewEIP155Signer")
 	}
 	from, _ := types.Sender(signer, tx)
 
