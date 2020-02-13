@@ -777,6 +777,21 @@ var (
 		Usage: "it can be one of (mainchain,subchain,anchor)",
 		Value: &role,
 	}
+	AnchorAccountsFlag = cli.StringFlag{
+		Name:  "anchors",
+		Usage: "Comma separated list of accounts to anchors",
+		Value: "",
+	}
+	ContractMainFlag = cli.StringFlag{
+		Name:  "contract.main",
+		Usage: "The address of main contract",
+		Value: params.MainChainCtxAddress.String(),
+	}
+	ContractSubFlag = cli.StringFlag{
+		Name:  "contract.sub",
+		Usage: "The address of sub contract",
+		Value: params.SubChainCtxAddress.String(),
+	}
 )
 
 // MakeDataDir retrieves the currently requested data directory, terminating
@@ -1532,6 +1547,7 @@ func RegisterEthService(stack *node.Node, cfg *eth.Config) {
 			return les.New(ctx, cfg)
 		})
 	} else {
+		log.Info("RegisterEthService","Role",cfg.Role)
 		if cfg.Role.IsMainChain() {
 			//mainchain
 			err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
@@ -1543,6 +1559,7 @@ func RegisterEthService(stack *node.Node, cfg *eth.Config) {
 				return fullNode, err
 			})
 		} else if cfg.Role.IsSubChain() {
+
 			//subchain
 			err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
 				//subConfig := ToSubChainConfig(cfg)
@@ -1554,6 +1571,7 @@ func RegisterEthService(stack *node.Node, cfg *eth.Config) {
 				return fullNode, err
 			})
 		} else if cfg.Role.IsAnchor() {
+			subConfig:=*cfg
 			//mainchain
 			err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
 				fullNode, err := eth.New(ctx, cfg)
@@ -1562,7 +1580,7 @@ func RegisterEthService(stack *node.Node, cfg *eth.Config) {
 			//subchain
 			err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
 				//subConfig := ToSubChainConfig(cfg)
-				fullNode, err := sub.New(ctx, cfg)
+				fullNode, err := sub.New(ctx, &subConfig)
 				return fullNode, err
 			})
 		}

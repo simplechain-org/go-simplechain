@@ -104,7 +104,7 @@ type Ethereum struct {
 	genesisHash common.Hash
 	ctxStore    *core.CtxStore
 	rtxStore    *core.RtxStore
-	msgHander   *cross.MsgHandler
+	msgHandler   types.MsgHandler
 	chainConfig *params.ChainConfig
 }
 
@@ -142,7 +142,7 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 	log.Info("Allocated trie memory caches", "clean", common.StorageSize(config.TrieCleanCache)*1024*1024, "dirty", common.StorageSize(config.TrieDirtyCache)*1024*1024)
 
 	// Assemble the Ethereum object
-	chainDb, err := ctx.OpenDatabaseWithFreezer("chaindata", config.DatabaseCache, config.DatabaseHandles, config.DatabaseFreezer, "eth/db/chaindata/")
+	chainDb, err := ctx.OpenDatabaseWithFreezer(common.MainchainData, config.DatabaseCache, config.DatabaseHandles, config.DatabaseFreezer, "eth/db/chaindata/")
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +209,7 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 	eth.bloomIndexer.Start(eth.blockchain)
 
 	if config.TxPool.Journal != "" {
-		config.TxPool.Journal = ctx.ResolvePath(config.TxPool.Journal)
+		config.TxPool.Journal = ctx.ResolvePath(fmt.Sprintf("mainChain_%s", config.TxPool.Journal))
 	}
 	eth.txPool = core.NewTxPool(config.TxPool, chainConfig, eth.blockchain)
 
@@ -234,11 +234,11 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 		return nil, err
 	}
 
-	eth.msgHander=cross.NewMsgHandler(eth,cross.RoleMainHandler,config.Role,eth.ctxStore,eth.rtxStore,eth.blockchain,ctx.MainCh, ctx.SubCh,config.MainChainCtxAddress,config.SubChainCtxAddress)
+	eth.msgHandler=cross.NewMsgHandler(eth,cross.RoleMainHandler,config.Role,eth.ctxStore,eth.rtxStore,eth.blockchain,ctx.MainCh, ctx.SubCh,config.MainChainCtxAddress,config.SubChainCtxAddress)
 
-	eth.msgHander.SetProtocolManager(eth.protocolManager)
+	eth.msgHandler.SetProtocolManager(eth.protocolManager)
 
-	eth.protocolManager.SetMsgHandler(eth.msgHander)
+	eth.protocolManager.SetMsgHandler(eth.msgHandler)
 
 	eth.miner = miner.New(eth, &config.Miner, chainConfig, eth.EventMux(), eth.engine, eth.isLocalBlock)
 	eth.miner.SetExtra(makeExtraData(config.Miner.ExtraData))
@@ -249,7 +249,7 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 		gpoParams.Default = config.Miner.GasPrice
 	}
 	eth.APIBackend.gpo = gasprice.NewOracle(eth.APIBackend, gpoParams)
-	eth.msgHander.SetGasPriceOracle(eth.APIBackend.gpo)
+	eth.msgHandler.SetGasPriceOracle(eth.APIBackend.gpo)
 	return eth, nil
 }
 
@@ -610,6 +610,8 @@ func (s *Ethereum) Stop() error {
 	s.bloomIndexer.Close()
 	s.blockchain.Stop()
 	s.engine.Close()
+	s.ctxStore.Stop()
+	s.rtxStore.Stop()
 	s.protocolManager.Stop()
 	if s.lesServer != nil {
 		s.lesServer.Stop()
@@ -617,7 +619,6 @@ func (s *Ethereum) Stop() error {
 	s.txPool.Stop()
 	s.miner.Stop()
 	s.eventMux.Stop()
-
 	s.chainDb.Close()
 	close(s.shutdownChan)
 	return nil

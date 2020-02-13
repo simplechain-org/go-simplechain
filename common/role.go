@@ -5,7 +5,7 @@ import "fmt"
 const (
 	ProtocolMain   = "simplechain"
 	ProtocolSub    = "subchain"
-	MainchainData  = "mainchaindata"
+	MainchainData  = "chaindata"
 	SubchainData   = "subchaindata"
 	LightchainData = "lightchaindata"
 	MainMakerData  = "mainmakerdata"

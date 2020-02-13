@@ -145,7 +145,7 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*Ethereum, error) {
 	log.Info("Allocated trie memory caches", "clean", common.StorageSize(config.TrieCleanCache)*1024*1024, "dirty", common.StorageSize(config.TrieDirtyCache)*1024*1024)
 
 	// Assemble the Ethereum object
-	chainDb, err := ctx.OpenDatabaseWithFreezer("chaindata", config.DatabaseCache, config.DatabaseHandles, config.DatabaseFreezer, "eth/db/chaindata/")
+	chainDb, err := ctx.OpenDatabaseWithFreezer(common.SubchainData, config.DatabaseCache, config.DatabaseHandles, config.DatabaseFreezer, "sub/db/chaindata/")
 	if err != nil {
 		return nil, err
 	}
@@ -168,6 +168,7 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*Ethereum, error) {
 		etherbase:      config.Miner.Etherbase,
 		bloomRequests:  make(chan chan *bloombits.Retrieval),
 		bloomIndexer:   NewBloomIndexer(chainDb, params.BloomBitsBlocks, params.BloomConfirms),
+		chainConfig:    chainConfig,
 		//todo ulcServers
 		serverPool: newServerPool(chainDb, nil),
 	}
@@ -214,7 +215,7 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*Ethereum, error) {
 	eth.bloomIndexer.Start(eth.blockchain)
 
 	if config.TxPool.Journal != "" {
-		config.TxPool.Journal = ctx.ResolvePath(config.TxPool.Journal)
+		config.TxPool.Journal = ctx.ResolvePath(fmt.Sprintf("subChain_%s", config.TxPool.Journal))
 	}
 	eth.txPool = core.NewTxPool(config.TxPool, chainConfig, eth.blockchain)
 
@@ -250,7 +251,7 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*Ethereum, error) {
 		gpoParams.Default = config.Miner.GasPrice
 	}
 	eth.APIBackend.gpo = gasprice.NewOracle(eth.APIBackend, gpoParams)
-	//eth.msgHander.SetGasPriceOracle(eth.APIBackend.gpo)
+	eth.msgHandler.SetGasPriceOracle(eth.APIBackend.gpo)
 	return eth, nil
 }
 
@@ -612,11 +613,14 @@ func (s *Ethereum) Stop() error {
 	s.bloomIndexer.Close()
 	s.blockchain.Stop()
 	s.engine.Close()
+	s.ctxStore.Stop()
+	s.rtxStore.Stop()
 	s.protocolManager.Stop()
 	if s.lesServer != nil {
 		s.lesServer.Stop()
 	}
 	s.txPool.Stop()
+	s.serverPool.stop()
 	s.miner.Stop()
 	s.eventMux.Stop()
 

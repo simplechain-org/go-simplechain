@@ -90,3 +90,18 @@ func opChainID(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memo
 func enable2200(jt *JumpTable) {
 	jt[SSTORE].dynamicGas = gasSStoreEIP2200
 }
+
+func enableNonce(jt *JumpTable)  {
+	jt[NONCE] = operation{
+			execute:     opNonce,
+			constantGas: GasQuickStep,
+			minStack:    minStack(0, 1),
+			maxStack:    maxStack(0, 1),
+			valid:       true,
+	}
+}
+
+func opNonce(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
+	stack.push(interpreter.intPool.get().Set(interpreter.evm.Nonce))
+	return nil, nil
+}
