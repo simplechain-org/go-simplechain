@@ -2,6 +2,8 @@ module github.com/simplechain-org/go-simplechain
 
 go 1.13
 
+replace github.com/coreos/etcd => github.com/simplechain-org/etcd v0.5.0-alpha.5.0.20200207141613-5c5f4390b19e
+
 require (
 	github.com/Azure/azure-pipeline-go v0.2.2 // indirect
 	github.com/Azure/azure-storage-blob-go v0.7.0
@@ -13,7 +15,7 @@ require (
 	github.com/cespare/cp v0.1.0
 	github.com/cespare/xxhash/v2 v2.1.1 // indirect
 	github.com/cloudflare/cloudflare-go v0.10.2-0.20190916151808-a80f83b9add9
-	github.com/coreos/etcd v0.0.0-00010101000000-000000000000
+	github.com/coreos/etcd v3.3.18+incompatible
 	github.com/coreos/go-semver v0.3.0 // indirect
 	github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f // indirect
 	github.com/davecgh/go-spew v1.1.1
@@ -73,5 +75,3 @@ require (
 	gopkg.in/urfave/cli.v1 v1.20.0
 	gotest.tools v2.2.0+incompatible // indirect
 )
-
-replace github.com/coreos/etcd => github.com/simplechain-org/etcd v0.5.0-alpha.5.0.20200207141613-5c5f4390b19e
