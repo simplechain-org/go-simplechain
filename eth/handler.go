@@ -270,16 +270,16 @@ func (pm *ProtocolManager) Stop() {
 
 	log.Info("Stopping Simplechain protocol")
 
+	if pm.msgHandler!=nil{
+		pm.msgHandler.Stop()
+	}
 	pm.txsSub.Unsubscribe()        // quits txBroadcastLoop
 	pm.minedBlockSub.Unsubscribe() // quits blockBroadcastLoop
 	// Quit the sync loop.
 	// After this send has completed, no new peers will be accepted.
 	pm.noMorePeers <- struct{}{}
-	log.Info("Stopping Simplechain protocol 2")
-
 	// Quit fetcher, txsyncLoop.
 	close(pm.quitSync)
-	log.Info("Stopping Simplechain protocol 3")
 
 	// Disconnect existing sessions.
 	// This also closes the gate for any new registrations on the peer set.
@@ -287,16 +287,8 @@ func (pm *ProtocolManager) Stop() {
 	// will exit when they try to register.
 	pm.peers.Close()
 
-	log.Info("Stopping Simplechain protocol 4")
-
 	// Wait for all peer handler goroutines and the loops to come down.
 	pm.wg.Wait()
-
-	log.Info("Stopping Simplechain protocol 5")
-
-	if pm.msgHandler!=nil{
-		pm.msgHandler.Stop()
-	}
 
 	log.Info("Simplechain protocol stopped")
 }
@@ -372,7 +364,7 @@ func (pm *ProtocolManager) handle(p *peer) error {
 	// Handle incoming messages until the connection is torn down
 	for {
 		if err := pm.handleMsg(p); err != nil {
-			p.Log().Info("Ethereum message handling failed", "err", err)
+			p.Log().Debug("Ethereum message handling failed", "err", err)
 			return err
 		}
 	}
