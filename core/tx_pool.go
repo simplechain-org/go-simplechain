@@ -890,8 +890,6 @@ func (pool *TxPool) Status(hashes []common.Hash) []TxStatus {
 
 // Get returns a transaction if it is contained in the pool and nil otherwise.
 func (pool *TxPool) Get(hash common.Hash) *types.Transaction {
-	pool.mu.Lock()
-	defer pool.mu.Unlock()
 	return pool.all.Get(hash)
 }
 
