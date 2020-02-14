@@ -68,7 +68,7 @@ type TxPool struct {
 	mined        map[common.Hash][]*types.Transaction // mined transactions by block hash
 	clearIdx     uint64                               // earliest block nr that can contain mined tx info
 
-	moon bool // Fork indicator whether we are in the moon stage.
+	singularity bool // Fork indicator whether we are in the moon stage.
 }
 
 // TxRelayBackend provides an interface to the mechanism that forwards transacions
@@ -313,7 +313,7 @@ func (pool *TxPool) setNewHead(head *types.Header) {
 
 	// Update fork indicator by next pending block number
 	next := new(big.Int).Add(head.Number, big.NewInt(1))
-	pool.moon = pool.config.IsMoon(next)
+	pool.singularity = pool.config.IsSingularity(next)
 }
 
 // Stop stops the light transaction pool
@@ -381,7 +381,7 @@ func (pool *TxPool) validateTx(ctx context.Context, tx *types.Transaction) error
 	}
 
 	// Should supply enough intrinsic gas
-	gas, err := core.IntrinsicGas(tx.Data(), tx.To() == nil, pool.moon)
+	gas, err := core.IntrinsicGas(tx.Data(), tx.To() == nil, pool.singularity)
 	if err != nil {
 		return err
 	}

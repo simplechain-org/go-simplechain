@@ -32,14 +32,14 @@ func TestCheckCompatible(t *testing.T) {
 		{stored: AllScryptProtocolChanges, new: AllScryptProtocolChanges, head: 0, wantErr: nil},
 		{stored: AllScryptProtocolChanges, new: AllScryptProtocolChanges, head: 100, wantErr: nil},
 		{
-			stored:  &ChainConfig{MoonBlock: big.NewInt(10)},
-			new:     &ChainConfig{MoonBlock: big.NewInt(20)},
+			stored:  &ChainConfig{SingularityBlock: big.NewInt(10)},
+			new:     &ChainConfig{SingularityBlock: big.NewInt(20)},
 			head:    9,
 			wantErr: nil,
 		},
 		{
 			stored: AllScryptProtocolChanges,
-			new:    &ChainConfig{MoonBlock: nil},
+			new:    &ChainConfig{SingularityBlock: nil},
 			head:   3,
 			wantErr: &ConfigCompatError{
 				What:         "MoonBlock fork block",
@@ -50,7 +50,7 @@ func TestCheckCompatible(t *testing.T) {
 		},
 		{
 			stored: AllScryptProtocolChanges,
-			new:    &ChainConfig{MoonBlock: big.NewInt(1)},
+			new:    &ChainConfig{SingularityBlock: big.NewInt(1)},
 			head:   3,
 			wantErr: &ConfigCompatError{
 				What:         "MoonBlock fork block",

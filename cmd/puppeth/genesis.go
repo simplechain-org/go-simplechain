@@ -109,7 +109,7 @@ func newAlethGenesisSpec(network string, genesis *core.Genesis) (*alethGenesisSp
 	spec.Params.TieBreakingGas = false
 	spec.Params.AllowFutureBlocks = false
 
-	if num := genesis.Config.MoonBlock; num != nil {
+	if num := genesis.Config.SingularityBlock; num != nil {
 		spec.Params.MoonBlock = (*hexutil.Big)(num)
 	}
 	spec.Params.NetworkID = (hexutil.Uint64)(genesis.Config.ChainID.Uint64())
@@ -151,18 +151,18 @@ func newAlethGenesisSpec(network string, genesis *core.Genesis) (*alethGenesisSp
 		Linear: &alethGenesisSpecLinearPricing{Base: 40000}})
 	spec.setPrecompile(8, &alethGenesisSpecBuiltin{Name: "alt_bn128_pairing_product"})
 
-	if genesis.Config.MoonBlock != nil {
+	if genesis.Config.SingularityBlock != nil {
 		spec.setPrecompile(6, &alethGenesisSpecBuiltin{
 			Name:          "alt_bn128_G1_add",
-			StartingBlock: (*hexutil.Big)(genesis.Config.MoonBlock),
+			StartingBlock: (*hexutil.Big)(genesis.Config.SingularityBlock),
 		}) // Aleth hardcoded the gas policy
 		spec.setPrecompile(7, &alethGenesisSpecBuiltin{
 			Name:          "alt_bn128_G1_mul",
-			StartingBlock: (*hexutil.Big)(genesis.Config.MoonBlock),
+			StartingBlock: (*hexutil.Big)(genesis.Config.SingularityBlock),
 		}) // Aleth hardcoded the gas policy
 		spec.setPrecompile(9, &alethGenesisSpecBuiltin{
 			Name:          "blake2_compression",
-			StartingBlock: (*hexutil.Big)(genesis.Config.MoonBlock),
+			StartingBlock: (*hexutil.Big)(genesis.Config.SingularityBlock),
 		})
 	}
 	return spec, nil
@@ -378,7 +378,7 @@ func newParityChainSpec(network string, genesis *core.Genesis, bootnodes []strin
 	//	spec.setConstantinopleFix(num)
 	//}
 	// Istanbul
-	if num := genesis.Config.MoonBlock; num != nil {
+	if num := genesis.Config.SingularityBlock; num != nil {
 		spec.setIstanbul(num)
 	}
 	spec.Params.MaximumExtraDataSize = (hexutil.Uint64)(params.MaximumExtraDataSize)
@@ -426,44 +426,44 @@ func newParityChainSpec(network string, genesis *core.Genesis, bootnodes []strin
 	//if genesis.Config.ByzantiumBlock != nil {
 	spec.setPrecompile(5, &parityChainSpecBuiltin{
 		Name:       "modexp",
-		ActivateAt: (*hexutil.Big)(genesis.Config.MoonBlock),
+		ActivateAt: (*hexutil.Big)(genesis.Config.SingularityBlock),
 		Pricing: &parityChainSpecPricing{
 			ModExp: &parityChainSpecModExpPricing{Divisor: 20},
 		},
 	})
 	spec.setPrecompile(6, &parityChainSpecBuiltin{
 		Name:       "alt_bn128_add",
-		ActivateAt: (*hexutil.Big)(genesis.Config.MoonBlock),
+		ActivateAt: (*hexutil.Big)(genesis.Config.SingularityBlock),
 		Pricing: &parityChainSpecPricing{
 			Linear: &parityChainSpecLinearPricing{Base: 500, Word: 0},
 		},
 	})
 	spec.setPrecompile(7, &parityChainSpecBuiltin{
 		Name:       "alt_bn128_mul",
-		ActivateAt: (*hexutil.Big)(genesis.Config.MoonBlock),
+		ActivateAt: (*hexutil.Big)(genesis.Config.SingularityBlock),
 		Pricing: &parityChainSpecPricing{
 			Linear: &parityChainSpecLinearPricing{Base: 40000, Word: 0},
 		},
 	})
 	spec.setPrecompile(8, &parityChainSpecBuiltin{
 		Name:       "alt_bn128_pairing",
-		ActivateAt: (*hexutil.Big)(genesis.Config.MoonBlock),
+		ActivateAt: (*hexutil.Big)(genesis.Config.SingularityBlock),
 		Pricing: &parityChainSpecPricing{
 			AltBnPairing: &parityChainSepcAltBnPairingPricing{Base: 100000, Pair: 80000},
 		},
 	})
 	//}
-	if genesis.Config.MoonBlock != nil {
+	if genesis.Config.SingularityBlock != nil {
 		spec.setPrecompile(6, &parityChainSpecBuiltin{
 			Name:       "alt_bn128_add",
-			ActivateAt: (*hexutil.Big)(genesis.Config.MoonBlock),
+			ActivateAt: (*hexutil.Big)(genesis.Config.SingularityBlock),
 			Pricing: map[*hexutil.Big]*parityChainSpecVersionedPricing{
 				(*hexutil.Big)(big.NewInt(0)): {
 					Price: &parityChainSpecAlternativePrice{
 						AltBnConstOperationPrice: &parityChainSpecAltBnConstOperationPricing{Price: 500},
 					},
 				},
-				(*hexutil.Big)(genesis.Config.MoonBlock): {
+				(*hexutil.Big)(genesis.Config.SingularityBlock): {
 					Price: &parityChainSpecAlternativePrice{
 						AltBnConstOperationPrice: &parityChainSpecAltBnConstOperationPricing{Price: 150},
 					},
@@ -472,14 +472,14 @@ func newParityChainSpec(network string, genesis *core.Genesis, bootnodes []strin
 		})
 		spec.setPrecompile(7, &parityChainSpecBuiltin{
 			Name:       "alt_bn128_mul",
-			ActivateAt: (*hexutil.Big)(genesis.Config.MoonBlock),
+			ActivateAt: (*hexutil.Big)(genesis.Config.SingularityBlock),
 			Pricing: map[*hexutil.Big]*parityChainSpecVersionedPricing{
 				(*hexutil.Big)(big.NewInt(0)): {
 					Price: &parityChainSpecAlternativePrice{
 						AltBnConstOperationPrice: &parityChainSpecAltBnConstOperationPricing{Price: 40000},
 					},
 				},
-				(*hexutil.Big)(genesis.Config.MoonBlock): {
+				(*hexutil.Big)(genesis.Config.SingularityBlock): {
 					Price: &parityChainSpecAlternativePrice{
 						AltBnConstOperationPrice: &parityChainSpecAltBnConstOperationPricing{Price: 6000},
 					},
@@ -488,14 +488,14 @@ func newParityChainSpec(network string, genesis *core.Genesis, bootnodes []strin
 		})
 		spec.setPrecompile(8, &parityChainSpecBuiltin{
 			Name:       "alt_bn128_pairing",
-			ActivateAt: (*hexutil.Big)(genesis.Config.MoonBlock),
+			ActivateAt: (*hexutil.Big)(genesis.Config.SingularityBlock),
 			Pricing: map[*hexutil.Big]*parityChainSpecVersionedPricing{
 				(*hexutil.Big)(big.NewInt(0)): {
 					Price: &parityChainSpecAlternativePrice{
 						AltBnPairingPrice: &parityChainSepcAltBnPairingPricing{Base: 100000, Pair: 80000},
 					},
 				},
-				(*hexutil.Big)(genesis.Config.MoonBlock): {
+				(*hexutil.Big)(genesis.Config.SingularityBlock): {
 					Price: &parityChainSpecAlternativePrice{
 						AltBnPairingPrice: &parityChainSepcAltBnPairingPricing{Base: 45000, Pair: 34000},
 					},
@@ -504,7 +504,7 @@ func newParityChainSpec(network string, genesis *core.Genesis, bootnodes []strin
 		})
 		spec.setPrecompile(9, &parityChainSpecBuiltin{
 			Name:       "blake2_f",
-			ActivateAt: (*hexutil.Big)(genesis.Config.MoonBlock),
+			ActivateAt: (*hexutil.Big)(genesis.Config.SingularityBlock),
 			Pricing: &parityChainSpecPricing{
 				Blake2F: &parityChainSpecBlakePricing{GasPerRound: 1},
 			},

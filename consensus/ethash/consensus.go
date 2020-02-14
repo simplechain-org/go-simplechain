@@ -309,7 +309,7 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, p
 func CalcDifficulty(config *params.ChainConfig, time uint64, parent *types.Header) *big.Int {
 	next := new(big.Int).Add(parent.Number, big1)
 	switch {
-	case config.IsMoon(next):
+	case config.IsSingularity(next):
 		return calcDifficultyEip2384(time, parent)
 	default:
 		return calcDifficultyConstantinople(time, parent)

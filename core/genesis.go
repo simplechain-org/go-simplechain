@@ -205,7 +205,7 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, genesis *Genesis, override
 	// Get the existing chain configuration.
 	newcfg := genesis.configOrDefault(stored)
 	if overrideMoon != nil {
-		newcfg.MoonBlock = overrideMoon
+		newcfg.SingularityBlock = overrideMoon
 	}
 	if err := newcfg.CheckConfigForkOrder(); err != nil {
 		return newcfg, common.Hash{}, err

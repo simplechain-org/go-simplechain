@@ -45,12 +45,12 @@ func TestSetupGenesis(t *testing.T) {
 	var (
 		customghash = common.HexToHash("0xc2f4d611bacef727b38b3f718a3d227728fbad565fed5ffbda4b933641adacda")
 		customg     = Genesis{
-			Config: &params.ChainConfig{MoonBlock: big.NewInt(3)},
+			Config: &params.ChainConfig{SingularityBlock: big.NewInt(3)},
 			Alloc:  decodePrealloc(SipeTestnetAllocData),
 		}
 		oldcustomg = customg
 	)
-	oldcustomg.Config = &params.ChainConfig{MoonBlock: big.NewInt(2)}
+	oldcustomg.Config = &params.ChainConfig{SingularityBlock: big.NewInt(2)}
 	tests := []struct {
 		name       string
 		fn         func(ethdb.Database) (*params.ChainConfig, common.Hash, error)

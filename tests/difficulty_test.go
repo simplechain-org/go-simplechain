@@ -26,8 +26,8 @@ import (
 
 var (
 	mainnetChainConfig = params.ChainConfig{
-		ChainID:   big.NewInt(1),
-		MoonBlock: big.NewInt(3000000),
+		ChainID:          big.NewInt(1),
+		SingularityBlock: big.NewInt(3000000),
 	}
 )
 
@@ -52,7 +52,7 @@ func TestDifficulty(t *testing.T) {
 	dt.config("Morden", *params.TestnetChainConfig)
 	dt.config("Frontier", params.ChainConfig{})
 	dt.config("Moon", params.ChainConfig{
-		MoonBlock: big.NewInt(0),
+		SingularityBlock: big.NewInt(0),
 	})
 
 	dt.config("Frontier", *params.TestnetChainConfig)

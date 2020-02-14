@@ -44,7 +44,7 @@ func (w *wizard) makeGenesis() {
 		Difficulty: big.NewInt(524288),
 		Alloc:      make(core.GenesisAlloc),
 		Config: &params.ChainConfig{
-			MoonBlock: big.NewInt(0),
+			SingularityBlock: big.NewInt(0),
 		},
 	}
 	// Figure out which consensus engine to choose
@@ -195,8 +195,8 @@ func (w *wizard) manageGenesis() {
 	case "1":
 		// Fork rule updating requested, iterate over each fork
 		fmt.Println()
-		fmt.Printf("Which block should MoonBlock come into effect? (default = %v)\n", w.conf.Genesis.Config.MoonBlock)
-		w.conf.Genesis.Config.MoonBlock = w.readDefaultBigInt(w.conf.Genesis.Config.MoonBlock)
+		fmt.Printf("Which block should SingularityBlock come into effect? (default = %v)\n", w.conf.Genesis.Config.SingularityBlock)
+		w.conf.Genesis.Config.SingularityBlock = w.readDefaultBigInt(w.conf.Genesis.Config.SingularityBlock)
 
 		out, _ := json.MarshalIndent(w.conf.Genesis.Config, "", "  ")
 		fmt.Printf("Chain configuration updated:\n\n%s\n", out)

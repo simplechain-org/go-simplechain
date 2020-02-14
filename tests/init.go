@@ -29,8 +29,8 @@ var Forks = map[string]*params.ChainConfig{
 		ChainID: big.NewInt(1),
 	},
 	"Moon": {
-		ChainID:   big.NewInt(1),
-		MoonBlock: big.NewInt(1000),
+		ChainID:          big.NewInt(1),
+		SingularityBlock: big.NewInt(1000),
 	},
 }
 
