@@ -77,6 +77,7 @@ func NewMsgHandler(chain simplechain, roleHandler RoleHandler, role common.Chain
 	blockchain *core.BlockChain, crossMsgReader <-chan interface{},
 	crossMsgWriter chan<- interface{},mainAddr common.Address,subAddr common.Address ) *MsgHandler {
 	gasHelper := NewGasHelper(blockchain, chain)
+	log.Info("NewMsgHandler","role",role.String())
 	return &MsgHandler{
 		chain:          chain,
 		roleHandler:    roleHandler,
@@ -141,9 +142,10 @@ func (this *MsgHandler) loop() {
 		case <-this.makerStartEventSub.Err():
 			return
 		case ev := <-this.makerSignedCh:
+			this.pm.BroadcastInternalCrossTransactionWithSignature([]*types.CrossTransactionWithSignatures{ev.Txs}) //主网广播
 			if this.role.IsAnchor() {
+				log.Info("IsAnchor BroadcastInternalCrossTransactionWithSignature")
 				this.WriteCrossMessage(ev.Txs)                                                                          //发送到子网
-				this.pm.BroadcastInternalCrossTransactionWithSignature([]*types.CrossTransactionWithSignatures{ev.Txs}) //主网广播
 			}
 		case <-this.makerSignedSub.Err():
 			return
@@ -233,6 +235,7 @@ func (this *MsgHandler) Stop() {
 }
 
 func (this *MsgHandler) HandleMsg(msg p2p.Msg, p types.Peer) error {
+	log.Info("MsgHandler HandleMsg","msg.Code",msg.Code)
 	switch {
 	case msg.Code == CtxSignMsg:
 		if !this.pm.CanAcceptTxs() {
@@ -249,6 +252,8 @@ func (this *MsgHandler) HandleMsg(msg p2p.Msg, p types.Peer) error {
 			if err := this.ctxStore.AddRemote(ctx); err != nil {
 				log.Debug("Add remote ctx", "err", err)
 			}
+		} else {
+			log.Info("ValidateCtx","err",err)
 		}
 	case msg.Code == CtxSignsMsg:
 		if !this.pm.CanAcceptTxs() {
@@ -311,9 +316,10 @@ func (this *MsgHandler) HandleMsg(msg p2p.Msg, p types.Peer) error {
 		}
 
 	case msg.Code == CtxSignsInternalMsg:
-		if !this.pm.CanAcceptTxs() {
-			break
-		}
+		//if !this.pm.CanAcceptTxs() {
+		//	break
+		//}
+		log.Info("receive CtxSignsInternalMsg")
 		var cwss []*types.CrossTransactionWithSignatures
 		if err := msg.Decode(&cwss); err != nil {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
@@ -336,20 +342,20 @@ func (this *MsgHandler) ReadCrossMessage() {
 	for {
 		select {
 		case v := <-this.crossMsgReader:
-			//log.Info("ReadCrossMessage")
+			log.Info("ReadCrossMessage")
 			cws, ok := v.(*types.CrossTransactionWithSignatures)
-			//if ok {
-			//	log.Info("ReadCrossMessage", "networkID", this.pm.NetworkId(), "destId", cws.Data.DestinationId.Uint64())
-			//}
+			if ok {
+				log.Info("ReadCrossMessage", "networkID", this.pm.NetworkId(), "destId", cws.Data.DestinationId.Uint64())
+			}
 			if ok && cws.Data.DestinationId.Uint64() == this.pm.NetworkId() {
 				this.ctxStore.AddCWss([]*types.CrossTransactionWithSignatures{cws})
 				this.pm.BroadcastCWss([]*types.CrossTransactionWithSignatures{cws})
 				break
 			}
 			rws, ok := v.(*types.ReceptTransactionWithSignatures)
-			//if ok {
-			//	log.Info("ReadCrossMessage", "networkID", this.pm.NetworkId(), "destId", rws.Data.DestinationId.Uint64())
-			//}
+			if ok {
+				log.Info("ReadCrossMessage", "networkID", this.pm.NetworkId(), "destId", rws.Data.DestinationId.Uint64())
+			}
 			if ok && rws.Data.DestinationId.Uint64() == this.pm.NetworkId() {
 				if local := this.rtxStore.ReadFromLocals(rws.Data.CTxId); local!=nil {
 					errs := this.rtxStore.AddLocals(rws)
@@ -440,7 +446,7 @@ func (this *MsgHandler) GetTxForLockOut(rws *types.ReceptTransactionWithSignatur
 func (this *MsgHandler) WriteCrossMessage(v interface{}) {
 	select {
 	case this.crossMsgWriter <- v:
-		//log.Info("WriteCrossMessage")
+		log.Info("WriteCrossMessage")
 	case <-this.quitSync:
 		return
 	}

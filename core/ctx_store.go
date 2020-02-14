@@ -283,6 +283,7 @@ func (store *CtxStore) addTx(ctx *types.CrossTransaction, local bool) error {
 }
 
 func (store *CtxStore) addTxs(cwss []*types.CrossTransactionWithSignatures) []error {
+	log.Info("addTxs")
 	errs := make([]error, len(cwss))
 	for i, cws := range cwss {
 		if err := store.verifyCtx(cws);err != ErrRepetitionCrossTransaction {
@@ -349,7 +350,7 @@ func (store *CtxStore) txExpired(ctx *types.CrossTransaction) bool {
 
 func (store *CtxStore) addTxLocked(ctx *types.CrossTransaction, local bool) error {
 	id := ctx.ID()
-
+	log.Info("addTxLocked","id",id.String(),"local",local)
 	// make signature first for local ctx
 	if local {
 		key, err := rpctx.StringToPrivateKey(rpctx.PrivateKey)
@@ -368,6 +369,7 @@ func (store *CtxStore) addTxLocked(ctx *types.CrossTransaction, local bool) erro
 	checkAndCommit := func(id common.Hash) error {
 		if cws := store.pending.Get(id); cws != nil && len(cws.Data.V) >= requireSignatureCount {
 			//TODO signatures combine or multi-sign msg?
+			log.Info("checkAndCommit","signCount",len(cws.Data.V))
 			go store.resultFeed.Send(NewCWsEvent{cws})
 
 			keyId := cws.Data.DestinationId.Uint64()
@@ -389,6 +391,7 @@ func (store *CtxStore) addTxLocked(ctx *types.CrossTransaction, local bool) erro
 				log.Error("Failed to encode cws", "err", err)
 			}
 			store.db.Put(cws.Key(), data)
+			log.Info("checkAndCommit finish")
 		}
 		return nil
 	}

@@ -34,6 +34,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/eth"
 	"github.com/simplechain-org/go-simplechain/node"
 	"github.com/simplechain-org/go-simplechain/params"
+	"github.com/simplechain-org/go-simplechain/rpctx"
 	whisper "github.com/simplechain-org/go-simplechain/whisper/whisperv6"
 )
 
@@ -160,6 +161,10 @@ func makeConfigNode(ctx *cli.Context) (*node.Node, gethConfig) {
 			cfg.Eth.CtxStore.Anchors=addresses
 			cfg.Eth.RtxStore.Anchors=addresses
 		}
+	}
+
+	if ctx.GlobalIsSet(utils.AnchorPriKeyFlag.Name) {
+		rpctx.PrivateKey = ctx.GlobalString(utils.AnchorPriKeyFlag.Name)
 	}
 
 	return stack, cfg

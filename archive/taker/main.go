@@ -14,26 +14,26 @@ import (
 	"math/big"
 )
 
-var rawurlVar *string = flag.String("rawurl", "http://127.0.0.1:8545", "rpc url")
+var rawurlVar *string = flag.String("rawurl", "http://127.0.0.1:8556", "rpc url")
 
 var abiPath *string = flag.String("abi", "../../contracts/crossdemo/crossdemo.abi", "abi文件路径")
 
-var contract *string = flag.String("contract", "0x6B96087Dac31cEdD35c608130DfD64F808f51946", "合约地址")
+var contract *string = flag.String("contract", "0x8eefA4bFeA64F2A89f3064D48646415168662a1e", "合约地址")
 
-var txId *string = flag.String("txId", "", "跨链交易哈希值")
+var txId *string = flag.String("TxId", "", "跨链交易哈希值")
 
-var fromVar *string = flag.String("from", "0x5d135018C4EE754c9d310472986B2abcc9CAD7cb", "接单人地址")
+var fromVar *string = flag.String("From", "0x8029fcfc954ff7be80afd4db9f77f18c8aa1ecbc", "接单人地址")
 
-var gaslimitVar *uint64 = flag.Uint64("gaslimit", 500000, "gas最大值")
+var gaslimitVar *uint64 = flag.Uint64("gaslimit", 5000000, "gas最大值")
 
 type SendTxArgs struct {
-	From     common.Address  `json:"from"`
+	From     common.Address  `json:"From"`
 	To       *common.Address `json:"to"`
 	Gas      *hexutil.Uint64 `json:"gas"`
 	GasPrice *hexutil.Big    `json:"gasPrice"`
-	Value    *hexutil.Big    `json:"value"`
+	Value    *hexutil.Big    `json:"Value"`
 	Nonce    *hexutil.Uint64 `json:"nonce"`
-	Data     *hexutil.Bytes  `json:"data"`
+	Data     *hexutil.Bytes  `json:"Data"`
 	Input    *hexutil.Bytes  `json:"input"`
 }
 
@@ -63,30 +63,30 @@ func Match() {
 	//}
 
 	type RPCCrossTransaction struct {
-		Value            *hexutil.Big   `json:"value"`
+		Value            *hexutil.Big   `json:"Value"`
 		CTxId            common.Hash    `json:"ctxId"`
-		TxHash           common.Hash    `json:"txHash"`
-		From             common.Address `json:"from"`
-		BlockHash        common.Hash    `json:"blockHash"`
+		TxHash           common.Hash    `json:"TxHash"`
+		From             common.Address `json:"From"`
+		BlockHash        common.Hash    `json:"BlockHash"`
 		DestinationId    *hexutil.Big   `json:"destinationId"`
-		DestinationValue *hexutil.Big   `json:"destinationValue"`
+		DestinationValue *hexutil.Big   `json:"DestinationValue"`
 		Input            hexutil.Bytes `json:"input"`
-		V                []*hexutil.Big `json:"v"`
-		R                []*hexutil.Big `json:"r"`
-		S                []*hexutil.Big `json:"s"`
+		V                []*hexutil.Big `json:"V"`
+		R                []*hexutil.Big `json:"R"`
+		S                []*hexutil.Big `json:"S"`
 	}
 
-	type order struct {
-		value	*big.Int
-		txId    common.Hash
-		txHash  common.Hash
-		from    common.Address
-		blockHash common.Hash
-		destinationValue *big.Int
-		data    []byte
-		v       []*big.Int
-		r       [][32]byte
-		s       [][32]byte
+	type Order struct {
+		Value            *big.Int
+		TxId             common.Hash
+		TxHash           common.Hash
+		From             common.Address
+		BlockHash        common.Hash
+		DestinationValue *big.Int
+		Data             []byte
+		V                []*big.Int
+		R                [][32]byte
+		S                [][32]byte
 	}
 
 	var signatures map[string]map[uint64][]*RPCCrossTransaction
@@ -98,12 +98,12 @@ func Match() {
 		return
 	}
 
-	//for _, value := range signatures["remote"] {
+	//for _, Value := range signatures["remote"] {
 	for remoteId, value := range signatures["remote"] {
 
 		for i,v:=range value {
-			//log.Println("1 v.CTxId=",v.CTxId.String(),"key",key)
-			//if v.CTxId.String() == *txId {
+			//log.Println("1 V.CTxId=",V.CTxId.String(),"key",key)
+			//if V.CTxId.String() == *TxId {
 			if i <= 10000 {
 					//账户地址
 					from := common.HexToAddress(*fromVar)
@@ -113,7 +113,7 @@ func Match() {
 					to := common.HexToAddress(*contract)
 
 					gas := hexutil.Uint64(*gaslimitVar)
-					//value := hexutil.Big(*v.DestinationValue)
+					//Value := hexutil.Big(*V.DestinationValue)
 
 					abi, err := abi.JSON(bytes.NewReader(data))
 					if err != nil {
@@ -121,9 +121,9 @@ func Match() {
 						continue
 					}
 
-					//data, _ := json.Marshal(v)
+					//Data, _ := json.Marshal(V)
 					//
-					//fmt.Println("data=", string(data))
+					//fmt.Println("Data=", string(Data))
 
 					r := make([][32]byte, 0, len(v.R))
 					s := make([][32]byte, 0, len(v.S))
@@ -144,7 +144,7 @@ func Match() {
 					//也就是maker的源头，那条链调用了maker,这个链id就对应那条链的id
 					//chainId := new(big.Int)
 					//
-					//if v.DestinationId.ToInt().Cmp(big.NewInt(1)) == 0 {
+					//if V.DestinationId.ToInt().Cmp(big.NewInt(1)) == 0 {
 					//	chainId.SetInt64(1024)
 					//	log.Println("1024")
 					//} else {
@@ -152,25 +152,30 @@ func Match() {
 					//	log.Println("1")
 					//}
 					chainId := big.NewInt(int64(remoteId))
+					fmt.Println(v.Value.String(),chainId.String())
+					//out, err := abi.Pack("taker", V.Value.ToInt(), V.CTxId, V.TxHash, V.From,
+					//	V.BlockHash, V.DestinationId.ToInt(), V.DestinationValue.ToInt(), chainId,
+					//	vv, R, S)
+					b,err := v.Input.MarshalText()
+					if err != nil {
+						fmt.Println(err)
+					}
 
-					//out, err := abi.Pack("taker", v.Value.ToInt(), v.CTxId, v.TxHash, v.From,
-					//	v.BlockHash, v.DestinationId.ToInt(), v.DestinationValue.ToInt(), chainId,
-					//	vv, r, s)
-					var ord order
-					ord.value = hexutil.Big(*v.DestinationValue).ToInt()
-					ord.txId = v.CTxId
-					ord.txHash = v.TxHash
-					ord.from = v.From
-					ord.blockHash = v.BlockHash
-					ord.destinationValue = v.DestinationValue.ToInt()
-					ord.data = v.Input
-					ord.v = vv
-					ord.r = r
-					ord.s = s
-					//out, err := abi.Pack("taker", v.Value.ToInt(), v.CTxId, v.TxHash, v.From,
-					//	v.BlockHash, v.DestinationValue.ToInt(), chainId,
-					//	vv, r, s)
-					out, err := abi.Pack("taker", ord, chainId, []byte{})
+					var ord Order
+					ord.Value = v.Value.ToInt()
+					ord.TxId = v.CTxId
+					ord.TxHash = v.TxHash
+					ord.From = v.From
+					ord.BlockHash = v.BlockHash
+					ord.DestinationValue = v.DestinationValue.ToInt()
+					ord.Data = b
+					ord.V = vv
+					ord.R = r
+					ord.S = s
+					//out, err := abi.Pack("taker", V.Value.ToInt(), V.CTxId, V.TxHash, V.From,
+					//	V.BlockHash, V.DestinationValue.ToInt(), chainId,
+					//	vv, R, S)
+					out, err := abi.Pack("taker",&ord,chainId,[]byte{})
 
 					if err != nil {
 						fmt.Println("abi.Pack err=", err)
@@ -203,12 +208,12 @@ func Match() {
 
 	}
 
-	//for _, value := range signatures["local"] {
-	//	for _,v:=range value {
-	//		log.Println("v.CTxId=",v.CTxId.String())
-	//		if v.CTxId == common.HexToHash(*txId) {
+	//for _, Value := range signatures["local"] {
+	//	for _,V:=range Value {
+	//		log.Println("V.CTxId=",V.CTxId.String())
+	//		if V.CTxId == common.HexToHash(*TxId) {
 	//			//账户地址
-	//			from := common.HexToAddress(*fromVar)
+	//			From := common.HexToAddress(*fromVar)
 	//			//合约地址
 	//			//在子链上接单就要填写子链上的合约地址
 	//			//在主链上接单就要填写主链上的合约地址
@@ -216,38 +221,38 @@ func Match() {
 	//
 	//			gas := hexutil.Uint64(*gaslimitVar)
 	//
-	//			value := hexutil.Big(*v.DestinationValue)
+	//			Value := hexutil.Big(*V.DestinationValue)
 	//
-	//			abi, err := abi.JSON(bytes.NewReader(data))
+	//			abi, err := abi.JSON(bytes.NewReader(Data))
 	//			if err != nil {
 	//				log.Fatalln(err)
 	//				continue
 	//			}
 	//
-	//			data, _ := json.Marshal(v)
+	//			Data, _ := json.Marshal(V)
 	//
-	//			fmt.Println("data=", string(data))
+	//			fmt.Println("Data=", string(Data))
 	//
-	//			r := make([][32]byte, 0, len(v.R))
-	//			s := make([][32]byte, 0, len(v.S))
-	//			vv := make([]*big.Int, 0, len(v.V))
+	//			R := make([][32]byte, 0, len(V.R))
+	//			S := make([][32]byte, 0, len(V.S))
+	//			vv := make([]*big.Int, 0, len(V.V))
 	//
-	//			for i := 0; i < len(v.R); i++ {
-	//				rone := common.LeftPadBytes(v.R[i].ToInt().Bytes(), 32)
+	//			for i := 0; i < len(V.R); i++ {
+	//				rone := common.LeftPadBytes(V.R[i].ToInt().Bytes(), 32)
 	//				var a [32]byte
 	//				copy(a[:], rone)
-	//				r = append(r, a)
-	//				sone := common.LeftPadBytes(v.S[i].ToInt().Bytes(), 32)
+	//				R = append(R, a)
+	//				sone := common.LeftPadBytes(V.S[i].ToInt().Bytes(), 32)
 	//				var b [32]byte
 	//				copy(b[:], sone)
-	//				s = append(s, b)
-	//				vv = append(vv, v.V[i].ToInt())
+	//				S = append(S, b)
+	//				vv = append(vv, V.V[i].ToInt())
 	//			}
 	//			//在调用这个函数中调用的chainId其实就是表示的是发单的链id
 	//			//也就是maker的源头，那条链调用了maker,这个链id就对应那条链的id
 	//			chainId := new(big.Int)
 	//
-	//			if v.DestinationId.ToInt().Cmp(big.NewInt(1)) == 0 {
+	//			if V.DestinationId.ToInt().Cmp(big.NewInt(1)) == 0 {
 	//				chainId.SetInt64(1024)
 	//				log.Println("1024")
 	//			} else {
@@ -255,9 +260,9 @@ func Match() {
 	//				log.Println("1")
 	//			}
 	//
-	//			out, err := abi.Pack("taker", v.Value.ToInt(), v.CTxId, v.TxHash, v.From,
-	//				v.BlockHash, v.DestinationValue.ToInt(), chainId,
-	//				vv, r, s)
+	//			out, err := abi.Pack("taker", V.Value.ToInt(), V.CTxId, V.TxHash, V.From,
+	//				V.BlockHash, V.DestinationValue.ToInt(), chainId,
+	//				vv, R, S)
 	//
 	//			if err != nil {
 	//				fmt.Println("abi.Pack err=", err)
@@ -268,11 +273,11 @@ func Match() {
 	//
 	//			//gasPrice := hexutil.Big(*big.NewInt(10000000000))
 	//			args := &SendTxArgs{
-	//				From:  from,
+	//				From:  From,
 	//				To:    &to,
 	//				Gas:   &gas,
 	//				//GasPrice: &gasPrice,
-	//				Value: &value,
+	//				Value: &Value,
 	//				Input: &input,
 	//			}
 	//

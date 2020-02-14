@@ -141,11 +141,11 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 					}
 				}
 				if len(ctxs) > 0 {
-					log.Info("ctxs", "blockNumber",next.index,"height",height,"l",len(ctxs))
+					log.Info("ctxs", "next.index",next.index,"height",height,"l",len(ctxs))
 					set.chain.CtxsFeedSend(NewCTxsEvent{ctxs})
 				}
 				if len(rtxs) > 0 {
-					log.Info("rtxs","blockNumber",next.index,"height",height,"l",len(rtxs))
+					log.Info("rtxs","next.index",next.index,"height",height,"l",len(rtxs))
 					set.chain.RtxsFeedSend(NewRTxsEvent{rtxs})
 				}
 				//if len(finishs) > 0 {

@@ -1838,6 +1838,7 @@ type RPCCrossTransaction struct {
 	BlockHash common.Hash    `json:"blockHash"`
 	DestinationId    *hexutil.Big `json:"destinationId"`
 	DestinationValue *hexutil.Big `json:"destinationValue"`
+	Input            hexutil.Bytes `json:"input"`
 	V []*hexutil.Big  `json:"v"`
 	R []*hexutil.Big  `json:"r"`
 	S []*hexutil.Big  `json:"s"`
