@@ -910,7 +910,7 @@ func (pm *ProtocolManager) BroadcastRtx(rtxs []*types.ReceptTransaction) {
 
 //inside the chain
 func (pm *ProtocolManager) BroadcastInternalCrossTransactionWithSignature(cwss []*types.CrossTransactionWithSignatures) {
-
+	log.Info("BroadcastInternalCrossTransactionWithSignature")
 	var txset = make(map[*peer][]*types.CrossTransactionWithSignatures)
 
 	// Broadcast CrossTransaction to a batch of peers not knowing about it

@@ -14,21 +14,24 @@ import (
 	"math/big"
 )
 
-var rawurlVar *string =flag.String("rawurl", "http://127.0.0.1:8545", "rpc url")
+var rawurlVar *string =flag.String("rawurl", "http://127.0.0.1:8556", "rpc url")
 
 var abiPath *string =flag.String("abi", "../../contracts/crossdemo/crossdemo.abi", "abi文件路径")
 
-var contract *string =flag.String("contract", "0xAa22934Df3867B8d59574dD4557ef1BA6dA2f8f3", "合约地址")
+var contract *string =flag.String("contract", "0x8eefA4bFeA64F2A89f3064D48646415168662a1e", "合约地址")
 
-var value *uint64 = flag.Uint64("value", 1e+18, "转入合约的数量")
+var signConfirm *uint64=flag.Uint64("signConfirm", 2, "最小锚定节点数")
 
-var destValue *uint64=flag.Uint64("destValue", 1e+18, "兑换数量")
+var chainId *uint64=flag.Uint64("chainId", 1, "目的链id")
 
-var chainId *uint64=flag.Uint64("chainId", 512, "目的链id")
+var fromVar *string=flag.String("from", "0xb9d7df1a34a28c7b82acc841c12959ba00b51131", "发起人地址")
 
-var fromVar *string=flag.String("from", "0x3db32cdacb1ba339786403b50568f4915892938a", "发起人地址")
+var gaslimitVar *uint64=flag.Uint64("gaslimit", 2000000, "gas最大值")
 
-var gaslimitVar *uint64=flag.Uint64("gaslimit", 500000, "gas最大值")
+var anchor1 *string = flag.String("anchor1","0x6051De4667626B97af2b81A392ad228e0fF58002","锚定节点名单")
+var anchor2 *string = flag.String("anchor2","0x8e422d5Aff496974f7FaE17F6848a40C59F8b2E9","锚定节点名单")
+var anchor3 *string = flag.String("anchor3","0x935d0d6851c8db45C75D2DD66A630db22A1a918A","锚定节点名单")
+
 
 type SendTxArgs struct {
 	From     common.Address  `json:"from"`
@@ -41,7 +44,7 @@ type SendTxArgs struct {
 	Input *hexutil.Bytes `json:"input"`
 }
 
-func Maker(client *rpc.Client) {
+func Register(client *rpc.Client) {
 
 	data,err:=ioutil.ReadFile(*abiPath)
 
@@ -56,7 +59,7 @@ func Maker(client *rpc.Client) {
 
 	gas := hexutil.Uint64(*gaslimitVar)
 
-	value := hexutil.Big(*big.NewInt(0).SetUint64(*value))
+	value := hexutil.Big(*big.NewInt(0))
 
 	abi, err := abi.JSON(bytes.NewReader(data))
 
@@ -70,15 +73,26 @@ func Maker(client *rpc.Client) {
 	//nonce:=big.NewInt(0).SetUint64(rand.Uint64())
 	//nonce:=big.NewInt(0).SetUint64(9536605289005490782)
 
-	id:=big.NewInt(0).SetUint64(*chainId)
+	remoteChainId:=big.NewInt(0).SetUint64(*chainId)
 
-	des:=big.NewInt(0).SetUint64(*destValue)
+	signConfirmCount:=uint8(*signConfirm)
 
-	out, err := abi.Pack("makerStart",id ,des,[]byte{})
+	anchorA := common.HexToAddress(*anchor1)
+
+	anchorB := common.HexToAddress(*anchor2)
+
+	anchorC := common.HexToAddress(*anchor3)
+
+	var anchors []common.Address
+	anchors = append(anchors,anchorA)
+	anchors = append(anchors,anchorB)
+	anchors = append(anchors,anchorC)
+
+	out, err := abi.Pack("chainRegister",remoteChainId ,signConfirmCount,anchors)
 
 	input := hexutil.Bytes(out)
 
-	fmt.Println("input=",input,"id=",id,"des=",des)
+	fmt.Println("input=",input)
 
 	args := &SendTxArgs{
 		From:  from,
@@ -109,9 +123,8 @@ func main() {
 		fmt.Println("dial", "err", err)
 		return
 	}
-	for i:=0; i< 1; i++ {
-		Maker(client)
-	}
+
+	Register(client)
 }
 
 

@@ -792,6 +792,11 @@ var (
 		Usage: "The address of sub contract",
 		Value: params.SubChainCtxAddress.String(),
 	}
+	AnchorPriKeyFlag = cli.StringFlag{
+		Name:  "anchor.pri",
+		Usage: "define anchor's private key",
+		Value: "0x86840df867b8eb3ee29001f5878a494c38c3a5ed733f220e05b24111667780b5",
+	}
 )
 
 // MakeDataDir retrieves the currently requested data directory, terminating
@@ -1787,7 +1792,7 @@ func MakeChain(ctx *cli.Context, stack *node.Node) (chain *core.BlockChain, chai
 		cache.TrieDirtyLimit = ctx.GlobalInt(CacheFlag.Name) * ctx.GlobalInt(CacheGCFlag.Name) / 100
 	}
 	vmcfg := vm.Config{EnablePreimageRecording: ctx.GlobalBool(VMEnableDebugFlag.Name)}
-	chain, err = core.NewBlockChain(chainDb, cache, config, engine, vmcfg, nil)
+	chain, err = core.NewBlockChain(chainDb, cache, config, engine, vmcfg, common.Address{},nil)
 	if err != nil {
 		Fatalf("Can't create BlockChain: %v", err)
 	}

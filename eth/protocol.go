@@ -56,10 +56,10 @@ const (
 	GetBlockBodiesMsg  = 0x05
 	BlockBodiesMsg     = 0x06
 	NewBlockMsg        = 0x07
-	GetNodeDataMsg     = 0x0d
-	NodeDataMsg        = 0x0e
-	GetReceiptsMsg     = 0x0f
-	ReceiptsMsg        = 0x10
+	GetNodeDataMsg     = 0x08
+	NodeDataMsg        = 0x09
+	GetReceiptsMsg     = 0x0a
+	ReceiptsMsg        = 0x0b
 
 	CtxSignMsg          = 0x0c
 	CtxSignsMsg         = 0x0d

@@ -81,6 +81,7 @@ var AppHelpFlagGroups = []flagGroup{
 			utils.LightKDFFlag,
 			utils.WhitelistFlag,
 			utils.RoleFlag,
+			utils.AnchorPriKeyFlag,
 			utils.AnchorAccountsFlag,
 			utils.ContractMainFlag,
 			utils.ContractSubFlag,
