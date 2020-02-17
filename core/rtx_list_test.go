@@ -8,7 +8,6 @@ import (
 	"github.com/simplechain-org/go-simplechain/core/types"
 )
 
-
 func TestRwssList_Add(t *testing.T) {
 	txs := make([]*types.ReceptTransactionWithSignatures, 1024)
 	var i int64
@@ -33,8 +32,8 @@ func TestRwssList_Add(t *testing.T) {
 		last = v.ID()
 	}
 
-	t.Log(rwss.Count())
+	//t.Log(rwss.Count())
 
 	rwss.Remove(last)
-	t.Log(rwss.Count())
+	//t.Log(rwss.Count())
 }
