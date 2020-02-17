@@ -348,7 +348,7 @@ func (store *CtxStore) txExpired(ctx *types.CrossTransaction) bool {
 
 func (store *CtxStore) addTxLocked(ctx *types.CrossTransaction, local bool) error {
 	id := ctx.ID()
-	log.Info("addTxLocked","id",id.String(),"local",local)
+	log.Info("addTxLocked", "id", id.String(), "local", local)
 	// make signature first for local ctx
 	if local {
 		key, err := rpctx.StringToPrivateKey(rpctx.PrivateKey)
@@ -367,7 +367,7 @@ func (store *CtxStore) addTxLocked(ctx *types.CrossTransaction, local bool) erro
 	checkAndCommit := func(id common.Hash) error {
 		if cws := store.pending.Get(id); cws != nil && len(cws.Data.V) >= requireSignatureCount {
 			//TODO signatures combine or multi-sign msg?
-			log.Info("checkAndCommit","signCount",len(cws.Data.V))
+			log.Info("checkAndCommit", "signCount", len(cws.Data.V))
 			go store.resultFeed.Send(NewCWsEvent{cws})
 
 			keyId := cws.Data.DestinationId.Uint64()

@@ -27,13 +27,13 @@ import (
 	"time"
 
 	"github.com/simplechain-org/go-simplechain/common"
+	"github.com/simplechain-org/go-simplechain/consensus"
 	"github.com/simplechain-org/go-simplechain/core/rawdb"
 	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/params"
-	"github.com/simplechain-org/go-simplechain/consensus"
 	"github.com/simplechain-org/go-simplechain/rlp"
 )
 
@@ -82,6 +82,7 @@ func (bc *testBlockChain) GetBlockByHash(hash common.Hash) *types.Block {
 func (bc *testBlockChain) GetBlockNumber(hash common.Hash) *uint64 {
 	return nil
 }
+
 // GetHeader returns the hash corresponding to their hash.
 func (bc *testBlockChain) GetHeader(common.Hash, uint64) *types.Header {
 	return nil
@@ -1852,10 +1853,13 @@ func benchmarkPoolBatchInsert(b *testing.B, size int) {
 	}
 }
 
-func TestIsAnchor(t *testing.T)  {
+func TestIsAnchor(t *testing.T) {
 	pool, _ := setupTxPool()
 	//todo anchor from contract
-	pool.anchors[1024] = append(pool.anchors[1024],common.HexToAddress("0x0000000000000000000000000000000000000000"))
-	isAnchor := pool.IsAnchor(common.HexToAddress("0x0000000000000000000000000000000000000000"),1024)
-	t.Log(isAnchor)
+	pool.anchors[1024] = append(pool.anchors[1024], common.HexToAddress("0x0000000000000000000000000000000000000000"))
+	isAnchor := pool.IsAnchor(common.HexToAddress("0x0000000000000000000000000000000000000000"), 1024)
+	if !isAnchor {
+		t.Fatal("Not anchor")
+	}
+
 }
