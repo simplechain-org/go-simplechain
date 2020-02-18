@@ -2,6 +2,8 @@ package types
 
 import (
 	"errors"
+	"github.com/simplechain-org/go-simplechain/common/hexutil"
+	"github.com/simplechain-org/go-simplechain/log"
 	"math/big"
 	"sync/atomic"
 
@@ -228,6 +230,7 @@ func (cws *CrossTransactionWithSignatures) Hash() (h common.Hash) {
 	b = append(b, common.LeftPadBytes(cws.Data.DestinationId.Bytes(), 32)...)
 	b = append(b, common.LeftPadBytes(cws.Data.DestinationValue.Bytes(), 32)...)
 	b = append(b, cws.Data.Input...)
+	log.Info("Hash","data",hexutil.Encode(b),"input",len(cws.Data.Input))
 	hash.Write(b)
 	hash.Sum(h[:0])
 	cws.hash.Store(h)

@@ -41,7 +41,7 @@ func NewGasHelper(blockchain *core.BlockChain, chain simplechain) *GasHelper {
 
 // EstimateGas returns an estimate of the amount of gas needed to execute the
 // given transaction against the current pending block.
-func (this *GasHelper) EstimateGas(ctx context.Context, args CallArgs) (hexutil.Uint64, error) {
+func (this *GasHelper) EstimateGas(ctx context.Context, args CallArgs) (uint64, error) {
 	// Binary search the gas requirement, as it may be higher than the amount used
 	var (
 		lo  uint64 = params.TxGas - 1
@@ -52,7 +52,7 @@ func (this *GasHelper) EstimateGas(ctx context.Context, args CallArgs) (hexutil.
 		hi = uint64(args.Gas)
 	} else {
 		// Retrieve the current pending block to act as the gas ceiling
-		block, err := this.chain.BlockByNumber(ctx, rpc.PendingBlockNumber)
+		block, err := this.chain.BlockByNumber(ctx, rpc.LatestBlockNumber)
 		if err != nil {
 			return 0, err
 		}
@@ -64,7 +64,7 @@ func (this *GasHelper) EstimateGas(ctx context.Context, args CallArgs) (hexutil.
 	executable := func(gas uint64) bool {
 		args.Gas = hexutil.Uint64(gas)
 
-		_, _, failed, err := this.doCall(ctx, args, rpc.PendingBlockNumber, vm.Config{}, 0)
+		_, _, failed, err := this.doCall(ctx, args, rpc.LatestBlockNumber, vm.Config{}, 0)
 		if err != nil || failed {
 			return false
 		}
@@ -85,7 +85,7 @@ func (this *GasHelper) EstimateGas(ctx context.Context, args CallArgs) (hexutil.
 			return 0, fmt.Errorf("gas required exceeds allowance or always failing transaction")
 		}
 	}
-	return hexutil.Uint64(hi), nil
+	return hi, nil
 }
 
 func (this *GasHelper) doCall(ctx context.Context, args CallArgs, blockNr rpc.BlockNumber, vmCfg vm.Config, timeout time.Duration) ([]byte, uint64, bool, error) {
@@ -140,4 +140,19 @@ func (this *GasHelper) doCall(ctx context.Context, args CallArgs, blockNr rpc.Bl
 		return nil, 0, false, err
 	}
 	return res, gas, failed, err
+}
+
+func (this *GasHelper) CheckExec(ctx context.Context, args CallArgs) (bool, error) {
+	// Retrieve the current pending block to act as the gas ceiling
+	//block, err := this.chain.BlockByNumber(ctx, rpc.LatestBlockNumber)
+	//if err != nil {
+	//	return false, err
+	//}
+	//hi := block.GasLimit()
+	//args.Gas = hexutil.Uint64(hi)
+	_, _, failed, err := this.doCall(ctx, args, rpc.LatestBlockNumber, vm.Config{}, 0)
+	if err != nil || failed {
+		return false,err
+	}
+	return true,nil
 }

@@ -156,7 +156,7 @@ func Match() {
 					//out, err := abi.Pack("taker", V.Value.ToInt(), V.CTxId, V.TxHash, V.From,
 					//	V.BlockHash, V.DestinationId.ToInt(), V.DestinationValue.ToInt(), chainId,
 					//	vv, R, S)
-					b,err := v.Input.MarshalText()
+					//b,err := v.Input.MarshalText()
 					if err != nil {
 						fmt.Println(err)
 					}
@@ -168,7 +168,7 @@ func Match() {
 					ord.From = v.From
 					ord.BlockHash = v.BlockHash
 					ord.DestinationValue = v.DestinationValue.ToInt()
-					ord.Data = b
+					ord.Data = v.Input
 					ord.V = vv
 					ord.R = r
 					ord.S = s

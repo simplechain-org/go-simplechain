@@ -159,12 +159,12 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 		accountManager: ctx.AccountManager,
 		engine:         CreateConsensusEngine(ctx, chainConfig, &config.Ethash, config.Miner.Notify, config.Miner.Noverify, chainDb),
 		shutdownChan:   make(chan bool),
-		networkID:      config.NetworkId,
+		networkID:      chainConfig.ChainID.Uint64(),
 		gasPrice:       config.Miner.GasPrice,
 		etherbase:      config.Miner.Etherbase,
 		bloomRequests:  make(chan chan *bloombits.Retrieval),
 		bloomIndexer:   NewBloomIndexer(chainDb, params.BloomBitsBlocks, params.BloomConfirms),
-		chainConfig:chainConfig,
+		chainConfig:	chainConfig,
 	}
 
 	bcVersion := rawdb.ReadDatabaseVersion(chainDb)

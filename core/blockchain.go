@@ -150,6 +150,7 @@ type BlockChain struct {
 	cwsFeed       event.Feed
 	rtxFeed       event.Feed
 	rtxsFeed      event.Feed
+	FinishsFeed   event.Feed
 	scope         event.SubscriptionScope
 	genesisBlock  *types.Block
 
@@ -2271,17 +2272,17 @@ func (bc *BlockChain) StoreContractLog(blockNumber uint64,hash common.Hash, logs
 							common.BytesToHash(v.Data[:common.HashLength]).Big(),
 							v.BlockNumber,
 							v.TxIndex,
-							v.Data[common.HashLength:])) //todo networkId read from contract
+							v.Data[common.HashLength*6:])) //todo networkId read from contract
 					blockLogs = append(blockLogs, v)
 					continue
 				}
 				isMakerFinish := v.Topics[0] == params.MakerFinishTopic
 				if isMakerFinish {
-					//if len(v.Topics) >= 2 {
-					//	ctxId := v.Topics[1]
-					//	to := v.Topics[2]
-					//	finishs = append(finishs,&types.FinishInfo{ctxId, common.BytesToAddress(to[:])})
-					//}
+				//	if len(v.Topics) >= 2 {
+				//		ctxId := v.Topics[1]
+				//		to := v.Topics[2]
+				//		finishs = append(finishs,&types.FinishInfo{ctxId, common.BytesToAddress(to[:])})
+				//	}
 					blockLogs = append(blockLogs, v)
 					continue
 				}
@@ -2301,7 +2302,7 @@ func (bc *BlockChain) StoreContractLog(blockNumber uint64,hash common.Hash, logs
 			go	bc.rtxsFeed.Send(NewRTxsEvent{rtxs}) //删除本地待接单
 		}
 		//if len(finishs) > 0 {
-		//	//bc.finishsFeed.Send(TransationFinishEvent{finishs}) //TODO
+		//	bc.FinishsFeed.Send(TransationFinishEvent{finishs}) //TODO
 		//}
 
 	}
@@ -2365,13 +2366,13 @@ func (bc *BlockChain) SubscribeNewRTxssEvent(ch chan<- NewRTxsEvent) event.Subsc
 //	return bc.scope.Track(bc.transactionFinishFeed.Subscribe(ch))
 //}
 //
-//func (bc *BlockChain) TransactionFinishFeedSend(tx TransationFinishEvent) int {
-//	return bc.transactionFinishFeed.Send(tx)
-//}
+func (bc *BlockChain) TransactionFinishFeedSend(tx TransationFinishEvent) int {
+	return bc.FinishsFeed.Send(tx)
+}
 
-//func (bc *BlockChain) SubscribeNewFinishsEvent(ch chan<- TransationFinishEvent) event.Subscription {
-//	return bc.scope.Track(bc.finishsFeed.Subscribe(ch))
-//}
+func (bc *BlockChain) SubscribeNewFinishsEvent(ch chan<- TransationFinishEvent) event.Subscription {
+	return bc.scope.Track(bc.FinishsFeed.Subscribe(ch))
+}
 
 func (bc *BlockChain) IsCtxAddress(addr common.Address) bool {
 	//if addr == params.SubChainCtxAddress {

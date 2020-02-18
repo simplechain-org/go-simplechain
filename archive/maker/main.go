@@ -70,15 +70,15 @@ func Maker(client *rpc.Client) {
 	//nonce:=big.NewInt(0).SetUint64(rand.Uint64())
 	//nonce:=big.NewInt(0).SetUint64(9536605289005490782)
 
-	id:=big.NewInt(0).SetUint64(*chainId)
+	remoteChainId:=big.NewInt(0).SetUint64(*chainId)
 
 	des:=big.NewInt(0).SetUint64(*destValue)
 
-	out, err := abi.Pack("makerStart",id ,des,[]byte{})
+	out, err := abi.Pack("makerStart",remoteChainId ,des,[]byte{})
 
 	input := hexutil.Bytes(out)
 
-	fmt.Println("input=",input,"id=",id,"des=",des)
+	fmt.Println("input=",input,"id=",remoteChainId,"des=",des)
 
 	args := &SendTxArgs{
 		From:  from,

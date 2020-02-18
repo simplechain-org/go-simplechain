@@ -17,7 +17,7 @@ type headerRetriever interface {
 	GetTransactionByTxHash(hash common.Hash) (*types.Transaction, common.Hash, uint64)
 	CtxsFeedSend(transaction NewCTxsEvent) int
 	RtxsFeedSend(transaction NewRTxsEvent) int
-	//TransactionFinishFeedSend(transaction TransationFinishEvent) int
+	TransactionFinishFeedSend(transaction TransationFinishEvent) int
 	IsCtxAddress(addr common.Address) bool
 }
 
@@ -89,7 +89,7 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 			if next.logs != nil {
 				var ctxs []*types.CrossTransaction
 				var rtxs []*types.ReceptTransaction
-				//var finishs []*types.FinishInfo
+				var finishs []*types.FinishInfo
 				//todo add and del anchors
 				for _, v := range next.logs {
 					tx, blockHash, blockNumber := set.chain.GetTransactionByTxHash(v.TxHash)
@@ -108,7 +108,7 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 									v.TxHash,
 									v.BlockHash,
 									from,
-									v.Data[common.HashLength*3:]))
+									v.Data[common.HashLength*5:])) //todo
 							continue
 						}
 
@@ -126,18 +126,18 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 									common.BytesToHash(v.Data[:common.HashLength]).Big(),
 									v.BlockNumber,
 									v.TxIndex,
-									v.Data[common.HashLength:]))
+									v.Data[common.HashLength*6:]))
 							continue
 						}
 						// delete statement
-						//isFinish := v.Topics[0] == params.MakerFinishTopic
-						//if set.chain.IsCtxAddress(v.Address) && isFinish {
-						//	if len(v.Topics) >= 2 {
-						//		ctxId := v.Topics[1]
-						//		to := v.Topics[2]
-						//		finishs = append(finishs,&types.FinishInfo{ctxId, common.BytesToAddress(to[:])})
-						//	}
-						//}
+						isFinish := v.Topics[0] == params.MakerFinishTopic
+						if set.chain.IsCtxAddress(v.Address) && isFinish {
+							if len(v.Topics) >= 2 {
+								ctxId := v.Topics[1]
+								to := v.Topics[2]
+								finishs = append(finishs,&types.FinishInfo{ctxId, common.BytesToAddress(to[:])})
+							}
+						}
 					}
 				}
 				if len(ctxs) > 0 {
@@ -148,11 +148,11 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 					log.Info("rtxs","next.index",next.index,"height",height,"l",len(rtxs))
 					set.chain.RtxsFeedSend(NewRTxsEvent{rtxs})
 				}
-				//if len(finishs) > 0 {
-				//	log.Info("finishs","blockNumber",next.index,"height",height,"l",len(finishs))
-				//	set.chain.TransactionFinishFeedSend(TransationFinishEvent{
-				//		finishs})
-				//}
+				if len(finishs) > 0 {
+					log.Info("finishs","blockNumber",next.index,"height",height,"l",len(finishs))
+					set.chain.TransactionFinishFeedSend(TransationFinishEvent{
+						finishs})
+				}
 			}
 		default:
 			log.Info("⑂ block  became a side fork", "number", next.index, "hash", next.hash)
