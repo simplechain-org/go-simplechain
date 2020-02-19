@@ -21,6 +21,8 @@ jobs:
       go: 1.11.x
       env:
         - GO111MODULE=on
+      git:
+        submodules: true # cloning simplechain-org/tests
       script:
         - go run build/ci.go install
         - go run build/ci.go test -coverage $TEST_PACKAGES
@@ -31,6 +33,8 @@ jobs:
       go: 1.12.x
       env:
         - GO111MODULE=on
+      git:
+        submodules: true # cloning simplechain-org/tests
       script:
         - go run build/ci.go install
         - go run build/ci.go test -coverage $TEST_PACKAGES
@@ -41,6 +45,8 @@ jobs:
       arch: amd64
       dist: xenial
       go: 1.13.x
+      git:
+        submodules: true # cloning simplechain-org/tests
       script:
         - go run build/ci.go install
         - go run build/ci.go test -coverage $TEST_PACKAGES
@@ -51,6 +57,8 @@ jobs:
       arch: arm64
       dist: xenial
       go: 1.13.x
+      git:
+        submodules: true # cloning simplechain-org/tests
       script:
         - go run build/ci.go install
         - go run build/ci.go test -coverage $TEST_PACKAGES
@@ -58,6 +66,8 @@ jobs:
     - stage: build
       os: osx
       go: 1.13.x
+      git:
+        submodules: true # cloning simplechain-org/tests
       script:
         - echo "Increase the maximum number of open file descriptors on macOS"
         - NOFILE=40960
