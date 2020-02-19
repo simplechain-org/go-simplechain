@@ -28,7 +28,7 @@ var chainId *uint64=flag.Uint64("chainId", 512, "目的链id")
 
 var fromVar *string=flag.String("from", "0x3db32cdacb1ba339786403b50568f4915892938a", "发起人地址")
 
-var gaslimitVar *uint64=flag.Uint64("gaslimit", 500000, "gas最大值")
+var gaslimitVar *uint64=flag.Uint64("gaslimit", 60000, "gas最大值")
 
 type SendTxArgs struct {
 	From     common.Address  `json:"from"`
@@ -109,7 +109,7 @@ func main() {
 		fmt.Println("dial", "err", err)
 		return
 	}
-	for i:=0; i< 1; i++ {
+	for i:=0; i< 10000; i++ {
 		Maker(client)
 	}
 }

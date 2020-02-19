@@ -403,7 +403,7 @@ func (rws *ReceptTransactionWithSignatures) ConstructData(gasUsed *big.Int) ([]b
 	rep.V = rws.Data.V
 	rep.R = r
 	rep.S = s
-	log.Info("ConstructData","input",hexutil.Encode(rep.Input),"rws.hash",rws.Hash().String(),"remoteChainId",rws.ChainId().String())
+	//log.Info("ConstructData","input",hexutil.Encode(rep.Input),"rws.hash",rws.Hash().String(),"remoteChainId",rws.ChainId().String())
 	out, err := abi.Pack("makerFinish", rep, rws.ChainId(), gasUsed)
 
 	if err != nil {
@@ -411,7 +411,7 @@ func (rws *ReceptTransactionWithSignatures) ConstructData(gasUsed *big.Int) ([]b
 	}
 
 	input := hexutil.Bytes(out)
-	log.Info("ConstructData","out",hexutil.Encode(input))
+	//log.Info("ConstructData","out",hexutil.Encode(input))
 	return input, nil
 }
 

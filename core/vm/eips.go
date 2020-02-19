@@ -18,8 +18,6 @@ package vm
 
 import (
 	"fmt"
-	"github.com/simplechain-org/go-simplechain/log"
-
 	"github.com/simplechain-org/go-simplechain/params"
 )
 
@@ -83,7 +81,6 @@ func enable1344(jt *JumpTable) {
 // opChainID implements CHAINID opcode
 func opChainID(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
 	chainId := interpreter.intPool.get().Set(interpreter.evm.chainConfig.ChainID)
-	log.Info("opChainID","chainId",chainId)
 	stack.push(chainId)
 	return nil, nil
 }

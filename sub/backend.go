@@ -241,7 +241,7 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*Ethereum, error) {
 	eth.msgHandler = cross.NewMsgHandler(eth, cross.RoleSubHandler, config.Role, eth.ctxStore, eth.rtxStore, eth.blockchain, ctx.SubCh, ctx.MainCh, config.MainChainCtxAddress, config.SubChainCtxAddress)
 	eth.msgHandler.SetProtocolManager(eth.protocolManager)
 	eth.protocolManager.SetMsgHandler(eth.msgHandler)
-	eth.miner = miner.New(eth, &config.Miner, chainConfig, eth.EventMux(), eth.engine, eth.isLocalBlock)
+	eth.miner = miner.New(eth, &config.Miner, chainConfig, eth.EventMux(), eth.engine, eth.isLocalBlock,eth.ctxStore)
 	eth.miner.SetExtra(makeExtraData(config.Miner.ExtraData))
 
 	eth.APIBackend = &EthAPIBackend{ctx.ExtRPCEnabled(), eth, nil}

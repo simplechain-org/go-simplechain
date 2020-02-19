@@ -24,7 +24,7 @@ var txId *string = flag.String("TxId", "", "跨链交易哈希值")
 
 var fromVar *string = flag.String("From", "0x8029fcfc954ff7be80afd4db9f77f18c8aa1ecbc", "接单人地址")
 
-var gaslimitVar *uint64 = flag.Uint64("gaslimit", 5000000, "gas最大值")
+var gaslimitVar *uint64 = flag.Uint64("gaslimit", 100000, "gas最大值")
 
 type SendTxArgs struct {
 	From     common.Address  `json:"From"`

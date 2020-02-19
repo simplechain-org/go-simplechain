@@ -149,7 +149,6 @@ func (this *MsgHandler) loop() {
 		case ev := <-this.makerSignedCh:
 			this.pm.BroadcastInternalCrossTransactionWithSignature([]*types.CrossTransactionWithSignatures{ev.Txs}) //主网广播
 			if this.role.IsAnchor() {
-				log.Info("IsAnchor BroadcastInternalCrossTransactionWithSignature")
 				this.WriteCrossMessage(ev.Txs)                                                                          //发送到子网
 			}
 		case <-this.makerSignedSub.Err():
@@ -185,7 +184,7 @@ func (this *MsgHandler) loop() {
 				}
 				address := crypto.PubkeyToAddress(key.PublicKey)
 				if pending, err := this.pm.GetAnchorTxs(address); err == nil && len(pending) < 10 {
-					gasUsed, _ := new(big.Int).SetString("300000000000000", 10) //todo gasUsed
+					gasUsed, _ := new(big.Int).SetString("80000000000000", 10) //todo gasUsed
 					txs, err := this.GetTxForLockOut(ev.Tws, gasUsed)
 					if err != nil {
 						log.Info("availableTakerCh", "err", err)
@@ -264,7 +263,6 @@ func (this *MsgHandler) Stop() {
 }
 
 func (this *MsgHandler) HandleMsg(msg p2p.Msg, p types.Peer) error {
-	log.Info("MsgHandler HandleMsg","msg.Code",msg.Code)
 	switch {
 	case msg.Code == CtxSignMsg:
 		if !this.pm.CanAcceptTxs() {
@@ -281,8 +279,6 @@ func (this *MsgHandler) HandleMsg(msg p2p.Msg, p types.Peer) error {
 			if err := this.ctxStore.AddRemote(ctx); err != nil {
 				log.Debug("Add remote ctx", "err", err)
 			}
-		} else {
-			log.Info("ValidateCtx","err",err)
 		}
 	case msg.Code == CtxSignsMsg:
 		if !this.pm.CanAcceptTxs() {
@@ -348,7 +344,6 @@ func (this *MsgHandler) HandleMsg(msg p2p.Msg, p types.Peer) error {
 		//if !this.pm.CanAcceptTxs() {
 		//	break
 		//}
-		log.Info("receive CtxSignsInternalMsg")
 		var cwss []*types.CrossTransactionWithSignatures
 		if err := msg.Decode(&cwss); err != nil {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
@@ -371,20 +366,20 @@ func (this *MsgHandler) ReadCrossMessage() {
 	for {
 		select {
 		case v := <-this.crossMsgReader:
-			log.Info("ReadCrossMessage")
+			//log.Info("ReadCrossMessage")
 			cws, ok := v.(*types.CrossTransactionWithSignatures)
-			if ok {
-				log.Info("ReadCrossMessage", "networkID", this.pm.NetworkId(), "destId", cws.Data.DestinationId.Uint64())
-			}
+			//if ok {
+			//	log.Info("ReadCrossMessage", "networkID", this.pm.NetworkId(), "destId", cws.Data.DestinationId.Uint64())
+			//}
 			if ok && cws.Data.DestinationId.Uint64() == this.pm.NetworkId() {
 				this.ctxStore.AddCWss([]*types.CrossTransactionWithSignatures{cws})
 				this.pm.BroadcastCWss([]*types.CrossTransactionWithSignatures{cws})
 				break
 			}
 			rws, ok := v.(*types.ReceptTransactionWithSignatures)
-			if ok {
-				log.Info("ReadCrossMessage", "networkID", this.pm.NetworkId(), "destId", rws.Data.DestinationId.Uint64())
-			}
+			//if ok {
+			//	log.Info("ReadCrossMessage", "networkID", this.pm.NetworkId(), "destId", rws.Data.DestinationId.Uint64())
+			//}
 			if ok && rws.Data.DestinationId.Uint64() == this.pm.NetworkId() {
 				if v := this.rtxStore.ReadFromLocals(rws.Data.CTxId); v == nil {
 					errs := this.rtxStore.AddLocals(rws)
@@ -481,66 +476,70 @@ func (this *MsgHandler) GetTxForLockOut(rwss []*types.ReceptTransactionWithSigna
 func (this *MsgHandler) WriteCrossMessage(v interface{}) {
 	select {
 	case this.crossMsgWriter <- v:
-		log.Info("WriteCrossMessage")
+		//log.Info("WriteCrossMessage")
 	case <-this.quitSync:
 		return
 	}
 }
 
 func (this *MsgHandler) RecordStatement(finishes []*types.FinishInfo) error {
-	var count,pass int
-	for _,v := range finishes {
-		ctxId := v.TxId
-		ctx := this.ctxStore.ReadFromLocals(ctxId)
-		if ctx == nil {
-			pass ++
-			continue
-			//return errors.New(fmt.Sprintf("no ctx for %v", ctxId))
-		}
-
-		rtx := this.rtxStore.ReadFromLocals(ctxId)
-		if rtx == nil {
-			pass ++
-			continue
-			//return errors.New(fmt.Sprintf("no rtx for %v", ctxId))
-		}
-		if err := this.rtxStore.RemoveLocals([]*types.ReceptTransactionWithSignatures{rtx}); err != nil {
-			pass ++
-			continue
-		}
-		//if this.statementDb == nil {
-		//	pass ++
-		//	continue
-		//	//return errors.New("MsgHandler statementDb is nil")
-		//}
-		//if this.statementDb.Has(ctxId) {
-		//	pass ++
-		//	continue
-		//	//return errors.New("db has record")
-		//}
-		//statement := &types.Statement{
-		//	CtxId:        ctxId,
-		//	Maker:        ctx.Data.From,
-		//	Taker:        rtx.Data.To,
-		//	Value:        ctx.Data.Value,
-		//	DestValue:    ctx.Data.DestinationValue,
-		//	MakerChainId: rtx.Data.DestinationId,
-		//	TakerChainId: ctx.Data.DestinationId,
-		//	MakerHash:    ctx.Data.TxHash,
-		//	TakerHash:    rtx.Data.TxHash,
-		//}
-		//err := this.statementDb.Write(statement)
-		//if err != nil {
-		//	pass ++
-		//	continue
-		//	//return err
-		//}
-		//count ++
-	}
+	//var count,pass int
+	//for _,v := range finishes {
+	//	ctxId := v.TxId
+	//	ctx := this.ctxStore.ReadFromLocals(ctxId)
+	//	if ctx == nil {
+	//		pass ++
+	//		continue
+	//		//return errors.New(fmt.Sprintf("no ctx for %v", ctxId))
+	//	}
+	//
+	//	rtx := this.rtxStore.ReadFromLocals(ctxId)
+	//	if rtx == nil {
+	//		pass ++
+	//		continue
+	//		//return errors.New(fmt.Sprintf("no rtx for %v", ctxId))
+	//	}
+	//	if err := this.rtxStore.RemoveLocals([]*types.ReceptTransactionWithSignatures{rtx}); err != nil {
+	//		pass ++
+	//		continue
+	//	}
+	//	//if this.statementDb == nil {
+	//	//	pass ++
+	//	//	continue
+	//	//	//return errors.New("MsgHandler statementDb is nil")
+	//	//}
+	//	//if this.statementDb.Has(ctxId) {
+	//	//	pass ++
+	//	//	continue
+	//	//	//return errors.New("db has record")
+	//	//}
+	//	//statement := &types.Statement{
+	//	//	CtxId:        ctxId,
+	//	//	Maker:        ctx.Data.From,
+	//	//	Taker:        rtx.Data.To,
+	//	//	Value:        ctx.Data.Value,
+	//	//	DestValue:    ctx.Data.DestinationValue,
+	//	//	MakerChainId: rtx.Data.DestinationId,
+	//	//	TakerChainId: ctx.Data.DestinationId,
+	//	//	MakerHash:    ctx.Data.TxHash,
+	//	//	TakerHash:    rtx.Data.TxHash,
+	//	//}
+	//	//err := this.statementDb.Write(statement)
+	//	//if err != nil {
+	//	//	pass ++
+	//	//	continue
+	//	//	//return err
+	//	//}
+	//	//count ++
+	//}
 	if err := this.ctxStore.RemoveLocals(finishes); err != nil {
 		return errors.New("rm ctx error")
 	}
-	log.Info("MsgHandler make record success","count",count,"pass",pass)
+	if err := this.rtxStore.RemoveLocals(finishes); err != nil {
+		return errors.New("rm rtx error")
+	}
+
+	log.Info("MsgHandler rm record success")
 	return nil
 }
 

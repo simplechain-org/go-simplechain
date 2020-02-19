@@ -138,8 +138,8 @@ type blockChain interface {
 }
 
 var (
-	finishID, _ = hexutil.Decode("0xb56c969a")
-	takerID, _ = hexutil.Decode("0xc0f61fb5")
+	finishID, _ = hexutil.Decode("0xaff64dae")
+	takerID, _ = hexutil.Decode("0x48741a9d")
 )
 
 // TxPoolConfig are the configuration parameters of the transaction pool.
@@ -1714,11 +1714,17 @@ func (pool *TxPool)IsAnchor(address common.Address, remoteChainId uint64) bool {
 //	}
 //}
 
-// removeTx removes a single transaction from the queue, moving all subsequent
+// RemoveTx removes a single transaction from the queue, moving all subsequent
 // transactions back to the future queue.
 func (pool *TxPool) removeTxByCtxId(CtxId common.Hash,method []byte, outofbound bool) {
 	hashes := pool.all.GetCtxId(CtxId,method)
 	for _,v := range hashes {
 		pool.removeTx(v,outofbound)
 	}
+}
+
+func (pool *TxPool) RemoveTx(hash common.Hash, outofbound bool) {
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+	pool.removeTx(hash,outofbound)
 }
