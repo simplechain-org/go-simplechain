@@ -99,6 +99,7 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 							var from common.Address
 							copy(from[:], v.Topics[2][common.HashLength-common.AddressLength:])
 							ctxId := v.Topics[1]
+							count := common.BytesToHash(v.Data[common.HashLength*4:common.HashLength*5]).Big().Int64()
 							ctxs = append(ctxs,
 								types.NewCrossTransaction(
 									common.BytesToHash(v.Data[common.HashLength:common.HashLength*2]).Big(),
@@ -108,7 +109,7 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 									v.TxHash,
 									v.BlockHash,
 									from,
-									v.Data[common.HashLength*5:])) //todo
+									v.Data[common.HashLength*5:common.HashLength*5+count])) //todo
 							continue
 						}
 
@@ -117,6 +118,7 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 							var to common.Address
 							copy(to[:], v.Topics[2][common.HashLength-common.AddressLength:])
 							ctxId := v.Topics[1]
+							count := common.BytesToHash(v.Data[common.HashLength*5:common.HashLength*6]).Big().Int64()
 							rtxs = append(rtxs,
 								types.NewReceptTransaction(
 									ctxId,
@@ -126,7 +128,7 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 									common.BytesToHash(v.Data[:common.HashLength]).Big(),
 									v.BlockNumber,
 									v.TxIndex,
-									v.Data[common.HashLength*6:]))
+									v.Data[common.HashLength*6:common.HashLength*6+count]))
 							continue
 						}
 						// delete statement

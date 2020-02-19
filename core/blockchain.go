@@ -2263,6 +2263,7 @@ func (bc *BlockChain) StoreContractLog(blockNumber uint64,hash common.Hash, logs
 					var to common.Address
 					copy(to[:], v.Topics[2][common.HashLength-common.AddressLength:])
 					ctxId := v.Topics[1]
+					count := common.BytesToHash(v.Data[common.HashLength*5:common.HashLength*6]).Big().Int64()
 					rtxs = append(rtxs,
 						types.NewReceptTransaction(
 							ctxId,
@@ -2272,7 +2273,7 @@ func (bc *BlockChain) StoreContractLog(blockNumber uint64,hash common.Hash, logs
 							common.BytesToHash(v.Data[:common.HashLength]).Big(),
 							v.BlockNumber,
 							v.TxIndex,
-							v.Data[common.HashLength*6:])) //todo networkId read from contract
+							v.Data[common.HashLength*6:common.HashLength*6+count])) //todo networkId read from contract
 					blockLogs = append(blockLogs, v)
 					continue
 				}
