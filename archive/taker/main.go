@@ -14,15 +14,15 @@ import (
 	"math/big"
 )
 
-var rawurlVar *string = flag.String("rawurl", "http://127.0.0.1:8556", "rpc url")
+var rawurlVar *string = flag.String("rawurl", "http://127.0.0.1:8545", "rpc url")
 
 var abiPath *string = flag.String("abi", "../../contracts/crossdemo/crossdemo.abi", "abi文件路径")
 
-var contract *string = flag.String("contract", "0x8eefA4bFeA64F2A89f3064D48646415168662a1e", "合约地址")
+var contract *string = flag.String("contract", "0xAa22934Df3867B8d59574dD4557ef1BA6dA2f8f3", "合约地址")
 
 var txId *string = flag.String("TxId", "", "跨链交易哈希值")
 
-var fromVar *string = flag.String("From", "0x8029fcfc954ff7be80afd4db9f77f18c8aa1ecbc", "接单人地址")
+var fromVar *string = flag.String("From", "0x3db32cdacb1ba339786403b50568f4915892938a", "接单人地址")
 
 var gaslimitVar *uint64 = flag.Uint64("gaslimit", 100000, "gas最大值")
 
@@ -152,7 +152,7 @@ func Match() {
 					//	log.Println("1")
 					//}
 					chainId := big.NewInt(int64(remoteId))
-					fmt.Println(v.Value.String(),chainId.String())
+					//fmt.Println(v.Value.String(),chainId.String())
 					//out, err := abi.Pack("taker", V.Value.ToInt(), V.CTxId, V.TxHash, V.From,
 					//	V.BlockHash, V.DestinationId.ToInt(), V.DestinationValue.ToInt(), chainId,
 					//	vv, R, S)
@@ -175,6 +175,7 @@ func Match() {
 					//out, err := abi.Pack("taker", V.Value.ToInt(), V.CTxId, V.TxHash, V.From,
 					//	V.BlockHash, V.DestinationValue.ToInt(), chainId,
 					//	vv, R, S)
+					//out, err := abi.Pack("taker",&ord,chainId,[]byte("When the whole world is about to rain, let’s make it clear in our heart together."))
 					out, err := abi.Pack("taker",&ord,chainId,[]byte{})
 
 					if err != nil {
