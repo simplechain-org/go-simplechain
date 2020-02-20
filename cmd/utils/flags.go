@@ -62,6 +62,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/p2p/netutil"
 	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/rpc"
+	"github.com/simplechain-org/go-simplechain/sub"
 	whisper "github.com/simplechain-org/go-simplechain/whisper/whisperv6"
 	cli "gopkg.in/urfave/cli.v1"
 )
@@ -809,6 +810,33 @@ var (
 		Name:  "vm.evm",
 		Usage: "External EVM configuration (default = built-in interpreter)",
 		Value: "",
+	}
+	role = eth.DefaultConfig.Role
+
+	RoleFlag = TextMarshalerFlag{
+		Name:  "role",
+		Usage: "it can be one of (mainchain,subchain,anchor)",
+		Value: &role,
+	}
+	AnchorAccountsFlag = cli.StringFlag{
+		Name:  "anchors",
+		Usage: "Comma separated list of accounts to anchors",
+		Value: "",
+	}
+	ContractMainFlag = cli.StringFlag{
+		Name:  "contract.main",
+		Usage: "The address of main contract",
+		Value: params.MainChainCtxAddress.String(),
+	}
+	ContractSubFlag = cli.StringFlag{
+		Name:  "contract.sub",
+		Usage: "The address of sub contract",
+		Value: params.SubChainCtxAddress.String(),
+	}
+	AnchorPriKeyFlag = cli.StringFlag{
+		Name:  "anchor.pri",
+		Usage: "define anchor's private key",
+		Value: "0x86840df867b8eb3ee29001f5878a494c38c3a5ed733f220e05b24111667780b5",
 	}
 )
 
@@ -1578,21 +1606,93 @@ func RegisterEthService(stack *node.Node, cfg *eth.Config) <-chan *eth.Ethereum 
 			return les.New(ctx, cfg)
 		})
 	} else {
-		err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
-			fullNode, err := eth.New(ctx, cfg)
-			if fullNode != nil && cfg.LightServ > 0 {
-				ls, _ := les.NewLesServer(fullNode, cfg)
-				fullNode.AddLesServer(ls)
-			}
-			nodeChan <- fullNode
-			return fullNode, err
-		})
+		log.Info("RegisterEthService", "Role", cfg.Role)
+		if cfg.Role.IsMainChain() {
+			//mainchain
+			err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
+				fullNode, err := eth.New(ctx, cfg)
+				if fullNode != nil && cfg.LightServ > 0 {
+					ls, _ := les.NewLesServer(fullNode, cfg)
+					fullNode.AddLesServer(ls)
+				}
+				nodeChan <- fullNode
+				return fullNode, err
+			})
+		} else if cfg.Role.IsSubChain() {
+
+			//subchain
+			err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
+				//subConfig := ToSubChainConfig(cfg)
+				fullNode, err := sub.New(ctx, cfg)
+				if fullNode != nil && cfg.LightServ > 0 {
+					ls, _ := les.NewLesServer(fullNode, cfg)
+					fullNode.AddLesServer(ls)
+				}
+				return fullNode, err
+			})
+		} else if cfg.Role.IsAnchor() {
+			subConfig := *cfg
+			//mainchain
+			err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
+				fullNode, err := eth.New(ctx, cfg)
+				return fullNode, err
+			})
+			//subchain
+			err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
+				//subConfig := ToSubChainConfig(cfg)
+				fullNode, err := sub.New(ctx, &subConfig)
+				return fullNode, err
+			})
+		}
 	}
 	if err != nil {
 		Fatalf("Failed to register the Ethereum service: %v", err)
 	}
 	return nodeChan
 }
+
+//func ToSubChainConfig(cfg *eth.Config) *sub.Config {
+//	subConfig := &sub.Config{
+//		Whitelist: make(map[uint64]common.Hash),
+//	}
+//	subConfig.Genesis = cfg.Genesis
+//	subConfig.NetworkId = cfg.NetworkId
+//	subConfig.SyncMode = cfg.SyncMode
+//	subConfig.NoPruning = cfg.NoPruning
+//	subConfig.NoPrefetch = cfg.NoPrefetch
+//	subConfig.LightEgress = cfg.LightEgress
+//	subConfig.LightIngress = cfg.LightIngress
+//	subConfig.LightPeers = cfg.LightPeers
+//	subConfig.LightServ = cfg.LightServ
+//	subConfig.UltraLightFraction = cfg.UltraLightFraction
+//	subConfig.UltraLightOnlyAnnounce = cfg.UltraLightOnlyAnnounce
+//	subConfig.UltraLightServers = cfg.UltraLightServers
+//	subConfig.SkipBcVersionCheck = cfg.SkipBcVersionCheck
+//	subConfig.DatabaseCache = cfg.DatabaseCache
+//	subConfig.DatabaseFreezer = cfg.DatabaseFreezer
+//	subConfig.DatabaseHandles = cfg.DatabaseHandles
+//	subConfig.TrieCleanCache = cfg.TrieCleanCache
+//	subConfig.TrieDirtyCache = cfg.TrieDirtyCache
+//	subConfig.TrieTimeout = cfg.TrieTimeout
+//	subConfig.Miner = cfg.Miner
+//	subConfig.Ethash = cfg.Ethash
+//	subConfig.TxPool = cfg.TxPool
+//	subConfig.GPO = cfg.GPO
+//	subConfig.EnablePreimageRecording = cfg.EnablePreimageRecording
+//	subConfig.DocRoot = cfg.DocRoot
+//	subConfig.EWASMInterpreter = cfg.EWASMInterpreter
+//	subConfig.EVMInterpreter = cfg.EVMInterpreter
+//	subConfig.RPCGasCap = cfg.RPCGasCap
+//	subConfig.Checkpoint = cfg.Checkpoint
+//	subConfig.CheckpointOracle = cfg.CheckpointOracle
+//	subConfig.OverrideIstanbul = cfg.OverrideIstanbul
+//	subConfig.OverrideMuirGlacier = cfg.OverrideMuirGlacier
+//	for k, v := range cfg.Whitelist {
+//		subConfig.Whitelist[k] = v
+//	}
+//	subConfig.Role = cfg.Role
+//	return subConfig
+//}
 
 // RegisterShhService configures Whisper and adds it to the given node.
 func RegisterShhService(stack *node.Node, cfg *whisper.Config) {
@@ -1748,7 +1848,7 @@ func MakeChain(ctx *cli.Context, stack *node.Node) (chain *core.BlockChain, chai
 		cache.TrieDirtyLimit = ctx.GlobalInt(CacheFlag.Name) * ctx.GlobalInt(CacheGCFlag.Name) / 100
 	}
 	vmcfg := vm.Config{EnablePreimageRecording: ctx.GlobalBool(VMEnableDebugFlag.Name)}
-	chain, err = core.NewBlockChain(chainDb, cache, config, engine, vmcfg, nil)
+	chain, err = core.NewBlockChain(chainDb, cache, config, engine, vmcfg, common.Address{}, nil)
 	if err != nil {
 		Fatalf("Can't create BlockChain: %v", err)
 	}

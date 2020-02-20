@@ -72,6 +72,9 @@ type Node struct {
 	lock sync.RWMutex
 
 	log log.Logger
+
+	MainCh chan interface{}
+	SubCh  chan interface{}
 }
 
 // New creates a new P2P node, ready for protocol registration.
@@ -119,6 +122,8 @@ func New(conf *Config) (*Node, error) {
 		wsEndpoint:        conf.WSEndpoint(),
 		eventmux:          new(event.TypeMux),
 		log:               conf.Logger,
+		MainCh:            make(chan interface{}, 100),
+		SubCh:             make(chan interface{}, 100),
 	}, nil
 }
 
@@ -198,6 +203,8 @@ func (n *Node) Start() error {
 			services:       make(map[reflect.Type]Service),
 			EventMux:       n.eventmux,
 			AccountManager: n.accman,
+			MainCh:         n.MainCh,
+			SubCh:          n.SubCh,
 		}
 		for kind, s := range services { // copy needed for threaded access
 			ctx.services[kind] = s

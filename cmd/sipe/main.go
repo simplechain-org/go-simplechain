@@ -19,6 +19,9 @@ package main
 
 import (
 	"fmt"
+	"github.com/simplechain-org/go-simplechain/miner"
+	"github.com/simplechain-org/go-simplechain/stratum"
+	"github.com/simplechain-org/go-simplechain/sub"
 	"math"
 	"os"
 	"runtime"
@@ -28,6 +31,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/elastic/gosigar"
 	"github.com/simplechain-org/go-simplechain/accounts"
 	"github.com/simplechain-org/go-simplechain/accounts/keystore"
 	"github.com/simplechain-org/go-simplechain/cmd/utils"
@@ -40,12 +44,8 @@ import (
 	"github.com/simplechain-org/go-simplechain/les"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/metrics"
-	"github.com/simplechain-org/go-simplechain/miner"
 	"github.com/simplechain-org/go-simplechain/node"
-	"github.com/simplechain-org/go-simplechain/stratum"
-
-	"github.com/elastic/gosigar"
-	cli "gopkg.in/urfave/cli.v1"
+	"gopkg.in/urfave/cli.v1"
 )
 
 const (
@@ -153,6 +153,11 @@ var (
 		utils.GpoPercentileFlag,
 		utils.EWASMInterpreterFlag,
 		utils.EVMInterpreterFlag,
+		utils.RoleFlag,
+		utils.AnchorPriKeyFlag,
+		utils.AnchorAccountsFlag,
+		utils.ContractMainFlag,
+		utils.ContractSubFlag,
 		configFileFlag,
 		utils.RaftModeFlag,
 		utils.RaftBlockTimeFlag,
@@ -421,62 +426,121 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 		}()
 	}
 
+	//
+	role := *utils.GlobalTextMarshaler(ctx, utils.RoleFlag.Name).(*common.ChainRole)
+
 	// Start auxiliary services if enabled
 	if ctx.GlobalBool(utils.MiningEnabledFlag.Name) || ctx.GlobalBool(utils.DeveloperFlag.Name) {
 		// Mining only makes sense if a full Ethereum node is running
 		if ctx.GlobalString(utils.SyncModeFlag.Name) == "light" {
 			utils.Fatalf("Light clients do not support mining")
 		}
-		var ethereum *eth.Ethereum
-		if err := stack.Service(&ethereum); err != nil {
-			utils.Fatalf("Ethereum service not running: %v", err)
-		}
-		// Set the gas price to the limits from the CLI and start mining
-		gasprice := utils.GlobalBig(ctx, utils.MinerLegacyGasPriceFlag.Name)
-		if ctx.IsSet(utils.MinerGasPriceFlag.Name) {
-			gasprice = utils.GlobalBig(ctx, utils.MinerGasPriceFlag.Name)
-		}
-		ethereum.TxPool().SetGasPrice(gasprice)
+		if role.IsMainChain() {
+			var ethereum *eth.Ethereum
+			if err := stack.Service(&ethereum); err != nil {
+				utils.Fatalf("Ethereum service not running: %v", err)
+			}
+			// Set the gas price to the limits from the CLI and start mining
+			gasprice := utils.GlobalBig(ctx, utils.MinerLegacyGasPriceFlag.Name)
+			if ctx.IsSet(utils.MinerGasPriceFlag.Name) {
+				gasprice = utils.GlobalBig(ctx, utils.MinerGasPriceFlag.Name)
+			}
+			ethereum.TxPool().SetGasPrice(gasprice)
 
-		threads := ctx.GlobalInt(utils.MinerLegacyThreadsFlag.Name)
-		if ctx.GlobalIsSet(utils.MinerThreadsFlag.Name) {
-			threads = ctx.GlobalInt(utils.MinerThreadsFlag.Name)
-		}
-		//Use stratum if requested
-		if ctx.GlobalString(utils.MinerType.Name) == "stratum" {
-			log.Info("MinerType", "MinerType", ctx.GlobalString(utils.MinerType.Name))
-			port := ctx.GlobalString(utils.StratumPort.Name)
-			log.Info("[stratum]Server port", "port", port)
-			auth := stratum.NewSimpleAuth(ctx.GlobalString(utils.StratumPassword.Name))
-			maxConn := ctx.GlobalInt(utils.StratumMaxConn.Name)
-			var calcHashRate bool = false
-			if ctx.GlobalBool(utils.StratumHashRate.Name) {
-				calcHashRate = true
-				log.Info("calc stratum miner's hashRate")
+			threads := ctx.GlobalInt(utils.MinerLegacyThreadsFlag.Name)
+			if ctx.GlobalIsSet(utils.MinerThreadsFlag.Name) {
+				threads = ctx.GlobalInt(utils.MinerThreadsFlag.Name)
 			}
-			fanOut := ctx.GlobalBool(utils.StratumFanout.Name)
-			stratumServer, err := stratum.NewServer(port, uint(maxConn), auth, calcHashRate, fanOut)
-			if err != nil {
-				log.Info("[stratum]Server init error", "err", err.Error())
-				return
-			}
-			stratumAgent := miner.NewStratumAgent(ethereum.BlockChain(), ethereum.Engine())
-			stratumAgent.Register(stratumServer)
-			if !ctx.GlobalBool(utils.CPUAgentOff.Name) {
+			//Use stratum if requested
+			if ctx.GlobalString(utils.MinerType.Name) == "stratum" {
+				log.Info("MinerType", "MinerType", ctx.GlobalString(utils.MinerType.Name))
+				port := ctx.GlobalString(utils.StratumPort.Name)
+				log.Info("[stratum]Server port", "port", port)
+				auth := stratum.NewSimpleAuth(ctx.GlobalString(utils.StratumPassword.Name))
+				maxConn := ctx.GlobalInt(utils.StratumMaxConn.Name)
+				var calcHashRate bool = false
+				if ctx.GlobalBool(utils.StratumHashRate.Name) {
+					calcHashRate = true
+					log.Info("calc stratum miner's hashRate")
+				}
+				fanOut := ctx.GlobalBool(utils.StratumFanout.Name)
+				stratumServer, err := stratum.NewServer(port, uint(maxConn), auth, calcHashRate, fanOut)
+				if err != nil {
+					log.Info("[stratum]Server init error", "err", err.Error())
+					return
+				}
+				stratumAgent := miner.NewStratumAgent(ethereum.BlockChain(), ethereum.Engine())
+				stratumAgent.Register(stratumServer)
+				if !ctx.GlobalBool(utils.CPUAgentOff.Name) {
+					cpuMinerAgent := miner.NewCpuAgent(ethereum.BlockChain(), ethereum.Engine())
+					ethereum.Miner().Register(cpuMinerAgent)
+					log.Info("CPU miner agent registered")
+				}
+				ethereum.Miner().Register(stratumAgent)
+				log.Info("Stratum miner agent registered")
+			} else {
+				//cpu miner
 				cpuMinerAgent := miner.NewCpuAgent(ethereum.BlockChain(), ethereum.Engine())
 				ethereum.Miner().Register(cpuMinerAgent)
-				log.Info("CPU miner agent registered")
 			}
-			ethereum.Miner().Register(stratumAgent)
-			log.Info("Stratum miner agent registered")
+			if err := ethereum.StartMining(threads); err != nil {
+				utils.Fatalf("Failed to start mining: %v", err)
+			}
+		} else if role.IsSubChain() {
+			var ethereum *sub.Ethereum
+			if err := stack.Service(&ethereum); err != nil {
+				utils.Fatalf("Ethereum service not running: %v", err)
+			}
+			// Set the gas price to the limits from the CLI and start mining
+			gasprice := utils.GlobalBig(ctx, utils.MinerLegacyGasPriceFlag.Name)
+			if ctx.IsSet(utils.MinerGasPriceFlag.Name) {
+				gasprice = utils.GlobalBig(ctx, utils.MinerGasPriceFlag.Name)
+			}
+			ethereum.TxPool().SetGasPrice(gasprice)
+
+			threads := ctx.GlobalInt(utils.MinerLegacyThreadsFlag.Name)
+			if ctx.GlobalIsSet(utils.MinerThreadsFlag.Name) {
+				threads = ctx.GlobalInt(utils.MinerThreadsFlag.Name)
+			}
+			//Use stratum if requested
+			if ctx.GlobalString(utils.MinerType.Name) == "stratum" {
+				log.Info("MinerType", "MinerType", ctx.GlobalString(utils.MinerType.Name))
+				port := ctx.GlobalString(utils.StratumPort.Name)
+				log.Info("[stratum]Server port", "port", port)
+				auth := stratum.NewSimpleAuth(ctx.GlobalString(utils.StratumPassword.Name))
+				maxConn := ctx.GlobalInt(utils.StratumMaxConn.Name)
+				var calcHashRate bool = false
+				if ctx.GlobalBool(utils.StratumHashRate.Name) {
+					calcHashRate = true
+					log.Info("calc stratum miner's hashRate")
+				}
+				fanOut := ctx.GlobalBool(utils.StratumFanout.Name)
+				stratumServer, err := stratum.NewServer(port, uint(maxConn), auth, calcHashRate, fanOut)
+				if err != nil {
+					log.Info("[stratum]Server init error", "err", err.Error())
+					return
+				}
+				stratumAgent := miner.NewStratumAgent(ethereum.BlockChain(), ethereum.Engine())
+				stratumAgent.Register(stratumServer)
+				if !ctx.GlobalBool(utils.CPUAgentOff.Name) {
+					cpuMinerAgent := miner.NewCpuAgent(ethereum.BlockChain(), ethereum.Engine())
+					ethereum.Miner().Register(cpuMinerAgent)
+					log.Info("CPU miner agent registered")
+				}
+				ethereum.Miner().Register(stratumAgent)
+				log.Info("Stratum miner agent registered")
+			} else {
+				//cpu miner
+				cpuMinerAgent := miner.NewCpuAgent(ethereum.BlockChain(), ethereum.Engine())
+				ethereum.Miner().Register(cpuMinerAgent)
+			}
+			if err := ethereum.StartMining(threads); err != nil {
+				utils.Fatalf("Failed to start mining: %v", err)
+			}
 		} else {
-			//cpu miner
-			cpuMinerAgent := miner.NewCpuAgent(ethereum.BlockChain(), ethereum.Engine())
-			ethereum.Miner().Register(cpuMinerAgent)
+			utils.Fatalf("role Anchor do not support mining")
 		}
-		if err := ethereum.StartMining(threads); err != nil {
-			utils.Fatalf("Failed to start mining: %v", err)
-		}
+
 	}
 }
 

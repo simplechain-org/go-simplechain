@@ -48,6 +48,7 @@ var (
 		ArgsUsage: "<genesisPath>",
 		Flags: []cli.Flag{
 			utils.DataDirFlag,
+			utils.RoleFlag,
 		},
 		Category: "BLOCKCHAIN COMMANDS",
 		Description: `
@@ -209,8 +210,40 @@ func initGenesis(ctx *cli.Context) error {
 	stack := makeFullNode(ctx)
 	defer stack.Close()
 
-	for _, name := range []string{"chaindata", "lightchaindata"} {
-		chaindb, err := stack.OpenDatabase(name, 0, 0, "")
+	role:=*utils.GlobalTextMarshaler(ctx, utils.RoleFlag.Name).(*common.ChainRole)
+
+	log.Info("initGenesis","role",role)
+
+	if role.IsMainChain() {
+		for _, name := range []string{common.MainchainData, common.LightchainData} {
+			chaindb, err := stack.OpenDatabase(name, 0, 0, "")
+			if err != nil {
+				utils.Fatalf("Failed to open database: %v", err)
+			}
+			_, hash, err := core.SetupGenesisBlock(chaindb, genesis)
+			if err != nil {
+				utils.Fatalf("Failed to write genesis block: %v", err)
+			}
+			chaindb.Close()
+			log.Info("Successfully wrote genesis state", "database", name, "hash", hash)
+		}
+
+	}else if role.IsSubChain() {
+		for _, name := range []string{common.SubchainData, common.LightchainData} {
+			chaindb, err := stack.OpenDatabase(name, 0, 0, "")
+			if err != nil {
+				utils.Fatalf("Failed to open database: %v", err)
+			}
+			_, hash, err := core.SetupGenesisBlock(chaindb, genesis)
+			if err != nil {
+				utils.Fatalf("Failed to write genesis block: %v", err)
+			}
+			chaindb.Close()
+			log.Info("Successfully wrote genesis state", "database", name, "hash", hash)
+		}
+	}else{
+
+		chaindb, err := stack.OpenDatabase(common.MainchainData, 0, 0,"")
 		if err != nil {
 			utils.Fatalf("Failed to open database: %v", err)
 		}
@@ -218,9 +251,34 @@ func initGenesis(ctx *cli.Context) error {
 		if err != nil {
 			utils.Fatalf("Failed to write genesis block: %v", err)
 		}
-		chaindb.Close()
-		log.Info("Successfully wrote genesis state", "database", name, "hash", hash)
+		log.Info("Successfully wrote genesis state", "database", common.MainchainData, "hash", hash)
+
+		genesisPath := ctx.Args().Get(1)
+
+		if len(genesisPath) == 0 {
+			utils.Fatalf("Must supply path to genesis JSON file")
+		}
+		file, err := os.Open(genesisPath)
+		if err != nil {
+			utils.Fatalf("Failed to read genesis file: %v", err)
+		}
+		defer file.Close()
+
+		genesis := new(core.Genesis)
+		if err := json.NewDecoder(file).Decode(genesis); err != nil {
+			utils.Fatalf("invalid genesis file: %v", err)
+		}
+		chaindb, err = stack.OpenDatabase(common.SubchainData, 0, 0,"")
+		if err != nil {
+			utils.Fatalf("Failed to open database: %v", err)
+		}
+		_, hash, err = core.SetupGenesisBlock(chaindb, genesis)
+		if err != nil {
+			utils.Fatalf("Failed to write genesis block: %v", err)
+		}
+		log.Info("Successfully wrote genesis state", "database", common.SubchainData, "hash", hash)
 	}
+
 	return nil
 }
 

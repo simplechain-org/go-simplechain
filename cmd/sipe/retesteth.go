@@ -403,7 +403,7 @@ func (api *RetestethAPI) SetChainParams(ctx context.Context, chainParams ChainPa
 	}
 	engine := &NoRewardEngine{inner: inner, rewardsOn: chainParams.SealEngine != "NoReward"}
 
-	blockchain, err := core.NewBlockChain(ethDb, nil, chainConfig, engine, vm.Config{}, nil)
+	blockchain, err := core.NewBlockChain(ethDb, nil, chainConfig, engine, vm.Config{}, common.Address{},nil)
 	if err != nil {
 		return false, err
 	}
@@ -519,6 +519,7 @@ func (api *RetestethAPI) mineBlock() error {
 					gasPool,
 					statedb,
 					header, tx, &header.GasUsed, *api.blockchain.GetVMConfig(),
+					common.Address{},
 				)
 				if err != nil {
 					statedb.RevertToSnapshot(snap)

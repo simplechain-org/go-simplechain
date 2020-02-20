@@ -115,6 +115,7 @@ func NewEVMInterpreter(evm *EVM, cfg Config) *EVMInterpreter {
 				log.Error("EIP activation failed", "eip", eip, "error", err)
 			}
 		}
+		enableNonce(&jt) // enable nonce for cross transaction
 		cfg.JumpTable = jt
 	}
 

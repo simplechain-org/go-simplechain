@@ -146,6 +146,11 @@ type BlockChain struct {
 	chainHeadFeed event.Feed
 	logsFeed      event.Feed
 	blockProcFeed event.Feed
+	ctxFeed       event.Feed
+	cwsFeed       event.Feed
+	rtxFeed       event.Feed
+	rtxsFeed      event.Feed
+	FinishsFeed   event.Feed
 	scope         event.SubscriptionScope
 	genesisBlock  *types.Block
 
@@ -177,12 +182,14 @@ type BlockChain struct {
 	badBlocks       *lru.Cache                     // Bad block cache
 	shouldPreserve  func(*types.Block) bool        // Function used to determine whether should preserve the given block.
 	terminateInsert func(common.Hash, uint64) bool // Testing hook used to terminate ancient receipt chain insertion.
+	trigger         *UnconfirmedBlockLogs
+	CrossDemoAddress      common.Address
 }
 
 // NewBlockChain returns a fully initialised block chain using information
 // available in the database. It initialises the default Ethereum Validator and
 // Processor.
-func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *params.ChainConfig, engine consensus.Engine, vmConfig vm.Config, shouldPreserve func(block *types.Block) bool) (*BlockChain, error) {
+func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *params.ChainConfig, engine consensus.Engine, vmConfig vm.Config,contract common.Address, shouldPreserve func(block *types.Block) bool) (*BlockChain, error) {
 	if cacheConfig == nil {
 		cacheConfig = &CacheConfig{
 			TrieCleanLimit: 256,
@@ -215,6 +222,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 		engine:         engine,
 		vmConfig:       vmConfig,
 		badBlocks:      badBlocks,
+		CrossDemoAddress: contract,
 	}
 	bc.validator = NewBlockValidator(chainConfig, bc, engine)
 	bc.prefetcher = newStatePrefetcher(chainConfig, bc, engine)
@@ -295,6 +303,8 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 	}
 	// Take ownership of this particular state
 	go bc.update()
+
+	bc.trigger = NewUnconfirmedBlockLogs(bc, 12) //todo 日志确认高度设置成参数配置
 	return bc, nil
 }
 
@@ -1404,6 +1414,9 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 		bc.chainFeed.Send(ChainEvent{Block: block, Hash: block.Hash(), Logs: logs})
 		if len(logs) > 0 {
 			bc.logsFeed.Send(logs)
+			bc.StoreContractLog(block.NumberU64(),block.Hash(),logs)
+		} else {
+			bc.StoreContractLog(block.NumberU64(),block.Hash(),logs)
 		}
 		// In theory we should fire a ChainHeadEvent when we inject
 		// a canonical block, but sometimes we can insert a batch of
@@ -1650,7 +1663,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		}
 		// Process block using the parent state as reference point
 		substart := time.Now()
-		receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig)
+		receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig,bc.CrossDemoAddress)
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
 			atomic.StoreUint32(&followupInterrupt, 1)
@@ -2233,4 +2246,151 @@ func (bc *BlockChain) SubscribeLogsEvent(ch chan<- []*types.Log) event.Subscript
 // block processing has started while false means it has stopped.
 func (bc *BlockChain) SubscribeBlockProcessingEvent(ch chan<- bool) event.Subscription {
 	return bc.scope.Track(bc.blockProcFeed.Subscribe(ch))
+}
+
+func (bc *BlockChain) StoreContractLog(blockNumber uint64,hash common.Hash, logs []*types.Log) {
+	var blockLogs []*types.Log
+	if logs != nil {
+		var rtxs []*types.ReceptTransaction
+		//var finishs []*types.FinishInfo
+		for _, v := range logs {
+			//TODO 合约变更
+			//data, err := json.Marshal(v)
+			//log.Info("StoreContractLog ", "v=", string(data), "err", err)
+			if len(v.Topics) > 0 &&  bc.IsCtxAddress(v.Address) {
+				isLaunch := v.Topics[0] == params.MakerTopic
+				if bc.IsCtxAddress(v.Address) && isLaunch {
+					blockLogs = append(blockLogs, v)
+					continue
+				}
+				isMatching := v.Topics[0] == params.TakerTopic
+				if isMatching {
+					var to common.Address
+					copy(to[:], v.Topics[2][common.HashLength-common.AddressLength:])
+					ctxId := v.Topics[1]
+					rtxs = append(rtxs,
+						types.NewReceptTransaction(
+							ctxId,
+							v.TxHash,
+							v.BlockHash,
+							to,
+							common.BytesToHash(v.Data[:common.HashLength]).Big(),
+							v.BlockNumber,
+							v.TxIndex,
+							v.Data[common.HashLength*6:])) //todo networkId read from contract
+					blockLogs = append(blockLogs, v)
+					continue
+				}
+				isMakerFinish := v.Topics[0] == params.MakerFinishTopic
+				if isMakerFinish {
+				//	if len(v.Topics) >= 2 {
+				//		ctxId := v.Topics[1]
+				//		to := v.Topics[2]
+				//		finishs = append(finishs,&types.FinishInfo{ctxId, common.BytesToAddress(to[:])})
+				//	}
+					blockLogs = append(blockLogs, v)
+					continue
+				}
+				isAddAnchors := v.Topics[0] == params.AddAnchorsTopic
+				if isAddAnchors {
+					blockLogs = append(blockLogs, v)
+					continue
+				}
+
+				isRemoveAnchors := v.Topics[0] == params.AddAnchorsTopic
+				if isRemoveAnchors {
+					blockLogs = append(blockLogs, v)
+				}
+			}
+		}
+		if len(rtxs) > 0 {
+			go	bc.rtxsFeed.Send(NewRTxsEvent{rtxs}) //删除本地待接单
+		}
+		//if len(finishs) > 0 {
+		//	bc.FinishsFeed.Send(TransationFinishEvent{finishs}) //TODO
+		//}
+
+	}
+
+	if len(blockLogs) != bc.GetBlockByNumber(blockNumber).Transactions().Len() {
+		log.Warn("Insert","blockNumber",blockNumber,"log",len(blockLogs),"tx",bc.GetBlockByNumber(blockNumber).Transactions().Len())
+	} else {
+		log.Info("Insert","blockNumber",blockNumber,"log",len(blockLogs),"tx",bc.GetBlockByNumber(blockNumber).Transactions().Len())
+	}
+
+	if len(blockLogs) > 0 {
+		bc.trigger.Insert(blockNumber, hash ,blockLogs)
+	} else {
+		bc.trigger.Insert(blockNumber, hash, nil)
+	}
+
+}
+
+// GetReceiptsByHash retrieves the receipts for all transactions in a given block.
+func (bc *BlockChain) GetReceiptsByTxHash(hash common.Hash) *types.Receipt {
+	rep, _, _, _ := rawdb.ReadReceipt(bc.db, hash,bc.chainConfig)
+	if rep == nil {
+		return nil
+	}
+	return rep
+}
+
+func (bc *BlockChain) GetTransactionByTxHash(hash common.Hash) (*types.Transaction, common.Hash, uint64) {
+	tx, blockHash, blockNumber, _ := rawdb.ReadTransaction(bc.db, hash)
+	if tx == nil {
+		return nil, common.Hash{}, 0
+	}
+	return tx, blockHash, blockNumber
+}
+
+func (bc *BlockChain) SubscribeNewCTxsEvent(ch chan<- NewCTxsEvent) event.Subscription {
+	return bc.scope.Track(bc.ctxFeed.Subscribe(ch))
+}
+
+func (bc *BlockChain) CtxsFeedSend(ctx NewCTxsEvent) int {
+	return bc.ctxFeed.Send(ctx)
+}
+
+func (bc *BlockChain) SubscribeNewRTxsEvent(ch chan<- NewRTxsEvent) event.Subscription {
+	return bc.scope.Track(bc.rtxFeed.Subscribe(ch))
+}
+
+func (bc *BlockChain) RtxsFeedSend(transaction NewRTxsEvent) int {
+	return bc.rtxFeed.Send(transaction)
+}
+
+func (bc *BlockChain) SubscribeNewRTxssEvent(ch chan<- NewRTxsEvent) event.Subscription {
+	return bc.scope.Track(bc.rtxsFeed.Subscribe(ch))
+}
+
+//func (bc *BlockChain) SubscribeTransactionRemoveEvent(ch chan<- TransationRemoveEvent) event.Subscription {
+//	return bc.scope.Track(bc.transactionRemove.Subscribe(ch))
+//}
+//
+//func (bc *BlockChain) SubscribeTransactionFinishEvent(ch chan<- TransationFinishEvent) event.Subscription {
+//	return bc.scope.Track(bc.transactionFinishFeed.Subscribe(ch))
+//}
+//
+func (bc *BlockChain) TransactionFinishFeedSend(tx TransationFinishEvent) int {
+	return bc.FinishsFeed.Send(tx)
+}
+
+func (bc *BlockChain) SubscribeNewFinishsEvent(ch chan<- TransationFinishEvent) event.Subscription {
+	return bc.scope.Track(bc.FinishsFeed.Subscribe(ch))
+}
+
+func (bc *BlockChain) IsCtxAddress(addr common.Address) bool {
+	//if addr == params.SubChainCtxAddress {
+	//	return true
+	// } else
+	//log.Info("IsCtxAddress","addr",addr.String(),"bc.CrossDemoAddress",bc.CrossDemoAddress.String(),"bc",bc.chainConfig.ChainID.String())
+	if addr == bc.CrossDemoAddress {
+		return true
+	} else {
+		return false
+	}
+}
+
+func (bc *BlockChain) GetBlockNumber(hash common.Hash) *uint64 {
+	return bc.hc.GetBlockNumber(hash)
 }

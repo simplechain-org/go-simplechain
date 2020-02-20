@@ -401,7 +401,7 @@ func (env *work) commitTransaction(tx *types.Transaction, bc *core.BlockChain, g
 
 	var author *common.Address
 	var vmConf vm.Config
-	receipt, err := core.ApplyTransaction(env.config, bc, author, gp, env.state, env.header, tx, &env.header.GasUsed, vmConf)
+	receipt, err := core.ApplyTransaction(env.config, bc, author, gp, env.state, env.header, tx, &env.header.GasUsed, vmConf, bc.CrossDemoAddress)
 	if err != nil {
 		env.state.RevertToSnapshot(snapshot)
 		return nil, err

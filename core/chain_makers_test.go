@@ -18,6 +18,7 @@ package core
 
 import (
 	"fmt"
+	"github.com/simplechain-org/go-simplechain/common"
 	"math/big"
 
 	"github.com/simplechain-org/go-simplechain/consensus/ethash"
@@ -79,7 +80,7 @@ func ExampleGenerateChain() {
 	})
 
 	// Import the chain. This runs all block validation rules.
-	blockchain, _ := NewBlockChain(db, nil, gspec.Config, ethash.NewFaker(), vm.Config{}, nil)
+	blockchain, _ := NewBlockChain(db, nil, gspec.Config, ethash.NewFaker(), vm.Config{}, common.Address{}, nil)
 	defer blockchain.Stop()
 
 	if i, err := blockchain.InsertChain(chain); err != nil {

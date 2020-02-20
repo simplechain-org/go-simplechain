@@ -31,23 +31,38 @@ import (
 
 // Constants to match up protocol versions and messages
 const (
-	eth63 = 63
-	eth64 = 64
+	sub = 64
 )
 
 // protocolName is the official short name of the protocol used during capability negotiation.
-const protocolName = "eth"
+const protocolName = "sub"
 
 // ProtocolVersions are the supported versions of the eth protocol (first is primary).
-var ProtocolVersions = []uint{eth64, eth63}
+var ProtocolVersions = []uint{sub}
 
 // protocolLengths are the number of implemented message corresponding to different protocol versions.
-var protocolLengths = map[uint]uint64{eth64: 17, eth63: 17}
+var protocolLengths = map[uint]uint64{sub: 21}
 
 const protocolMaxMsgSize = 10 * 1024 * 1024 // Maximum cap on the size of a protocol message
 
 // eth protocol message codes
 const (
+	//StatusMsg          = 0x00
+	//NewBlockHashesMsg  = 0x01
+	//TxMsg              = 0x02
+	//GetBlockHeadersMsg = 0x03
+	//BlockHeadersMsg    = 0x04
+	//GetBlockBodiesMsg  = 0x05
+	//BlockBodiesMsg     = 0x06
+	//NewBlockMsg        = 0x07
+	//GetNodeDataMsg     = 0x0d
+	//NodeDataMsg        = 0x0e
+	//GetReceiptsMsg     = 0x0f
+	//ReceiptsMsg        = 0x10
+	//CtxSignMsg          = 0x0c //多重签名过程中传消息
+	//CtxSignsMsg         = 0x0d //完成签名后的消息在对面链广播
+	//RtxSignMsg          = 0x0e //多重签名过程中传消息
+	//CtxSignsInternalMsg = 0x0f //完成签名后的消息在本链内传播
 	StatusMsg          = 0x00
 	NewBlockHashesMsg  = 0x01
 	TxMsg              = 0x02
@@ -56,10 +71,14 @@ const (
 	GetBlockBodiesMsg  = 0x05
 	BlockBodiesMsg     = 0x06
 	NewBlockMsg        = 0x07
-	GetNodeDataMsg     = 0x0d
-	NodeDataMsg        = 0x0e
-	GetReceiptsMsg     = 0x0f
-	ReceiptsMsg        = 0x10
+	GetNodeDataMsg     = 0x08
+	NodeDataMsg        = 0x09
+	GetReceiptsMsg     = 0x0a
+	ReceiptsMsg        = 0x0b
+	CtxSignMsg          = 0x0c //多重签名过程中传消息
+	CtxSignsMsg         = 0x0d //完成签名后的消息在对面链广播
+	RtxSignMsg          = 0x0e //多重签名过程中传消息
+	CtxSignsInternalMsg = 0x0f //完成签名后的消息在本链内传播
 )
 
 type errCode int
@@ -100,10 +119,13 @@ type txPool interface {
 	// Pending should return pending transactions.
 	// The slice should be modifiable by the caller.
 	Pending() (map[common.Address]types.Transactions, error)
-
+	GetAnchorTxs(common.Address) (map[common.Address]types.Transactions, error)
 	// SubscribeNewTxsEvent should return an event subscription of
 	// NewTxsEvent and send events to the given channel.
 	SubscribeNewTxsEvent(chan<- core.NewTxsEvent) event.Subscription
+
+	// GetLatestNonceFromQueueAndPending.
+	GetCurrentNonce(address common.Address) uint64
 }
 
 // statusData63 is the network packet for the status message for eth/63.
@@ -202,3 +224,45 @@ type blockBody struct {
 
 // blockBodiesData is the network packet for block content distribution.
 type blockBodiesData []*blockBody
+
+type ctxStore interface {
+
+	// AddRemotes should add the given transactions to the pool.
+	AddRemote(*types.CrossTransaction) error
+
+	// AddRemotes should add the given transactions to the pool.
+	AddLocal(*types.CrossTransaction) error
+
+	AddCWss([]*types.CrossTransactionWithSignatures) []error
+
+	ValidateCtx(*types.CrossTransaction) error
+
+	RemoveRemotes(common.Hash) error
+
+	RemoveLocals(common.Hash) error
+
+	RemoveFromLocalsByTransaction(common.Hash) error
+
+	SubscribeCWssResultEvent(chan<- core.NewCWsEvent) event.Subscription
+
+	//SubscribeNewCWssEvent(chan<- core.NewCWssEvent) event.Subscription
+
+	ReadFromLocals(common.Hash) *types.CrossTransactionWithSignatures
+}
+
+type rtxStore interface {
+
+	AddRemote(*types.ReceptTransaction) error
+
+	AddLocal(*types.ReceptTransaction) error
+
+	AddLocals([]*types.ReceptTransactionWithSignatures) []error
+
+	RemoveLocals([]*types.ReceptTransactionWithSignatures) error
+
+	ReadFromLocals(ctxId common.Hash) *types.ReceptTransactionWithSignatures
+
+	ValidateRtx(rtx *types.ReceptTransaction) error
+
+	SubscribeRWssResultEvent(chan<- core.NewRWsEvent) event.Subscription
+}

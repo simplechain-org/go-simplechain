@@ -19,6 +19,7 @@ package sub
 import (
 	"errors"
 	"fmt"
+	"github.com/simplechain-org/go-simplechain/log"
 	"math/big"
 	"sync"
 	"time"
@@ -86,26 +87,44 @@ type peer struct {
 	td   *big.Int
 	lock sync.RWMutex
 
-	knownTxs    mapset.Set                // Set of transaction hashes known to be known by this peer
-	knownBlocks mapset.Set                // Set of block hashes known to be known by this peer
-	queuedTxs   chan []*types.Transaction // Queue of transactions to broadcast to the peer
-	queuedProps chan *propEvent           // Queue of blocks to broadcast to the peer
-	queuedAnns  chan *types.Block         // Queue of blocks to announce to the peer
-	term        chan struct{}             // Termination channel to stop the broadcaster
+	knownTxs      mapset.Set                // Set of transaction hashes known to be known by this peer
+	knownBlocks   mapset.Set                // Set of block hashes known to be known by this peer
+	queuedTxs     chan []*types.Transaction // Queue of transactions to broadcast to the peer
+	queuedProps   chan *propEvent           // Queue of blocks to broadcast to the peer
+	queuedAnns    chan *types.Block         // Queue of blocks to announce to the peer
+	term          chan struct{}             // Termination channel to stop the
+	poolEntry     *poolEntry
+	queuedCWss    chan []*types.CrossTransactionWithSignatures
+	knownCWss     mapset.Set
+	queuedCtxSign chan *types.CrossTransaction
+	knownCTxs     mapset.Set
+	queuedRtxSign chan *types.ReceptTransaction
+	knownRTxs     mapset.Set
+
+	internalCrossTransactionWithSignaturesCh chan []*types.CrossTransactionWithSignatures
+	internalCrossTransactionWithSignatures   mapset.Set
 }
 
 func newPeer(version int, p *p2p.Peer, rw p2p.MsgReadWriter) *peer {
 	return &peer{
-		Peer:        p,
-		rw:          rw,
-		version:     version,
-		id:          fmt.Sprintf("%x", p.ID().Bytes()[:8]),
-		knownTxs:    mapset.NewSet(),
-		knownBlocks: mapset.NewSet(),
-		queuedTxs:   make(chan []*types.Transaction, maxQueuedTxs),
-		queuedProps: make(chan *propEvent, maxQueuedProps),
-		queuedAnns:  make(chan *types.Block, maxQueuedAnns),
-		term:        make(chan struct{}),
+		Peer:                                     p,
+		rw:                                       rw,
+		version:                                  version,
+		id:                                       fmt.Sprintf("%x", p.ID().Bytes()[:8]),
+		knownTxs:                                 mapset.NewSet(),
+		knownBlocks:                              mapset.NewSet(),
+		queuedTxs:                                make(chan []*types.Transaction, maxQueuedTxs),
+		queuedProps:                              make(chan *propEvent, maxQueuedProps),
+		queuedAnns:                               make(chan *types.Block, maxQueuedAnns),
+		term:                                     make(chan struct{}),
+		queuedCWss:                               make(chan []*types.CrossTransactionWithSignatures, maxQueuedTxs),
+		knownCWss:                                mapset.NewSet(),
+		queuedCtxSign:                            make(chan *types.CrossTransaction, maxQueuedTxs),
+		knownCTxs:                                mapset.NewSet(),
+		queuedRtxSign:                            make(chan *types.ReceptTransaction, maxQueuedTxs),
+		knownRTxs:                                mapset.NewSet(),
+		internalCrossTransactionWithSignaturesCh: make(chan []*types.CrossTransactionWithSignatures, maxQueuedTxs),
+		internalCrossTransactionWithSignatures:   mapset.NewSet(),
 	}
 }
 
@@ -135,6 +154,27 @@ func (p *peer) broadcast() {
 
 		case <-p.term:
 			return
+		case ctxs := <-p.queuedCWss:
+			if err := p.SendCrossTransactionWithSignatures(ctxs); err != nil {
+				return
+			}
+			p.Log().Trace("Broadcast transactions", "count", len(ctxs))
+		case ctx := <-p.queuedCtxSign:
+			if err := p.SendCrossTransaction(ctx); err != nil {
+				p.Log().Trace("SendCrossTransaction", "err", err)
+				return
+			}
+		case rtx := <-p.queuedRtxSign:
+			if err := p.SendReceptTransaction(rtx); err != nil {
+				return
+			}
+			p.Log().Trace("Broadcast rtxSign", "hash", rtx.Hash())
+		case ctxs := <-p.internalCrossTransactionWithSignaturesCh:
+			if err := p.SendInternalCrossTransactionWithSignatures(ctxs); err != nil {
+				log.Info("SendInternalCrossTransactionWithSignatures", "err", err)
+				return
+			}
+			p.Log().Trace("Broadcast InternalCrossTransactionWithSignatures", "count", len(ctxs))
 		}
 	}
 }
@@ -359,41 +399,22 @@ func (p *peer) Handshake(network uint64, td *big.Int, head common.Hash, genesis 
 	errc := make(chan error, 2)
 
 	var (
-		status63 statusData63 // safe to read after two values have been received from errc
 		status   statusData   // safe to read after two values have been received from errc
 	)
 	go func() {
-		switch {
-		case p.version == eth63:
-			errc <- p2p.Send(p.rw, StatusMsg, &statusData63{
-				ProtocolVersion: uint32(p.version),
-				NetworkId:       network,
-				TD:              td,
-				CurrentBlock:    head,
-				GenesisBlock:    genesis,
-			})
-		case p.version == eth64:
-			errc <- p2p.Send(p.rw, StatusMsg, &statusData{
-				ProtocolVersion: uint32(p.version),
-				NetworkID:       network,
-				TD:              td,
-				Head:            head,
-				Genesis:         genesis,
-				ForkID:          forkID,
-			})
-		default:
-			panic(fmt.Sprintf("unsupported eth protocol version: %d", p.version))
-		}
+
+		errc <- p2p.Send(p.rw, StatusMsg, &statusData{
+			ProtocolVersion: uint32(p.version),
+			NetworkID:       network,
+			TD:              td,
+			Head:            head,
+			Genesis:         genesis,
+			ForkID:          forkID,
+		})
+
 	}()
 	go func() {
-		switch {
-		case p.version == eth63:
-			errc <- p.readStatusLegacy(network, &status63, genesis)
-		case p.version == eth64:
-			errc <- p.readStatus(network, &status, genesis, forkFilter)
-		default:
-			panic(fmt.Sprintf("unsupported eth protocol version: %d", p.version))
-		}
+		errc <- p.readStatus(network, &status, genesis, forkFilter)
 	}()
 	timeout := time.NewTimer(handshakeTimeout)
 	defer timeout.Stop()
@@ -407,14 +428,9 @@ func (p *peer) Handshake(network uint64, td *big.Int, head common.Hash, genesis 
 			return p2p.DiscReadTimeout
 		}
 	}
-	switch {
-	case p.version == eth63:
-		p.td, p.head = status63.TD, status63.CurrentBlock
-	case p.version == eth64:
-		p.td, p.head = status.TD, status.Head
-	default:
-		panic(fmt.Sprintf("unsupported eth protocol version: %d", p.version))
-	}
+
+	p.td, p.head = status.TD, status.Head
+
 	return nil
 }
 
@@ -605,4 +621,144 @@ func (ps *peerSet) Close() {
 		p.Disconnect(p2p.DiscQuitting)
 	}
 	ps.closed = true
+}
+func (p *peer) MarkCrossTransaction(hash common.Hash) {
+	// If we reached the memory allowance, drop a previously known transaction hash
+	for p.knownCTxs.Cardinality() >= maxKnownTxs {
+		p.knownCTxs.Pop()
+	}
+	p.knownCTxs.Add(hash)
+}
+
+func (ps *peerSet) PeersWithoutCTx(hash common.Hash) []*peer {
+	ps.lock.RLock()
+	defer ps.lock.RUnlock()
+
+	list := make([]*peer, 0, len(ps.peers))
+	for _, p := range ps.peers {
+		if !p.knownCTxs.Contains(hash) {
+			list = append(list, p)
+		}
+	}
+	return list
+}
+
+func (p *peer) SendCrossTransaction(ctx *types.CrossTransaction) error {
+	return p2p.Send(p.rw, CtxSignMsg, ctx)
+}
+
+func (p *peer) AsyncSendCrossTransaction(ctx *types.CrossTransaction) {
+	select {
+	case p.queuedCtxSign <- ctx:
+		p.knownCTxs.Add(ctx.SignHash())
+	default:
+		p.Log().Debug("Dropping ctx propagation", "hash", ctx.SignHash())
+	}
+}
+
+func (p *peer) MarkReceptTransaction(hash common.Hash) {
+	// If we reached the memory allowance, drop a previously known transaction hash
+	for p.knownRTxs.Cardinality() >= maxKnownTxs {
+		p.knownRTxs.Pop()
+	}
+	p.knownRTxs.Add(hash)
+}
+
+func (ps *peerSet) PeersWithoutRTx(hash common.Hash) []*peer {
+	ps.lock.RLock()
+	defer ps.lock.RUnlock()
+
+	list := make([]*peer, 0, len(ps.peers))
+	for _, p := range ps.peers {
+		if !p.knownRTxs.Contains(hash) {
+			list = append(list, p)
+		}
+	}
+	return list
+}
+
+func (p *peer) SendReceptTransaction(rtx *types.ReceptTransaction) error {
+	return p2p.Send(p.rw, RtxSignMsg, rtx)
+}
+
+func (p *peer) AsyncSendReceptTransaction(rtx *types.ReceptTransaction) {
+	select {
+	case p.queuedRtxSign <- rtx:
+		p.knownRTxs.Add(rtx.SignHash())
+
+	default:
+		p.Log().Debug("Dropping transaction propagation", "hash", rtx.Hash())
+	}
+}
+
+func (p *peer) MarkCrossTransactionWithSignatures(hash common.Hash) {
+	// If we reached the memory allowance, drop a previously known transaction hash
+	for p.knownCWss.Cardinality() >= maxKnownTxs {
+		p.knownCWss.Pop()
+	}
+	p.knownCWss.Add(hash)
+}
+
+func (ps *peerSet) PeersWithoutCWss(hash common.Hash) []*peer {
+	ps.lock.RLock()
+	defer ps.lock.RUnlock()
+
+	list := make([]*peer, 0, len(ps.peers))
+	for _, p := range ps.peers {
+		if !p.knownCWss.Contains(hash) {
+			list = append(list, p)
+		}
+	}
+	return list
+}
+
+func (p *peer) SendCrossTransactionWithSignatures(txs []*types.CrossTransactionWithSignatures) error {
+	log.Debug("SendCrossTransactionWithSignatures", "len", len(txs), "peer", p.id)
+	return p2p.Send(p.rw, CtxSignsMsg, txs)
+}
+
+func (p *peer) AsyncSendCrossTransactionWithSignatures(cwss []*types.CrossTransactionWithSignatures) {
+	select {
+	case p.queuedCWss <- cwss:
+		for _, cws := range cwss {
+			p.knownCWss.Add(cws.ID())
+		}
+	default:
+		p.Log().Debug("Dropping transaction propagation", "count", len(cwss))
+	}
+}
+
+func (p *peer) MarkInternalCrossTransactionWithSignatures(hash common.Hash) {
+	for p.internalCrossTransactionWithSignatures.Cardinality() >= maxKnownTxs {
+		p.internalCrossTransactionWithSignatures.Pop()
+	}
+	p.internalCrossTransactionWithSignatures.Add(hash)
+}
+
+func (ps *peerSet) PeersWithoutInternalCrossTransactionWithSignatures(hash common.Hash) []*peer {
+	ps.lock.RLock()
+	defer ps.lock.RUnlock()
+	list := make([]*peer, 0, len(ps.peers))
+	for _, p := range ps.peers {
+		if !p.internalCrossTransactionWithSignatures.Contains(hash) {
+			list = append(list, p)
+		}
+	}
+	return list
+}
+
+func (p *peer) SendInternalCrossTransactionWithSignatures(txs []*types.CrossTransactionWithSignatures) error {
+	//log.Info("SendLocalCrossTransactionWithSignatures", "len", len(txs), "peer", p.id)
+	return p2p.Send(p.rw, CtxSignsInternalMsg, txs)
+}
+
+func (p *peer) AsyncSendInternalCrossTransactionWithSignatures(cwss []*types.CrossTransactionWithSignatures) {
+	select {
+	case p.internalCrossTransactionWithSignaturesCh <- cwss:
+		for _, cws := range cwss {
+			p.internalCrossTransactionWithSignatures.Add(cws.ID())
+		}
+	default:
+		p.Log().Debug("Dropping CrossTransactionWithSignature propagation", "count", len(cwss))
+	}
 }

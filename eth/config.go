@@ -62,6 +62,9 @@ var DefaultConfig = Config{
 		Blocks:     20,
 		Percentile: 60,
 	},
+	CtxStore:      core.DefaultCtxStoreConfig,
+	RtxStore:      core.DefaultRtxStoreConfig,
+	Role:common.RoleMainChain,
 	Istanbul: *istanbul.DefaultConfig,
 }
 
@@ -165,4 +168,14 @@ type Config struct {
 
 	// MuirGlacier block override (TODO: remove after the fork)
 	OverrideMuirGlacier *big.Int
+
+	Role common.ChainRole
+
+	CtxStore core.CtxStoreConfig
+
+	RtxStore core.RtxStoreConfig
+
+	MainChainCtxAddress common.Address
+
+	SubChainCtxAddress common.Address
 }
