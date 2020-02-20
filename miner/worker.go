@@ -996,7 +996,6 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64, 
 			return
 		} else {
 			for _,ctxHash := range hashs {
-				//log.Info("RemoveTx","hash",ctxHash)
 				w.eth.TxPool().RemoveTx(ctxHash,true)
 			}
 		}

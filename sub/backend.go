@@ -217,7 +217,7 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*Ethereum, error) {
 	if config.TxPool.Journal != "" {
 		config.TxPool.Journal = ctx.ResolvePath(fmt.Sprintf("subChain_%s", config.TxPool.Journal))
 	}
-	eth.txPool = core.NewTxPool(config.TxPool, chainConfig, eth.blockchain)
+	eth.txPool = core.NewTxPool(config.TxPool, chainConfig, eth.blockchain,config.SubChainCtxAddress)
 
 	makerDb, err := CreateDB(ctx, config, common.SubMakerData)
 	if err != nil {
