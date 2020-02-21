@@ -1855,6 +1855,7 @@ func newRPCCrossTransaction(tx *types.CrossTransactionWithSignatures) *RPCCrossT
 		BlockHash:tx.Data.BlockHash,
 		DestinationId:(*hexutil.Big)(tx.Data.DestinationId),
 		DestinationValue:(*hexutil.Big)(tx.Data.DestinationValue),
+		Input:    tx.Data.Input,
 	}
 	for _,v := range tx.Data.V {
 		result.V = append(result.V,(*hexutil.Big)(v))

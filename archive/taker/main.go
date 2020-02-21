@@ -14,17 +14,17 @@ import (
 	"math/big"
 )
 
-var rawurlVar *string = flag.String("rawurl", "http://127.0.0.1:8556", "rpc url")
+var rawurlVar *string = flag.String("rawurl", "http://127.0.0.1:8545", "rpc url")
 
 var abiPath *string = flag.String("abi", "../../contracts/crossdemo/crossdemo.abi", "abi文件路径")
 
-var contract *string = flag.String("contract", "0x8eefA4bFeA64F2A89f3064D48646415168662a1e", "合约地址")
+var contract *string = flag.String("contract", "0xAa22934Df3867B8d59574dD4557ef1BA6dA2f8f3", "合约地址")
 
 var txId *string = flag.String("TxId", "", "跨链交易哈希值")
 
-var fromVar *string = flag.String("From", "0x8029fcfc954ff7be80afd4db9f77f18c8aa1ecbc", "接单人地址")
+var fromVar *string = flag.String("From", "0x3db32cdacb1ba339786403b50568f4915892938a", "接单人地址")
 
-var gaslimitVar *uint64 = flag.Uint64("gaslimit", 5000000, "gas最大值")
+var gaslimitVar *uint64 = flag.Uint64("gaslimit", 100000, "gas最大值")
 
 type SendTxArgs struct {
 	From     common.Address  `json:"From"`
@@ -105,104 +105,105 @@ func Match() {
 			//log.Println("1 V.CTxId=",V.CTxId.String(),"key",key)
 			//if V.CTxId.String() == *TxId {
 			if i <= 10000 {
-				//账户地址
-				from := common.HexToAddress(*fromVar)
-				//合约地址
-				//在子链上接单就要填写子链上的合约地址
-				//在主链上接单就要填写主链上的合约地址
-				to := common.HexToAddress(*contract)
+					//账户地址
+					from := common.HexToAddress(*fromVar)
+					//合约地址
+					//在子链上接单就要填写子链上的合约地址
+					//在主链上接单就要填写主链上的合约地址
+					to := common.HexToAddress(*contract)
 
-				gas := hexutil.Uint64(*gaslimitVar)
-				//Value := hexutil.Big(*V.DestinationValue)
+					gas := hexutil.Uint64(*gaslimitVar)
+					//Value := hexutil.Big(*V.DestinationValue)
 
-				abi, err := abi.JSON(bytes.NewReader(data))
-				if err != nil {
-					log.Fatalln(err)
-					continue
+					abi, err := abi.JSON(bytes.NewReader(data))
+					if err != nil {
+						log.Fatalln(err)
+						continue
+					}
+
+					//Data, _ := json.Marshal(V)
+					//
+					//fmt.Println("Data=", string(Data))
+
+					r := make([][32]byte, 0, len(v.R))
+					s := make([][32]byte, 0, len(v.S))
+					vv := make([]*big.Int, 0, len(v.V))
+
+					for i := 0; i < len(v.R); i++ {
+						rone := common.LeftPadBytes(v.R[i].ToInt().Bytes(), 32)
+						var a [32]byte
+						copy(a[:], rone)
+						r = append(r, a)
+						sone := common.LeftPadBytes(v.S[i].ToInt().Bytes(), 32)
+						var b [32]byte
+						copy(b[:], sone)
+						s = append(s, b)
+						vv = append(vv, v.V[i].ToInt())
+					}
+					//在调用这个函数中调用的chainId其实就是表示的是发单的链id
+					//也就是maker的源头，那条链调用了maker,这个链id就对应那条链的id
+					//chainId := new(big.Int)
+					//
+					//if V.DestinationId.ToInt().Cmp(big.NewInt(1)) == 0 {
+					//	chainId.SetInt64(1024)
+					//	log.Println("1024")
+					//} else {
+					//	chainId.SetInt64(1)
+					//	log.Println("1")
+					//}
+					chainId := big.NewInt(int64(remoteId))
+					//fmt.Println(v.Value.String(),chainId.String())
+					//out, err := abi.Pack("taker", V.Value.ToInt(), V.CTxId, V.TxHash, V.From,
+					//	V.BlockHash, V.DestinationId.ToInt(), V.DestinationValue.ToInt(), chainId,
+					//	vv, R, S)
+					//b,err := v.Input.MarshalText()
+					if err != nil {
+						fmt.Println(err)
+					}
+
+					var ord Order
+					ord.Value = v.Value.ToInt()
+					ord.TxId = v.CTxId
+					ord.TxHash = v.TxHash
+					ord.From = v.From
+					ord.BlockHash = v.BlockHash
+					ord.DestinationValue = v.DestinationValue.ToInt()
+					ord.Data = v.Input
+					ord.V = vv
+					ord.R = r
+					ord.S = s
+					//out, err := abi.Pack("taker", V.Value.ToInt(), V.CTxId, V.TxHash, V.From,
+					//	V.BlockHash, V.DestinationValue.ToInt(), chainId,
+					//	vv, R, S)
+					//out, err := abi.Pack("taker",&ord,chainId,[]byte("When the whole world is about to rain, let’s make it clear in our heart together."))
+					out, err := abi.Pack("taker",&ord,chainId,[]byte{})
+
+					if err != nil {
+						fmt.Println("abi.Pack err=", err)
+						continue
+					}
+
+					input := hexutil.Bytes(out)
+
+					args := &SendTxArgs{
+						From:  from,
+						To:    &to,
+						Gas:   &gas,
+						Value: v.DestinationValue,
+						Input: &input,
+					}
+
+					var result common.Hash
+
+					err = client.CallContext(context.Background(), &result, "eth_sendTransaction", args)
+
+					if err != nil {
+						fmt.Println("CallContext", "err", err)
+						return
+					}
+
+					fmt.Println("eth_sendTransaction result=", result.Hex())
 				}
-
-				//Data, _ := json.Marshal(V)
-				//
-				//fmt.Println("Data=", string(Data))
-
-				r := make([][32]byte, 0, len(v.R))
-				s := make([][32]byte, 0, len(v.S))
-				vv := make([]*big.Int, 0, len(v.V))
-
-				for i := 0; i < len(v.R); i++ {
-					rone := common.LeftPadBytes(v.R[i].ToInt().Bytes(), 32)
-					var a [32]byte
-					copy(a[:], rone)
-					r = append(r, a)
-					sone := common.LeftPadBytes(v.S[i].ToInt().Bytes(), 32)
-					var b [32]byte
-					copy(b[:], sone)
-					s = append(s, b)
-					vv = append(vv, v.V[i].ToInt())
-				}
-				//在调用这个函数中调用的chainId其实就是表示的是发单的链id
-				//也就是maker的源头，那条链调用了maker,这个链id就对应那条链的id
-				//chainId := new(big.Int)
-				//
-				//if V.DestinationId.ToInt().Cmp(big.NewInt(1)) == 0 {
-				//	chainId.SetInt64(1024)
-				//	log.Println("1024")
-				//} else {
-				//	chainId.SetInt64(1)
-				//	log.Println("1")
-				//}
-				chainId := big.NewInt(int64(remoteId))
-				fmt.Println(v.Value.String(),chainId.String())
-				//out, err := abi.Pack("taker", V.Value.ToInt(), V.CTxId, V.TxHash, V.From,
-				//	V.BlockHash, V.DestinationId.ToInt(), V.DestinationValue.ToInt(), chainId,
-				//	vv, R, S)
-				b,err := v.Input.MarshalText()
-				if err != nil {
-					fmt.Println(err)
-				}
-
-				var ord Order
-				ord.Value = v.Value.ToInt()
-				ord.TxId = v.CTxId
-				ord.TxHash = v.TxHash
-				ord.From = v.From
-				ord.BlockHash = v.BlockHash
-				ord.DestinationValue = v.DestinationValue.ToInt()
-				ord.Data = b
-				ord.V = vv
-				ord.R = r
-				ord.S = s
-				//out, err := abi.Pack("taker", V.Value.ToInt(), V.CTxId, V.TxHash, V.From,
-				//	V.BlockHash, V.DestinationValue.ToInt(), chainId,
-				//	vv, R, S)
-				out, err := abi.Pack("taker",&ord,chainId,[]byte{})
-
-				if err != nil {
-					fmt.Println("abi.Pack err=", err)
-					continue
-				}
-
-				input := hexutil.Bytes(out)
-
-				args := &SendTxArgs{
-					From:  from,
-					To:    &to,
-					Gas:   &gas,
-					Value: v.DestinationValue,
-					Input: &input,
-				}
-
-				var result common.Hash
-
-				err = client.CallContext(context.Background(), &result, "eth_sendTransaction", args)
-
-				if err != nil {
-					fmt.Println("CallContext", "err", err)
-					return
-				}
-
-				fmt.Println("eth_sendTransaction result=", result.Hex())
-			}
 
 		}
 

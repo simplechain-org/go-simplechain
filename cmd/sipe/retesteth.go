@@ -459,6 +459,7 @@ func (api *RetestethAPI) mineBlock() error {
 					gasPool,
 					statedb,
 					header, tx, &header.GasUsed, *api.blockchain.GetVMConfig(),
+					common.Address{},
 				)
 				if err != nil {
 					statedb.RevertToSnapshot(snap)

@@ -49,7 +49,7 @@ type rtxStore interface {
 	SubscribeNewRWssEvent(chan<- core.NewRWssEvent ) event.Subscription
 
 	AddLocals(...*types.ReceptTransactionWithSignatures) []error
-	RemoveLocals([]*types.ReceptTransactionWithSignatures) error
+	RemoveLocals(finishes []*types.FinishInfo) error
 	//ReadFromLocals(ctxId common.Hash) *types.ReceptTransactionWithSignatures
 	//WriteToLocals(rtws *types.ReceptTransactionWithSignatures) error
 

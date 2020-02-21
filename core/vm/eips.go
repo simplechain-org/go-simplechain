@@ -18,7 +18,6 @@ package vm
 
 import (
 	"fmt"
-
 	"github.com/simplechain-org/go-simplechain/params"
 )
 

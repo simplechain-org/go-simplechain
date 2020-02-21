@@ -14,21 +14,21 @@ import (
 	"math/big"
 )
 
-var rawurlVar *string =flag.String("rawurl", "http://127.0.0.1:8545", "rpc url")
+var rawurlVar *string =flag.String("rawurl", "http://127.0.0.1:8556", "rpc url")
 
 var abiPath *string =flag.String("abi", "../../contracts/crossdemo/crossdemo.abi", "abi文件路径")
 
-var contract *string =flag.String("contract", "0xAa22934Df3867B8d59574dD4557ef1BA6dA2f8f3", "合约地址")
+var contract *string =flag.String("contract", "0x8eefA4bFeA64F2A89f3064D48646415168662a1e", "合约地址")
 
 var value *uint64 = flag.Uint64("value", 1e+18, "转入合约的数量")
 
 var destValue *uint64=flag.Uint64("destValue", 1e+18, "兑换数量")
 
-var chainId *uint64=flag.Uint64("chainId", 512, "目的链id")
+var chainId *uint64=flag.Uint64("chainId", 1, "目的链id")
 
-var fromVar *string=flag.String("from", "0x3db32cdacb1ba339786403b50568f4915892938a", "发起人地址")
+var fromVar *string=flag.String("from", "0x8029fcfc954ff7be80afd4db9f77f18c8aa1ecbc", "发起人地址")
 
-var gaslimitVar *uint64=flag.Uint64("gaslimit", 500000, "gas最大值")
+var gaslimitVar *uint64=flag.Uint64("gaslimit", 60000, "gas最大值")
 
 type SendTxArgs struct {
 	From     common.Address  `json:"from"`
@@ -70,15 +70,15 @@ func Maker(client *rpc.Client) {
 	//nonce:=big.NewInt(0).SetUint64(rand.Uint64())
 	//nonce:=big.NewInt(0).SetUint64(9536605289005490782)
 
-	id:=big.NewInt(0).SetUint64(*chainId)
+	remoteChainId:=big.NewInt(0).SetUint64(*chainId)
 
 	des:=big.NewInt(0).SetUint64(*destValue)
 
-	out, err := abi.Pack("makerStart",id ,des,[]byte{})
-
+	//out, err := abi.Pack("makerStart",remoteChainId ,des,[]byte("In the end, it’s not the years in your life that count. It’s the life in your years."))
+	out, err := abi.Pack("makerStart",remoteChainId ,des,[]byte{})
 	input := hexutil.Bytes(out)
 
-	fmt.Println("input=",input,"id=",id,"des=",des)
+	//fmt.Println("input=",input,"id=",remoteChainId,"des=",des)
 
 	args := &SendTxArgs{
 		From:  from,
@@ -109,7 +109,7 @@ func main() {
 		fmt.Println("dial", "err", err)
 		return
 	}
-	for i:=0; i< 1; i++ {
+	for i:=0; i< 10000; i++ {
 		Maker(client)
 	}
 }

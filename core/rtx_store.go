@@ -197,12 +197,27 @@ func (store *RtxStore) AddRemote(rtx *types.ReceptTransaction) error {
 	return store.addTxLocked(rtx, false)
 }
 
-func (store *RtxStore) RemoveLocals(rwss []*types.ReceptTransactionWithSignatures) error {
+//func (store *RtxStore) RemoveLocals(rwss []*types.ReceptTransactionWithSignatures) error {
+//	store.mu.Lock()
+//	defer store.mu.Unlock()
+//	for _,rws := range rwss {
+//		if v := store.all.Get(rws.ID()); v != nil {
+//			store.all.Remove(rws.ID())
+//		}
+//	}
+//	store.task.Removed()
+//	if store.journal != nil {
+//		return store.journal.rotate(store.all.GetAll())
+//	}
+//	return nil
+//}
+
+func (store *RtxStore) RemoveLocals(finishes []*types.FinishInfo) error {
 	store.mu.Lock()
 	defer store.mu.Unlock()
-	for _,rws := range rwss {
-		if v := store.all.Get(rws.ID()); v != nil {
-			store.all.Remove(rws.ID())
+	for _, f := range finishes {
+		if v := store.all.Get(f.TxId); v != nil {
+			store.all.Remove(f.TxId)
 		}
 	}
 	store.task.Removed()

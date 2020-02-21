@@ -39,7 +39,8 @@ type ProtocolManager interface {
 	BroadcastCWss(cwss []*CrossTransactionWithSignatures)
 	AddRemotes([]*Transaction) []error
 	SetMsgHandler(pm MsgHandler)
-	Pending() (map[common.Address]Transactions, error)
+	//Pending() (map[common.Address]Transactions, error)
+	GetAnchorTxs(address common.Address) (map[common.Address]Transactions, error)
 }
 
 type GasPriceOracle interface{

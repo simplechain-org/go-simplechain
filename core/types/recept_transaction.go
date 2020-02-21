@@ -5,15 +5,17 @@ import (
 	"crypto/ecdsa"
 	"encoding/binary"
 	"errors"
+	"github.com/simplechain-org/go-simplechain/accounts/abi"
 	"github.com/simplechain-org/go-simplechain/common"
+	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/crypto/sha3"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/params"
-	"github.com/simplechain-org/go-simplechain/accounts/abi"
-	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"io/ioutil"
 	"math/big"
+	"path"
+	"runtime"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -352,7 +354,10 @@ func (rws *ReceptTransactionWithSignatures) ConstructData(gasUsed *big.Int) ([]b
 	//	data = append(data, common.LeftPadBytes(rws.Data.S[i].Bytes(), 32)...)
 	//}
 	//data = append(data, rws.Data.Input...) //makeFinish input字段
-	data, err := ioutil.ReadFile("../../contracts/crossdemo/crossdemo.abi")
+	const dataFile = "../contracts/crossdemo/crossdemo.abi"
+	_, filename, _, _ := runtime.Caller(1)
+	datapath := path.Join(path.Dir(filename), dataFile)
+	data, err := ioutil.ReadFile(datapath)
 	if err != nil {
 		return nil,err
 	}
@@ -361,36 +366,52 @@ func (rws *ReceptTransactionWithSignatures) ConstructData(gasUsed *big.Int) ([]b
 		return nil,err
 	}
 	type Recept struct {
-		txId 		common.Hash
-		txHash 		common.Hash
-		to			common.Address
-		blockHash	common.Hash
-		blockNumber uint64
-		index		uint32
-		input		[]byte
-		v       	[]*big.Int
-		r       	[]*big.Int
-		s       	[]*big.Int
+		TxId 		common.Hash
+		TxHash 		common.Hash
+		To			common.Address
+		BlockHash	common.Hash
+		BlockNumber uint64
+		Index		uint32
+		Input		[]byte
+		V           []*big.Int
+		R           [][32]byte
+		S           [][32]byte
+	}
+
+	r := make([][32]byte, 0, len(rws.Data.R))
+	s := make([][32]byte, 0, len(rws.Data.S))
+	//vv := make([]*big.Int, 0, len(v.V))
+
+	for i := 0; i < len(rws.Data.R); i++ {
+		rone := common.LeftPadBytes(rws.Data.R[i].Bytes(), 32)
+		var a [32]byte
+		copy(a[:], rone)
+		r = append(r, a)
+		sone := common.LeftPadBytes(rws.Data.S[i].Bytes(), 32)
+		var b [32]byte
+		copy(b[:], sone)
+		s = append(s, b)
 	}
 	var rep Recept
-	rep.txId = rws.Data.CTxId
-	rep.txHash = rws.Data.TxHash
-	rep.to = rws.Data.To
-	rep.blockHash = rws.Data.BlockHash
-	rep.blockNumber = rws.Data.BlockNumber
-	rep.index = uint32(rws.Data.Index)
-	rep.input = rws.Data.Input
-	rep.v = rws.Data.V
-	rep.r = rws.Data.R
-	rep.s = rws.Data.S
-
-	out, err := abi.Pack("makerFinish", rep, rws.Data.DestinationId, gasUsed)
+	rep.TxId = rws.Data.CTxId
+	rep.TxHash = rws.Data.TxHash
+	rep.To = rws.Data.To
+	rep.BlockHash = rws.Data.BlockHash
+	rep.BlockNumber = rws.Data.BlockNumber
+	rep.Index = uint32(rws.Data.Index)
+	rep.Input = rws.Data.Input
+	rep.V = rws.Data.V
+	rep.R = r
+	rep.S = s
+	//log.Info("ConstructData","input",hexutil.Encode(rep.Input),"rws.hash",rws.Hash().String(),"remoteChainId",rws.ChainId().String())
+	out, err := abi.Pack("makerFinish", rep, rws.ChainId(), gasUsed)
 
 	if err != nil {
 		return nil,err
 	}
 
 	input := hexutil.Bytes(out)
+	//log.Info("ConstructData","out",hexutil.Encode(input))
 	return input, nil
 }
 

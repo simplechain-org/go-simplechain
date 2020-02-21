@@ -979,6 +979,10 @@ func (pm *ProtocolManager) GetNonce(address common.Address) uint64 {
 	return pm.txpool.GetCurrentNonce(address)
 }
 
-func (pm *ProtocolManager) Pending() (map[common.Address]types.Transactions, error) {
-	return pm.txpool.Pending()
+//func (pm *ProtocolManager) Pending() (map[common.Address]types.Transactions, error) {
+//	return pm.txpool.Pending()
+//}
+
+func (pm *ProtocolManager) GetAnchorTxs(address common.Address) (map[common.Address]types.Transactions, error) {
+	return pm.txpool.GetAnchorTxs(address)
 }
