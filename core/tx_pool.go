@@ -137,13 +137,8 @@ type blockChain interface {
 }
 
 var (
-<<<<<<< HEAD
-	finishID, _ = hexutil.Decode("0xb56c969a")
-	takerID, _  = hexutil.Decode("0xc0f61fb5")
-=======
 	finishID, _ = hexutil.Decode("0xaff64dae")
-	takerID, _ = hexutil.Decode("0x48741a9d")
->>>>>>> 6a03cf252bc12476804963d9ee10bd47d3a0c72b
+	takerID, _  = hexutil.Decode("0x48741a9d")
 )
 
 // TxPoolConfig are the configuration parameters of the transaction pool.
@@ -270,13 +265,12 @@ type txpoolResetRequest struct {
 
 // NewTxPool creates a new transaction pool to gather, sort and filter inbound
 // transactions from the network.
-func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain blockChain,contractAddress common.Address) *TxPool {
+func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain blockChain, contractAddress common.Address) *TxPool {
 	// Sanitize the input to ensure no vulnerable gas prices are set
 	config = (&config).sanitize()
 
 	// Create the transaction pool with its initial settings
 	pool := &TxPool{
-<<<<<<< HEAD
 		config:           config,
 		chainconfig:      chainconfig,
 		chain:            chain,
@@ -292,27 +286,8 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		reorgDoneCh:      make(chan chan struct{}),
 		reorgShutdownCh:  make(chan struct{}),
 		gasPrice:         new(big.Int).SetUint64(config.PriceLimit),
-		crossDemoAddress: common.Address{}, //todo 参数传入
+		crossDemoAddress: contractAddress, //todo 参数传入
 		anchors:          make(map[uint64][]common.Address),
-=======
-		config:          config,
-		chainconfig:     chainconfig,
-		chain:           chain,
-		signer:          types.NewEIP155Signer(chainconfig.ChainID),
-		pending:         make(map[common.Address]*txList),
-		queue:           make(map[common.Address]*txList),
-		beats:           make(map[common.Address]time.Time),
-		all:             newTxLookup(common.Address{}), //todo 参数传入
-		chainHeadCh:     make(chan ChainHeadEvent, chainHeadChanSize),
-		reqResetCh:      make(chan *txpoolResetRequest),
-		reqPromoteCh:    make(chan *accountSet),
-		queueTxEventCh:  make(chan *types.Transaction),
-		reorgDoneCh:     make(chan chan struct{}),
-		reorgShutdownCh: make(chan struct{}),
-		gasPrice:        new(big.Int).SetUint64(config.PriceLimit),
-		crossDemoAddress:contractAddress, //todo 参数传入
-		anchors:     	 make(map[uint64][]common.Address),
->>>>>>> 6a03cf252bc12476804963d9ee10bd47d3a0c72b
 	}
 	pool.locals = newAccountSet(pool.signer)
 	for _, addr := range config.Locals {
@@ -622,13 +597,8 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 	if tx.To() != nil && *tx.To() == pool.crossDemoAddress {
 		if len(tx.Data()) > 160 && bytes.Equal(tx.Data()[:4], finishID) {
 			//startTxHash := common.BytesToHash(tx.Data()[4+common.HashLength:4+common.HashLength*2])
-<<<<<<< HEAD
-			remoteChainId := new(big.Int).SetBytes(tx.Data()[4+common.HashLength*4 : 4+common.HashLength*5]).Uint64()
+			remoteChainId := new(big.Int).SetBytes(tx.Data()[4+common.HashLength : 4+common.HashLength*2]).Uint64()
 			isAnchor = pool.IsAnchor(from, remoteChainId)
-=======
-			remoteChainId := new(big.Int).SetBytes(tx.Data()[4+common.HashLength:4+common.HashLength*2]).Uint64()
-			isAnchor = pool.IsAnchor(from,remoteChainId)
->>>>>>> 6a03cf252bc12476804963d9ee10bd47d3a0c72b
 		}
 	}
 	// If the transaction pool is full, discard underpriced transactions
@@ -703,13 +673,8 @@ func (pool *TxPool) enqueueTx(hash common.Hash, tx *types.Transaction) (bool, er
 	if tx.To() != nil && *tx.To() == pool.crossDemoAddress {
 		if len(tx.Data()) > 160 && bytes.Equal(tx.Data()[:4], finishID) {
 			//startTxHash := common.BytesToHash(tx.Data()[4+common.HashLength:4+common.HashLength*2])
-<<<<<<< HEAD
-			remoteChainId := new(big.Int).SetBytes(tx.Data()[4+common.HashLength*4 : 4+common.HashLength*5]).Uint64()
+			remoteChainId := new(big.Int).SetBytes(tx.Data()[4+common.HashLength : 4+common.HashLength*2]).Uint64()
 			isAnchor = pool.IsAnchor(from, remoteChainId)
-=======
-			remoteChainId := new(big.Int).SetBytes(tx.Data()[4+common.HashLength:4+common.HashLength*2]).Uint64()
-			isAnchor = pool.IsAnchor(from,remoteChainId)
->>>>>>> 6a03cf252bc12476804963d9ee10bd47d3a0c72b
 		}
 	}
 	inserted, old := pool.queue[from].Add(tx, pool.config.PriceBump, isAnchor)
@@ -760,13 +725,8 @@ func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.T
 	if tx.To() != nil && *tx.To() == pool.crossDemoAddress {
 		if len(tx.Data()) > 160 && bytes.Equal(tx.Data()[:4], finishID) {
 			//startTxHash := common.BytesToHash(tx.Data()[4+common.HashLength:4+common.HashLength*2])
-<<<<<<< HEAD
-			remoteChainId := new(big.Int).SetBytes(tx.Data()[4+common.HashLength*4 : 4+common.HashLength*5]).Uint64()
+			remoteChainId := new(big.Int).SetBytes(tx.Data()[4+common.HashLength : 4+common.HashLength*2]).Uint64()
 			isAnchor = pool.IsAnchor(addr, remoteChainId)
-=======
-			remoteChainId := new(big.Int).SetBytes(tx.Data()[4+common.HashLength:4+common.HashLength*2]).Uint64()
-			isAnchor = pool.IsAnchor(addr,remoteChainId)
->>>>>>> 6a03cf252bc12476804963d9ee10bd47d3a0c72b
 		}
 	}
 	inserted, old := list.Add(tx, pool.config.PriceBump, isAnchor)
@@ -1761,12 +1721,9 @@ func (pool *TxPool) removeTxByCtxId(CtxId common.Hash, method []byte, outofbound
 		pool.removeTx(v, outofbound)
 	}
 }
-<<<<<<< HEAD
-=======
 
 func (pool *TxPool) RemoveTx(hash common.Hash, outofbound bool) {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
-	pool.removeTx(hash,outofbound)
+	pool.removeTx(hash, outofbound)
 }
->>>>>>> 6a03cf252bc12476804963d9ee10bd47d3a0c72b
