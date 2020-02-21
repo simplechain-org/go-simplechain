@@ -132,6 +132,10 @@ func (p *testTxPool) SubscribeNewTxsEvent(ch chan<- core.NewTxsEvent) event.Subs
 func (p *testTxPool) GetCurrentNonce(address common.Address) uint64 {
 	return 0
 }
+func (p *testTxPool) GetAnchorTxs(anchor common.Address) (map[common.Address]types.Transactions, error) {
+	pending := make(map[common.Address]types.Transactions)
+	return pending, nil
+}
 
 // newTestTransaction create a new dummy transaction.
 func newTestTransaction(from *ecdsa.PrivateKey, nonce uint64, datasize int) *types.Transaction {
