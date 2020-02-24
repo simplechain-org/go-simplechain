@@ -15,7 +15,7 @@
     "maxGasLimit": "0x7fffffffffffffff",
     "tieBreakingGas": false,
     "gasLimitBoundDivisor": "0x400",
-    "minimumDifficulty": "0x5000",
+    "minimumDifficulty": "0x20000",
     "difficultyBoundDivisor": "0x800",
     "durationLimit": "0xd",
     "blockReward": "0x4563918244f40000",

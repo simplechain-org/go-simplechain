@@ -22,7 +22,7 @@ import (
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/math"
-	"github.com/simplechain-org/go-simplechain/consensus/ethash"
+	"github.com/simplechain-org/go-simplechain/consensus/scrypt"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/params"
 )
@@ -56,7 +56,7 @@ func (test *DifficultyTest) Run(config *params.ChainConfig) error {
 		UncleHash:  test.UncleHash,
 	}
 
-	actual := ethash.CalcDifficulty(config, test.CurrentTimestamp, parent)
+	actual := scrypt.CalcDifficulty(config, test.CurrentTimestamp, parent)
 	exp := test.CurrentDifficulty
 
 	if actual.Cmp(exp) != 0 {

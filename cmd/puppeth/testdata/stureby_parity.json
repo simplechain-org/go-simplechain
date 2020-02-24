@@ -4,7 +4,7 @@
   "engine": {
     "Ethash": {
       "params": {
-        "minimumDifficulty": "0x5000",
+        "minimumDifficulty": "0x20000",
         "difficultyBoundDivisor": "0x800",
         "durationLimit": "0xd",
         "blockReward": {
