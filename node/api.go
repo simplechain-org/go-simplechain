@@ -236,93 +236,6 @@ func (api *PrivateAdminAPI) StartRPC(host *string, port *int, cors *string, apis
 			return false, err
 		}
 		return true, nil
-	} else if api.node.IsAnchor() {
-		if api.node.httpHandler != nil {
-			return false, fmt.Errorf("HTTP RPC already running on %s", api.node.httpEndpoint)
-		}
-
-		if host == nil {
-			h := DefaultHTTPHost
-			if api.node.config.HTTPHost != "" {
-				h = api.node.config.HTTPHost
-			}
-			host = &h
-		}
-		if port == nil {
-			port = &api.node.config.HTTPPort
-		}
-
-		allowedOrigins := api.node.config.HTTPCors
-		if cors != nil {
-			allowedOrigins = nil
-			for _, origin := range strings.Split(*cors, ",") {
-				allowedOrigins = append(allowedOrigins, strings.TrimSpace(origin))
-			}
-		}
-
-		allowedVHosts := api.node.config.HTTPVirtualHosts
-		if vhosts != nil {
-			allowedVHosts = nil
-			for _, vhost := range strings.Split(*host, ",") {
-				allowedVHosts = append(allowedVHosts, strings.TrimSpace(vhost))
-			}
-		}
-
-		modules := api.node.httpWhitelist
-		if apis != nil {
-			modules = nil
-			for _, m := range strings.Split(*apis, ",") {
-				modules = append(modules, strings.TrimSpace(m))
-			}
-		}
-
-		if err := api.node.startHTTP(fmt.Sprintf("%s:%d", *host, *port), api.node.rpcAPIs, modules, allowedOrigins, allowedVHosts, api.node.config.HTTPTimeouts); err != nil {
-			return false, err
-		}
-		if api.node.subHttpHandler != nil {
-			return false, fmt.Errorf("HTTP RPC already running on %v", api.node.subHttpHandler)
-		}
-
-		if host == nil {
-			h := DefaultSubHTTPHost
-			if api.node.config.SubHTTPHost != "" {
-				h = api.node.config.SubHTTPHost
-			}
-			host = &h
-		}
-		if port == nil {
-			port = &api.node.config.SubHTTPPort
-		}
-
-		allowedOrigins = api.node.config.SubHTTPCors
-		if cors != nil {
-			allowedOrigins = nil
-			for _, origin := range strings.Split(*cors, ",") {
-				allowedOrigins = append(allowedOrigins, strings.TrimSpace(origin))
-			}
-		}
-
-		allowedVHosts = api.node.config.SubHTTPVirtualHosts
-		if vhosts != nil {
-			allowedVHosts = nil
-			for _, vhost := range strings.Split(*host, ",") {
-				allowedVHosts = append(allowedVHosts, strings.TrimSpace(vhost))
-			}
-		}
-
-		modules = api.node.httpWhitelist
-		if apis != nil {
-			modules = nil
-			for _, m := range strings.Split(*apis, ",") {
-				modules = append(modules, strings.TrimSpace(m))
-			}
-		}
-
-		if err := api.node.startSubHTTP(fmt.Sprintf("%s:%d", *host, *port+1), api.node.subRpcAPIs, modules, allowedOrigins, allowedVHosts, api.node.config.HTTPTimeouts); err != nil {
-			api.node.stopHTTP()
-			return false, err
-		}
-		return true, nil
 	}
 	return false, nil
 }
@@ -342,14 +255,7 @@ func (api *PrivateAdminAPI) StopRPC() (bool, error) {
 		}
 		api.node.stopSubHTTP()
 	} else if api.node.IsAnchor() {
-		if api.node.httpHandler == nil {
-			return false, fmt.Errorf("HTTP RPC not running")
-		}
-		api.node.stopHTTP()
-		if api.node.subHttpHandler == nil {
-			return false, fmt.Errorf("HTTP RPC not running")
-		}
-		api.node.stopSubHTTP()
+		return false,nil
 	}
 	return true, nil
 }
@@ -430,79 +336,8 @@ func (api *PrivateAdminAPI) StartWS(host *string, port *int, allowedOrigins *str
 			return false, err
 		}
 		return true, nil
-	} else if api.node.IsAnchor() {
-		if api.node.wsHandler != nil {
-			return false, fmt.Errorf("WebSocket RPC already running on %s", api.node.wsEndpoint)
-		}
-
-		if host == nil {
-			h := DefaultWSHost
-			if api.node.config.WSHost != "" {
-				h = api.node.config.WSHost
-			}
-			host = &h
-		}
-		if port == nil {
-			port = &api.node.config.WSPort
-		}
-
-		origins := api.node.config.WSOrigins
-		if allowedOrigins != nil {
-			origins = nil
-			for _, origin := range strings.Split(*allowedOrigins, ",") {
-				origins = append(origins, strings.TrimSpace(origin))
-			}
-		}
-
-		modules := api.node.config.WSModules
-		if apis != nil {
-			modules = nil
-			for _, m := range strings.Split(*apis, ",") {
-				modules = append(modules, strings.TrimSpace(m))
-			}
-		}
-
-		if err := api.node.startWS(fmt.Sprintf("%s:%d", *host, *port), api.node.rpcAPIs, modules, origins, api.node.config.WSExposeAll); err != nil {
-			return false, err
-		}
-		if api.node.subWsHandler != nil {
-			return false, fmt.Errorf("WebSocket RPC already running on %v", api.node.subWsHandler)
-		}
-
-		if host == nil {
-			h := DefaultSubWSHost
-			if api.node.config.SubWSHost != "" {
-				h = api.node.config.SubWSHost
-			}
-			host = &h
-		}
-		if port == nil {
-			port = &api.node.config.SubWSPort
-		}
-
-		origins = api.node.config.SubWSOrigins
-		if allowedOrigins != nil {
-			origins = nil
-			for _, origin := range strings.Split(*allowedOrigins, ",") {
-				origins = append(origins, strings.TrimSpace(origin))
-			}
-		}
-
-		modules = api.node.config.SubWSModules
-		if apis != nil {
-			modules = nil
-			for _, m := range strings.Split(*apis, ",") {
-				modules = append(modules, strings.TrimSpace(m))
-			}
-		}
-
-		if err := api.node.startSubWS(fmt.Sprintf("%s:%d", *host, *port+1), api.node.subRpcAPIs, modules, origins, api.node.config.SubWSExposeAll); err != nil {
-			api.node.stopWS()
-			return false, err
-		}
-
-		return true, nil
 	}
+
 	return false, nil
 }
 
@@ -520,15 +355,8 @@ func (api *PrivateAdminAPI) StopWS() (bool, error) {
 			return false, fmt.Errorf("WebSocket RPC not running")
 		}
 		api.node.stopSubWS()
-	} else if api.node.IsAnchor() {
-		if api.node.wsHandler == nil {
-			return false, fmt.Errorf("WebSocket RPC not running")
-		}
-		api.node.stopWS()
-		if api.node.subWsHandler == nil {
-			return false, fmt.Errorf("WebSocket RPC not running")
-		}
-		api.node.stopSubWS()
+	} else {
+		return false, nil
 	}
 	return true, nil
 }
