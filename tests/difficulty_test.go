@@ -54,7 +54,6 @@ func TestDifficulty(t *testing.T) {
 	dt.skipLoad("difficultyCustomHomestead\\.json")
 	dt.skipLoad("difficultyMorden\\.json")
 	dt.skipLoad("difficultyOlimpic\\.json")
-	dt.skipLoad("difficultyEthash\\.json")
 
 	dt.config("Ropsten", *params.TestnetChainConfig)
 	dt.config("Morden", *params.TestnetChainConfig)
