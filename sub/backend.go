@@ -163,7 +163,7 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*Ethereum, error) {
 		accountManager: ctx.AccountManager,
 		engine:         CreateConsensusEngine(ctx, chainConfig, &config.Ethash, config.Miner.Notify, config.Miner.Noverify, chainDb),
 		shutdownChan:   make(chan bool),
-		networkID:      chainConfig.ChainID.Uint64(),
+		networkID:      config.NetworkId,
 		gasPrice:       config.Miner.GasPrice,
 		etherbase:      config.Miner.Etherbase,
 		bloomRequests:  make(chan chan *bloombits.Retrieval),
