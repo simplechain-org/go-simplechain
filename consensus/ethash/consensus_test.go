@@ -58,7 +58,7 @@ func (d *diffTest) UnmarshalJSON(b []byte) (err error) {
 }
 
 func TestCalcDifficulty(t *testing.T) {
-	file, err := os.Open(filepath.Join("..", "..", "tests", "testdata", "BasicTests", "difficulty.json"))
+	file, err := os.Open(filepath.Join("..", "..", "tests", "testdata", "BasicTests", "difficultyEthash.json"))
 	if err != nil {
 		t.Skip(err)
 	}
