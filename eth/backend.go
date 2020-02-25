@@ -18,6 +18,7 @@
 package eth
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"github.com/simplechain-org/go-simplechain/common/math"
@@ -27,7 +28,6 @@ import (
 	"runtime"
 	"sync"
 	"sync/atomic"
-	"context"
 
 	"github.com/simplechain-org/go-simplechain/accounts"
 	"github.com/simplechain-org/go-simplechain/accounts/abi/bind"
@@ -104,7 +104,7 @@ type Ethereum struct {
 	genesisHash common.Hash
 	ctxStore    *core.CtxStore
 	rtxStore    *core.RtxStore
-	msgHandler   types.MsgHandler
+	msgHandler  types.MsgHandler
 	chainConfig *params.ChainConfig
 }
 
@@ -159,12 +159,12 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 		accountManager: ctx.AccountManager,
 		engine:         CreateConsensusEngine(ctx, chainConfig, &config.Ethash, config.Miner.Notify, config.Miner.Noverify, chainDb),
 		shutdownChan:   make(chan bool),
-		networkID:      chainConfig.ChainID.Uint64(),
+		networkID:      config.NetworkId,
 		gasPrice:       config.Miner.GasPrice,
 		etherbase:      config.Miner.Etherbase,
 		bloomRequests:  make(chan chan *bloombits.Retrieval),
 		bloomIndexer:   NewBloomIndexer(chainDb, params.BloomBitsBlocks, params.BloomConfirms),
-		chainConfig:	chainConfig,
+		chainConfig:    chainConfig,
 	}
 
 	bcVersion := rawdb.ReadDatabaseVersion(chainDb)
@@ -211,18 +211,18 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 	if config.TxPool.Journal != "" {
 		config.TxPool.Journal = ctx.ResolvePath(fmt.Sprintf("mainChain_%s", config.TxPool.Journal))
 	}
-	eth.txPool = core.NewTxPool(config.TxPool, chainConfig, eth.blockchain,config.MainChainCtxAddress)
+	eth.txPool = core.NewTxPool(config.TxPool, chainConfig, eth.blockchain, config.MainChainCtxAddress)
 
 	makerDb, err := CreateDB(ctx, config, common.MainMakerData)
 	if err != nil {
 		return nil, err
 	}
-	eth.ctxStore = core.NewCtxStore(config.CtxStore, eth.chainConfig, eth.blockchain,makerDb,config.MainChainCtxAddress)
+	eth.ctxStore = core.NewCtxStore(config.CtxStore, eth.chainConfig, eth.blockchain, makerDb, config.MainChainCtxAddress)
 
 	if config.RtxStore.Journal != "" {
 		config.RtxStore.Journal = ctx.ResolvePath(fmt.Sprintf("mainChain_%s", config.RtxStore.Journal))
 	}
-	eth.rtxStore = core.NewRtxStore(config.RtxStore, eth.chainConfig, eth.blockchain, chainDb,config.MainChainCtxAddress)
+	eth.rtxStore = core.NewRtxStore(config.RtxStore, eth.chainConfig, eth.blockchain, chainDb, config.MainChainCtxAddress)
 
 	// Permit the downloader to use the trie cache allowance during fast sync
 	cacheLimit := cacheConfig.TrieCleanLimit + cacheConfig.TrieDirtyLimit
@@ -234,13 +234,13 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 		return nil, err
 	}
 
-	eth.msgHandler=cross.NewMsgHandler(eth,cross.RoleMainHandler,config.Role,eth.ctxStore,eth.rtxStore,eth.blockchain,ctx.MainCh, ctx.SubCh,config.MainChainCtxAddress,config.SubChainCtxAddress)
+	eth.msgHandler = cross.NewMsgHandler(eth, cross.RoleMainHandler, config.Role, eth.ctxStore, eth.rtxStore, eth.blockchain, ctx.MainCh, ctx.SubCh, config.MainChainCtxAddress, config.SubChainCtxAddress)
 
 	eth.msgHandler.SetProtocolManager(eth.protocolManager)
 
 	eth.protocolManager.SetMsgHandler(eth.msgHandler)
 
-	eth.miner = miner.New(eth, &config.Miner, chainConfig, eth.EventMux(), eth.engine, eth.isLocalBlock,eth.ctxStore)
+	eth.miner = miner.New(eth, &config.Miner, chainConfig, eth.EventMux(), eth.engine, eth.isLocalBlock, eth.ctxStore)
 	eth.miner.SetExtra(makeExtraData(config.Miner.ExtraData))
 
 	eth.APIBackend = &EthAPIBackend{ctx.ExtRPCEnabled(), eth, nil}
@@ -255,7 +255,7 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 
 // CreateDB creates the chain database.
 func CreateDB(ctx *node.ServiceContext, config *Config, name string) (ethdb.Database, error) {
-	db, err := ctx.OpenDatabase(name, config.DatabaseCache, config.DatabaseHandles,"")
+	db, err := ctx.OpenDatabase(name, config.DatabaseCache, config.DatabaseHandles, "")
 	if err != nil {
 		return nil, err
 	}

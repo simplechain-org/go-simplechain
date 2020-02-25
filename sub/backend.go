@@ -163,7 +163,7 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*Ethereum, error) {
 		accountManager: ctx.AccountManager,
 		engine:         CreateConsensusEngine(ctx, chainConfig, &config.Ethash, config.Miner.Notify, config.Miner.Noverify, chainDb),
 		shutdownChan:   make(chan bool),
-		networkID:      chainConfig.ChainID.Uint64(),
+		networkID:      config.NetworkId,
 		gasPrice:       config.Miner.GasPrice,
 		etherbase:      config.Miner.Etherbase,
 		bloomRequests:  make(chan chan *bloombits.Retrieval),
@@ -202,7 +202,7 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*Ethereum, error) {
 			TrieTimeLimit:       config.TrieTimeout,
 		}
 	)
-	eth.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, chainConfig, eth.engine, vmConfig,eth.config.SubChainCtxAddress , eth.shouldPreserve)
+	eth.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, chainConfig, eth.engine, vmConfig, eth.config.SubChainCtxAddress, eth.shouldPreserve)
 	if err != nil {
 		return nil, err
 	}
@@ -217,7 +217,7 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*Ethereum, error) {
 	if config.TxPool.Journal != "" {
 		config.TxPool.Journal = ctx.ResolvePath(fmt.Sprintf("subChain_%s", config.TxPool.Journal))
 	}
-	eth.txPool = core.NewTxPool(config.TxPool, chainConfig, eth.blockchain,config.SubChainCtxAddress)
+	eth.txPool = core.NewTxPool(config.TxPool, chainConfig, eth.blockchain, config.SubChainCtxAddress)
 
 	makerDb, err := CreateDB(ctx, config, common.SubMakerData)
 	if err != nil {
@@ -241,7 +241,7 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*Ethereum, error) {
 	eth.msgHandler = cross.NewMsgHandler(eth, cross.RoleSubHandler, config.Role, eth.ctxStore, eth.rtxStore, eth.blockchain, ctx.SubCh, ctx.MainCh, config.MainChainCtxAddress, config.SubChainCtxAddress)
 	eth.msgHandler.SetProtocolManager(eth.protocolManager)
 	eth.protocolManager.SetMsgHandler(eth.msgHandler)
-	eth.miner = miner.New(eth, &config.Miner, chainConfig, eth.EventMux(), eth.engine, eth.isLocalBlock,eth.ctxStore)
+	eth.miner = miner.New(eth, &config.Miner, chainConfig, eth.EventMux(), eth.engine, eth.isLocalBlock, eth.ctxStore)
 	eth.miner.SetExtra(makeExtraData(config.Miner.ExtraData))
 
 	eth.APIBackend = &EthAPIBackend{ctx.ExtRPCEnabled(), eth, nil}

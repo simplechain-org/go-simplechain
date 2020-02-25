@@ -147,7 +147,6 @@ func (api *PrivateAdminAPI) StartRPC(host *string, port *int, cors *string, apis
 	api.node.lock.Lock()
 	defer api.node.lock.Unlock()
 
-
 	if api.node.IsMainChain() {
 
 		if api.node.httpHandler != nil {
@@ -193,9 +192,9 @@ func (api *PrivateAdminAPI) StartRPC(host *string, port *int, cors *string, apis
 			return false, err
 		}
 		return true, nil
-	}else if api.node.IsSubChain(){
+	} else if api.node.IsSubChain() {
 		if api.node.subHttpHandler != nil {
-			return false, fmt.Errorf("HTTP RPC already running on %s", api.node.subHttpHandler)
+			return false, fmt.Errorf("HTTP RPC already running on %v", api.node.subHttpHandler)
 		}
 
 		if host == nil {
@@ -237,7 +236,7 @@ func (api *PrivateAdminAPI) StartRPC(host *string, port *int, cors *string, apis
 			return false, err
 		}
 		return true, nil
-	}else if api.node.IsAnchor(){
+	} else if api.node.IsAnchor() {
 		if api.node.httpHandler != nil {
 			return false, fmt.Errorf("HTTP RPC already running on %s", api.node.httpEndpoint)
 		}
@@ -281,7 +280,7 @@ func (api *PrivateAdminAPI) StartRPC(host *string, port *int, cors *string, apis
 			return false, err
 		}
 		if api.node.subHttpHandler != nil {
-			return false, fmt.Errorf("HTTP RPC already running on %s", api.node.subHttpHandler)
+			return false, fmt.Errorf("HTTP RPC already running on %v", api.node.subHttpHandler)
 		}
 
 		if host == nil {
@@ -325,7 +324,7 @@ func (api *PrivateAdminAPI) StartRPC(host *string, port *int, cors *string, apis
 		}
 		return true, nil
 	}
-	return false,nil
+	return false, nil
 }
 
 // StopRPC terminates an already running HTTP RPC API endpoint.
@@ -337,12 +336,12 @@ func (api *PrivateAdminAPI) StopRPC() (bool, error) {
 			return false, fmt.Errorf("HTTP RPC not running")
 		}
 		api.node.stopHTTP()
-	}else if api.node.IsSubChain(){
+	} else if api.node.IsSubChain() {
 		if api.node.subHttpHandler == nil {
 			return false, fmt.Errorf("HTTP RPC not running")
 		}
 		api.node.stopSubHTTP()
-	}else if api.node.IsAnchor(){
+	} else if api.node.IsAnchor() {
 		if api.node.httpHandler == nil {
 			return false, fmt.Errorf("HTTP RPC not running")
 		}
@@ -395,9 +394,9 @@ func (api *PrivateAdminAPI) StartWS(host *string, port *int, allowedOrigins *str
 			return false, err
 		}
 		return true, nil
-	}else if api.node.IsSubChain(){
+	} else if api.node.IsSubChain() {
 		if api.node.subWsHandler != nil {
-			return false, fmt.Errorf("WebSocket RPC already running on %s", api.node.subWsHandler)
+			return false, fmt.Errorf("WebSocket RPC already running on %v", api.node.subWsHandler)
 		}
 
 		if host == nil {
@@ -431,7 +430,7 @@ func (api *PrivateAdminAPI) StartWS(host *string, port *int, allowedOrigins *str
 			return false, err
 		}
 		return true, nil
-	}else if api.node.IsAnchor(){
+	} else if api.node.IsAnchor() {
 		if api.node.wsHandler != nil {
 			return false, fmt.Errorf("WebSocket RPC already running on %s", api.node.wsEndpoint)
 		}
@@ -467,7 +466,7 @@ func (api *PrivateAdminAPI) StartWS(host *string, port *int, allowedOrigins *str
 			return false, err
 		}
 		if api.node.subWsHandler != nil {
-			return false, fmt.Errorf("WebSocket RPC already running on %s", api.node.subWsHandler)
+			return false, fmt.Errorf("WebSocket RPC already running on %v", api.node.subWsHandler)
 		}
 
 		if host == nil {
@@ -502,10 +501,9 @@ func (api *PrivateAdminAPI) StartWS(host *string, port *int, allowedOrigins *str
 			return false, err
 		}
 
-
 		return true, nil
 	}
-	return false,nil
+	return false, nil
 }
 
 // StopWS terminates an already running websocket RPC API endpoint.
@@ -517,12 +515,12 @@ func (api *PrivateAdminAPI) StopWS() (bool, error) {
 			return false, fmt.Errorf("WebSocket RPC not running")
 		}
 		api.node.stopWS()
-	}else if api.node.IsSubChain(){
+	} else if api.node.IsSubChain() {
 		if api.node.subWsHandler == nil {
 			return false, fmt.Errorf("WebSocket RPC not running")
 		}
 		api.node.stopSubWS()
-	}else if api.node.IsAnchor(){
+	} else if api.node.IsAnchor() {
 		if api.node.wsHandler == nil {
 			return false, fmt.Errorf("WebSocket RPC not running")
 		}
