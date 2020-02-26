@@ -43,31 +43,31 @@ type ReceptTransaction struct {
 }
 
 type receptdata struct {
-	CTxId     common.Hash    `json:"ctxId" gencodec:"required"` //cross_transaction ID
-	TxHash    common.Hash    `json:"txHash" gencodec:"required"`
-	To        common.Address `json:"to" gencodec:"required"`        //Token buyer
-	BlockHash common.Hash    `json:"blockHash" gencodec:"required"` //The Hash of block in which the message resides
-	DestinationId *big.Int `json:"destinationId" gencodec:"required"` //Message destination networkId
+	CTxId         common.Hash    `json:"ctxId" gencodec:"required"` //cross_transaction ID
+	TxHash        common.Hash    `json:"txHash" gencodec:"required"`
+	To            common.Address `json:"to" gencodec:"required"`            //Token buyer
+	BlockHash     common.Hash    `json:"blockHash" gencodec:"required"`     //The Hash of block in which the message resides
+	DestinationId *big.Int       `json:"destinationId" gencodec:"required"` //Message destination networkId
 
-	BlockNumber   uint64         `json:"blockNumber" gencodec:"required"`   //The Height of block in which the message resides
-	Index         uint         `json:"index" gencodec:"required"`
-	Input     	 []byte          `json:"input"    gencodec:"required"`
+	BlockNumber uint64 `json:"blockNumber" gencodec:"required"` //The Height of block in which the message resides
+	Index       uint   `json:"index" gencodec:"required"`
+	Input       []byte `json:"input"    gencodec:"required"`
 	// Signature values
 	V *big.Int `json:"v" gencodec:"required"` //chainId
 	R *big.Int `json:"r" gencodec:"required"`
 	S *big.Int `json:"s" gencodec:"required"`
 }
 
-func NewReceptTransaction(id, txHash, bHash common.Hash, to common.Address, networkId *big.Int,blockNumber uint64,index uint,input []byte) *ReceptTransaction {
+func NewReceptTransaction(id, txHash, bHash common.Hash, to common.Address, networkId *big.Int, blockNumber uint64, index uint, input []byte) *ReceptTransaction {
 	d := receptdata{
-		CTxId:     id,
-		TxHash:    txHash,
-		To:        to,
-		BlockHash: bHash,
+		CTxId:         id,
+		TxHash:        txHash,
+		To:            to,
+		BlockHash:     bHash,
 		DestinationId: networkId,
-		BlockNumber:blockNumber,
-		Index:index,
-		Input:input,
+		BlockNumber:   blockNumber,
+		Index:         index,
+		Input:         input,
 		V:             new(big.Int),
 		R:             new(big.Int),
 		S:             new(big.Int),
@@ -105,8 +105,8 @@ func (tx *ReceptTransaction) Hash() (h common.Hash) {
 	b = append(b, tx.Data.To.Bytes()...)
 	b = append(b, tx.Data.BlockHash.Bytes()...)
 	b = append(b, common.LeftPadBytes(tx.Data.DestinationId.Bytes(), 32)...)
-	b = append(b, common.LeftPadBytes(Uint64ToBytes(tx.Data.BlockNumber),8)...)
-	b = append(b, common.LeftPadBytes(Uint32ToBytes(tx.Data.Index),4)...)
+	b = append(b, common.LeftPadBytes(Uint64ToBytes(tx.Data.BlockNumber), 8)...)
+	b = append(b, common.LeftPadBytes(Uint32ToBytes(tx.Data.Index), 4)...)
 	//todo blocknumber index
 	b = append(b, tx.Data.Input...)
 	hash.Write(b)
@@ -151,15 +151,15 @@ type ReceptTransactionWithSignatures struct {
 }
 
 type receptdatas struct {
-	CTxId     common.Hash    `json:"ctxId" gencodec:"required"` //cross_transaction ID
-	TxHash    common.Hash    `json:"txHash" gencodec:"required"`
-	To        common.Address `json:"to" gencodec:"required"`        //Token buyer
-	BlockHash common.Hash    `json:"blockHash" gencodec:"required"` //The Hash of block in which the message resides
-	DestinationId *big.Int `json:"destinationId" gencodec:"required"` //Message destination networkId
+	CTxId         common.Hash    `json:"ctxId" gencodec:"required"` //cross_transaction ID
+	TxHash        common.Hash    `json:"txHash" gencodec:"required"`
+	To            common.Address `json:"to" gencodec:"required"`            //Token buyer
+	BlockHash     common.Hash    `json:"blockHash" gencodec:"required"`     //The Hash of block in which the message resides
+	DestinationId *big.Int       `json:"destinationId" gencodec:"required"` //Message destination networkId
 
-	BlockNumber   uint64         `json:"blockNumber" gencodec:"required"`   //The Height of block in which the message resides
-	Index         uint         `json:"index" gencodec:"required"`
-	Input     	 []byte          `json:"input"    gencodec:"required"`
+	BlockNumber uint64 `json:"blockNumber" gencodec:"required"` //The Height of block in which the message resides
+	Index       uint   `json:"index" gencodec:"required"`
+	Input       []byte `json:"input"    gencodec:"required"`
 	// Signature values
 	V []*big.Int `json:"v" gencodec:"required"` //chainId
 	R []*big.Int `json:"r" gencodec:"required"`
@@ -168,14 +168,14 @@ type receptdatas struct {
 
 func NewReceptTransactionWithSignatures(rtx *ReceptTransaction) *ReceptTransactionWithSignatures {
 	d := receptdatas{
-		CTxId:     rtx.Data.CTxId,
-		TxHash:    rtx.Data.TxHash,
-		To:        rtx.Data.To,
-		BlockHash: rtx.Data.BlockHash,
+		CTxId:         rtx.Data.CTxId,
+		TxHash:        rtx.Data.TxHash,
+		To:            rtx.Data.To,
+		BlockHash:     rtx.Data.BlockHash,
 		DestinationId: rtx.Data.DestinationId,
-		BlockNumber:rtx.Data.BlockNumber,
-		Index:rtx.Data.Index,
-		Input:rtx.Data.Input,
+		BlockNumber:   rtx.Data.BlockNumber,
+		Index:         rtx.Data.Index,
+		Input:         rtx.Data.Input,
 	}
 
 	d.V = append(d.V, rtx.Data.V)
@@ -207,8 +207,8 @@ func (rws *ReceptTransactionWithSignatures) Hash() (h common.Hash) {
 	b = append(b, rws.Data.To.Bytes()...)
 	b = append(b, rws.Data.BlockHash.Bytes()...)
 	b = append(b, common.LeftPadBytes(rws.Data.DestinationId.Bytes(), 32)...)
-	b = append(b, common.LeftPadBytes(Uint64ToBytes(rws.Data.BlockNumber),8)...)
-	b = append(b, common.LeftPadBytes(Uint32ToBytes(rws.Data.Index),4)...)
+	b = append(b, common.LeftPadBytes(Uint64ToBytes(rws.Data.BlockNumber), 8)...)
+	b = append(b, common.LeftPadBytes(Uint32ToBytes(rws.Data.Index), 4)...)
 	b = append(b, rws.Data.Input...)
 	hash.Write(b)
 	hash.Sum(h[:0])
@@ -354,25 +354,25 @@ func (rws *ReceptTransactionWithSignatures) ConstructData(gasUsed *big.Int) ([]b
 	//	data = append(data, common.LeftPadBytes(rws.Data.S[i].Bytes(), 32)...)
 	//}
 	//data = append(data, rws.Data.Input...) //makeFinish input字段
-	const dataFile = "../contracts/crossdemo/crossdemo.abi"
+	const dataFile = "../../contracts/crossdemo/crossdemo.abi"
 	_, filename, _, _ := runtime.Caller(1)
 	datapath := path.Join(path.Dir(filename), dataFile)
 	data, err := ioutil.ReadFile(datapath)
 	if err != nil {
-		return nil,err
+		return nil, err
 	}
 	abi, err := abi.JSON(bytes.NewReader(data))
 	if err != nil {
-		return nil,err
+		return nil, err
 	}
 	type Recept struct {
-		TxId 		common.Hash
-		TxHash 		common.Hash
-		To			common.Address
-		BlockHash	common.Hash
+		TxId        common.Hash
+		TxHash      common.Hash
+		To          common.Address
+		BlockHash   common.Hash
 		BlockNumber uint64
-		Index		uint32
-		Input		[]byte
+		Index       uint32
+		Input       []byte
 		V           []*big.Int
 		R           [][32]byte
 		S           [][32]byte
@@ -407,7 +407,7 @@ func (rws *ReceptTransactionWithSignatures) ConstructData(gasUsed *big.Int) ([]b
 	out, err := abi.Pack("makerFinish", rep, rws.ChainId(), gasUsed)
 
 	if err != nil {
-		return nil,err
+		return nil, err
 	}
 
 	input := hexutil.Bytes(out)
