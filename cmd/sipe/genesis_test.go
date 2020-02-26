@@ -56,7 +56,9 @@ var customGenesisTests = []struct {
 			"mixhash"    : "0x0000000000000000000000000000000000000000000000000000000000000000",
 			"parentHash" : "0x0000000000000000000000000000000000000000000000000000000000000000",
 			"timestamp"  : "0x00",
-			"config"     : {}
+			"config"     : {
+                "chainId": "0x01",
+            }
 		}`,
 		query:  "eth.getBlock(0).nonce",
 		result: "0x0000000000000138",
@@ -74,6 +76,7 @@ var customGenesisTests = []struct {
 			"parentHash" : "0x0000000000000000000000000000000000000000000000000000000000000000",
 			"timestamp"  : "0x00",
 			"config"     : {
+                "chainId": "0x01",
 				"homesteadBlock" : 314,
 				"daoForkBlock"   : 141,
 				"daoForkSupport" : true

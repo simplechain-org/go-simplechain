@@ -742,8 +742,9 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 
 	var coalescedLogs []*types.Log
 	var txHashs []common.Hash
-	var address []common.Address
-Loop:
+
+	//var address	[]common.Address
+	//Loop:
 	for {
 		// In the following three cases, we will interrupt the execution of the transaction.
 		// (1) new head block event arrival, the interrupt signal is 1
@@ -783,14 +784,14 @@ Loop:
 		// We use the eip155 signer regardless of the current hf.
 		from, _ := types.Sender(w.current.signer, tx)
 
-		for _, add := range address {
-			if add == from { //TODO 解析交易应用
-				txHashs = append(txHashs, tx.Hash())
-				txs.Shift()
-				continue Loop
-			}
-		}
-		if !w.current.storeCheck(tx, w.ctxStore.CrossDemoAddress) {
+		//for _,add := range address {
+		//	if add == from { //TODO 解析交易应用
+		//		txHashs = append(txHashs,tx.Hash())
+		//		txs.Shift()
+		//		continue Loop
+		//	}
+		//}
+		if !w.current.storeCheck(tx,w.ctxStore.CrossDemoAddress) {
 			log.Info("ctxStore is busy!")
 			txs.Pop()
 		} else {
@@ -823,10 +824,11 @@ Loop:
 				txs.Pop()
 
 			case core.ErrRepetitionCrossTransaction:
-				log.Trace("repetition", "sender", from, "hash", tx.Hash())
-				address = append(address, from)
-				txHashs = append(txHashs, tx.Hash()) //record RepetitionCrossTransaction
-				txs.Shift()
+				log.Trace("repetition", "sender", from,"hash",tx.Hash())
+				//address = append(address,from)
+				txHashs = append(txHashs,tx.Hash()) //record RepetitionCrossTransaction
+				//txs.Shift()
+				txs.Pop()
 
 			case nil:
 				// Everything ok, collect the logs and shift in the next transaction from the same account
@@ -870,7 +872,6 @@ Loop:
 func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64, status map[uint64]*core.Statistics) {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
-
 	tstart := time.Now()
 	parent := w.chain.CurrentBlock()
 
@@ -974,27 +975,27 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64, 
 		}
 	}
 	if len(localTxs) > 0 {
-		//log.Info("commitTransactions","localTxs",len(localTxs))
 		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, localTxs)
 		if ok, hashs := w.commitTransactions(txs, w.coinbase, interrupt); ok {
 			return
 		} else {
-			for _, ctxHash := range hashs {
-				w.eth.TxPool().RemoveTx(ctxHash, true)
+			if len(hashs) > 0 {
+				log.Info("begin RemoveTx","hashs",len(hashs))
+				w.eth.TxPool().RemoveTx(hashs,true)
 			}
 		}
 	}
 	if len(remoteTxs) > 0 {
-		//log.Info("commitTransactions","remoteTxs",len(remoteTxs))
 		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, remoteTxs)
 		if ok, hashs := w.commitTransactions(txs, w.coinbase, interrupt); ok {
 			return
 		} else {
-			for _, ctxHash := range hashs {
-				w.eth.TxPool().RemoveTx(ctxHash, true)
+			if len(hashs) > 0 {
+				w.eth.TxPool().RemoveTx(hashs,true)
 			}
 		}
 	}
+	log.Info("begin commit")
 	w.commit(uncles, w.fullTaskHook, true, tstart)
 }
 

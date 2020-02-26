@@ -153,8 +153,8 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 			result := new(big.Int).SetBytes(res)
 			//log.Info("applyTx","data",hexutil.Encode(data))
 			if result.Cmp(big.NewInt(0)) == 0 {
-				//log.Info("already finish!", "res", new(big.Int).SetBytes(res).Uint64(), "tx", tx.Hash().String())
-				return nil, ErrRepetitionCrossTransaction
+				log.Info("already finish!", "res", new(big.Int).SetBytes(res).Uint64(), "tx", tx.Hash().String())
+				return nil,  ErrRepetitionCrossTransaction
 			} else { //TODO 交易失败一直finish ok
 				//log.Info("finish ok!", "res", new(big.Int).SetBytes(res).Uint64(), "tx", tx.Hash().String())
 			}

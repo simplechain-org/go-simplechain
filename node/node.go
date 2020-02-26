@@ -75,6 +75,23 @@ type Node struct {
 
 	MainCh chan interface{}
 	SubCh  chan interface{}
+
+	//for subchain
+	subRpcAPIs       []rpc.API   // List of APIs currently provided by the node
+	subInprocHandler *rpc.Server // In-process RPC request handler to process the API requests
+
+	subIpcEndpoint string       // IPC endpoint to listen at (empty = IPC disabled)
+	subIpcListener net.Listener // IPC RPC listener socket to serve API requests
+	subIpcHandler  *rpc.Server  // IPC RPC request handler to process the API requests
+
+	subHttpEndpoint  string       // HTTP endpoint (interface + port) to listen at (empty = HTTP disabled)
+	subHttpWhitelist []string     // HTTP RPC modules to allow through this endpoint
+	subHttpListener  net.Listener // HTTP RPC listener socket to server API requests
+	subHttpHandler   *rpc.Server  // HTTP RPC request handler to process the API requests
+
+	subWsEndpoint string       // Websocket endpoint (interface + port) to listen at (empty = websocket disabled)
+	subWsListener net.Listener // Websocket RPC listener socket to server API requests
+	subWsHandler  *rpc.Server  // Websocket RPC request handler to process the API requests
 }
 
 // New creates a new P2P node, ready for protocol registration.
@@ -124,6 +141,9 @@ func New(conf *Config) (*Node, error) {
 		log:               conf.Logger,
 		MainCh:            make(chan interface{}, 100),
 		SubCh:             make(chan interface{}, 100),
+		subIpcEndpoint:    conf.SubIPCEndpoint(),
+		subHttpEndpoint:   conf.SubHTTPEndpoint(),
+		subWsEndpoint:     conf.SubWSEndpoint(),
 	}, nil
 }
 
@@ -243,12 +263,37 @@ func (n *Node) Start() error {
 		started = append(started, kind)
 	}
 	// Lastly start the configured RPC interfaces
-	if err := n.startRPC(services); err != nil {
-		for _, service := range services {
-			service.Stop()
+	if n.config.Role.IsMainChain() {
+		if err := n.startRPC(services); err != nil {
+			for _, service := range services {
+				service.Stop()
+			}
+			running.Stop()
+			return err
 		}
-		running.Stop()
-		return err
+	} else if n.config.Role.IsSubChain() {
+		if err := n.startSubRPC(services); err != nil {
+			for _, service := range services {
+				service.Stop()
+			}
+			running.Stop()
+			return err
+		}
+	} else if n.config.Role.IsAnchor(){
+		if err := n.startRPC(services); err != nil {
+			for _, service := range services {
+				service.Stop()
+			}
+			running.Stop()
+			return err
+		}
+		if err := n.startSubRPC(services); err != nil {
+			for _, service := range services {
+				service.Stop()
+			}
+			running.Stop()
+			return err
+		}
 	}
 	// Finish initializing the startup
 	n.services = services
@@ -287,8 +332,10 @@ func (n *Node) openDataDir() error {
 func (n *Node) startRPC(services map[reflect.Type]Service) error {
 	// Gather all the possible APIs to surface
 	apis := n.apis()
-	for _, service := range services {
-		apis = append(apis, service.APIs()...)
+	for key, service := range services {
+		if key.String() != "*sub.Ethereum" {
+			apis = append(apis, service.APIs()...)
+		}
 	}
 	// Start the various API endpoints, terminating all in case of errors
 	if err := n.startInProc(apis); err != nil {
@@ -447,6 +494,12 @@ func (n *Node) Stop() error {
 	n.stopHTTP()
 	n.stopIPC()
 	n.rpcAPIs = nil
+
+	n.stopSubWS()
+	n.stopSubHTTP()
+	n.stopSubIPC()
+	n.subRpcAPIs=nil
+
 	failure := &StopError{
 		Services: make(map[reflect.Type]error),
 	}
@@ -519,7 +572,13 @@ func (n *Node) Attach() (*rpc.Client, error) {
 	if n.server == nil {
 		return nil, ErrNodeStopped
 	}
-	return rpc.DialInProc(n.inprocHandler), nil
+	if n.inprocHandler != nil {
+		return rpc.DialInProc(n.inprocHandler), nil
+	}
+	if n.subInprocHandler != nil {
+		return rpc.DialInProc(n.subInprocHandler), nil
+	}
+	return nil, errors.New("inprocHandler or subInprocHandler must be not nil")
 }
 
 // RPCHandler returns the in-process RPC request handler.
@@ -668,4 +727,160 @@ func (n *Node) apis() []rpc.API {
 			Public:    true,
 		},
 	}
+}
+func (n *Node) startSubRPC(services map[reflect.Type]Service) error {
+	// Gather all the possible APIs to surface
+	apis := n.apis()
+	for key, service := range services {
+		if key.String() != "*eth.Ethereum" {
+			apis = append(apis, service.APIs()...)
+		}
+	}
+	// Start the various API endpoints, terminating all in case of errors
+	if err := n.startSubInProc(apis); err != nil {
+		return err
+	}
+	if err := n.startSubIPC(apis); err != nil {
+		n.stopInProc()
+		return err
+	}
+	if err := n.startSubHTTP(n.subHttpEndpoint, apis, n.config.SubHTTPModules, n.config.SubHTTPCors, n.config.SubHTTPVirtualHosts, n.config.HTTPTimeouts); err != nil {
+		n.stopSubIPC()
+		n.stopSubInProc()
+		return err
+	}
+	if err := n.startSubWS(n.subWsEndpoint, apis, n.config.SubWSModules, n.config.SubWSOrigins, n.config.SubWSExposeAll); err != nil {
+		n.stopSubHTTP()
+		n.stopSubIPC()
+		n.stopSubInProc()
+		return err
+	}
+	// All API endpoints started successfully
+	n.subRpcAPIs = apis
+	return nil
+}
+
+// startInProc initializes an in-process RPC endpoint.
+func (n *Node) startSubInProc(apis []rpc.API) error {
+	// Register all the APIs exposed by the services
+	handler := rpc.NewServer()
+	for _, api := range apis {
+		if err := handler.RegisterName(api.Namespace, api.Service); err != nil {
+			return err
+		}
+		n.log.Debug("subchain InProc registered", "service", api.Service, "namespace", api.Namespace)
+	}
+	n.subInprocHandler = handler
+	return nil
+}
+
+// stopInProc terminates the in-process RPC endpoint.
+func (n *Node) stopSubInProc() {
+	if n.subInprocHandler != nil {
+		n.subInprocHandler.Stop()
+		n.subInprocHandler = nil
+	}
+}
+
+// startIPC initializes and starts the IPC RPC endpoint.
+func (n *Node) startSubIPC(apis []rpc.API) error {
+	if n.subIpcEndpoint == "" {
+		return nil // IPC disabled.
+	}
+	listener, handler, err := rpc.StartIPCEndpoint(n.subIpcEndpoint, apis)
+	if err != nil {
+		return err
+	}
+	n.subIpcListener = listener
+	n.subIpcHandler = handler
+	n.log.Info("subchain IPC endpoint opened", "url", n.subIpcEndpoint)
+	return nil
+}
+
+// stopIPC terminates the IPC RPC endpoint.
+func (n *Node) stopSubIPC() {
+	if n.subIpcListener != nil {
+		n.subIpcListener.Close()
+		n.subIpcListener = nil
+
+		n.log.Info("subchain IPC endpoint closed", "endpoint", n.subIpcEndpoint)
+	}
+	if n.subIpcHandler != nil {
+		n.subIpcHandler.Stop()
+		n.subIpcHandler = nil
+	}
+}
+
+// startHTTP initializes and starts the HTTP RPC endpoint.
+func (n *Node) startSubHTTP(endpoint string, apis []rpc.API, modules []string, cors []string, vhosts []string, timeouts rpc.HTTPTimeouts) error {
+	// Short circuit if the HTTP endpoint isn't being exposed
+	if endpoint == "" {
+		return nil
+	}
+	listener, handler, err := rpc.StartHTTPEndpoint(endpoint, apis, modules, cors, vhosts, timeouts)
+	if err != nil {
+		return err
+	}
+	n.log.Info("subchain HTTP endpoint opened", "url", fmt.Sprintf("http://%s", endpoint), "cors", strings.Join(cors, ","), "vhosts", strings.Join(vhosts, ","))
+	// All listeners booted successfully
+	n.subHttpEndpoint = endpoint
+	n.subHttpListener = listener
+	n.subHttpHandler = handler
+
+	return nil
+}
+
+// stopHTTP terminates the HTTP RPC endpoint.
+func (n *Node) stopSubHTTP() {
+	if n.subHttpListener != nil {
+		n.subHttpListener.Close()
+		n.subHttpListener = nil
+		n.log.Info("subchain HTTP endpoint closed", "url", fmt.Sprintf("http://%s", n.subHttpEndpoint))
+	}
+	if n.subHttpHandler != nil {
+		n.subHttpHandler.Stop()
+		n.subHttpHandler = nil
+	}
+}
+
+// startWS initializes and starts the websocket RPC endpoint.
+func (n *Node) startSubWS(endpoint string, apis []rpc.API, modules []string, wsOrigins []string, exposeAll bool) error {
+	// Short circuit if the WS endpoint isn't being exposed
+	if endpoint == "" {
+		return nil
+	}
+	listener, handler, err := rpc.StartWSEndpoint(endpoint, apis, modules, wsOrigins, exposeAll)
+	if err != nil {
+		return err
+	}
+	n.log.Info("subchain WebSocket endpoint opened", "url", fmt.Sprintf("ws://%s", listener.Addr()))
+	// All listeners booted successfully
+	n.subWsEndpoint = endpoint
+	n.subWsListener = listener
+	n.subWsHandler = handler
+
+	return nil
+}
+
+// stopWS terminates the websocket RPC endpoint.
+func (n *Node) stopSubWS() {
+	if n.subWsListener != nil {
+		n.subWsListener.Close()
+		n.subWsListener = nil
+
+		n.log.Info("WebSocket endpoint closed", "url", fmt.Sprintf("ws://%s", n.subWsEndpoint))
+	}
+	if n.subWsHandler != nil {
+		n.subWsHandler.Stop()
+		n.subWsHandler = nil
+	}
+}
+func (n *Node) IsMainChain() bool{
+	return n.config.Role.IsMainChain()
+}
+func (n *Node) IsSubChain()bool {
+	return n.config.Role.IsSubChain()
+}
+func (n *Node) IsAnchor() bool{
+	return n.config.Role.IsAnchor()
 }

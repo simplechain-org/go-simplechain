@@ -182,6 +182,21 @@ var (
 		utils.InsecureUnlockAllowedFlag,
 		utils.RPCGlobalGasCap,
 	}
+	subrpcFlags = []cli.Flag{
+		utils.SUBRPCEnabledFlag,
+		utils.SUBRPCListenAddrFlag,
+		utils.SUBRPCPortFlag,
+		utils.SUBRPCApiFlag,
+		utils.SUBWSEnabledFlag,
+		utils.SUBWSListenAddrFlag,
+		utils.SUBWSPortFlag,
+		utils.SUBWSApiFlag,
+		utils.SUBWSAllowedOriginsFlag,
+		utils.SUBIPCDisabledFlag,
+		utils.SUBIPCPathFlag,
+		utils.SUBRPCCORSDomainFlag,
+		utils.SUBRPCVirtualHostsFlag,
+	}
 
 	whisperFlags = []cli.Flag{
 		utils.WhisperEnabledFlag,
@@ -239,6 +254,7 @@ func init() {
 
 	app.Flags = append(app.Flags, nodeFlags...)
 	app.Flags = append(app.Flags, rpcFlags...)
+	app.Flags = append(app.Flags, subrpcFlags...)
 	app.Flags = append(app.Flags, consoleFlags...)
 	app.Flags = append(app.Flags, debug.Flags...)
 	app.Flags = append(app.Flags, whisperFlags...)

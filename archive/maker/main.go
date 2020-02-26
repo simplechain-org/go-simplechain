@@ -109,7 +109,7 @@ func main() {
 		fmt.Println("dial", "err", err)
 		return
 	}
-	for i:=0; i< 10000; i++ {
+	for i:=0; i< 20000; i++ {
 		Maker(client)
 	}
 }

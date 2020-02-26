@@ -34,6 +34,10 @@ const (
 	DefaultWSPort      = 8546        // Default TCP port for the websocket RPC server
 	DefaultGraphQLHost = "localhost" // Default host interface for the GraphQL server
 	DefaultGraphQLPort = 8547        // Default TCP port for the GraphQL server
+	DefaultSubHTTPHost = "localhost" // Default host interface for the HTTP RPC server
+	DefaultSubHTTPPort = 9545        // Default TCP port for the HTTP RPC server
+	DefaultSubWSHost   = "localhost" // Default host interface for the websocket RPC server
+	DefaultSubWSPort   = 9546        // Default TCP port for the websocket RPC server
 )
 
 // DefaultConfig contains reasonable default settings.
@@ -52,6 +56,11 @@ var DefaultConfig = Config{
 		MaxPeers:   50,
 		NAT:        nat.Any(),
 	},
+	SubHTTPPort:         DefaultSubHTTPPort,
+	SubHTTPModules:      []string{"net", "web3"},
+	SubHTTPVirtualHosts: []string{"localhost"},
+	SubWSPort:           DefaultSubWSPort,
+	SubWSModules:        []string{"net", "web3"},
 }
 
 // DefaultDataDir is the default data directory to use for the databases and other
