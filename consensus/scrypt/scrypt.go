@@ -285,6 +285,6 @@ func (powScrypt *PowScrypt) APIs(chain consensus.ChainReader) []rpc.API {
 }
 
 // Protocol implements consensus.Engine.Protocol
-func (powScrypt *PowScrypt) Protocol() consensus.Protocol {
-	return consensus.EthProtocol
-}
+//func (powScrypt *PowScrypt) Protocol() consensus.Protocol {
+//	return consensus.EthProtocol
+//}

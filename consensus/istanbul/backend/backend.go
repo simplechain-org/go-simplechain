@@ -160,8 +160,8 @@ func (sb *backend) Gossip(valSet istanbul.ValidatorSet, payload []byte) {
 			sb.recentMessages.Add(addr, m)
 
 			go func(peer consensus.Peer) {
-				if err := peer.Send(istanbulMsg, payload); err != nil {
-					log.Error("send istanbulMsg failed", "error", err.Error())
+				if err := peer.Send(IstanbulMsg, payload); err != nil {
+					log.Error("send IstanbulMsg failed", "error", err.Error())
 				}
 			}(p)
 		}

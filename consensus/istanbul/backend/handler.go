@@ -33,7 +33,7 @@ import (
 )
 
 const (
-	istanbulMsg = 0x11
+	IstanbulMsg = 0x11
 	NewBlockMsg = 0x07
 )
 
@@ -43,13 +43,13 @@ var (
 )
 
 // Protocol implements consensus.Engine.Protocol
-func (sb *backend) Protocol() consensus.Protocol {
-	return consensus.Protocol{
-		Name:     "istanbul",
-		Versions: []uint{65},
-		Lengths:  map[uint]uint64{65: 18},
-	}
-}
+//func (sb *backend) Protocol() consensus.Protocol {
+//	return consensus.Protocol{
+//		Name:     "istanbul",
+//		Versions: []uint{65},
+//		Lengths:  map[uint]uint64{65: 18},
+//	}
+//}
 
 func (sb *backend) decode(msg p2p.Msg) ([]byte, common.Hash, error) {
 	var data []byte
@@ -65,7 +65,7 @@ func (sb *backend) HandleMsg(addr common.Address, msg p2p.Msg) (bool, error) {
 	sb.coreMu.Lock()
 	defer sb.coreMu.Unlock()
 
-	if msg.Code == istanbulMsg {
+	if msg.Code == IstanbulMsg {
 		if !sb.coreStarted {
 			return true, istanbul.ErrStoppedEngine
 		}

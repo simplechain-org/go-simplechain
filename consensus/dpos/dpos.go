@@ -1058,9 +1058,9 @@ func (d *DPoS) Close() error {
 }
 
 // Protocol implements consensus.Engine.Protocol
-func (d *DPoS) Protocol() consensus.Protocol {
-	return consensus.EthProtocol
-}
+//func (d *DPoS) Protocol() consensus.Protocol {
+//	return consensus.EthProtocol
+//}
 
 func sideChainRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header, snap *Snapshot) {
 	// vanish gas fee

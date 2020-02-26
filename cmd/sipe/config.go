@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/simplechain-org/go-simplechain/common"
+	"github.com/simplechain-org/go-simplechain/sub"
 	"math/big"
 	"os"
 	"reflect"
@@ -138,31 +139,31 @@ func makeConfigNode(ctx *cli.Context) (*node.Node, gethConfig) {
 	}
 	utils.SetShhConfig(ctx, stack, &cfg.Shh)
 
-	if ctx.GlobalIsSet(utils.ContractMainFlag.Name){
-		mainCtxAddress:=ctx.GlobalString(utils.ContractMainFlag.Name)
-		if common.IsHexAddress(mainCtxAddress){
-			address:=common.HexToAddress(mainCtxAddress)
-			cfg.Eth.MainChainCtxAddress=address
+	if ctx.GlobalIsSet(utils.ContractMainFlag.Name) {
+		mainCtxAddress := ctx.GlobalString(utils.ContractMainFlag.Name)
+		if common.IsHexAddress(mainCtxAddress) {
+			address := common.HexToAddress(mainCtxAddress)
+			cfg.Eth.MainChainCtxAddress = address
 		}
 	}
-	if ctx.GlobalIsSet(utils.ContractSubFlag.Name){
-		subCtxAddress:=ctx.GlobalString(utils.ContractSubFlag.Name)
-		if common.IsHexAddress(subCtxAddress){
-			address:=common.HexToAddress(subCtxAddress)
-			cfg.Eth.SubChainCtxAddress=address
+	if ctx.GlobalIsSet(utils.ContractSubFlag.Name) {
+		subCtxAddress := ctx.GlobalString(utils.ContractSubFlag.Name)
+		if common.IsHexAddress(subCtxAddress) {
+			address := common.HexToAddress(subCtxAddress)
+			cfg.Eth.SubChainCtxAddress = address
 		}
 	}
-	if ctx.GlobalIsSet(utils.AnchorAccountsFlag.Name){
+	if ctx.GlobalIsSet(utils.AnchorAccountsFlag.Name) {
 		anchors := strings.Split(ctx.GlobalString(utils.AnchorAccountsFlag.Name), ",")
-		if len(anchors)>0{
-			addresses:=make([]common.Address,0,len(anchors))
-			for _,anchor:=range anchors{
+		if len(anchors) > 0 {
+			addresses := make([]common.Address, 0, len(anchors))
+			for _, anchor := range anchors {
 				if common.IsHexAddress(anchor) {
-					addresses=append(addresses,common.HexToAddress(anchor))
+					addresses = append(addresses, common.HexToAddress(anchor))
 				}
 			}
-			cfg.Eth.CtxStore.Anchors=addresses
-			cfg.Eth.RtxStore.Anchors=addresses
+			cfg.Eth.CtxStore.Anchors = addresses
+			cfg.Eth.RtxStore.Anchors = addresses
 		}
 	}
 
@@ -194,11 +195,11 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 	}
 	role := *utils.GlobalTextMarshaler(ctx, utils.RoleFlag.Name).(*common.ChainRole)
 
-	cfg.Eth.Role=role
+	cfg.Eth.Role = role
 
-	ethChan := utils.RegisterEthService(stack, &cfg.Eth)
+	subChan := utils.RegisterEthService(stack, &cfg.Eth)
 	if ctx.GlobalBool(utils.RaftModeFlag.Name) {
-		RegisterRaftService(stack, ctx, cfg, ethChan)
+		RegisterRaftService(stack, ctx, cfg, subChan)
 	}
 
 	// Whisper must be explicitly enabled by specifying at least 1 whisper flag or in dev mode
@@ -227,7 +228,7 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 	return stack
 }
 
-func RegisterRaftService(stack *node.Node, ctx *cli.Context, cfg gethConfig, ethChan <-chan *eth.Ethereum) {
+func RegisterRaftService(stack *node.Node, ctx *cli.Context, cfg gethConfig, subChan <-chan *sub.Ethereum) {
 	blockTimeMillis := ctx.GlobalInt(utils.RaftBlockTimeFlag.Name)
 	datadir := ctx.GlobalString(utils.DataDirFlag.Name)
 	joinExistingId := ctx.GlobalInt(utils.RaftJoinExistingFlag.Name)
@@ -268,8 +269,8 @@ func RegisterRaftService(stack *node.Node, ctx *cli.Context, cfg gethConfig, eth
 			}
 		}
 
-		ethereum := <-ethChan
-		return raft.New(ctx, ethereum.ChainConfig(), myId, raftPort, joinExisting, blockTimeNanos, ethereum, peers, datadir)
+		ethereum := <-subChan
+		return raft.New(ctx, ethereum.ChainConfig(), myId, raftPort, joinExisting, blockTimeNanos, ethereum, peers, datadir, ethereum.GetCtxStore())
 	}); err != nil {
 		utils.Fatalf("Failed to register the Raft service: %v", err)
 	}

@@ -2,13 +2,13 @@ package raft
 
 import (
 	"crypto/ecdsa"
+	"github.com/simplechain-org/go-simplechain/sub"
 	"sync"
 	"time"
 
 	"github.com/simplechain-org/go-simplechain/accounts"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/types"
-	"github.com/simplechain-org/go-simplechain/eth"
 	"github.com/simplechain-org/go-simplechain/eth/downloader"
 	"github.com/simplechain-org/go-simplechain/ethdb"
 	"github.com/simplechain-org/go-simplechain/event"
@@ -38,7 +38,7 @@ type RaftService struct {
 	calcGasLimitFunc func(block *types.Block) uint64
 }
 
-func New(ctx *node.ServiceContext, chainConfig *params.ChainConfig, raftId, raftPort uint16, joinExisting bool, blockTime time.Duration, e *eth.Ethereum, startPeers []*enode.Node, datadir string) (*RaftService, error) {
+func New(ctx *node.ServiceContext, chainConfig *params.ChainConfig, raftId, raftPort uint16, joinExisting bool, blockTime time.Duration, e *sub.Ethereum, startPeers []*enode.Node, datadir string, ctxStore *core.CtxStore) (*RaftService, error) {
 	service := &RaftService{
 		eventMux:         ctx.EventMux,
 		chainDb:          e.ChainDb(),
@@ -51,7 +51,7 @@ func New(ctx *node.ServiceContext, chainConfig *params.ChainConfig, raftId, raft
 		calcGasLimitFunc: e.CalcGasLimit,
 	}
 
-	service.minter = newMinter(chainConfig, service, blockTime)
+	service.minter = newMinter(chainConfig, service, blockTime, ctxStore)
 
 	var err error
 	if service.raftProtocolManager, err = NewProtocolManager(raftId, raftPort, service.blockchain, service.eventMux, startPeers, joinExisting, datadir, service.minter, service.downloader); err != nil {

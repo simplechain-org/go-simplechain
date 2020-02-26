@@ -269,9 +269,9 @@ func (e *NoRewardEngine) APIs(chain consensus.ChainReader) []rpc.API {
 	return e.inner.APIs(chain)
 }
 
-func (e *NoRewardEngine) Protocol() consensus.Protocol {
-	return consensus.EthProtocol
-}
+//func (e *NoRewardEngine) Protocol() consensus.Protocol {
+//	return consensus.EthProtocol
+//}
 
 func (e *NoRewardEngine) Close() error {
 	return e.inner.Close()

@@ -1596,10 +1596,10 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 }
 
 // RegisterEthService adds an Ethereum client to the stack.
-func RegisterEthService(stack *node.Node, cfg *eth.Config) <-chan *eth.Ethereum {
+func RegisterEthService(stack *node.Node, cfg *eth.Config) <-chan *sub.Ethereum {
 	var (
-		err      error
-		nodeChan = make(chan *eth.Ethereum, 1)
+		err     error
+		subChan = make(chan *sub.Ethereum, 1)
 	)
 	if cfg.SyncMode == downloader.LightSync {
 		err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
@@ -1615,7 +1615,6 @@ func RegisterEthService(stack *node.Node, cfg *eth.Config) <-chan *eth.Ethereum 
 					ls, _ := les.NewLesServer(fullNode, cfg)
 					fullNode.AddLesServer(ls)
 				}
-				nodeChan <- fullNode
 				return fullNode, err
 			})
 		} else if cfg.Role.IsSubChain() {
@@ -1628,6 +1627,7 @@ func RegisterEthService(stack *node.Node, cfg *eth.Config) <-chan *eth.Ethereum 
 					ls, _ := les.NewLesServer(fullNode, cfg)
 					fullNode.AddLesServer(ls)
 				}
+				subChan <- fullNode
 				return fullNode, err
 			})
 		} else if cfg.Role.IsAnchor() {
@@ -1641,6 +1641,7 @@ func RegisterEthService(stack *node.Node, cfg *eth.Config) <-chan *eth.Ethereum 
 			err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
 				//subConfig := ToSubChainConfig(cfg)
 				fullNode, err := sub.New(ctx, &subConfig)
+				subChan <- fullNode
 				return fullNode, err
 			})
 		}
@@ -1648,7 +1649,7 @@ func RegisterEthService(stack *node.Node, cfg *eth.Config) <-chan *eth.Ethereum 
 	if err != nil {
 		Fatalf("Failed to register the Ethereum service: %v", err)
 	}
-	return nodeChan
+	return subChan
 }
 
 //func ToSubChainConfig(cfg *eth.Config) *sub.Config {

@@ -114,7 +114,7 @@ type Engine interface {
 	APIs(chain ChainReader) []rpc.API
 
 	// Protocol returns the protocol for this consensus
-	Protocol() Protocol
+	//Protocol() Protocol
 
 	// Close terminates any background threads maintained by the consensus engine.
 	Close() error

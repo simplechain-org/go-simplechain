@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/simplechain-org/go-simplechain/crypto"
 	"math"
 	"math/big"
 	"sync"
@@ -100,9 +101,10 @@ type ProtocolManager struct {
 
 	serverPool *serverPool
 
-	msgHandler   types.MsgHandler
+	msgHandler types.MsgHandler
+	raftMode   bool
+	engine     consensus.Engine // used for istanbul consensus
 }
-
 
 // NewProtocolManager returns a new Ethereum sub protocol manager. The Ethereum sub protocol manages peers capable
 // with the Ethereum network.
@@ -121,7 +123,14 @@ func NewProtocolManager(config *params.ChainConfig, checkpoint *params.TrustedCh
 		txsyncCh:    make(chan *txsync),
 		quitSync:    make(chan struct{}),
 		serverPool:  serverPool,
+		raftMode:    config.Raft,
+		engine:      engine,
 	}
+
+	if istanbul, ok := manager.engine.(consensus.Istanbul); ok {
+		istanbul.SetBroadcaster(manager)
+	}
+
 	if mode == downloader.FullSync {
 		// The database seems empty as the current block is the genesis. Yet the fast
 		// block is ahead, so fast sync was enabled for this node at a certain point.
@@ -263,9 +272,16 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 	pm.txsSub = pm.txpool.SubscribeNewTxsEvent(pm.txsCh)
 	go pm.txBroadcastLoop()
 
-	// broadcast mined blocks
-	pm.minedBlockSub = pm.eventMux.Subscribe(core.NewMinedBlockEvent{})
-	go pm.minedBroadcastLoop()
+	if !pm.raftMode {
+		// broadcast mined blocks
+		pm.minedBlockSub = pm.eventMux.Subscribe(core.NewMinedBlockEvent{})
+		go pm.minedBroadcastLoop()
+	} else {
+		// We set this immediately in raft mode to make sure the miner never drops
+		// incoming txes. Raft mode doesn't use the fetcher or downloader, and so
+		// this would never be set otherwise.
+		atomic.StoreUint32(&pm.acceptTxs, 1)
+	}
 
 	// start sync handlers
 	go pm.syncer()
@@ -280,8 +296,10 @@ func (pm *ProtocolManager) Stop() {
 
 	log.Info("Stopping Subchain protocol")
 
-	pm.txsSub.Unsubscribe()        // quits txBroadcastLoop
-	pm.minedBlockSub.Unsubscribe() // quits blockBroadcastLoop
+	pm.txsSub.Unsubscribe() // quits txBroadcastLoop
+	if !pm.raftMode {
+		pm.minedBlockSub.Unsubscribe() // quits blockBroadcastLoop
+	}
 
 	// Quit the sync loop.
 	// After this send has completed, no new peers will be accepted.
@@ -399,6 +417,26 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		return errResp(ErrMsgTooLarge, "%v > %v", msg.Size, protocolMaxMsgSize)
 	}
 	defer msg.Discard()
+
+	if pm.raftMode {
+		if msg.Code != TxMsg &&
+			msg.Code != GetBlockHeadersMsg && msg.Code != BlockHeadersMsg &&
+			msg.Code != GetBlockBodiesMsg && msg.Code != BlockBodiesMsg {
+
+			log.Info("raft: ignoring message", "code", msg.Code)
+
+			return nil
+		}
+	}
+
+	if istanbul, ok := pm.engine.(consensus.Istanbul); ok {
+		pubKey := p.Node().Pubkey()
+		addr := crypto.PubkeyToAddress(*pubKey)
+		handled, err := istanbul.HandleMsg(addr, msg)
+		if handled {
+			return err
+		}
+	}
 
 	// Handle the message depending on its contents
 	switch {
@@ -638,7 +676,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			log.Debug("Failed to deliver node state data", "err", err)
 		}
 
-	case  msg.Code == GetReceiptsMsg:
+	case msg.Code == GetReceiptsMsg:
 		// Decode the retrieval message
 		msgStream := rlp.NewStream(msg.Payload, uint64(msg.Size))
 		if _, err := msgStream.List(); err != nil {
@@ -674,7 +712,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 		return p.SendReceiptsRLP(receipts)
 
-	case  msg.Code == ReceiptsMsg:
+	case msg.Code == ReceiptsMsg:
 		// A batch of receipts arrived to one of our previous requests
 		var receipts [][]*types.Receipt
 		if err := msg.Decode(&receipts); err != nil {
@@ -873,6 +911,7 @@ func (pm *ProtocolManager) NodeInfo() *NodeInfo {
 		Head:       currentBlock.Hash(),
 	}
 }
+
 //广播多签完成的Ctx
 func (pm *ProtocolManager) BroadcastCWss(cwss []*types.CrossTransactionWithSignatures) {
 	var txset = make(map[*peer][]*types.CrossTransactionWithSignatures)
@@ -892,10 +931,9 @@ func (pm *ProtocolManager) BroadcastCWss(cwss []*types.CrossTransactionWithSigna
 	}
 }
 
-
 //锚定节点广播签名Ctx
 func (pm *ProtocolManager) BroadcastCtx(ctxs []*types.CrossTransaction) {
-	for _,ctx:=range ctxs{
+	for _, ctx := range ctxs {
 		var txset = make(map[*peer]*types.CrossTransaction)
 
 		// Broadcast ctx to a batch of peers not knowing about it
@@ -916,7 +954,7 @@ func (pm *ProtocolManager) BroadcastCtx(ctxs []*types.CrossTransaction) {
 
 //锚定节点广播签名Rtx
 func (pm *ProtocolManager) BroadcastRtx(rtxs []*types.ReceptTransaction) {
-	for _,rtx:=range rtxs{
+	for _, rtx := range rtxs {
 		var txset = make(map[*peer]*types.ReceptTransaction)
 
 		// Broadcast rtx to a batch of peers not knowing about it
@@ -934,8 +972,6 @@ func (pm *ProtocolManager) BroadcastRtx(rtxs []*types.ReceptTransaction) {
 	}
 
 }
-
-
 
 //ctxStore触发
 func (pm *ProtocolManager) BroadcastInternalCrossTransactionWithSignature(cwss []*types.CrossTransactionWithSignatures) {
@@ -956,12 +992,11 @@ func (pm *ProtocolManager) BroadcastInternalCrossTransactionWithSignature(cwss [
 	}
 }
 
-
 func (pm *ProtocolManager) SetMsgHandler(msgHandler types.MsgHandler) {
 	pm.msgHandler = msgHandler
 }
 
-func (pm *ProtocolManager) AddRemotes(txs []*types.Transaction) []error{
+func (pm *ProtocolManager) AddRemotes(txs []*types.Transaction) []error {
 	return pm.txpool.AddRemotes(txs)
 }
 
@@ -985,4 +1020,20 @@ func (pm *ProtocolManager) GetNonce(address common.Address) uint64 {
 
 func (pm *ProtocolManager) GetAnchorTxs(address common.Address) (map[common.Address]types.Transactions, error) {
 	return pm.txpool.GetAnchorTxs(address)
+}
+
+func (pm *ProtocolManager) Enqueue(id string, block *types.Block) {
+	pm.fetcher.Enqueue(id, block)
+}
+
+func (pm *ProtocolManager) FindPeers(targets map[common.Address]bool) map[common.Address]consensus.Peer {
+	m := make(map[common.Address]consensus.Peer)
+	for _, p := range pm.peers.Peers() {
+		pubKey := p.Node().Pubkey()
+		addr := crypto.PubkeyToAddress(*pubKey)
+		if targets[addr] {
+			m[addr] = p
+		}
+	}
+	return m
 }

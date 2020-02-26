@@ -68,5 +68,5 @@ for i in $(seq 1 ${numNodes}); do
   cp raftdata/nodekey/static-nodes.json raftdata/dd${i}/static-nodes.json
   cp raftdata/nodekey/nodekey${i} raftdata/dd${i}/sipe/nodekey
   cp raftdata/nodekey/keys/key${i} raftdata/dd${i}/keystore/key${i}
-  sipe --datadir raftdata/dd${i} init raftdata/nodekey/genesis_raft.json
+  sipe --datadir raftdata/dd${i} init raftdata/nodekey/genesis_raft.json --role=subchain
 done

@@ -128,10 +128,6 @@ func NewProtocolManager(config *params.ChainConfig, checkpoint *params.TrustedCh
 		engine:      engine,
 	}
 
-	if istanbul, ok := manager.engine.(consensus.Istanbul); ok {
-		istanbul.SetBroadcaster(manager)
-	}
-
 	if mode == downloader.FullSync {
 		// The database seems empty as the current block is the genesis. Yet the fast
 		// block is ahead, so fast sync was enabled for this node at a certain point.
@@ -209,14 +205,14 @@ func NewProtocolManager(config *params.ChainConfig, checkpoint *params.TrustedCh
 }
 
 func (pm *ProtocolManager) makeProtocol(version uint) p2p.Protocol {
-	proto := pm.engine.Protocol()
-	length, ok := proto.Lengths[version]
+	length, ok := protocolLengths[version]
+
 	if !ok {
 		panic("makeProtocol for unknown version")
 	}
 
 	return p2p.Protocol{
-		Name:    proto.Name,
+		Name:    protocolName,
 		Version: version,
 		Length:  length,
 		Run: func(p *p2p.Peer, rw p2p.MsgReadWriter) error {
@@ -901,22 +897,6 @@ func (pm *ProtocolManager) NodeInfo() *NodeInfo {
 		Head:       currentBlock.Hash(),
 		Consensus:  pm.getConsensusAlgorithm(),
 	}
-}
-
-func (pm *ProtocolManager) Enqueue(id string, block *types.Block) {
-	pm.fetcher.Enqueue(id, block)
-}
-
-func (pm *ProtocolManager) FindPeers(targets map[common.Address]bool) map[common.Address]consensus.Peer {
-	m := make(map[common.Address]consensus.Peer)
-	for _, p := range pm.peers.Peers() {
-		pubKey := p.Node().Pubkey()
-		addr := crypto.PubkeyToAddress(*pubKey)
-		if targets[addr] {
-			m[addr] = p
-		}
-	}
-	return m
 }
 
 func (pm *ProtocolManager) getConsensusAlgorithm() string {

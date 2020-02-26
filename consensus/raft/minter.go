@@ -17,6 +17,7 @@
 package raft
 
 import (
+	"bytes"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -44,10 +45,11 @@ var (
 
 // Current state information for building the next block
 type work struct {
+	signer types.Signer
 	config *params.ChainConfig
 	state  *state.StateDB
-	Block  *types.Block
 	header *types.Header
+	status map[uint64]*core.Statistics
 }
 
 type minter struct {
@@ -61,6 +63,7 @@ type minter struct {
 	minting          int32 // Atomic status counter
 	shouldMine       *channels.RingChannel
 	blockTime        time.Duration
+	env              *work
 	speculativeChain *speculativeChain
 
 	invalidRaftOrderingChan chan InvalidRaftOrdering
@@ -68,6 +71,7 @@ type minter struct {
 	chainHeadSub            event.Subscription
 	txPreChan               chan core.NewTxsEvent
 	txPreSub                event.Subscription
+	ctxStore                *core.CtxStore
 }
 
 type extraSeal struct {
@@ -75,7 +79,7 @@ type extraSeal struct {
 	Signature []byte // Signature of the block minter
 }
 
-func newMinter(config *params.ChainConfig, eth *RaftService, blockTime time.Duration) *minter {
+func newMinter(config *params.ChainConfig, eth *RaftService, blockTime time.Duration, ctxStore *core.CtxStore) *minter {
 	minter := &minter{
 		config:           config,
 		eth:              eth,
@@ -89,6 +93,7 @@ func newMinter(config *params.ChainConfig, eth *RaftService, blockTime time.Dura
 		invalidRaftOrderingChan: make(chan InvalidRaftOrdering, 1),
 		chainHeadChan:           make(chan core.ChainHeadEvent, 1),
 		txPreChan:               make(chan core.NewTxsEvent, 4096),
+		ctxStore:                ctxStore,
 	}
 
 	minter.chainHeadSub = eth.BlockChain().SubscribeChainHeadEvent(minter.chainHeadChan)
@@ -251,7 +256,7 @@ func generateNanoTimestamp(parent *types.Block) (tstamp int64) {
 }
 
 // Assumes mu is held.
-func (minter *minter) createWork() *work {
+func (minter *minter) createWork() {
 	parent := minter.speculativeChain.head
 	parentNumber := parent.Number()
 	tstamp := generateNanoTimestamp(parent)
@@ -271,10 +276,12 @@ func (minter *minter) createWork() *work {
 		panic(fmt.Sprint("failed to get parent state: ", err))
 	}
 
-	return &work{
+	minter.env = &work{
+		signer: types.NewEIP155Signer(minter.config.ChainID),
 		config: minter.config,
 		state:  state,
 		header: header,
+		status: minter.ctxStore.Status(),
 	}
 }
 
@@ -307,25 +314,29 @@ func (minter *minter) mintNewBlock() {
 	minter.mu.Lock()
 	defer minter.mu.Unlock()
 
-	work := minter.createWork()
+	minter.createWork()
 
 	transactions := minter.getTransactions()
 
-	committedTxes, receipts, logs := work.commitTransactions(transactions, minter.chain)
+	committedTxes, receipts, logs, hashes := minter.commitTransactions(transactions, minter.chain)
 	txCount := len(committedTxes)
 
 	if txCount == 0 {
 		log.Info("Not minting a new block since there are no pending transactions")
 		return
+	} else {
+		for _, ctxHash := range hashes {
+			minter.eth.TxPool().RemoveTx(ctxHash, true)
+		}
 	}
 
 	minter.firePendingBlockEvents(logs)
 
-	header := work.header
+	header := minter.env.header
 
 	// commit state root after all state transitions.
-	ethash.AccumulateRewards(minter.chain.Config(), work.state, header, nil)
-	header.Root = work.state.IntermediateRoot(minter.chain.Config().IsEIP158(work.header.Number))
+	ethash.AccumulateRewards(minter.chain.Config(), minter.env.state, header, nil)
+	header.Root = minter.env.state.IntermediateRoot(minter.chain.Config().IsEIP158(minter.env.header.Number))
 
 	header.Bloom = types.CreateBloom(receipts)
 
@@ -349,7 +360,7 @@ func (minter *minter) mintNewBlock() {
 	log.Info("Generated next block", "block num", block.Number(), "num txs", txCount)
 
 	deleteEmptyObjects := minter.chain.Config().IsEIP158(block.Number())
-	if _, err := work.state.Commit(deleteEmptyObjects); err != nil {
+	if _, err := minter.env.state.Commit(deleteEmptyObjects); err != nil {
 		panic(fmt.Sprint("error committing state: ", err))
 	}
 
@@ -361,49 +372,110 @@ func (minter *minter) mintNewBlock() {
 	log.Info("🔨  Mined block", "number", block.Number(), "hash", fmt.Sprintf("%x", block.Hash().Bytes()[:4]), "elapsed", elapsed)
 }
 
-func (env *work) commitTransactions(txes *types.TransactionsByPriceAndNonce, bc *core.BlockChain) (types.Transactions, types.Receipts, []*types.Log) {
+func (minter *minter) commitTransactions(txs *types.TransactionsByPriceAndNonce, bc *core.BlockChain) (types.Transactions, types.Receipts, []*types.Log, []common.Hash) {
 	var allLogs []*types.Log
 	var committedTxes types.Transactions
 	var receipts types.Receipts
+	var txHashs []common.Hash
+	var address []common.Address
 
-	gp := new(core.GasPool).AddGas(env.header.GasLimit)
+	gp := new(core.GasPool).AddGas(minter.env.header.GasLimit)
 	txCount := 0
 
+Loop:
 	for {
-		tx := txes.Peek()
+		tx := txs.Peek()
 		if tx == nil {
 			break
 		}
 
-		env.state.Prepare(tx.Hash(), common.Hash{}, txCount)
-
-		receipt, err := env.commitTransaction(tx, bc, gp)
-		switch {
-		case err != nil:
-			log.Info("TX failed, will be removed", "hash", tx.Hash(), "err", err)
-			txes.Pop() // skip rest of txes from this account
-		default:
-			txCount++
-			committedTxes = append(committedTxes, tx)
-
-			receipts = append(receipts, receipt)
-			allLogs = append(allLogs, receipt.Logs...)
-
-			txes.Shift()
+		// Error may be ignored here. The error has already been checked
+		// during transaction acceptance is the transaction pool.
+		//
+		// We use the eip155 signer regardless of the current hf.
+		from, _ := types.Sender(minter.env.signer, tx)
+		for _, add := range address {
+			if add == from { //TODO 解析交易应用
+				txHashs = append(txHashs, tx.Hash())
+				txs.Shift()
+				continue Loop
+			}
 		}
+
+		if !minter.env.storeCheck(tx, minter.ctxStore.CrossDemoAddress) {
+			log.Info("ctxStore is busy!")
+			txs.Pop()
+		} else {
+			minter.env.state.Prepare(tx.Hash(), common.Hash{}, txCount)
+
+			receipt, err := minter.commitTransaction(tx, bc, gp)
+
+			switch err {
+			case core.ErrGasLimitReached:
+				// Pop the current out-of-gas transaction without shifting in the next from the account
+				log.Trace("Gas limit exceeded for current block", "sender", from)
+				txs.Pop()
+
+			case core.ErrNonceTooLow:
+				// New head notification data race between the transaction pool and miner, shift
+				log.Trace("Skipping transaction with low nonce", "sender", from, "nonce", tx.Nonce())
+				txs.Shift()
+
+			case core.ErrNonceTooHigh:
+				// Reorg notification data race between the transaction pool and miner, skip account =
+				log.Trace("Skipping account with hight nonce", "sender", from, "nonce", tx.Nonce())
+				txs.Pop()
+
+			case core.ErrRepetitionCrossTransaction:
+				log.Trace("repetition", "sender", from, "hash", tx.Hash())
+				address = append(address, from)
+				txHashs = append(txHashs, tx.Hash()) //record RepetitionCrossTransaction
+				txs.Shift()
+
+			case nil:
+				// Everything ok, collect the logs and shift in the next transaction from the same account
+				txCount++
+				committedTxes = append(committedTxes, tx)
+
+				receipts = append(receipts, receipt)
+				allLogs = append(allLogs, receipt.Logs...)
+
+				txs.Shift()
+
+			default:
+				// Strange error, discard the transaction and get the next in line (note, the
+				// nonce-too-high clause will prevent us from executing in vain).
+				log.Debug("Transaction failed, account skipped", "hash", tx.Hash(), "err", err)
+				txs.Shift()
+			}
+		}
+
+		//switch {
+		//case err != nil:
+		//	log.Info("TX failed, will be removed", "hash", tx.Hash(), "err", err)
+		//	txs.Pop() // skip rest of txs from this account
+		//default:
+		//	txCount++
+		//	committedTxes = append(committedTxes, tx)
+		//
+		//	receipts = append(receipts, receipt)
+		//	allLogs = append(allLogs, receipt.Logs...)
+		//
+		//	txs.Shift()
+		//}
 	}
 
-	return committedTxes, receipts, allLogs
+	return committedTxes, receipts, allLogs, txHashs
 }
 
-func (env *work) commitTransaction(tx *types.Transaction, bc *core.BlockChain, gp *core.GasPool) (*types.Receipt, error) {
-	snapshot := env.state.Snapshot()
+func (minter *minter) commitTransaction(tx *types.Transaction, bc *core.BlockChain, gp *core.GasPool) (*types.Receipt, error) {
+	snapshot := minter.env.state.Snapshot()
 
 	var author *common.Address
 	var vmConf vm.Config
-	receipt, err := core.ApplyTransaction(env.config, bc, author, gp, env.state, env.header, tx, &env.header.GasUsed, vmConf, bc.CrossDemoAddress)
+	receipt, err := core.ApplyTransaction(minter.env.config, bc, author, gp, minter.env.state, minter.env.header, tx, &minter.env.header.GasUsed, vmConf, bc.CrossDemoAddress)
 	if err != nil {
-		env.state.RevertToSnapshot(snapshot)
+		minter.env.state.RevertToSnapshot(snapshot)
 		return nil, err
 	}
 
@@ -434,4 +506,26 @@ func (minter *minter) buildExtraSeal(headerHash common.Hash) []byte {
 	}
 
 	return extraDataBytes
+}
+
+func (env *work) storeCheck(tx *types.Transaction, address common.Address) bool {
+	if tx.To() != nil && (*tx.To() == address) {
+		startID, _ := hexutil.Decode("0xf56339a8")
+
+		if len(tx.Data()) >= 2*common.HashLength+4 && bytes.Equal(tx.Data()[:4], startID) {
+			networkId := common.BytesToHash(tx.Data()[4 : common.HashLength+4]).Big().Uint64()
+			if v, ok := env.status[networkId]; ok {
+				if v.Top {
+					if !core.ComparePrice2(
+						common.BytesToHash(tx.Data()[common.HashLength+4:2*common.HashLength+4]).Big(),
+						tx.Value(),
+						v.MinimumTx.Data.DestinationValue,
+						v.MinimumTx.Data.Value) {
+						return false
+					}
+				}
+			}
+		}
+	}
+	return true
 }

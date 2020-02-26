@@ -49,15 +49,12 @@ go build
 
 ip="127.0.0.1"
 port=21000
-discport=0
-raftport=50400
 
 cmd="./consensus newnode --consensus=istanbul --nodedir=${dir}/nodekey --n=${numNodes} --genesis=genesis_istanbul.json"
 
 for i in $(seq 1 ${numNodes}); do
   port=$(expr ${port} + 1)
-  raftport=$(expr ${raftport} + 1)
-  cmd="${cmd} --ip=${ip} --port=${port} --discport=0 --raftport=${raftport}"
+  cmd="${cmd} --ip=${ip} --port=${port}"
 done
 
 $cmd
@@ -70,5 +67,5 @@ for i in $(seq 1 ${numNodes}); do
   cp ${dir}/nodekey/static-nodes.json ${dir}/dd${i}/static-nodes.json
   cp ${dir}/nodekey/nodekey${i} ${dir}/dd${i}/sipe/nodekey
   cp ${dir}/nodekey/keys/key${i} ${dir}/dd${i}/keystore/key${i}
-  sipe --datadir ${dir}/dd${i} init ${dir}/nodekey/genesis_istanbul.json
+  sipe init ${dir}/nodekey/genesis_istanbul.json --datadir=${dir}/dd${i} --role=subchain
 done

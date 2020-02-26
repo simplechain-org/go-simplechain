@@ -21,6 +21,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/simplechain-org/go-simplechain/consensus/dpos"
+	"github.com/simplechain-org/go-simplechain/crypto"
 	"math/big"
 	"runtime"
 	"sync"
@@ -33,8 +35,6 @@ import (
 	"github.com/simplechain-org/go-simplechain/common/math"
 	"github.com/simplechain-org/go-simplechain/consensus"
 	"github.com/simplechain-org/go-simplechain/consensus/clique"
-	"github.com/simplechain-org/go-simplechain/consensus/ethash"
-	"github.com/simplechain-org/go-simplechain/consensus/scrypt"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/bloombits"
 	"github.com/simplechain-org/go-simplechain/core/rawdb"
@@ -161,7 +161,7 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*Ethereum, error) {
 		chainDb:        chainDb,
 		eventMux:       ctx.EventMux,
 		accountManager: ctx.AccountManager,
-		engine:         CreateConsensusEngine(ctx, chainConfig, &config.Ethash, config.Miner.Notify, config.Miner.Noverify, chainDb),
+		engine:         eth.CreateConsensusEngine(ctx, chainConfig, config, config.Miner.Notify, config.Miner.Noverify, chainDb),
 		shutdownChan:   make(chan bool),
 		networkID:      chainConfig.ChainID.Uint64(),
 		gasPrice:       config.Miner.GasPrice,
@@ -178,6 +178,12 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*Ethereum, error) {
 	if bcVersion != nil {
 		dbVer = fmt.Sprintf("%d", *bcVersion)
 	}
+
+	// force to set the istanbul etherbase to node key address
+	if chainConfig.Istanbul != nil {
+		eth.etherbase = crypto.PubkeyToAddress(ctx.NodeKey().PublicKey)
+	}
+
 	log.Info("Initialising Ethereum protocol", "versions", ProtocolVersions, "network", config.NetworkId, "dbversion", dbVer)
 
 	if !config.SkipBcVersionCheck {
@@ -280,54 +286,6 @@ func makeExtraData(extra []byte) []byte {
 		extra = nil
 	}
 	return extra
-}
-
-// CreateConsensusEngine creates the required type of consensus engine instance for an Ethereum service
-func CreateConsensusEngine(ctx *node.ServiceContext, chainConfig *params.ChainConfig, config *ethash.Config, notify []string, noverify bool, db ethdb.Database) consensus.Engine {
-	// If proof-of-authority is requested, set it up
-	if chainConfig.Clique != nil {
-		return clique.New(chainConfig.Clique, db)
-	}
-
-	if chainConfig.Scrypt != nil {
-		// Scrypt and Ethash share the PowMode in this switch cases
-		switch config.PowMode {
-		case ethash.ModeFake:
-			log.Warn("Scrypt used in fake mode")
-			return scrypt.NewFaker()
-		case ethash.ModeTest:
-			log.Warn("Scrypt used in test mode")
-			return scrypt.NewTester(notify, noverify)
-		default:
-			engine := scrypt.NewScrypt(scrypt.Config{PowMode: scrypt.ModeNormal}, notify, noverify)
-			engine.SetThreads(-1) // Disable CPU mining
-			return engine
-		}
-	}
-
-	// Otherwise assume proof-of-work
-	switch config.PowMode {
-	case ethash.ModeFake:
-		log.Warn("Ethash used in fake mode")
-		return ethash.NewFaker()
-	case ethash.ModeTest:
-		log.Warn("Ethash used in test mode")
-		return ethash.NewTester(nil, noverify)
-	case ethash.ModeShared:
-		log.Warn("Ethash used in shared mode")
-		return ethash.NewShared()
-	default:
-		engine := ethash.New(ethash.Config{
-			CacheDir:       ctx.ResolvePath(config.CacheDir),
-			CachesInMem:    config.CachesInMem,
-			CachesOnDisk:   config.CachesOnDisk,
-			DatasetDir:     config.DatasetDir,
-			DatasetsInMem:  config.DatasetsInMem,
-			DatasetsOnDisk: config.DatasetsOnDisk,
-		}, notify, noverify)
-		engine.SetThreads(-1) // Disable CPU mining
-		return engine
-	}
 }
 
 // APIs return the collection of RPC services the ethereum package offers.
@@ -523,6 +481,14 @@ func (s *Ethereum) StartMining(threads int) error {
 			}
 			clique.Authorize(eb, wallet.SignData)
 		}
+		if dpos, ok := s.engine.(*dpos.DPoS); ok {
+			wallet, err := s.accountManager.Find(accounts.Account{Address: eb})
+			if wallet == nil || err != nil {
+				log.Error("Etherbase account unavailable locally", "err", err)
+				return fmt.Errorf("signer missing: %v", err)
+			}
+			dpos.Authorize(eb, wallet.SignData, wallet.SignTx)
+		}
 		// If mining is started, we can disable the transaction rejection mechanism
 		// introduced to speed sync times.
 		atomic.StoreUint32(&s.protocolManager.acceptTxs, 1)
@@ -562,6 +528,9 @@ func (s *Ethereum) Downloader() *downloader.Downloader { return s.protocolManage
 func (s *Ethereum) Synced() bool                       { return atomic.LoadUint32(&s.protocolManager.acceptTxs) == 1 }
 func (s *Ethereum) ArchiveMode() bool                  { return s.config.NoPruning }
 func (s *Ethereum) GetSynced() func() bool             { return s.Synced }
+func (s *Ethereum) GetCtxStore() *core.CtxStore {
+	return s.ctxStore
+}
 
 // Protocols implements node.Service, returning all the currently configured
 // network protocols to start.
@@ -670,4 +639,10 @@ func (s *Ethereum) GetEVM(ctx context.Context, msg core.Message, state *state.St
 	vmError := func() error { return nil }
 	context := core.NewEVMContext(msg, header, s.blockchain, nil)
 	return vm.NewEVM(context, state, s.chainConfig, vmCfg), vmError, nil
+}
+
+func (s *Ethereum) ChainConfig() *params.ChainConfig { return s.chainConfig }
+
+func (s *Ethereum) CalcGasLimit(block *types.Block) uint64 {
+	return core.CalcGasLimit(block, s.config.Miner.GasFloor, s.config.Miner.GasCeil)
 }

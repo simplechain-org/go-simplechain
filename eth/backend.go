@@ -45,7 +45,6 @@ import (
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/core/vm"
 	"github.com/simplechain-org/go-simplechain/cross"
-	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/eth/downloader"
 	"github.com/simplechain-org/go-simplechain/eth/filters"
 	"github.com/simplechain-org/go-simplechain/eth/gasprice"
@@ -156,6 +155,16 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 	}
 	log.Info("Initialised chain configuration", "config", chainConfig)
 
+	switch {
+	case chainConfig.Istanbul != nil:
+		return nil, errors.New("Istanbul consensus is not support in MainChain role")
+	case chainConfig.DPoS != nil:
+		return nil, errors.New("DPoS consensus is not support in MainChain role")
+	case chainConfig.Raft:
+		return nil, errors.New("Raft consensus is not support in MainChain role")
+
+	}
+
 	eth := &Ethereum{
 		config:         config,
 		chainConfig:    chainConfig,
@@ -177,12 +186,7 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 		dbVer = fmt.Sprintf("%d", *bcVersion)
 	}
 
-	// force to set the istanbul etherbase to node key address
-	if chainConfig.Istanbul != nil {
-		eth.etherbase = crypto.PubkeyToAddress(ctx.NodeKey().PublicKey)
-	}
-
-	log.Info("Initialising Ethereum protocol", "versions", eth.engine.Protocol().Versions, "network", config.NetworkId, "dbversion", dbVer)
+	log.Info("Initialising Ethereum protocol", "versions", ProtocolVersions, "network", config.NetworkId, "dbversion", dbVer)
 
 	if !config.SkipBcVersionCheck {
 		if bcVersion != nil && *bcVersion > core.BlockChainVersion {
@@ -598,7 +602,7 @@ func (s *Ethereum) EventMux() *event.TypeMux           { return s.eventMux }
 func (s *Ethereum) Engine() consensus.Engine           { return s.engine }
 func (s *Ethereum) ChainDb() ethdb.Database            { return s.chainDb }
 func (s *Ethereum) IsListening() bool                  { return true } // Always listening
-func (s *Ethereum) EthVersion() int                    { return int(s.engine.Protocol().Versions[0]) }
+func (s *Ethereum) EthVersion() int                    { return int(ProtocolVersions[0]) }
 func (s *Ethereum) NetVersion() uint64                 { return s.networkID }
 func (s *Ethereum) Downloader() *downloader.Downloader { return s.protocolManager.downloader }
 func (s *Ethereum) Synced() bool                       { return atomic.LoadUint32(&s.protocolManager.acceptTxs) == 1 }
@@ -608,9 +612,8 @@ func (s *Ethereum) GetSynced() func() bool             { return s.Synced }
 // Protocols implements node.Service, returning all the currently configured
 // network protocols to start.
 func (s *Ethereum) Protocols() []p2p.Protocol {
-	proto := s.engine.Protocol()
-	protos := make([]p2p.Protocol, len(proto.Versions))
-	for i, vsn := range proto.Versions {
+	protos := make([]p2p.Protocol, len(ProtocolVersions))
+	for i, vsn := range ProtocolVersions {
 		protos[i] = s.protocolManager.makeProtocol(vsn)
 		protos[i].Attributes = []enr.Entry{s.currentEthEntry()}
 	}
