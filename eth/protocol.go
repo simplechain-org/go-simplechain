@@ -42,7 +42,7 @@ const protocolName = "eth"
 var ProtocolVersions = []uint{eth64, eth63}
 
 // protocolLengths are the number of implemented message corresponding to different protocol versions.
-var protocolLengths = map[uint]uint64{eth64: 17, eth63: 17}
+var protocolLengths = map[uint]uint64{eth64: 21, eth63: 17}
 
 const protocolMaxMsgSize = 10 * 1024 * 1024 // Maximum cap on the size of a protocol message
 
@@ -50,22 +50,22 @@ const protocolMaxMsgSize = 10 * 1024 * 1024 // Maximum cap on the size of a prot
 const (
 	StatusMsg          = 0x00
 	NewBlockHashesMsg  = 0x01
-	TxMsg              = 0x02
+	TransactionMsg     = 0x02
 	GetBlockHeadersMsg = 0x03
 	BlockHeadersMsg    = 0x04
 	GetBlockBodiesMsg  = 0x05
 	BlockBodiesMsg     = 0x06
 	NewBlockMsg        = 0x07
-	GetNodeDataMsg     = 0x08
-	NodeDataMsg        = 0x09
-	GetReceiptsMsg     = 0x0a
-	ReceiptsMsg        = 0x0b
+	GetNodeDataMsg     = 0x0d
+	NodeDataMsg        = 0x0e
+	GetReceiptsMsg     = 0x0f
+	ReceiptsMsg        = 0x10
 
-	CtxSignMsg          = 0x0c
-	CtxSignsMsg         = 0x0d
-	RtxSignMsg          = 0x0e
-	CtxSignsInternalMsg = 0x0f //完成签名后的消息在本链内传播
-	GetCtxSignsMsg      = 0x10
+	//for eth64
+	CtxSignMsg          = 0x31
+	CtxSignsMsg         = 0x32
+	RtxSignMsg          = 0x33
+	CtxSignsInternalMsg = 0x34
 )
 
 type errCode int

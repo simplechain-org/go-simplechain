@@ -227,6 +227,7 @@ func (c *ChainConfig) String() string {
 	)
 }
 
+
 // IsMoon returns whether num is either equal to the Istanbul fork block or greater.
 func (c *ChainConfig) IsSingularity(num *big.Int) bool {
 	return isForked(c.SingularityBlock, num)
