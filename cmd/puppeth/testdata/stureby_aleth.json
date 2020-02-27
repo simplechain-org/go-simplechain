@@ -3,7 +3,7 @@
   "params": {
     "accountStartNonce": "0x0",
     "maximumExtraDataSize": "0x20",
-    "moonForkBlock": "0xc350",
+    "singularityforkBlock": "0xc350",
     "minGasLimit": "0x1388",
     "maxGasLimit": "0x7fffffffffffffff",
     "tieBreakingGas": false,
@@ -70,29 +70,27 @@
     "0000000000000000000000000000000000000005": {
       "balance": "0x1",
       "precompiled": {
-        "name": "modexp",
-        "startingBlock": "0x7530"
+        "name": "modexp"
       }
     },
     "0000000000000000000000000000000000000006": {
       "balance": "0x1",
       "precompiled": {
         "name": "alt_bn128_G1_add",
-        "startingBlock": "0x7530"
+        "startingBlock": "0xc350"
       }
     },
     "0000000000000000000000000000000000000007": {
       "balance": "0x1",
       "precompiled": {
         "name": "alt_bn128_G1_mul",
-        "startingBlock": "0x7530"
+        "startingBlock": "0xc350"
       }
     },
     "0000000000000000000000000000000000000008": {
       "balance": "0x1",
       "precompiled": {
-        "name": "alt_bn128_pairing_product",
-        "startingBlock": "0x7530"
+        "name": "alt_bn128_pairing_product"
       }
     },
     "0000000000000000000000000000000000000009": {

@@ -42,7 +42,7 @@ func TestCheckCompatible(t *testing.T) {
 			new:    &ChainConfig{SingularityBlock: nil},
 			head:   3,
 			wantErr: &ConfigCompatError{
-				What:         "MoonBlock fork block",
+				What:         "SingularityBlock fork block",
 				StoredConfig: big.NewInt(0),
 				NewConfig:    nil,
 				RewindTo:     0,
@@ -53,7 +53,7 @@ func TestCheckCompatible(t *testing.T) {
 			new:    &ChainConfig{SingularityBlock: big.NewInt(1)},
 			head:   3,
 			wantErr: &ConfigCompatError{
-				What:         "MoonBlock fork block",
+				What:         "SingularityBlock fork block",
 				StoredConfig: big.NewInt(0),
 				NewConfig:    big.NewInt(1),
 				RewindTo:     0,

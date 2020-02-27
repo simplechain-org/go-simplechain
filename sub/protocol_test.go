@@ -160,6 +160,7 @@ func TestForkIDSplit(t *testing.T) {
 		configNoFork  = &params.ChainConfig{SingularityBlock: big.NewInt(1)}
 		configProFork = &params.ChainConfig{
 			SingularityBlock: big.NewInt(1),
+			EWASMBlock:       big.NewInt(2),
 		}
 		dbNoFork  = rawdb.NewMemoryDatabase()
 		dbProFork = rawdb.NewMemoryDatabase()

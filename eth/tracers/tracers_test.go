@@ -20,7 +20,6 @@ import (
 	"crypto/ecdsa"
 	"crypto/rand"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"math/big"
 	"path/filepath"
@@ -208,7 +207,7 @@ func TestCallTracer(t *testing.T) {
 		t.Fatalf("failed to retrieve tracer test suite: %v", err)
 	}
 	for _, file := range files {
-		if !strings.HasPrefix(file.Name(), "call_tracer_inner_create_") {
+		if !strings.HasPrefix(file.Name(), "call_tracer_") {
 			continue
 		}
 		file := file // capture range variable
@@ -245,7 +244,6 @@ func TestCallTracer(t *testing.T) {
 			}
 			statedb := tests.MakePreState(rawdb.NewMemoryDatabase(), test.Genesis.Alloc)
 
-			fmt.Println(test.Context.Number)
 			// Create the tracer, the EVM environment and run it
 			tracer, err := New("callTracer")
 			if err != nil {

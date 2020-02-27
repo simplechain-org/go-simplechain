@@ -36,16 +36,9 @@ import (
 type alethGenesisSpec struct {
 	SealEngine string `json:"sealEngine"`
 	Params     struct {
-		AccountStartNonce    math2.HexOrDecimal64 `json:"accountStartNonce"`
-		MaximumExtraDataSize hexutil.Uint64       `json:"maximumExtraDataSize"`
-		//HomesteadForkBlock         *hexutil.Big           `json:"homesteadForkBlock,omitempty"`
-		//DaoHardforkBlock           math2.HexOrDecimal64   `json:"daoHardforkBlock"`
-		//EIP150ForkBlock            *hexutil.Big           `json:"EIP150ForkBlock,omitempty"`
-		//EIP158ForkBlock            *hexutil.Big           `json:"EIP158ForkBlock,omitempty"`
-		//ByzantiumForkBlock         *hexutil.Big           `json:"byzantiumForkBlock,omitempty"`
-		//ConstantinopleForkBlock    *hexutil.Big           `json:"constantinopleForkBlock,omitempty"`
-		//ConstantinopleFixForkBlock *hexutil.Big           `json:"constantinopleFixForkBlock,omitempty"`
-		MoonBlock              *hexutil.Big           `json:"moonBlock,omitempty"`
+		AccountStartNonce      math2.HexOrDecimal64   `json:"accountStartNonce"`
+		MaximumExtraDataSize   hexutil.Uint64         `json:"maximumExtraDataSize"`
+		SingularityForkBlock   *hexutil.Big           `json:"singularityforkBlock,omitempty"`
 		MinGasLimit            hexutil.Uint64         `json:"minGasLimit"`
 		MaxGasLimit            hexutil.Uint64         `json:"maxGasLimit"`
 		TieBreakingGas         bool                   `json:"tieBreakingGas"`
@@ -110,7 +103,7 @@ func newAlethGenesisSpec(network string, genesis *core.Genesis) (*alethGenesisSp
 	spec.Params.AllowFutureBlocks = false
 
 	if num := genesis.Config.SingularityBlock; num != nil {
-		spec.Params.MoonBlock = (*hexutil.Big)(num)
+		spec.Params.SingularityForkBlock = (*hexutil.Big)(num)
 	}
 	spec.Params.NetworkID = (hexutil.Uint64)(genesis.Config.ChainID.Uint64())
 	spec.Params.ChainID = (hexutil.Uint64)(genesis.Config.ChainID.Uint64())

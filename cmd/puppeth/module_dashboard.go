@@ -627,7 +627,7 @@ func deployDashboard(client *sshClient, network string, conf *config, config *da
 		"ParityGenesis":    network + "-parity.json",
 		"PythonGenesis":    network + "-python.json",
 		"PythonBootnodes":  strings.Join(bootPython, ","),
-		"MoonBlock":        conf.Genesis.Config.SingularityBlock,
+		"SingularityBlock": conf.Genesis.Config.SingularityBlock,
 	})
 	files[filepath.Join(workdir, "index.html")] = indexfile.Bytes()
 

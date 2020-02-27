@@ -171,8 +171,8 @@ type CheckpointOracleConfig struct {
 type ChainConfig struct {
 	ChainID *big.Int `json:"chainId"` // chainId identifies the current chain and is used for replay protection
 
-	SingularityBlock *big.Int `json:"moonBlock,omitempty"`  // Moon switch block (nil = no fork, 0 = already on moon)
-	EWASMBlock       *big.Int `json:"ewasmBlock,omitempty"` // EWASM switch block (nil = no fork, 0 = already activated)
+	SingularityBlock *big.Int `json:"singularityBlock,omitempty"` // Moon switch block (nil = no fork, 0 = already on moon)
+	EWASMBlock       *big.Int `json:"ewasmBlock,omitempty"`       // EWASM switch block (nil = no fork, 0 = already activated)
 
 	// Various consensus engines
 	Ethash *EthashConfig `json:"ethash,omitempty"`
@@ -220,18 +220,18 @@ func (c *ChainConfig) String() string {
 	default:
 		engine = "unknown"
 	}
-	return fmt.Sprintf("{ChainID: %v Moon: %v, Engine: %v}",
+	return fmt.Sprintf("{ChainID: %v Singularity: %v, Engine: %v}",
 		c.ChainID,
 		c.SingularityBlock,
 		engine,
 	)
 }
 
-
 // IsMoon returns whether num is either equal to the Istanbul fork block or greater.
 func (c *ChainConfig) IsSingularity(num *big.Int) bool {
 	return isForked(c.SingularityBlock, num)
 }
+
 // IsEWASM returns whether num represents a block number after the EWASM fork
 func (c *ChainConfig) IsEWASM(num *big.Int) bool {
 	return isForked(c.EWASMBlock, num)
@@ -264,7 +264,7 @@ func (c *ChainConfig) CheckConfigForkOrder() error {
 	}
 	var lastFork fork
 	for _, cur := range []fork{
-		{"moonBlock", c.SingularityBlock},
+		{"singularityBlock", c.SingularityBlock},
 	} {
 		if lastFork.name != "" {
 			// Next one must be higher number
@@ -286,7 +286,7 @@ func (c *ChainConfig) CheckConfigForkOrder() error {
 
 func (c *ChainConfig) checkCompatible(newcfg *ChainConfig, head *big.Int) *ConfigCompatError {
 	if isForkIncompatible(c.SingularityBlock, newcfg.SingularityBlock, head) {
-		return newCompatError("MoonBlock fork block", c.SingularityBlock, newcfg.SingularityBlock)
+		return newCompatError("SingularityBlock fork block", c.SingularityBlock, newcfg.SingularityBlock)
 	}
 	if isForkIncompatible(c.EWASMBlock, newcfg.EWASMBlock, head) {
 		return newCompatError("ewasm fork block", c.EWASMBlock, newcfg.EWASMBlock)

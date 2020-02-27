@@ -373,7 +373,7 @@ func TestTransactionChainFork(t *testing.T) {
 	if _, err := pool.add(tx, false); err != nil {
 		t.Error("didn't expect error", err)
 	}
-	pool.RemoveTx(tx.Hash(), true)
+	pool.RemoveTx([]common.Hash{tx.Hash()}, true)
 
 	// reset the pool's internal state
 	resetState()
@@ -1853,13 +1853,13 @@ func benchmarkPoolBatchInsert(b *testing.B, size int) {
 	}
 }
 
-func TestIsAnchor(t *testing.T) {
-	pool, _ := setupTxPool()
-	//todo anchor from contract
-	pool.anchors[1024] = append(pool.anchors[1024], common.HexToAddress("0x0000000000000000000000000000000000000000"))
-	isAnchor := pool.IsAnchor(common.HexToAddress("0x0000000000000000000000000000000000000000"), 1024)
-	if !isAnchor {
-		t.Fatal("Not anchor")
-	}
-
-}
+//func TestIsAnchor(t *testing.T) {
+//	pool, _ := setupTxPool()
+//	//todo anchor from contract
+//	pool.anchors[1024] = append(pool.anchors[1024], common.HexToAddress("0x0000000000000000000000000000000000000000"))
+//	isAnchor := pool.IsAnchor(common.HexToAddress("0x0000000000000000000000000000000000000000"), 1024)
+//	if !isAnchor {
+//		t.Fatal("Not anchor")
+//	}
+//
+//}
