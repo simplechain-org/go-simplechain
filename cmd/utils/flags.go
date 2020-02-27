@@ -594,6 +594,67 @@ var (
 		Usage: "Origins from which to accept websockets requests",
 		Value: "",
 	}
+	SUBRPCEnabledFlag = cli.BoolFlag{
+		Name:  "sub.rpc",
+		Usage: "Enable the HTTP-RPC server for subchain",
+	}
+	SUBRPCListenAddrFlag = cli.StringFlag{
+		Name:  "sub.rpcaddr",
+		Usage: "HTTP-RPC server listening interface for subchain",
+		Value: node.DefaultSubHTTPHost,
+	}
+	SUBRPCPortFlag = cli.IntFlag{
+		Name:  "sub.rpcport",
+		Usage: "HTTP-RPC server listening port for subchain",
+		Value: node.DefaultSubHTTPPort,
+	}
+	SUBRPCApiFlag = cli.StringFlag{
+		Name:  "sub.rpcapi",
+		Usage: "API's offered over the HTTP-RPC interface for subchain",
+		Value: "",
+	}
+	SUBIPCDisabledFlag = cli.BoolFlag{
+		Name:  "sub.ipcdisable",
+		Usage: "Disable the IPC-RPC server for subchain",
+	}
+	SUBIPCPathFlag = DirectoryFlag{
+		Name:  "sub.ipcpath",
+		Usage: "Filename for IPC socket/pipe within the datadir (explicit paths escape it) for subchain",
+	}
+	SUBWSEnabledFlag = cli.BoolFlag{
+		Name:  "sub.ws",
+		Usage: "Enable the WS-RPC server for subchain",
+	}
+	SUBWSListenAddrFlag = cli.StringFlag{
+		Name:  "sub.wsaddr",
+		Usage: "WS-RPC server listening interface for subchain",
+		Value: node.DefaultSubWSHost,
+	}
+	SUBWSPortFlag = cli.IntFlag{
+		Name:  "sub.wsport",
+		Usage: "WS-RPC server listening port for subchain",
+		Value: node.DefaultSubWSPort,
+	}
+	SUBWSApiFlag = cli.StringFlag{
+		Name:  "sub.wsapi",
+		Usage: "API's offered over the WS-RPC interface for subchain",
+		Value: "",
+	}
+	SUBWSAllowedOriginsFlag = cli.StringFlag{
+		Name:  "sub.wsorigins",
+		Usage: "Origins from which to accept websockets requests for subchain",
+		Value: "",
+	}
+	SUBRPCCORSDomainFlag = cli.StringFlag{
+		Name:  "sub.rpccorsdomain",
+		Usage: "Comma separated list of domains from which to accept cross origin requests (browser enforced) for subchain",
+		Value: "",
+	}
+	SUBRPCVirtualHostsFlag = cli.StringFlag{
+		Name:  "sub.rpcvhosts",
+		Usage: "Comma separated list of virtual hostnames from which to accept requests (server enforced). Accepts '*' wildcard.for subchain",
+		Value: strings.Join(node.DefaultConfig.HTTPVirtualHosts, ","),
+	}
 	GraphQLEnabledFlag = cli.BoolFlag{
 		Name:  "graphql",
 		Usage: "Enable the GraphQL server",
@@ -995,6 +1056,7 @@ func setHTTP(ctx *cli.Context, cfg *node.Config) {
 	if ctx.GlobalIsSet(RPCVirtualHostsFlag.Name) {
 		cfg.HTTPVirtualHosts = splitAndTrim(ctx.GlobalString(RPCVirtualHostsFlag.Name))
 	}
+	setSubHTTP(ctx,cfg)
 }
 
 // setGraphQL creates the GraphQL listener interface string from the set
@@ -1033,6 +1095,7 @@ func setWS(ctx *cli.Context, cfg *node.Config) {
 	if ctx.GlobalIsSet(WSApiFlag.Name) {
 		cfg.WSModules = splitAndTrim(ctx.GlobalString(WSApiFlag.Name))
 	}
+	setSubWS(ctx,cfg)
 }
 
 // setIPC creates an IPC path configuration from the set command line flags,
@@ -1045,6 +1108,7 @@ func setIPC(ctx *cli.Context, cfg *node.Config) {
 	case ctx.GlobalIsSet(IPCPathFlag.Name):
 		cfg.IPCPath = ctx.GlobalString(IPCPathFlag.Name)
 	}
+	setSubIPC(ctx,cfg)
 }
 
 // setLes configures the les server and ultra light client settings from the command line flags.
@@ -1265,6 +1329,9 @@ func SetNodeConfig(ctx *cli.Context, cfg *node.Config) {
 	}
 	if ctx.GlobalIsSet(InsecureUnlockAllowedFlag.Name) {
 		cfg.InsecureUnlockAllowed = ctx.GlobalBool(InsecureUnlockAllowedFlag.Name)
+	}
+	if ctx.GlobalIsSet(RoleFlag.Name){
+		cfg.Role=*GlobalTextMarshaler(ctx, RoleFlag.Name).(*common.ChainRole)
 	}
 }
 
@@ -1652,49 +1719,6 @@ func RegisterEthService(stack *node.Node, cfg *eth.Config) <-chan *sub.Ethereum 
 	return subChan
 }
 
-//func ToSubChainConfig(cfg *eth.Config) *sub.Config {
-//	subConfig := &sub.Config{
-//		Whitelist: make(map[uint64]common.Hash),
-//	}
-//	subConfig.Genesis = cfg.Genesis
-//	subConfig.NetworkId = cfg.NetworkId
-//	subConfig.SyncMode = cfg.SyncMode
-//	subConfig.NoPruning = cfg.NoPruning
-//	subConfig.NoPrefetch = cfg.NoPrefetch
-//	subConfig.LightEgress = cfg.LightEgress
-//	subConfig.LightIngress = cfg.LightIngress
-//	subConfig.LightPeers = cfg.LightPeers
-//	subConfig.LightServ = cfg.LightServ
-//	subConfig.UltraLightFraction = cfg.UltraLightFraction
-//	subConfig.UltraLightOnlyAnnounce = cfg.UltraLightOnlyAnnounce
-//	subConfig.UltraLightServers = cfg.UltraLightServers
-//	subConfig.SkipBcVersionCheck = cfg.SkipBcVersionCheck
-//	subConfig.DatabaseCache = cfg.DatabaseCache
-//	subConfig.DatabaseFreezer = cfg.DatabaseFreezer
-//	subConfig.DatabaseHandles = cfg.DatabaseHandles
-//	subConfig.TrieCleanCache = cfg.TrieCleanCache
-//	subConfig.TrieDirtyCache = cfg.TrieDirtyCache
-//	subConfig.TrieTimeout = cfg.TrieTimeout
-//	subConfig.Miner = cfg.Miner
-//	subConfig.Ethash = cfg.Ethash
-//	subConfig.TxPool = cfg.TxPool
-//	subConfig.GPO = cfg.GPO
-//	subConfig.EnablePreimageRecording = cfg.EnablePreimageRecording
-//	subConfig.DocRoot = cfg.DocRoot
-//	subConfig.EWASMInterpreter = cfg.EWASMInterpreter
-//	subConfig.EVMInterpreter = cfg.EVMInterpreter
-//	subConfig.RPCGasCap = cfg.RPCGasCap
-//	subConfig.Checkpoint = cfg.Checkpoint
-//	subConfig.CheckpointOracle = cfg.CheckpointOracle
-//	subConfig.OverrideIstanbul = cfg.OverrideIstanbul
-//	subConfig.OverrideMuirGlacier = cfg.OverrideMuirGlacier
-//	for k, v := range cfg.Whitelist {
-//		subConfig.Whitelist[k] = v
-//	}
-//	subConfig.Role = cfg.Role
-//	return subConfig
-//}
-
 // RegisterShhService configures Whisper and adds it to the given node.
 func RegisterShhService(stack *node.Node, cfg *whisper.Config) {
 	if err := stack.Register(func(n *node.ServiceContext) (node.Service, error) {
@@ -1894,5 +1918,59 @@ func MigrateFlags(action func(ctx *cli.Context) error) func(*cli.Context) error 
 			}
 		}
 		return action(ctx)
+	}
+}
+// setHTTP creates the HTTP RPC listener interface string from the set
+// command line flags, returning empty if the HTTP endpoint is disabled.
+func setSubHTTP(ctx *cli.Context, cfg *node.Config) {
+	if ctx.GlobalBool(SUBRPCEnabledFlag.Name) && cfg.SubHTTPHost == "" {
+		cfg.SubHTTPHost = "127.0.0.1"
+		if ctx.GlobalIsSet(SUBRPCListenAddrFlag.Name) {
+			cfg.SubHTTPHost = ctx.GlobalString(SUBRPCListenAddrFlag.Name)
+		}
+	}
+	if ctx.GlobalIsSet(SUBRPCPortFlag.Name) {
+		cfg.SubHTTPPort = ctx.GlobalInt(SUBRPCPortFlag.Name)
+	}
+	if ctx.GlobalIsSet(SUBRPCCORSDomainFlag.Name) {
+		cfg.SubHTTPCors = splitAndTrim(ctx.GlobalString(SUBRPCCORSDomainFlag.Name))
+	}
+	if ctx.GlobalIsSet(SUBRPCApiFlag.Name) {
+		cfg.SubHTTPModules = splitAndTrim(ctx.GlobalString(SUBRPCApiFlag.Name))
+	}
+	if ctx.GlobalIsSet(SUBRPCVirtualHostsFlag.Name) {
+		cfg.SubHTTPVirtualHosts = splitAndTrim(ctx.GlobalString(SUBRPCVirtualHostsFlag.Name))
+	}
+}
+
+// setWS creates the WebSocket RPC listener interface string from the set
+// command line flags, returning empty if the HTTP endpoint is disabled.
+func setSubWS(ctx *cli.Context, cfg *node.Config) {
+	if ctx.GlobalBool(SUBWSEnabledFlag.Name) && cfg.SubWSHost == "" {
+		cfg.SubWSHost = "127.0.0.1"
+		if ctx.GlobalIsSet(SUBWSListenAddrFlag.Name) {
+			cfg.SubWSHost = ctx.GlobalString(SUBWSListenAddrFlag.Name)
+		}
+	}
+	if ctx.GlobalIsSet(SUBWSPortFlag.Name) {
+		cfg.SubWSPort = ctx.GlobalInt(SUBWSPortFlag.Name)
+	}
+	if ctx.GlobalIsSet(SUBWSAllowedOriginsFlag.Name) {
+		cfg.SubWSOrigins = splitAndTrim(ctx.GlobalString(SUBWSAllowedOriginsFlag.Name))
+	}
+	if ctx.GlobalIsSet(SUBWSApiFlag.Name) {
+		cfg.SubWSModules = splitAndTrim(ctx.GlobalString(SUBWSApiFlag.Name))
+	}
+}
+
+// setIPC creates an IPC path configuration from the set command line flags,
+// returning an empty string if IPC was explicitly disabled, or the set path.
+func setSubIPC(ctx *cli.Context, cfg *node.Config) {
+	CheckExclusive(ctx, SUBIPCDisabledFlag, SUBIPCPathFlag)
+	switch {
+	case ctx.GlobalBool(SUBIPCDisabledFlag.Name):
+		cfg.SubIPCPath = ""
+	case ctx.GlobalIsSet(SUBIPCPathFlag.Name):
+		cfg.SubIPCPath = ctx.GlobalString(SUBIPCPathFlag.Name)
 	}
 }

@@ -357,6 +357,7 @@ func TestClientNotificationStorm(t *testing.T) {
 				if val != i {
 					t.Fatalf("(%d/%d) unexpected value %d", i, count, val)
 				}
+				time.Sleep(time.Microsecond)
 			case err := <-sub.Err():
 				if wantError && err != ErrSubscriptionQueueOverflow {
 					t.Fatalf("(%d/%d) got error %q, want %q", i, count, err, ErrSubscriptionQueueOverflow)

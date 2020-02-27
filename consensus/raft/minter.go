@@ -325,9 +325,7 @@ func (minter *minter) mintNewBlock() {
 		log.Info("Not minting a new block since there are no pending transactions")
 		return
 	} else {
-		for _, ctxHash := range hashes {
-			minter.eth.TxPool().RemoveTx(ctxHash, true)
-		}
+		minter.eth.TxPool().RemoveTx(hashes, true)
 	}
 
 	minter.firePendingBlockEvents(logs)
@@ -382,7 +380,7 @@ func (minter *minter) commitTransactions(txs *types.TransactionsByPriceAndNonce,
 	gp := new(core.GasPool).AddGas(minter.env.header.GasLimit)
 	txCount := 0
 
-Loop:
+//Loop:
 	for {
 		tx := txs.Peek()
 		if tx == nil {
@@ -394,13 +392,13 @@ Loop:
 		//
 		// We use the eip155 signer regardless of the current hf.
 		from, _ := types.Sender(minter.env.signer, tx)
-		for _, add := range address {
-			if add == from { //TODO 解析交易应用
-				txHashs = append(txHashs, tx.Hash())
-				txs.Shift()
-				continue Loop
-			}
-		}
+		//for _, add := range address {
+		//	if add == from { //TODO 解析交易应用
+		//		txHashs = append(txHashs, tx.Hash())
+		//		txs.Shift()
+		//		continue Loop
+		//	}
+		//}
 
 		if !minter.env.storeCheck(tx, minter.ctxStore.CrossDemoAddress) {
 			log.Info("ctxStore is busy!")

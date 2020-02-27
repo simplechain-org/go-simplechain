@@ -244,7 +244,7 @@ func (p *peer) SendTransactions(txs types.Transactions) error {
 	for p.knownTxs.Cardinality() >= maxKnownTxs {
 		p.knownTxs.Pop()
 	}
-	return p2p.Send(p.rw, TxMsg, txs)
+	return p2p.Send(p.rw, TransactionMsg, txs)
 }
 
 // AsyncSendTransactions queues list of transactions propagation to a remote

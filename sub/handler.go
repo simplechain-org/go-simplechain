@@ -419,7 +419,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 	defer msg.Discard()
 
 	if pm.raftMode {
-		if msg.Code != TxMsg &&
+		if msg.Code != TransactionMsg &&
 			msg.Code != GetBlockHeadersMsg && msg.Code != BlockHeadersMsg &&
 			msg.Code != GetBlockBodiesMsg && msg.Code != BlockBodiesMsg {
 
@@ -778,7 +778,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			}
 		}
 
-	case msg.Code == TxMsg:
+	case msg.Code == TransactionMsg:
 		// Transactions arrived, make sure we have a valid and fresh chain to handle them
 		if atomic.LoadUint32(&pm.acceptTxs) == 0 {
 			break

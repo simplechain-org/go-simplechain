@@ -22,7 +22,7 @@ var contract *string = flag.String("contract", "0x8eefA4bFeA64F2A89f3064D4864641
 
 var txId *string = flag.String("TxId", "", "跨链交易哈希值")
 
-var fromVar *string = flag.String("From", "0x8029fcfc954ff7be80afd4db9f77f18c8aa1ecbc", "接单人地址")
+var fromVar *string = flag.String("From", "0xb9d7df1a34a28c7b82acc841c12959ba00b51131", "接单人地址")
 
 var gaslimitVar *uint64 = flag.Uint64("gaslimit", 100000, "gas最大值")
 
@@ -152,7 +152,7 @@ func Match() {
 					//	log.Println("1")
 					//}
 					chainId := big.NewInt(int64(remoteId))
-					fmt.Println(v.Value.String(),chainId.String())
+					//fmt.Println(v.Value.String(),chainId.String())
 					//out, err := abi.Pack("taker", V.Value.ToInt(), V.CTxId, V.TxHash, V.From,
 					//	V.BlockHash, V.DestinationId.ToInt(), V.DestinationValue.ToInt(), chainId,
 					//	vv, R, S)
@@ -175,6 +175,7 @@ func Match() {
 					//out, err := abi.Pack("taker", V.Value.ToInt(), V.CTxId, V.TxHash, V.From,
 					//	V.BlockHash, V.DestinationValue.ToInt(), chainId,
 					//	vv, R, S)
+					//out, err := abi.Pack("taker",&ord,chainId,[]byte("When the whole world is about to rain, let’s make it clear in our heart together."))
 					out, err := abi.Pack("taker",&ord,chainId,[]byte{})
 
 					if err != nil {

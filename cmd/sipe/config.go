@@ -109,6 +109,10 @@ func defaultNodeConfig() node.Config {
 	cfg.HTTPModules = append(cfg.HTTPModules, "eth", "shh")
 	cfg.WSModules = append(cfg.WSModules, "eth", "shh")
 	cfg.IPCPath = "sipe.ipc"
+
+	cfg.SubHTTPModules = append(cfg.SubHTTPModules, "eth", "shh")
+	cfg.SubWSModules = append(cfg.SubWSModules, "eth", "shh")
+	cfg.SubIPCPath = "subsipe.ipc"
 	return cfg
 }
 

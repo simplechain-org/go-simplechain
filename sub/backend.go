@@ -21,8 +21,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/simplechain-org/go-simplechain/consensus/dpos"
-	"github.com/simplechain-org/go-simplechain/crypto"
 	"math/big"
 	"runtime"
 	"sync"
@@ -35,6 +33,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/common/math"
 	"github.com/simplechain-org/go-simplechain/consensus"
 	"github.com/simplechain-org/go-simplechain/consensus/clique"
+	"github.com/simplechain-org/go-simplechain/consensus/dpos"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/bloombits"
 	"github.com/simplechain-org/go-simplechain/core/rawdb"
@@ -42,6 +41,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/core/vm"
 	"github.com/simplechain-org/go-simplechain/cross"
+	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/eth"
 	"github.com/simplechain-org/go-simplechain/eth/downloader"
 	"github.com/simplechain-org/go-simplechain/eth/filters"
@@ -223,7 +223,7 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*Ethereum, error) {
 	if config.TxPool.Journal != "" {
 		config.TxPool.Journal = ctx.ResolvePath(fmt.Sprintf("subChain_%s", config.TxPool.Journal))
 	}
-	eth.txPool = core.NewTxPool(config.TxPool, chainConfig, eth.blockchain)
+	eth.txPool = core.NewTxPool(config.TxPool, chainConfig, eth.blockchain, config.SubChainCtxAddress)
 
 	makerDb, err := CreateDB(ctx, config, common.SubMakerData)
 	if err != nil {
