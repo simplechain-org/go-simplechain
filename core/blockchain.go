@@ -2279,11 +2279,6 @@ func (bc *BlockChain) StoreContractLog(blockNumber uint64,hash common.Hash, logs
 				}
 				isMakerFinish := v.Topics[0] == params.MakerFinishTopic
 				if isMakerFinish {
-				//	if len(v.Topics) >= 2 {
-				//		ctxId := v.Topics[1]
-				//		to := v.Topics[2]
-				//		finishs = append(finishs,&types.FinishInfo{ctxId, common.BytesToAddress(to[:])})
-				//	}
 					blockLogs = append(blockLogs, v)
 					continue
 				}
@@ -2302,17 +2297,13 @@ func (bc *BlockChain) StoreContractLog(blockNumber uint64,hash common.Hash, logs
 		if len(rtxs) > 0 {
 			go	bc.rtxsFeed.Send(NewRTxsEvent{rtxs}) //删除本地待接单
 		}
-		//if len(finishs) > 0 {
-		//	bc.FinishsFeed.Send(TransationFinishEvent{finishs}) //TODO
-		//}
-
 	}
 
-	if len(blockLogs) != bc.GetBlockByNumber(blockNumber).Transactions().Len() {
-		log.Warn("Insert","blockNumber",blockNumber,"log",len(blockLogs),"tx",bc.GetBlockByNumber(blockNumber).Transactions().Len())
-	} else {
-		log.Info("Insert","blockNumber",blockNumber,"log",len(blockLogs),"tx",bc.GetBlockByNumber(blockNumber).Transactions().Len())
-	}
+	//if len(blockLogs) != bc.GetBlockByNumber(blockNumber).Transactions().Len() {
+	//	log.Warn("Insert","blockNumber",blockNumber,"log",len(blockLogs),"tx",bc.GetBlockByNumber(blockNumber).Transactions().Len())
+	//} else {
+	//	log.Info("Insert","blockNumber",blockNumber,"log",len(blockLogs),"tx",bc.GetBlockByNumber(blockNumber).Transactions().Len())
+	//}
 
 	if len(blockLogs) > 0 {
 		bc.trigger.Insert(blockNumber, hash ,blockLogs)
