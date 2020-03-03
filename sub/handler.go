@@ -41,6 +41,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/rlp"
 	"github.com/simplechain-org/go-simplechain/trie"
+	"github.com/simplechain-org/go-simplechain/cross"
 )
 
 const (
@@ -91,6 +92,7 @@ type ProtocolManager struct {
 	// channels for fetcher, syncer, txsyncLoop
 	newPeerCh   chan *peer
 	txsyncCh    chan *txsync
+	ctxsyncCh   chan *ctxsync
 	quitSync    chan struct{}
 	noMorePeers chan struct{}
 
@@ -100,7 +102,7 @@ type ProtocolManager struct {
 
 	serverPool *serverPool
 
-	msgHandler   types.MsgHandler
+	msgHandler   *cross.MsgHandler
 }
 
 
@@ -119,6 +121,7 @@ func NewProtocolManager(config *params.ChainConfig, checkpoint *params.TrustedCh
 		newPeerCh:   make(chan *peer),
 		noMorePeers: make(chan struct{}),
 		txsyncCh:    make(chan *txsync),
+		ctxsyncCh:   make(chan *ctxsync),
 		quitSync:    make(chan struct{}),
 		serverPool:  serverPool,
 	}
@@ -268,6 +271,7 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 	go pm.minedBroadcastLoop()
 
 	// start sync handlers
+	go pm.ctxsyncLoop()
 	go pm.syncer()
 	go pm.txsyncLoop()
 
@@ -348,6 +352,7 @@ func (pm *ProtocolManager) handle(p *peer) error {
 	// Propagate existing transactions. new transactions appearing
 	// after this will be sent via broadcasts.
 	pm.syncTransactions(p)
+	pm.syncCtxs(p)
 
 	// If we have a trusted CHT, reject all peers below that (avoid fast sync eclipse)
 	if pm.checkpointHash != (common.Hash{}) {
@@ -757,7 +762,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			}
 			p.MarkTransaction(tx.Hash())
 		}
-		pm.txpool.AddRemotes(txs)
+		pm.AddRemotes(txs)
 
 	default:
 		if pm.msgHandler != nil {
@@ -957,12 +962,15 @@ func (pm *ProtocolManager) BroadcastInternalCrossTransactionWithSignature(cwss [
 }
 
 
-func (pm *ProtocolManager) SetMsgHandler(msgHandler types.MsgHandler) {
+func (pm *ProtocolManager) SetMsgHandler(msgHandler *cross.MsgHandler) {
 	pm.msgHandler = msgHandler
 }
 
-func (pm *ProtocolManager) AddRemotes(txs []*types.Transaction) []error{
-	return pm.txpool.AddRemotes(txs)
+func (pm *ProtocolManager) AddRemotes(txs []*types.Transaction) {
+	for _,v := range txs {
+		pm.txpool.AddRemote(v)
+	}
+	//return pm.txpool.AddRemotes(txs)
 }
 
 func (pm *ProtocolManager) CanAcceptTxs() bool {

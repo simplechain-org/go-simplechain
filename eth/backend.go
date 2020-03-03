@@ -104,7 +104,7 @@ type Ethereum struct {
 	genesisHash common.Hash
 	ctxStore    *core.CtxStore
 	rtxStore    *core.RtxStore
-	msgHandler  types.MsgHandler
+	msgHandler  *cross.MsgHandler
 	chainConfig *params.ChainConfig
 }
 

@@ -354,7 +354,7 @@ func (rws *ReceptTransactionWithSignatures) ConstructData(gasUsed *big.Int) ([]b
 	//	data = append(data, common.LeftPadBytes(rws.Data.S[i].Bytes(), 32)...)
 	//}
 	//data = append(data, rws.Data.Input...) //makeFinish input字段
-	const dataFile = "../../contracts/crossdemo/crossdemo.abi"
+	const dataFile = "../contracts/crossdemo/crossdemo.abi"
 	_, filename, _, _ := runtime.Caller(1)
 	datapath := path.Join(path.Dir(filename), dataFile)
 	data, err := ioutil.ReadFile(datapath)

@@ -104,7 +104,7 @@ type Ethereum struct {
 
 	serverPool *serverPool
 
-	msgHandler types.MsgHandler
+	msgHandler *cross.MsgHandler
 
 	chainConfig *params.ChainConfig
 	ctxStore    *core.CtxStore

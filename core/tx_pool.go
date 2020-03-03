@@ -842,9 +842,9 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local, sync bool) []error {
 		types.Sender(pool.signer, tx)
 	}
 	// Process all the new transaction and merge any errors into the original slice
-	//pool.mu.Lock()
+	pool.mu.Lock()
 	newErrs, dirtyAddrs := pool.addTxsLocked(news, local)
-	//pool.mu.Unlock()
+	pool.mu.Unlock()
 	//log.Info("addTx lock end","txs",len(news))
 
 	var nilSlot = 0
@@ -868,10 +868,10 @@ func (pool *TxPool) addTxsLocked(txs []*types.Transaction, local bool) ([]error,
 	dirty := newAccountSet(pool.signer)
 	errs := make([]error, len(txs))
 	for i, tx := range txs {
-		pool.mu.Lock()
+		//pool.mu.Lock()
 		//log.Info("addTx lock begin","tx",tx.Hash().String())
 		replaced, err := pool.add(tx, local)
-		pool.mu.Unlock()
+		//pool.mu.Unlock()
 		//log.Info("addTx lock end","tx",tx.Hash().String())
 		errs[i] = err
 		if err == nil && !replaced {
@@ -1069,7 +1069,7 @@ func (pool *TxPool) runReorg(done chan struct{}, reset *txpoolResetRequest, dirt
 	if dirtyAccounts != nil {
 		promoteAddrs = dirtyAccounts.flatten()
 	}
-	//pool.mu.Lock()
+	pool.mu.Lock()
 	if reset != nil {
 		// Reset from the old head to the new, rescheduling any reorged transactions
 		pool.reset(reset.oldHead, reset.newHead)
@@ -1087,7 +1087,7 @@ func (pool *TxPool) runReorg(done chan struct{}, reset *txpoolResetRequest, dirt
 			promoteAddrs = append(promoteAddrs, addr)
 		}
 	}
-	pool.mu.Lock()
+	//pool.mu.Lock()
 	// Check for pending transactions for every account that sent new ones
 	promoted := pool.promoteExecutables(promoteAddrs)
 	for _, tx := range promoted {
@@ -1120,6 +1120,9 @@ func (pool *TxPool) runReorg(done chan struct{}, reset *txpoolResetRequest, dirt
 		for _, set := range events {
 			txs = append(txs, set.Flatten()...)
 		}
+		//if len(txs) > 1 {
+		//	log.Info("txFeed.Send","txs",len(txs))
+		//}
 		pool.txFeed.Send(NewTxsEvent{txs})
 	}
 }

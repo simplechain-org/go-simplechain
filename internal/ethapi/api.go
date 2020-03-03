@@ -1829,6 +1829,26 @@ func (s *PublicCtxPoolAPI) CtxStats() int {
 	return s.b.CtxStats()
 }
 
+func (s *PublicCtxPoolAPI) CtxQuery(ctx context.Context, hash common.Hash) *RPCCrossTransaction {
+	remotes, locals := s.b.CtxPoolContent()
+	for _, txs := range remotes {
+		for _,tx := range txs {
+			if tx.Data.TxHash == hash {
+				return newRPCCrossTransaction(tx)
+			}
+		}
+
+	}
+	for _, txs := range locals {
+		for _,tx := range txs {
+			if tx.Data.TxHash == hash {
+				return newRPCCrossTransaction(tx)
+			}
+		}
+	}
+	return nil
+}
+
 // RPCTransaction represents a transaction that will serialize to the RPC representation of a transaction
 type RPCCrossTransaction struct {
 	Value     *hexutil.Big       `json:"value"`
