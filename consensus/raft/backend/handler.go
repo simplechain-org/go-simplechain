@@ -1,8 +1,11 @@
-package raft
+package backend
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"github.com/simplechain-org/go-simplechain/common"
+	"github.com/simplechain-org/go-simplechain/miner"
 	"net/http"
 	"net/url"
 	"os"
@@ -10,29 +13,27 @@ import (
 	"sync"
 	"time"
 
-	"context"
-
-	"github.com/coreos/etcd/pkg/fileutil"
-	"github.com/coreos/etcd/snap"
-	"github.com/coreos/etcd/wal"
+	"github.com/simplechain-org/go-simplechain/consensus/raft"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/eth/downloader"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/p2p"
+	"github.com/simplechain-org/go-simplechain/p2p/enode"
+	"github.com/simplechain-org/go-simplechain/p2p/enr"
 	"github.com/simplechain-org/go-simplechain/rlp"
 
 	"github.com/coreos/etcd/etcdserver/stats"
+	"github.com/coreos/etcd/pkg/fileutil"
 	raftTypes "github.com/coreos/etcd/pkg/types"
 	etcdRaft "github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/coreos/etcd/rafthttp"
-	"github.com/simplechain-org/go-simplechain/p2p/enode"
-	"github.com/simplechain-org/go-simplechain/p2p/enr"
-	"github.com/syndtr/goleveldb/leveldb"
-
+	"github.com/coreos/etcd/snap"
+	"github.com/coreos/etcd/wal"
 	mapset "github.com/deckarep/golang-set"
+	"github.com/syndtr/goleveldb/leveldb"
 )
 
 type ProtocolManager struct {
@@ -47,14 +48,14 @@ type ProtocolManager struct {
 	raftPort       uint16
 
 	// Local peer state (protected by mu vs concurrent access via JS)
-	address       *Address
+	address       *raft.Address
 	role          int    // Role: minter or verifier
 	appliedIndex  uint64 // The index of the last-applied raft entry
 	snapshotIndex uint64 // The index of the latest snapshot.
 
 	// Remote peer state (protected by mu vs concurrent access via JS)
 	leader       uint16
-	peers        map[uint16]*Peer
+	peers        map[uint16]*raft.Peer
 	removedPeers mapset.Set // *Permanently removed* peers
 
 	// P2P transport
@@ -63,7 +64,7 @@ type ProtocolManager struct {
 	// Blockchain services
 	blockchain *core.BlockChain
 	downloader *downloader.Downloader
-	minter     *minter
+	minter     *miner.Miner
 
 	// Blockchain events
 	eventMux      *event.TypeMux
@@ -97,14 +98,14 @@ type ProtocolManager struct {
 // Public interface
 //
 
-func NewProtocolManager(raftId uint16, raftPort uint16, blockchain *core.BlockChain, mux *event.TypeMux, bootstrapNodes []*enode.Node, joinExisting bool, datadir string, minter *minter, downloader *downloader.Downloader) (*ProtocolManager, error) {
+func NewProtocolManager(raftId uint16, raftPort uint16, blockchain *core.BlockChain, mux *event.TypeMux, bootstrapNodes []*enode.Node, joinExisting bool, datadir string, minter *miner.Miner, downloader *downloader.Downloader) (*ProtocolManager, error) {
 	waldir := fmt.Sprintf("%s/raft-wal", datadir)
 	snapdir := fmt.Sprintf("%s/raft-snap", datadir)
 	raftDbLoc := fmt.Sprintf("%s/raft-state", datadir)
 
 	manager := &ProtocolManager{
 		bootstrapNodes:      bootstrapNodes,
-		peers:               make(map[uint16]*Peer),
+		peers:               make(map[uint16]*raft.Peer),
 		leader:              uint16(etcdRaft.None),
 		removedPeers:        mapset.NewSet(),
 		joinExisting:        joinExisting,
@@ -177,7 +178,7 @@ func (pm *ProtocolManager) Stop() {
 
 	pm.p2pServer = nil
 
-	pm.minter.stop()
+	pm.minter.Stop()
 
 	pm.stopped = true
 }
@@ -187,16 +188,16 @@ func (pm *ProtocolManager) NodeInfo() *RaftNodeInfo {
 	defer pm.mu.RUnlock()
 
 	var roleDescription string
-	if pm.role == minterRole {
+	if pm.role == raft.MinterRole {
 		roleDescription = "minter"
 	} else {
 		roleDescription = "verifier"
 	}
 
-	peerAddresses := make([]*Address, len(pm.peers))
+	peerAddresses := make([]*raft.Address, len(pm.peers))
 	peerIdx := 0
 	for _, peer := range pm.peers {
-		peerAddresses[peerIdx] = peer.address
+		peerAddresses[peerIdx] = peer.Address
 		peerIdx += 1
 	}
 
@@ -283,8 +284,8 @@ func (pm *ProtocolManager) isNodeAlreadyInCluster(node *enode.Node) error {
 	defer pm.mu.RUnlock()
 
 	for _, peer := range pm.peers {
-		peerRaftId := peer.address.RaftId
-		peerNode := peer.p2pNode
+		peerRaftId := peer.Address.RaftId
+		peerNode := peer.P2pNode
 
 		if peerNode.ID() == node.ID() {
 			return fmt.Errorf("node with this enode has already been added to the cluster: %s", node.ID())
@@ -293,7 +294,7 @@ func (pm *ProtocolManager) isNodeAlreadyInCluster(node *enode.Node) error {
 		if peerNode.IP().Equal(node.IP()) {
 			if peerNode.TCP() == node.TCP() {
 				return fmt.Errorf("existing node %v with raft ID %v is already using eth p2p at %v:%v", peerNode.ID(), peerRaftId, node.IP(), node.TCP())
-			} else if peer.address.RaftPort == enr.RaftPort(node.RaftPort()) {
+			} else if peer.Address.RaftPort == enr.RaftPort(node.RaftPort()) {
 				return fmt.Errorf("existing node %v with raft ID %v is already using raft at %v:%v", peerNode.ID(), peerRaftId, node.IP(), node.RaftPort())
 			}
 		}
@@ -321,12 +322,12 @@ func (pm *ProtocolManager) ProposeNewPeer(enodeId string) (uint16, error) {
 	}
 
 	raftId := pm.nextRaftId()
-	address := newAddress(raftId, node.RaftPort(), node)
+	address := raft.NewAddress(raftId, node.RaftPort(), node)
 
 	pm.confChangeProposalC <- raftpb.ConfChange{
 		Type:    raftpb.ConfChangeAddNode,
 		NodeID:  uint64(raftId),
-		Context: address.toBytes(),
+		Context: address.ToBytes(),
 	}
 
 	return raftId, nil
@@ -386,7 +387,7 @@ func (pm *ProtocolManager) ReportSnapshot(id uint64, status etcdRaft.SnapshotSta
 func (pm *ProtocolManager) startRaft() {
 	if !fileutil.Exist(pm.snapdir) {
 		if err := os.Mkdir(pm.snapdir, 0750); err != nil {
-			fatalf("cannot create dir for snapshot (%v)", err)
+			raft.Fatalf("cannot create dir for snapshot (%v)", err)
 		}
 	}
 	walExisted := wal.Exist(pm.waldir)
@@ -501,7 +502,7 @@ func (pm *ProtocolManager) startRaft() {
 	go pm.handleRoleChange(pm.rawNode().RoleChan().Out())
 }
 
-func (pm *ProtocolManager) setLocalAddress(addr *Address) {
+func (pm *ProtocolManager) setLocalAddress(addr *raft.Address) {
 	pm.mu.Lock()
 	pm.address = addr
 	pm.mu.Unlock()
@@ -520,18 +521,18 @@ func (pm *ProtocolManager) serveRaft() {
 	urlString := fmt.Sprintf("http://0.0.0.0:%d", pm.raftPort)
 	url, err := url.Parse(urlString)
 	if err != nil {
-		fatalf("Failed parsing URL (%v)", err)
+		raft.Fatalf("Failed parsing URL (%v)", err)
 	}
 
-	listener, err := newStoppableListener(url.Host, pm.httpstopc)
+	listener, err := raft.NewStoppableListener(url.Host, pm.httpstopc)
 	if err != nil {
-		fatalf("Failed to listen rafthttp (%v)", err)
+		raft.Fatalf("Failed to listen rafthttp (%v)", err)
 	}
 	err = (&http.Server{Handler: pm.transport.Handler()}).Serve(listener)
 	select {
 	case <-pm.httpstopc:
 	default:
-		fatalf("Failed to serve rafthttp (%v)", err)
+		raft.Fatalf("Failed to serve rafthttp (%v)", err)
 	}
 	close(pm.httpdonec)
 }
@@ -546,12 +547,12 @@ func (pm *ProtocolManager) handleRoleChange(roleC <-chan interface{}) {
 				panic("Couldn't cast role to int")
 			}
 
-			if intRole == minterRole {
+			if intRole == raft.MinterRole {
 				log.EmitCheckpoint(log.BecameMinter)
-				pm.minter.start()
+				pm.minter.Start(common.Address{})
 			} else { // verifier
 				log.EmitCheckpoint(log.BecameVerifier)
-				pm.minter.stop()
+				pm.minter.Stop()
 			}
 
 			pm.mu.Lock()
@@ -627,7 +628,7 @@ func (pm *ProtocolManager) entriesToApply(allEntries []raftpb.Entry) (entriesToA
 	pm.mu.RUnlock()
 
 	if first > lastApplied+1 {
-		fatalf("first index of committed entry[%d] should <= appliedIndex[%d] + 1", first, lastApplied)
+		raft.Fatalf("first index of committed entry[%d] should <= appliedIndex[%d] + 1", first, lastApplied)
 	}
 
 	firstToApply := lastApplied - first + 1
@@ -638,11 +639,11 @@ func (pm *ProtocolManager) entriesToApply(allEntries []raftpb.Entry) (entriesToA
 	return
 }
 
-func raftUrl(address *Address) string {
+func raftUrl(address *raft.Address) string {
 	return fmt.Sprintf("http://%s:%d", address.Ip, address.RaftPort)
 }
 
-func (pm *ProtocolManager) addPeer(address *Address) {
+func (pm *ProtocolManager) addPeer(address *raft.Address) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
@@ -661,11 +662,11 @@ func (pm *ProtocolManager) addPeer(address *Address) {
 
 	// Add raft transport connection:
 	pm.transport.AddPeer(raftTypes.ID(raftId), []string{raftUrl(address)})
-	pm.peers[raftId] = &Peer{address, p2pNode}
+	pm.peers[raftId] = &raft.Peer{address, p2pNode}
 }
 
-func (pm *ProtocolManager) disconnectFromPeer(raftId uint16, peer *Peer) {
-	pm.p2pServer.RemovePeer(peer.p2pNode)
+func (pm *ProtocolManager) disconnectFromPeer(raftId uint16, peer *raft.Peer) {
+	pm.p2pServer.RemovePeer(peer.P2pNode)
 	pm.transport.RemovePeer(raftTypes.ID(raftId))
 }
 
@@ -689,7 +690,7 @@ func (pm *ProtocolManager) removePeer(raftId uint16) {
 }
 
 func (pm *ProtocolManager) eventLoop() {
-	ticker := time.NewTicker(tickerMS * time.Millisecond)
+	ticker := time.NewTicker(raft.TickerMS * time.Millisecond)
 	defer ticker.Stop()
 	defer pm.wal.Close()
 
@@ -777,7 +778,7 @@ func (pm *ProtocolManager) eventLoop() {
 							log.Info("adding peer due to ConfChangeAddNode", "raft id", raftId)
 
 							forceSnapshot = true
-							pm.addPeer(bytesToAddress(cc.Context))
+							pm.addPeer(raft.BytesToAddress(cc.Context))
 						}
 
 					case raftpb.ConfChangeRemoveNode:
@@ -798,7 +799,7 @@ func (pm *ProtocolManager) eventLoop() {
 					case raftpb.ConfChangeUpdateNode:
 						// NOTE: remember to forceSnapshot in this case, if we add support
 						// for this.
-						fatalf("not yet handled: ConfChangeUpdateNode")
+						raft.Fatalf("not yet handled: ConfChangeUpdateNode")
 					}
 
 					if forceSnapshot {
@@ -837,10 +838,10 @@ func (pm *ProtocolManager) eventLoop() {
 	}
 }
 
-func (pm *ProtocolManager) makeInitialRaftPeers() (raftPeers []etcdRaft.Peer, peerAddresses []*Address, localAddress *Address) {
+func (pm *ProtocolManager) makeInitialRaftPeers() (raftPeers []etcdRaft.Peer, peerAddresses []*raft.Address, localAddress *raft.Address) {
 	initialNodes := pm.bootstrapNodes
-	raftPeers = make([]etcdRaft.Peer, len(initialNodes))  // Entire cluster
-	peerAddresses = make([]*Address, len(initialNodes)-1) // Cluster without *this* node
+	raftPeers = make([]etcdRaft.Peer, len(initialNodes))       // Entire cluster
+	peerAddresses = make([]*raft.Address, len(initialNodes)-1) // Cluster without *this* node
 
 	peersSeen := 0
 	for i, node := range initialNodes {
@@ -848,10 +849,10 @@ func (pm *ProtocolManager) makeInitialRaftPeers() (raftPeers []etcdRaft.Peer, pe
 		// We initially get the raftPort from the enode ID's query string. As an alternative, we can move away from
 		// requiring the use of static peers for the initial set, and load them from e.g. another JSON file which
 		// contains pairs of enodes and raft ports, or we can get this initial peer list from commandline flags.
-		address := newAddress(raftId, node.RaftPort(), node)
+		address := raft.NewAddress(raftId, node.RaftPort(), node)
 		raftPeers[i] = etcdRaft.Peer{
 			ID:      uint64(raftId),
-			Context: address.toBytes(),
+			Context: address.ToBytes(),
 		}
 
 		if raftId == pm.raftId {
@@ -872,10 +873,9 @@ func blockExtendsChain(block *types.Block, chain *core.BlockChain) bool {
 func (pm *ProtocolManager) applyNewChainHead(block *types.Block) {
 	if !blockExtendsChain(block, pm.blockchain) {
 		headBlock := pm.blockchain.CurrentBlock()
-
 		log.Info("Non-extending block", "block", block.Hash(), "parent", block.ParentHash(), "head", headBlock.Hash())
+		pm.minter.InvalidRaftOrdering() <- raft.InvalidRaftOrdering{HeadBlock: headBlock, InvalidBlock: block}
 
-		pm.minter.invalidRaftOrderingChan <- InvalidRaftOrdering{headBlock: headBlock, invalidBlock: block}
 	} else {
 		if existingBlock := pm.blockchain.GetBlockByHash(block.Hash()); nil == existingBlock {
 			if err := pm.blockchain.Validator().ValidateBody(block); err != nil {
@@ -914,14 +914,14 @@ func (pm *ProtocolManager) updateLeader(leader uint64) {
 }
 
 // The Address for the current leader, or an error if no leader is elected.
-func (pm *ProtocolManager) LeaderAddress() (*Address, error) {
+func (pm *ProtocolManager) LeaderAddress() (*raft.Address, error) {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 
-	if minterRole == pm.role {
+	if raft.MinterRole == pm.role {
 		return pm.address, nil
 	} else if l, ok := pm.peers[pm.leader]; ok {
-		return l.address, nil
+		return l.Address, nil
 	}
 	// We expect to reach this if pm.leader is 0, which is how etcd denotes the lack of a leader.
 	return nil, errors.New("no leader is currently elected")
@@ -934,7 +934,7 @@ func (pm *ProtocolManager) FetchRaftId(enodeId string) (uint16, error) {
 		return 0, err
 	}
 	for raftId, peer := range pm.peers {
-		if peer.p2pNode.ID() == node.ID() {
+		if peer.P2pNode.ID() == node.ID() {
 			return raftId, nil
 		}
 	}

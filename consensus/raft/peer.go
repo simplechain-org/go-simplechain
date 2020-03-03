@@ -22,7 +22,7 @@ type Address struct {
 	RaftPort enr.RaftPort  `json:"raftPort"`
 }
 
-func newAddress(raftId uint16, raftPort int, node *enode.Node) *Address {
+func NewAddress(raftId uint16, raftPort int, node *enode.Node) *Address {
 	// derive 64 byte nodeID from 128 byte enodeID
 	id, err := enode.RaftHexID(node.EnodeID())
 	if err != nil {
@@ -39,8 +39,8 @@ func newAddress(raftId uint16, raftPort int, node *enode.Node) *Address {
 
 // A peer that we're connected to via both raft's http transport, and ethereum p2p
 type Peer struct {
-	address *Address    // For raft transport
-	p2pNode *enode.Node // For ethereum transport
+	Address *Address    // For raft transport
+	P2pNode *enode.Node // For ethereum transport
 }
 
 func (addr *Address) EncodeRLP(w io.Writer) error {
@@ -66,7 +66,7 @@ func (addr *Address) DecodeRLP(s *rlp.Stream) error {
 }
 
 // RLP Address encoding, for transport over raft and storage in LevelDB.
-func (addr *Address) toBytes() []byte {
+func (addr *Address) ToBytes() []byte {
 	size, r, err := rlp.EncodeToReader(addr)
 	if err != nil {
 		panic(fmt.Sprintf("error: failed to RLP-encode Address: %s", err.Error()))
@@ -77,7 +77,7 @@ func (addr *Address) toBytes() []byte {
 	return buffer
 }
 
-func bytesToAddress(bytes []byte) *Address {
+func BytesToAddress(bytes []byte) *Address {
 	var addr Address
 	if err := rlp.DecodeBytes(bytes, &addr); err != nil {
 		log.Error("failed to RLP-decode Address", "error", err)

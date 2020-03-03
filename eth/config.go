@@ -62,9 +62,9 @@ var DefaultConfig = Config{
 		Blocks:     20,
 		Percentile: 60,
 	},
-	CtxStore:      core.DefaultCtxStoreConfig,
-	RtxStore:      core.DefaultRtxStoreConfig,
-	Role:common.RoleMainChain,
+	CtxStore: core.DefaultCtxStoreConfig,
+	RtxStore: core.DefaultRtxStoreConfig,
+	Role:     common.RoleMainChain,
 	Istanbul: *istanbul.DefaultConfig,
 }
 

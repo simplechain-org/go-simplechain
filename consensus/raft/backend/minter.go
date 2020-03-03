@@ -13,8 +13,9 @@
 //
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
+//+build .
 
-package raft
+package backend
 
 import (
 	"bytes"
@@ -27,6 +28,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"github.com/simplechain-org/go-simplechain/consensus/ethash"
+	"github.com/simplechain-org/go-simplechain/consensus/raft"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"
@@ -64,9 +66,9 @@ type minter struct {
 	shouldMine       *channels.RingChannel
 	blockTime        time.Duration
 	env              *work
-	speculativeChain *speculativeChain
+	speculativeChain *raft.SpeculativeChain
 
-	invalidRaftOrderingChan chan InvalidRaftOrdering
+	invalidRaftOrderingChan chan raft.InvalidRaftOrdering
 	chainHeadChan           chan core.ChainHeadEvent
 	chainHeadSub            event.Subscription
 	txPreChan               chan core.NewTxsEvent
@@ -88,9 +90,9 @@ func newMinter(config *params.ChainConfig, eth *RaftService, blockTime time.Dura
 		chain:            eth.BlockChain(),
 		shouldMine:       channels.NewRingChannel(1),
 		blockTime:        blockTime,
-		speculativeChain: newSpeculativeChain(),
+		speculativeChain: raft.NewSpeculativeChain(),
 
-		invalidRaftOrderingChan: make(chan InvalidRaftOrdering, 1),
+		invalidRaftOrderingChan: make(chan raft.InvalidRaftOrdering, 1),
 		chainHeadChan:           make(chan core.ChainHeadEvent, 1),
 		txPreChan:               make(chan core.NewTxsEvent, 4096),
 		ctxStore:                ctxStore,
@@ -99,7 +101,7 @@ func newMinter(config *params.ChainConfig, eth *RaftService, blockTime time.Dura
 	minter.chainHeadSub = eth.BlockChain().SubscribeChainHeadEvent(minter.chainHeadChan)
 	minter.txPreSub = eth.TxPool().SubscribeNewTxsEvent(minter.txPreChan)
 
-	minter.speculativeChain.clear(minter.chain.CurrentBlock())
+	minter.speculativeChain.Clear(minter.chain.CurrentBlock())
 
 	go minter.eventLoop()
 	go minter.mintingLoop()
@@ -116,7 +118,7 @@ func (minter *minter) stop() {
 	minter.mu.Lock()
 	defer minter.mu.Unlock()
 
-	minter.speculativeChain.clear(minter.chain.CurrentBlock())
+	minter.speculativeChain.Clear(minter.chain.CurrentBlock())
 	atomic.StoreInt32(&minter.minting, 0)
 }
 
@@ -127,13 +129,11 @@ func (minter *minter) requestMinting() {
 	minter.shouldMine.In() <- struct{}{}
 }
 
-type AddressTxes map[common.Address]types.Transactions
-
 func (minter *minter) updateSpeculativeChainPerNewHead(newHeadBlock *types.Block) {
 	minter.mu.Lock()
 	defer minter.mu.Unlock()
 
-	minter.speculativeChain.accept(newHeadBlock)
+	minter.speculativeChain.Accept(newHeadBlock)
 }
 
 func (minter *minter) updateSpeculativeChainPerInvalidOrdering(headBlock *types.Block, invalidBlock *types.Block) {
@@ -151,7 +151,7 @@ func (minter *minter) updateSpeculativeChainPerInvalidOrdering(headBlock *types.
 		return
 	}
 
-	minter.speculativeChain.unwindFrom(invalidHash, headBlock)
+	minter.speculativeChain.UnwindFrom(invalidHash, headBlock)
 }
 
 func (minter *minter) eventLoop() {
@@ -175,7 +175,7 @@ func (minter *minter) eventLoop() {
 				minter.requestMinting()
 			} else {
 				minter.mu.Lock()
-				minter.speculativeChain.setHead(newHeadBlock)
+				minter.speculativeChain.SetHead(newHeadBlock)
 				minter.mu.Unlock()
 			}
 
@@ -185,8 +185,8 @@ func (minter *minter) eventLoop() {
 			}
 
 		case ev := <-minter.invalidRaftOrderingChan:
-			headBlock := ev.headBlock
-			invalidBlock := ev.invalidBlock
+			headBlock := ev.HeadBlock
+			invalidBlock := ev.InvalidBlock
 
 			minter.updateSpeculativeChainPerInvalidOrdering(headBlock, invalidBlock)
 
@@ -257,7 +257,7 @@ func generateNanoTimestamp(parent *types.Block) (tstamp int64) {
 
 // Assumes mu is held.
 func (minter *minter) createWork() {
-	parent := minter.speculativeChain.head
+	parent := minter.speculativeChain.Head()
 	parentNumber := parent.Number()
 	tstamp := generateNanoTimestamp(parent)
 
@@ -290,7 +290,7 @@ func (minter *minter) getTransactions() *types.TransactionsByPriceAndNonce {
 	if err != nil { // TODO: handle
 		panic(err)
 	}
-	addrTxes := minter.speculativeChain.withoutProposedTxes(allAddrTxes)
+	addrTxes := minter.speculativeChain.WithoutProposedTxes(allAddrTxes)
 	signer := types.MakeSigner(minter.chain.Config(), minter.chain.CurrentBlock().Number())
 	return types.NewTransactionsByPriceAndNonce(signer, addrTxes)
 }
@@ -362,7 +362,7 @@ func (minter *minter) mintNewBlock() {
 		panic(fmt.Sprint("error committing state: ", err))
 	}
 
-	minter.speculativeChain.extend(block)
+	minter.speculativeChain.Extend(block)
 
 	minter.mux.Post(core.NewMinedBlockEvent{Block: block})
 
@@ -380,7 +380,7 @@ func (minter *minter) commitTransactions(txs *types.TransactionsByPriceAndNonce,
 	gp := new(core.GasPool).AddGas(minter.env.header.GasLimit)
 	txCount := 0
 
-//Loop:
+	//Loop:
 	for {
 		tx := txs.Peek()
 		if tx == nil {

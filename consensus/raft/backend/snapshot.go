@@ -1,4 +1,4 @@
-package raft
+package backend
 
 import (
 	"fmt"
@@ -7,26 +7,28 @@ import (
 	"sort"
 	"time"
 
-	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/coreos/etcd/snap"
-	"github.com/coreos/etcd/wal/walpb"
 	"github.com/deckarep/golang-set"
 	"github.com/simplechain-org/go-simplechain/common"
+	"github.com/simplechain-org/go-simplechain/consensus/raft"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/eth/downloader"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/rlp"
+
+	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/coreos/etcd/snap"
+	"github.com/coreos/etcd/wal/walpb"
 )
 
 // Snapshot
 
 type Snapshot struct {
-	addresses      []Address
+	addresses      []raft.Address
 	removedRaftIds []uint16 // Raft IDs for permanently removed peers
 	headBlockHash  common.Hash
 }
 
-type ByRaftId []Address
+type ByRaftId []raft.Address
 
 func (a ByRaftId) Len() int           { return len(a) }
 func (a ByRaftId) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
@@ -40,7 +42,7 @@ func (pm *ProtocolManager) buildSnapshot() *Snapshot {
 	numRemovedNodes := pm.removedPeers.Cardinality()
 
 	snapshot := &Snapshot{
-		addresses:      make([]Address, numNodes),
+		addresses:      make([]raft.Address, numNodes),
 		removedRaftIds: make([]uint16, numRemovedNodes),
 		headBlockHash:  pm.blockchain.CurrentBlock().Hash(),
 	}
@@ -53,7 +55,7 @@ func (pm *ProtocolManager) buildSnapshot() *Snapshot {
 		if raftId == pm.raftId {
 			snapshot.addresses[i] = *pm.address
 		} else {
-			snapshot.addresses[i] = *pm.peers[raftId].address
+			snapshot.addresses[i] = *pm.peers[raftId].Address
 		}
 	}
 	sort.Sort(ByRaftId(snapshot.addresses))
@@ -108,7 +110,7 @@ func confStateIdSet(confState raftpb.ConfState) mapset.Set {
 	return set
 }
 
-func (pm *ProtocolManager) updateClusterMembership(newConfState raftpb.ConfState, addresses []Address, removedRaftIds []uint16) {
+func (pm *ProtocolManager) updateClusterMembership(newConfState raftpb.ConfState, addresses []raft.Address, removedRaftIds []uint16) {
 	log.Info("updating cluster membership per raft snapshot")
 
 	prevConfState := pm.confState
@@ -170,7 +172,7 @@ func (pm *ProtocolManager) maybeTriggerSnapshot() {
 	entriesSinceLastSnap := appliedIndex - pm.snapshotIndex
 	pm.mu.RUnlock()
 
-	if entriesSinceLastSnap < snapshotPeriod {
+	if entriesSinceLastSnap < raft.SnapshotPeriod {
 		return
 	}
 
@@ -205,7 +207,7 @@ func (snapshot *Snapshot) toBytes() []byte {
 func bytesToSnapshot(bytes []byte) *Snapshot {
 	var snapshot Snapshot
 	if err := rlp.DecodeBytes(bytes, &snapshot); err != nil {
-		fatalf("failed to RLP-decode Snapshot: %v", err)
+		raft.Fatalf("failed to RLP-decode Snapshot: %v", err)
 	}
 	return &snapshot
 }
@@ -217,7 +219,7 @@ func (snapshot *Snapshot) EncodeRLP(w io.Writer) error {
 func (snapshot *Snapshot) DecodeRLP(s *rlp.Stream) error {
 	// These fields need to be public:
 	var temp struct {
-		Addresses      []Address
+		Addresses      []raft.Address
 		RemovedRaftIds []uint16
 		HeadBlockHash  common.Hash
 	}
@@ -252,7 +254,7 @@ func (pm *ProtocolManager) saveRaftSnapshot(snap raftpb.Snapshot) error {
 func (pm *ProtocolManager) readRaftSnapshot() *raftpb.Snapshot {
 	snapshot, err := pm.snapshotter.Load()
 	if err != nil && err != snap.ErrNoSnapshot {
-		fatalf("error loading snapshot: %v", err)
+		raft.Fatalf("error loading snapshot: %v", err)
 	}
 
 	return snapshot
@@ -261,7 +263,7 @@ func (pm *ProtocolManager) readRaftSnapshot() *raftpb.Snapshot {
 func (pm *ProtocolManager) applyRaftSnapshot(raftSnapshot raftpb.Snapshot) {
 	log.Info("applying snapshot to raft storage")
 	if err := pm.raftStorage.ApplySnapshot(raftSnapshot); err != nil {
-		fatalf("failed to apply snapshot: %s", err)
+		raft.Fatalf("failed to apply snapshot: %s", err)
 	}
 	snapshot := bytesToSnapshot(raftSnapshot.Data)
 
@@ -275,7 +277,7 @@ func (pm *ProtocolManager) applyRaftSnapshot(raftSnapshot raftpb.Snapshot) {
 		pm.syncBlockchainUntil(latestBlockHash)
 		pm.logNewlyAcceptedTransactions(preSyncHead)
 
-		log.Info(chainExtensionMessage, "hash", pm.blockchain.CurrentBlock().Hash())
+		log.Info(raft.ChainExtensionMessage, "hash", pm.blockchain.CurrentBlock().Hash())
 	} else {
 		// added for permissions changes to indicate node sync up has started
 		//TODO types.SetSyncStatus()
@@ -291,7 +293,7 @@ func (pm *ProtocolManager) applyRaftSnapshot(raftSnapshot raftpb.Snapshot) {
 
 func (pm *ProtocolManager) syncBlockchainUntil(hash common.Hash) {
 	pm.mu.RLock()
-	peerMap := make(map[uint16]*Peer, len(pm.peers))
+	peerMap := make(map[uint16]*raft.Peer, len(pm.peers))
 	for raftId, peer := range pm.peers {
 		peerMap[raftId] = peer
 	}
@@ -301,8 +303,8 @@ func (pm *ProtocolManager) syncBlockchainUntil(hash common.Hash) {
 		for peerId, peer := range peerMap {
 			log.Info("synchronizing with peer", "peer id", peerId, "hash", hash)
 
-			peerId := peer.p2pNode.ID().String()
-			peerIdPrefix := fmt.Sprintf("%x", peer.p2pNode.ID().Bytes()[:8])
+			peerId := peer.P2pNode.ID().String()
+			peerIdPrefix := fmt.Sprintf("%x", peer.P2pNode.ID().Bytes()[:8])
 
 			if err := pm.downloader.Synchronise(peerIdPrefix, hash, big.NewInt(0), downloader.FullSync); err != nil {
 				log.Info("failed to synchronize with peer", "peer id", peerId)

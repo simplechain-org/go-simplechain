@@ -641,8 +641,5 @@ func (s *Ethereum) GetEVM(ctx context.Context, msg core.Message, state *state.St
 	return vm.NewEVM(context, state, s.chainConfig, vmCfg), vmError, nil
 }
 
+func (s *Ethereum) Config() *eth.Config              { return s.config }
 func (s *Ethereum) ChainConfig() *params.ChainConfig { return s.chainConfig }
-
-func (s *Ethereum) CalcGasLimit(block *types.Block) uint64 {
-	return core.CalcGasLimit(block, s.config.Miner.GasFloor, s.config.Miner.GasCeil)
-}

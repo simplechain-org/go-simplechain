@@ -13,7 +13,6 @@
 //
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-simplechain library. If not, see <http://www.gnu.org/licenses/>.
-//+build .
 
 package miner
 
@@ -21,6 +20,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/eapache/channels"
+	"github.com/simplechain-org/go-simplechain/consensus/raft"
 	"math/big"
 	"sync"
 	"sync/atomic"
@@ -63,7 +64,8 @@ const (
 
 	// minRecommitInterval is the minimal time interval to recreate the mining block with
 	// any newly arrived transactions.
-	minRecommitInterval = 1 * time.Second
+	minRecommitInterval     = 1 * time.Second
+	minRaftRecommitInterval = 50 * time.Millisecond
 
 	// maxRecommitInterval is the maximum time interval to recreate the mining block with
 	// any newly arrived transactions.
@@ -181,7 +183,9 @@ type worker struct {
 	fullTaskHook func()                             // Method to call before pushing the full sealing task.
 	resubmitHook func(time.Duration, time.Duration) // Method to call upon updating resubmitting interval.
 	agents       map[Agent]struct{}
-	ctxStore     *core.CtxStore
+
+	ctxStore *core.CtxStore
+	raftCtx  *raftContext
 }
 
 func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus.Engine, eth Backend, mux *event.TypeMux, isLocalBlock func(*types.Block) bool, init bool, ctxStore *core.CtxStore) *worker {
@@ -211,10 +215,6 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 		ctxStore:           ctxStore,
 	}
 
-	if chainConfig.Raft {
-		return worker
-	}
-
 	// Subscribe NewTxsEvent for tx pool
 	worker.txsSub = eth.TxPool().SubscribeNewTxsEvent(worker.txsCh)
 	// Subscribe events for blockchain
@@ -223,9 +223,25 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 
 	// Sanitize recommit interval if the user-specified one is too short.
 	recommit := worker.config.Recommit
-	if recommit < minRecommitInterval {
+	if !chainConfig.Raft && recommit < minRecommitInterval {
 		log.Warn("Sanitizing miner recommit interval", "provided", recommit, "updated", minRecommitInterval)
 		recommit = minRecommitInterval
+	} else if chainConfig.Raft && recommit < minRaftRecommitInterval {
+		log.Warn("Sanitizing miner recommit interval", "provided", recommit, "updated", minRecommitInterval)
+		recommit = minRaftRecommitInterval
+	}
+
+	if chainConfig.Raft {
+		worker.raftCtx = &raftContext{
+			shouldMine:              channels.NewRingChannel(1),
+			speculativeChain:        raft.NewSpeculativeChain(),
+			invalidRaftOrderingChan: make(chan raft.InvalidRaftOrdering, 1),
+		}
+		worker.raftCtx.speculativeChain.Clear(worker.chain.CurrentBlock())
+
+		go worker.raftLoop()
+		go worker.mintingLoop(recommit)
+		return worker
 	}
 
 	go worker.mainLoop()

@@ -1,4 +1,4 @@
-package raft
+package backend
 
 import (
 	"math/big"
@@ -7,6 +7,7 @@ import (
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
+	"github.com/simplechain-org/go-simplechain/consensus/raft"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/node"
@@ -20,10 +21,6 @@ func TestSignHeader(t *testing.T) {
 
 	nodeKey := config.NodeKey()
 
-	raftProtocolManager := &ProtocolManager{raftId: testRaftId}
-	raftService := &RaftService{nodeKey: nodeKey, raftProtocolManager: raftProtocolManager}
-	minter := minter{eth: raftService}
-
 	//create some fake header to sign
 	fakeParentHash := common.HexToHash("0xc2c1dc1be8054808c69e06137429899d")
 
@@ -33,13 +30,12 @@ func TestSignHeader(t *testing.T) {
 		Difficulty: big.NewInt(1),
 		GasLimit:   uint64(0),
 		GasUsed:    uint64(0),
-		Coinbase:   minter.coinbase,
 		Time:       uint64(time.Now().UnixNano()),
 	}
 
 	headerHash := header.Hash()
-	extraDataBytes := minter.buildExtraSeal(headerHash)
-	var seal *extraSeal
+	extraDataBytes := raft.BuildExtraSeal(nodeKey, testRaftId, headerHash)
+	var seal *raft.ExtraSeal
 	err := rlp.DecodeBytes(extraDataBytes[:], &seal)
 	if err != nil {
 		t.Fatalf("Unable to decode seal: %s", err.Error())

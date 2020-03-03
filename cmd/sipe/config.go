@@ -26,14 +26,13 @@ import (
 	"os"
 	"reflect"
 	"strings"
-	"time"
 	"unicode"
 
 	cli "gopkg.in/urfave/cli.v1"
 
 	"github.com/naoina/toml"
 	"github.com/simplechain-org/go-simplechain/cmd/utils"
-	"github.com/simplechain-org/go-simplechain/consensus/raft"
+	raftBackend "github.com/simplechain-org/go-simplechain/consensus/raft/backend"
 	"github.com/simplechain-org/go-simplechain/eth"
 	"github.com/simplechain-org/go-simplechain/node"
 	"github.com/simplechain-org/go-simplechain/p2p/enode"
@@ -233,7 +232,6 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 }
 
 func RegisterRaftService(stack *node.Node, ctx *cli.Context, cfg gethConfig, subChan <-chan *sub.Ethereum) {
-	blockTimeMillis := ctx.GlobalInt(utils.RaftBlockTimeFlag.Name)
 	datadir := ctx.GlobalString(utils.DataDirFlag.Name)
 	joinExistingId := ctx.GlobalInt(utils.RaftJoinExistingFlag.Name)
 
@@ -242,7 +240,6 @@ func RegisterRaftService(stack *node.Node, ctx *cli.Context, cfg gethConfig, sub
 	if err := stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
 		privkey := cfg.Node.NodeKey()
 		strId := enode.PubkeyToIDV4(&privkey.PublicKey).String()
-		blockTimeNanos := time.Duration(blockTimeMillis) * time.Millisecond
 		peers := cfg.Node.StaticNodes()
 
 		var myId uint16
@@ -274,7 +271,7 @@ func RegisterRaftService(stack *node.Node, ctx *cli.Context, cfg gethConfig, sub
 		}
 
 		ethereum := <-subChan
-		return raft.New(ctx, ethereum.ChainConfig(), myId, raftPort, joinExisting, blockTimeNanos, ethereum, peers, datadir, ethereum.GetCtxStore())
+		return raftBackend.New(ctx, myId, raftPort, joinExisting, ethereum, peers, datadir, ethereum.GetCtxStore())
 	}); err != nil {
 		utils.Fatalf("Failed to register the Raft service: %v", err)
 	}

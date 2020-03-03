@@ -1,23 +1,20 @@
-package raft
+package backend
 
 import (
 	"crypto/ecdsa"
-	"github.com/simplechain-org/go-simplechain/sub"
-	"sync"
-	"time"
-
 	"github.com/simplechain-org/go-simplechain/accounts"
 	"github.com/simplechain-org/go-simplechain/core"
-	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/eth/downloader"
 	"github.com/simplechain-org/go-simplechain/ethdb"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/log"
+	"github.com/simplechain-org/go-simplechain/miner"
 	"github.com/simplechain-org/go-simplechain/node"
 	"github.com/simplechain-org/go-simplechain/p2p"
 	"github.com/simplechain-org/go-simplechain/p2p/enode"
-	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/rpc"
+	"github.com/simplechain-org/go-simplechain/sub"
+	"sync"
 )
 
 type RaftService struct {
@@ -32,26 +29,23 @@ type RaftService struct {
 	startPeers          []*enode.Node
 
 	// we need an event mux to instantiate the blockchain
-	eventMux         *event.TypeMux
-	minter           *minter
-	nodeKey          *ecdsa.PrivateKey
-	calcGasLimitFunc func(block *types.Block) uint64
+	eventMux *event.TypeMux
+	minter   *miner.Miner
+	nodeKey  *ecdsa.PrivateKey
 }
 
-func New(ctx *node.ServiceContext, chainConfig *params.ChainConfig, raftId, raftPort uint16, joinExisting bool, blockTime time.Duration, e *sub.Ethereum, startPeers []*enode.Node, datadir string, ctxStore *core.CtxStore) (*RaftService, error) {
+func New(ctx *node.ServiceContext, raftId, raftPort uint16, joinExisting bool, e *sub.Ethereum, startPeers []*enode.Node, datadir string, ctxStore *core.CtxStore) (*RaftService, error) {
 	service := &RaftService{
-		eventMux:         ctx.EventMux,
-		chainDb:          e.ChainDb(),
-		blockchain:       e.BlockChain(),
-		txPool:           e.TxPool(),
-		accountManager:   e.AccountManager(),
-		downloader:       e.Downloader(),
-		startPeers:       startPeers,
-		nodeKey:          ctx.NodeKey(),
-		calcGasLimitFunc: e.CalcGasLimit,
+		eventMux:       ctx.EventMux,
+		chainDb:        e.ChainDb(),
+		blockchain:     e.BlockChain(),
+		txPool:         e.TxPool(),
+		accountManager: e.AccountManager(),
+		downloader:     e.Downloader(),
+		startPeers:     startPeers,
+		nodeKey:        ctx.NodeKey(),
 	}
-
-	service.minter = newMinter(chainConfig, service, blockTime, ctxStore)
+	service.minter = miner.New(service, &e.Config().Miner, e.ChainConfig(), e.EventMux(), e.Engine(), nil, ctxStore)
 
 	var err error
 	if service.raftProtocolManager, err = NewProtocolManager(raftId, raftPort, service.blockchain, service.eventMux, startPeers, joinExisting, datadir, service.minter, service.downloader); err != nil {
@@ -83,6 +77,11 @@ func (service *RaftService) APIs() []rpc.API {
 	}
 }
 
+// miner.RaftBackend interface methods:
+
+func (service *RaftService) NodeKey() *ecdsa.PrivateKey { return service.nodeKey }
+func (service *RaftService) RaftId() uint16             { return service.raftProtocolManager.raftId }
+
 // Start implements node.Service, starting the background data propagation thread
 // of the protocol.
 func (service *RaftService) Start(p2pServer *p2p.Server) error {
@@ -95,7 +94,7 @@ func (service *RaftService) Start(p2pServer *p2p.Server) error {
 func (service *RaftService) Stop() error {
 	service.blockchain.Stop()
 	service.raftProtocolManager.Stop()
-	service.minter.stop()
+	service.minter.Stop()
 	service.eventMux.Stop()
 
 	//service.chainDb.Close()

@@ -27,7 +27,7 @@ type stoppableListener struct {
 	stopc <-chan struct{}
 }
 
-func newStoppableListener(addr string, stopc <-chan struct{}) (*stoppableListener, error) {
+func NewStoppableListener(addr string, stopc <-chan struct{}) (*stoppableListener, error) {
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, err

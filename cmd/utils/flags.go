@@ -787,11 +787,6 @@ var (
 		Name:  "raft",
 		Usage: "If enabled, uses Raft instead of Quorum Chain for consensus",
 	}
-	RaftBlockTimeFlag = cli.IntFlag{
-		Name:  "raftblocktime",
-		Usage: "Amount of time between raft block creations in milliseconds",
-		Value: 50,
-	}
 	RaftJoinExistingFlag = cli.IntFlag{
 		Name:  "raftjoinexisting",
 		Usage: "The raft ID to assume when joining an pre-existing cluster",
@@ -1056,7 +1051,7 @@ func setHTTP(ctx *cli.Context, cfg *node.Config) {
 	if ctx.GlobalIsSet(RPCVirtualHostsFlag.Name) {
 		cfg.HTTPVirtualHosts = splitAndTrim(ctx.GlobalString(RPCVirtualHostsFlag.Name))
 	}
-	setSubHTTP(ctx,cfg)
+	setSubHTTP(ctx, cfg)
 }
 
 // setGraphQL creates the GraphQL listener interface string from the set
@@ -1095,7 +1090,7 @@ func setWS(ctx *cli.Context, cfg *node.Config) {
 	if ctx.GlobalIsSet(WSApiFlag.Name) {
 		cfg.WSModules = splitAndTrim(ctx.GlobalString(WSApiFlag.Name))
 	}
-	setSubWS(ctx,cfg)
+	setSubWS(ctx, cfg)
 }
 
 // setIPC creates an IPC path configuration from the set command line flags,
@@ -1108,7 +1103,7 @@ func setIPC(ctx *cli.Context, cfg *node.Config) {
 	case ctx.GlobalIsSet(IPCPathFlag.Name):
 		cfg.IPCPath = ctx.GlobalString(IPCPathFlag.Name)
 	}
-	setSubIPC(ctx,cfg)
+	setSubIPC(ctx, cfg)
 }
 
 // setLes configures the les server and ultra light client settings from the command line flags.
@@ -1330,8 +1325,8 @@ func SetNodeConfig(ctx *cli.Context, cfg *node.Config) {
 	if ctx.GlobalIsSet(InsecureUnlockAllowedFlag.Name) {
 		cfg.InsecureUnlockAllowed = ctx.GlobalBool(InsecureUnlockAllowedFlag.Name)
 	}
-	if ctx.GlobalIsSet(RoleFlag.Name){
-		cfg.Role=*GlobalTextMarshaler(ctx, RoleFlag.Name).(*common.ChainRole)
+	if ctx.GlobalIsSet(RoleFlag.Name) {
+		cfg.Role = *GlobalTextMarshaler(ctx, RoleFlag.Name).(*common.ChainRole)
 	}
 }
 
@@ -1920,6 +1915,7 @@ func MigrateFlags(action func(ctx *cli.Context) error) func(*cli.Context) error 
 		return action(ctx)
 	}
 }
+
 // setHTTP creates the HTTP RPC listener interface string from the set
 // command line flags, returning empty if the HTTP endpoint is disabled.
 func setSubHTTP(ctx *cli.Context, cfg *node.Config) {

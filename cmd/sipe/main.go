@@ -160,7 +160,6 @@ var (
 		utils.ContractSubFlag,
 		configFileFlag,
 		utils.RaftModeFlag,
-		utils.RaftBlockTimeFlag,
 		utils.RaftJoinExistingFlag,
 		utils.RaftPortFlag,
 		utils.IstanbulRequestTimeoutFlag,

@@ -1,8 +1,9 @@
-package raft
+package backend
 
 import (
 	"encoding/binary"
 
+	"github.com/simplechain-org/go-simplechain/consensus/raft"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/errors"
@@ -29,12 +30,12 @@ func openRaftDb(path string) (db *leveldb.DB, err error) {
 }
 
 func (pm *ProtocolManager) loadAppliedIndex() uint64 {
-	dat, err := pm.raftDb.Get(appliedDbKey, nil)
+	dat, err := pm.raftDb.Get(raft.AppliedDbKey, nil)
 	var lastAppliedIndex uint64
 	if err == errors.ErrNotFound {
 		lastAppliedIndex = 0
 	} else if err != nil {
-		fatalf("loadAppliedIndex error: %s", err)
+		raft.Fatalf("loadAppliedIndex error: %s", err)
 	} else {
 		lastAppliedIndex = binary.LittleEndian.Uint64(dat)
 	}
@@ -52,5 +53,5 @@ func (pm *ProtocolManager) writeAppliedIndex(index uint64) {
 	log.Info("persisted the latest applied index", "index", index)
 	buf := make([]byte, 8)
 	binary.LittleEndian.PutUint64(buf, index)
-	pm.raftDb.Put(appliedDbKey, buf, noFsync)
+	pm.raftDb.Put(raft.AppliedDbKey, buf, noFsync)
 }
