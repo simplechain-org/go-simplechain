@@ -152,7 +152,7 @@ func (this *GasHelper) CheckExec(ctx context.Context, args CallArgs) (bool, erro
 	//args.Gas = hexutil.Uint64(hi)
 	_, _, failed, err := this.doCall(ctx, args, rpc.LatestBlockNumber, vm.Config{}, 0)
 	if err != nil || failed {
-		return false,err
+		return false, err
 	}
-	return true,nil
+	return true, nil
 }

@@ -20,22 +20,21 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"github.com/simplechain-org/go-simplechain/common"
 	"math/big"
 	"os"
 	"reflect"
 	"strings"
 	"unicode"
 
-	cli "gopkg.in/urfave/cli.v1"
-
 	"github.com/naoina/toml"
 	"github.com/simplechain-org/go-simplechain/cmd/utils"
+	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/eth"
 	"github.com/simplechain-org/go-simplechain/node"
 	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/rpctx"
 	whisper "github.com/simplechain-org/go-simplechain/whisper/whisperv6"
+	cli "gopkg.in/urfave/cli.v1"
 )
 
 var (
@@ -139,31 +138,31 @@ func makeConfigNode(ctx *cli.Context) (*node.Node, gethConfig) {
 	}
 	utils.SetShhConfig(ctx, stack, &cfg.Shh)
 
-	if ctx.GlobalIsSet(utils.ContractMainFlag.Name){
-		mainCtxAddress:=ctx.GlobalString(utils.ContractMainFlag.Name)
-		if common.IsHexAddress(mainCtxAddress){
-			address:=common.HexToAddress(mainCtxAddress)
-			cfg.Eth.MainChainCtxAddress=address
+	if ctx.GlobalIsSet(utils.ContractMainFlag.Name) {
+		mainCtxAddress := ctx.GlobalString(utils.ContractMainFlag.Name)
+		if common.IsHexAddress(mainCtxAddress) {
+			address := common.HexToAddress(mainCtxAddress)
+			cfg.Eth.MainChainCtxAddress = address
 		}
 	}
-	if ctx.GlobalIsSet(utils.ContractSubFlag.Name){
-		subCtxAddress:=ctx.GlobalString(utils.ContractSubFlag.Name)
-		if common.IsHexAddress(subCtxAddress){
-			address:=common.HexToAddress(subCtxAddress)
-			cfg.Eth.SubChainCtxAddress=address
+	if ctx.GlobalIsSet(utils.ContractSubFlag.Name) {
+		subCtxAddress := ctx.GlobalString(utils.ContractSubFlag.Name)
+		if common.IsHexAddress(subCtxAddress) {
+			address := common.HexToAddress(subCtxAddress)
+			cfg.Eth.SubChainCtxAddress = address
 		}
 	}
-	if ctx.GlobalIsSet(utils.AnchorAccountsFlag.Name){
+	if ctx.GlobalIsSet(utils.AnchorAccountsFlag.Name) {
 		anchors := strings.Split(ctx.GlobalString(utils.AnchorAccountsFlag.Name), ",")
-		if len(anchors)>0{
-			addresses:=make([]common.Address,0,len(anchors))
-			for _,anchor:=range anchors{
+		if len(anchors) > 0 {
+			addresses := make([]common.Address, 0, len(anchors))
+			for _, anchor := range anchors {
 				if common.IsHexAddress(anchor) {
-					addresses=append(addresses,common.HexToAddress(anchor))
+					addresses = append(addresses, common.HexToAddress(anchor))
 				}
 			}
-			cfg.Eth.CtxStore.Anchors=addresses
-			cfg.Eth.RtxStore.Anchors=addresses
+			cfg.Eth.CtxStore.Anchors = addresses
+			cfg.Eth.RtxStore.Anchors = addresses
 		}
 	}
 
@@ -194,7 +193,7 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 	}
 	role := *utils.GlobalTextMarshaler(ctx, utils.RoleFlag.Name).(*common.ChainRole)
 
-	cfg.Eth.Role=role
+	cfg.Eth.Role = role
 
 	utils.RegisterEthService(stack, &cfg.Eth)
 

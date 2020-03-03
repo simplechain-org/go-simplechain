@@ -261,7 +261,7 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 	// start sync handlers
 	go pm.syncer()
 	go pm.txsyncLoop()
-	if pm.msgHandler!=nil{
+	if pm.msgHandler != nil {
 		pm.msgHandler.Start()
 	}
 }
@@ -270,7 +270,7 @@ func (pm *ProtocolManager) Stop() {
 
 	log.Info("Stopping Simplechain protocol")
 
-	if pm.msgHandler!=nil{
+	if pm.msgHandler != nil {
 		pm.msgHandler.Stop()
 	}
 	pm.txsSub.Unsubscribe()        // quits txBroadcastLoop
@@ -743,9 +743,9 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		pm.txpool.AddRemotes(txs)
 
 	default:
-		if pm.msgHandler!=nil{
-			return pm.msgHandler.HandleMsg(msg,p)
-		}else{
+		if pm.msgHandler != nil {
+			return pm.msgHandler.HandleMsg(msg, p)
+		} else {
 			return errResp(ErrInvalidMsgCode, "%v", msg.Code)
 		}
 	}
@@ -932,10 +932,7 @@ func (pm *ProtocolManager) AddRemotes(txs []*types.Transaction) []error {
 	return pm.txpool.AddRemotes(txs)
 }
 func (pm *ProtocolManager) CanAcceptTxs() bool {
-	if atomic.LoadUint32(&pm.acceptTxs) == 0 {
-		return false
-	}
-	return true
+	return atomic.LoadUint32(&pm.acceptTxs) != 0
 }
 func (pm *ProtocolManager) NetworkId() uint64 {
 	return pm.networkID

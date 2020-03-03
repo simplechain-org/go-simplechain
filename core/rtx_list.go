@@ -22,7 +22,7 @@ func (h rwsHeap) Less(i, j int) bool {
 		return false
 	} else {
 		if h[i].Data.Index < h[j].Data.Index {
-			return  true
+			return true
 		} else { //不会出现相等的情况
 			return false
 		}
@@ -45,7 +45,7 @@ func (h *rwsHeap) Pop() interface{} {
 // contents in a price-incrementing way.
 type rwsList struct {
 	all    *rwsLookup // Pointer to the map of all transactions
-	items  *rwsHeap // Heap of prices of all the stored transactions
+	items  *rwsHeap   // Heap of prices of all the stored transactions
 	stales int        // Number of stale price points to (re-heap trigger)
 }
 

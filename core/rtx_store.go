@@ -3,7 +3,9 @@ package core
 import (
 	"container/heap"
 	"fmt"
-	"github.com/hashicorp/golang-lru"
+	"sync"
+	"time"
+
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/ethdb"
@@ -11,16 +13,15 @@ import (
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/rpctx"
-	"sync"
-	"time"
+
+	lru "github.com/hashicorp/golang-lru"
 )
 
 const (
-
-	expireInterval        = time.Second * 60 * 12
-	reportInterval        = time.Second * 30
-	expireNumber          = 100 //pending rtx expired after block num
-	finishedCacheLimit    = 4096
+	expireInterval     = time.Second * 60 * 12
+	reportInterval     = time.Second * 30
+	expireNumber       = 100 //pending rtx expired after block num
+	finishedCacheLimit = 4096
 )
 
 var requireSignatureCount = 2
@@ -34,7 +35,7 @@ type RtxStoreConfig struct {
 }
 
 var DefaultRtxStoreConfig = RtxStoreConfig{
-	Anchors: []common.Address{},
+	Anchors:   []common.Address{},
 	Journal:   "recept_transactions.rlp",
 	ReJournal: time.Hour,
 }
@@ -49,8 +50,8 @@ func (config *RtxStoreConfig) sanitize() RtxStoreConfig {
 }
 
 type RtxStore struct {
-	config RtxStoreConfig
-	chain  blockChain
+	config      RtxStoreConfig
+	chain       blockChain
 	chainConfig *params.ChainConfig
 
 	pending       *rwsSortedMap
@@ -74,12 +75,12 @@ type RtxStore struct {
 
 	//locals map[common.Hash]*types.ReceptTransactionWithSignatures
 	//online map[common.Hash]*types.ReceptTransactionWithSignatures
-	all    *rwsLookup
-	task   *rwsList
+	all              *rwsLookup
+	task             *rwsList
 	CrossDemoAddress common.Address
 }
 
-func NewRtxStore(config RtxStoreConfig, chainconfig *params.ChainConfig, chain blockChain, chainDb ethdb.KeyValueStore,address common.Address) *RtxStore {
+func NewRtxStore(config RtxStoreConfig, chainconfig *params.ChainConfig, chain blockChain, chainDb ethdb.KeyValueStore, address common.Address) *RtxStore {
 	// Sanitize the input to ensure no vulnerable gas prices are set
 	config = (&config).sanitize()
 
@@ -87,22 +88,22 @@ func NewRtxStore(config RtxStoreConfig, chainconfig *params.ChainConfig, chain b
 	finishedCache, _ := lru.New(finishedCacheLimit)
 
 	store := &RtxStore{
-		config:        config,
-		chain:         chain,
-		chainConfig:   chainconfig,
-		pending:       newRwsSortedMap(),
-		queued:        newRwsSortedMap(),
-		signer:        signer,
+		config:      config,
+		chain:       chain,
+		chainConfig: chainconfig,
+		pending:     newRwsSortedMap(),
+		queued:      newRwsSortedMap(),
+		signer:      signer,
 		//anchors:       newAnchorAccountSet(config.Anchors, signer),
 		stopCh:        make(chan struct{}),
 		finishedCache: finishedCache,
 		//records:       make(map[common.Hash]*types.CrossRecord),
-		db:     chainDb,
+		db: chainDb,
 		//online: make(map[common.Hash]*types.ReceptTransactionWithSignatures),
 
-		all:    newRwsLookup(),
-		CrossDemoAddress:address,
-		anchors: make(map[uint64]*anchorAccountSet),
+		all:              newRwsLookup(),
+		CrossDemoAddress: address,
+		anchors:          make(map[uint64]*anchorAccountSet),
 	}
 	//newHead := store.chain.CurrentBlock().Header() // Special case during testing
 	//statedb, err := store.chain.StateAt(newHead.Root)
@@ -227,7 +228,6 @@ func (store *RtxStore) RemoveLocals(finishes []*types.FinishInfo) error {
 	return nil
 }
 
-
 func (store *RtxStore) ReadFromLocals(ctxId common.Hash) *types.ReceptTransactionWithSignatures {
 	store.mu.RLock()
 	defer store.mu.RUnlock()
@@ -275,21 +275,21 @@ func (store *RtxStore) loop() {
 				store.queued.RemoveUnderNum(currentNum - expireNumber)
 			}
 			store.mu.Unlock()
-		case <- report.C: //broadcast
-				store.mu.RLock()
-				taker := store.task.Discard(1024) //todo 当确认高度增长时，提高该值
-				log.Info("report","taker",len(taker),"task", len(store.task.all.all))
-				store.mu.RUnlock()
-				//var cws []*types.ReceptTransactionWithSignatures
-				//var count int
-				//for _, v := range taker {
-				//	if count >= 500 {
-				//		break
-				//	}
-				//	count ++
-				//	cws = append(cws, v)
-				//}
-				go store.rwsFeed.Send(NewRWssEvent{taker})
+		case <-report.C: //broadcast
+			store.mu.RLock()
+			taker := store.task.Discard(1024) //todo 当确认高度增长时，提高该值
+			log.Info("report", "taker", len(taker), "task", len(store.task.all.all))
+			store.mu.RUnlock()
+			//var cws []*types.ReceptTransactionWithSignatures
+			//var count int
+			//for _, v := range taker {
+			//	if count >= 500 {
+			//		break
+			//	}
+			//	count ++
+			//	cws = append(cws, v)
+			//}
+			go store.rwsFeed.Send(NewRWssEvent{taker})
 		case <-journal.C:
 			if store.journal != nil {
 				store.mu.Lock()
@@ -313,7 +313,7 @@ func (store *RtxStore) addTxs(rwss []*types.ReceptTransactionWithSignatures, loc
 			store.all.Add(rws)
 			errs[i] = store.journalTx(rws)
 			store.task.Put(rws)
-			log.Debug("RtxStore addTxs","ctxId",rws.ID().String())
+			log.Debug("RtxStore addTxs", "ctxId", rws.ID().String())
 		}
 	}
 	return errs
@@ -350,11 +350,11 @@ func (store *RtxStore) addTxLocked(rtx *types.ReceptTransaction, local bool) err
 	checkAndCommit := func(rws *types.ReceptTransactionWithSignatures) error {
 		if rws != nil && len(rws.Data.V) >= requireSignatureCount {
 			//TODO signatures combine or multi-sign msg?
-			log.Debug("checkAndCommit","ctxId",rws.ID().String())
+			log.Debug("checkAndCommit", "ctxId", rws.ID().String())
 			store.pending.RemoveByHash(id)
 			store.finishedCache.Add(id, struct{}{}) //finished需要用db存,db信息需和链上信息一一对应
 			if err := store.db.Put(rws.Key(), []byte{}); err != nil {
-				log.Error("db.Put","err",err)
+				log.Error("db.Put", "err", err)
 				return err
 			}
 			//go store.resultFeed.Send(NewRWsEvent{rws})
@@ -423,8 +423,8 @@ func (store *RtxStore) validateRtx(rtx *types.ReceptTransaction) error {
 		return fmt.Errorf("rtx is already expired, id: %s", id.String())
 	}
 
-	if  v,ok := store.anchors[rtx.Data.DestinationId.Uint64()];ok {
-		if  !v.isAnchorTx(rtx) {
+	if v, ok := store.anchors[rtx.Data.DestinationId.Uint64()]; ok {
+		if !v.isAnchorTx(rtx) {
 			return fmt.Errorf("invalid signature of rtx:%s", id.String())
 		}
 	} else {
@@ -432,9 +432,9 @@ func (store *RtxStore) validateRtx(rtx *types.ReceptTransaction) error {
 		statedb, err := store.chain.StateAt(newHead.Root)
 		if err != nil {
 			log.Error("Failed to reset txpool state", "err", err)
-			return fmt.Errorf("stateAt err:%s",err.Error())
+			return fmt.Errorf("stateAt err:%s", err.Error())
 		}
-		anchors,signedCount := QueryAnchor(store.chainConfig,store.chain,statedb,newHead,store.CrossDemoAddress,rtx.Data.DestinationId.Uint64())
+		anchors, signedCount := QueryAnchor(store.chainConfig, store.chain, statedb, newHead, store.CrossDemoAddress, rtx.Data.DestinationId.Uint64())
 		store.config.Anchors = anchors
 		requireSignatureCount = signedCount
 		store.anchors[rtx.Data.DestinationId.Uint64()] = newAnchorAccountSet(store.config.Anchors, store.signer)
@@ -561,12 +561,6 @@ func (as anchorAccountSet) isAnchorTx(tx *types.ReceptTransaction) bool {
 		return as.isAnchor(addr)
 	}
 	return false
-}
-
-var signedRtxPrefix = []byte("signed_rtx_")
-
-func signedRtxKey(id []byte) []byte {
-	return append(signedRtxPrefix, id...)
 }
 
 //func (store *RtxStore) WriteToLocals(rtws *types.ReceptTransactionWithSignatures) error {

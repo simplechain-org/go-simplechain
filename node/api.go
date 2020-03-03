@@ -255,7 +255,7 @@ func (api *PrivateAdminAPI) StopRPC() (bool, error) {
 		}
 		api.node.stopSubHTTP()
 	} else if api.node.IsAnchor() {
-		return false,nil
+		return false, nil
 	}
 	return true, nil
 }

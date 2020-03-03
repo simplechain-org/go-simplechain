@@ -89,7 +89,7 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 			if next.logs != nil {
 				var ctxs []*types.CrossTransaction
 				var rtxs []*types.ReceptTransaction
-				var finishs []*types.FinishInfo
+				var finishes []*types.FinishInfo
 				//todo add and del anchors
 				for _, v := range next.logs {
 					tx, blockHash, blockNumber := set.chain.GetTransactionByTxHash(v.TxHash)
@@ -99,7 +99,7 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 							var from common.Address
 							copy(from[:], v.Topics[2][common.HashLength-common.AddressLength:])
 							ctxId := v.Topics[1]
-							count := common.BytesToHash(v.Data[common.HashLength*4:common.HashLength*5]).Big().Int64()
+							count := common.BytesToHash(v.Data[common.HashLength*4 : common.HashLength*5]).Big().Int64()
 							ctxs = append(ctxs,
 								types.NewCrossTransaction(
 									common.BytesToHash(v.Data[common.HashLength:common.HashLength*2]).Big(),
@@ -118,7 +118,7 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 							var to common.Address
 							copy(to[:], v.Topics[2][common.HashLength-common.AddressLength:])
 							ctxId := v.Topics[1]
-							count := common.BytesToHash(v.Data[common.HashLength*5:common.HashLength*6]).Big().Int64()
+							count := common.BytesToHash(v.Data[common.HashLength*5 : common.HashLength*6]).Big().Int64()
 							rtxs = append(rtxs,
 								types.NewReceptTransaction(
 									ctxId,
@@ -137,7 +137,7 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 							if len(v.Topics) >= 2 {
 								ctxId := v.Topics[1]
 								to := v.Topics[2]
-								finishs = append(finishs,&types.FinishInfo{ctxId, common.BytesToAddress(to[:])})
+								finishes = append(finishes, &types.FinishInfo{TxId: ctxId, Taker: common.BytesToAddress(to[:])})
 							}
 						}
 					}
@@ -150,10 +150,10 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 					//log.Info("rtxs","next.index",next.index,"height",height,"l",len(rtxs))
 					set.chain.RtxsFeedSend(NewRTxsEvent{rtxs})
 				}
-				if len(finishs) > 0 {
+				if len(finishes) > 0 {
 					//log.Info("finishs","blockNumber",next.index,"height",height,"l",len(finishs))
 					set.chain.TransactionFinishFeedSend(TransationFinishEvent{
-						finishs})
+						finishes})
 				}
 			}
 		default:

@@ -1,10 +1,11 @@
 package types
 
 import (
+	"context"
+	"math/big"
+
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/p2p"
-	"math/big"
-	"context"
 )
 
 type Peer interface {
@@ -39,11 +40,9 @@ type ProtocolManager interface {
 	BroadcastCWss(cwss []*CrossTransactionWithSignatures)
 	AddRemotes([]*Transaction) []error
 	SetMsgHandler(pm MsgHandler)
-	//Pending() (map[common.Address]Transactions, error)
 	GetAnchorTxs(address common.Address) (map[common.Address]Transactions, error)
 }
 
-type GasPriceOracle interface{
-    SuggestPrice(ctx context.Context) (*big.Int, error)
-
+type GasPriceOracle interface {
+	SuggestPrice(ctx context.Context) (*big.Int, error)
 }

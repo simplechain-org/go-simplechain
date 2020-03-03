@@ -19,7 +19,6 @@ package eth
 import (
 	"errors"
 	"fmt"
-	"github.com/simplechain-org/go-simplechain/log"
 	"math/big"
 	"sync"
 	"time"
@@ -28,6 +27,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/forkid"
 	"github.com/simplechain-org/go-simplechain/core/types"
+	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/p2p"
 	"github.com/simplechain-org/go-simplechain/rlp"
 )
@@ -106,16 +106,16 @@ type peer struct {
 
 func newPeer(version int, p *p2p.Peer, rw p2p.MsgReadWriter) *peer {
 	return &peer{
-		Peer:        p,
-		rw:          rw,
-		version:     version,
-		id:          fmt.Sprintf("%x", p.ID().Bytes()[:8]),
-		knownTxs:    mapset.NewSet(),
-		knownBlocks: mapset.NewSet(),
-		queuedTxs:   make(chan []*types.Transaction, maxQueuedTxs),
-		queuedProps: make(chan *propEvent, maxQueuedProps),
-		queuedAnns:  make(chan *types.Block, maxQueuedAnns),
-		term:        make(chan struct{}),
+		Peer:                                     p,
+		rw:                                       rw,
+		version:                                  version,
+		id:                                       fmt.Sprintf("%x", p.ID().Bytes()[:8]),
+		knownTxs:                                 mapset.NewSet(),
+		knownBlocks:                              mapset.NewSet(),
+		queuedTxs:                                make(chan []*types.Transaction, maxQueuedTxs),
+		queuedProps:                              make(chan *propEvent, maxQueuedProps),
+		queuedAnns:                               make(chan *types.Block, maxQueuedAnns),
+		term:                                     make(chan struct{}),
 		queuedCWss:                               make(chan []*types.CrossTransactionWithSignatures, maxQueuedTxs),
 		knownCWss:                                mapset.NewSet(),
 		queuedCtxSign:                            make(chan *types.CrossTransaction, maxQueuedTxs),

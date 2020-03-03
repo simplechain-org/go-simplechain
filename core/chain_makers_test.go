@@ -18,9 +18,9 @@ package core
 
 import (
 	"fmt"
-	"github.com/simplechain-org/go-simplechain/common"
 	"math/big"
 
+	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/consensus/ethash"
 	"github.com/simplechain-org/go-simplechain/core/rawdb"
 	"github.com/simplechain-org/go-simplechain/core/types"

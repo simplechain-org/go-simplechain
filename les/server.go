@@ -18,15 +18,15 @@ package les
 
 import (
 	"crypto/ecdsa"
-	"github.com/simplechain-org/go-simplechain/consensus"
-	"github.com/simplechain-org/go-simplechain/ethdb"
-	"github.com/simplechain-org/go-simplechain/event"
 	"time"
 
 	"github.com/simplechain-org/go-simplechain/accounts/abi/bind"
 	"github.com/simplechain-org/go-simplechain/common/mclock"
+	"github.com/simplechain-org/go-simplechain/consensus"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/eth"
+	"github.com/simplechain-org/go-simplechain/ethdb"
+	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/les/flowcontrol"
 	"github.com/simplechain-org/go-simplechain/light"
 	"github.com/simplechain-org/go-simplechain/log"

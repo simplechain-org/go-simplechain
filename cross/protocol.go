@@ -7,5 +7,3 @@ const (
 	CtxSignsInternalMsg = 0x0f //完成签名后的消息在本链内传播
 	GetCtxSignsMsg      = 0x10
 )
-
-

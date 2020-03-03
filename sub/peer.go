@@ -19,7 +19,7 @@ package sub
 import (
 	"errors"
 	"fmt"
-	"github.com/simplechain-org/go-simplechain/log"
+
 	"math/big"
 	"sync"
 	"time"
@@ -28,6 +28,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/forkid"
 	"github.com/simplechain-org/go-simplechain/core/types"
+	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/p2p"
 	"github.com/simplechain-org/go-simplechain/rlp"
 )
@@ -399,7 +400,7 @@ func (p *peer) Handshake(network uint64, td *big.Int, head common.Hash, genesis 
 	errc := make(chan error, 2)
 
 	var (
-		status   statusData   // safe to read after two values have been received from errc
+		status statusData // safe to read after two values have been received from errc
 	)
 	go func() {
 

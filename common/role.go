@@ -21,23 +21,14 @@ const (
 )
 
 func (role ChainRole) IsMainChain() bool {
-	if role == RoleMainChain {
-		return true
-	}
-	return false
+	return role == RoleMainChain
 }
 
 func (role ChainRole) IsSubChain() bool {
-	if role == RoleSubChain {
-		return true
-	}
-	return false
+	return role == RoleSubChain
 }
 func (role ChainRole) IsAnchor() bool {
-	if role == RoleAnchor {
-		return true
-	}
-	return false
+	return role == RoleAnchor
 }
 
 func (role ChainRole) IsValid() bool {

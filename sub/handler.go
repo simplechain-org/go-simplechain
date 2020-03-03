@@ -100,9 +100,8 @@ type ProtocolManager struct {
 
 	serverPool *serverPool
 
-	msgHandler   types.MsgHandler
+	msgHandler types.MsgHandler
 }
-
 
 // NewProtocolManager returns a new Ethereum sub protocol manager. The Ethereum sub protocol manages peers capable
 // with the Ethereum network.
@@ -638,7 +637,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			log.Debug("Failed to deliver node state data", "err", err)
 		}
 
-	case  msg.Code == GetReceiptsMsg:
+	case msg.Code == GetReceiptsMsg:
 		// Decode the retrieval message
 		msgStream := rlp.NewStream(msg.Payload, uint64(msg.Size))
 		if _, err := msgStream.List(); err != nil {
@@ -674,7 +673,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 		return p.SendReceiptsRLP(receipts)
 
-	case  msg.Code == ReceiptsMsg:
+	case msg.Code == ReceiptsMsg:
 		// A batch of receipts arrived to one of our previous requests
 		var receipts [][]*types.Receipt
 		if err := msg.Decode(&receipts); err != nil {
@@ -873,6 +872,7 @@ func (pm *ProtocolManager) NodeInfo() *NodeInfo {
 		Head:       currentBlock.Hash(),
 	}
 }
+
 //广播多签完成的Ctx
 func (pm *ProtocolManager) BroadcastCWss(cwss []*types.CrossTransactionWithSignatures) {
 	var txset = make(map[*peer][]*types.CrossTransactionWithSignatures)
@@ -892,10 +892,9 @@ func (pm *ProtocolManager) BroadcastCWss(cwss []*types.CrossTransactionWithSigna
 	}
 }
 
-
 //锚定节点广播签名Ctx
 func (pm *ProtocolManager) BroadcastCtx(ctxs []*types.CrossTransaction) {
-	for _,ctx:=range ctxs{
+	for _, ctx := range ctxs {
 		var txset = make(map[*peer]*types.CrossTransaction)
 
 		// Broadcast ctx to a batch of peers not knowing about it
@@ -916,7 +915,7 @@ func (pm *ProtocolManager) BroadcastCtx(ctxs []*types.CrossTransaction) {
 
 //锚定节点广播签名Rtx
 func (pm *ProtocolManager) BroadcastRtx(rtxs []*types.ReceptTransaction) {
-	for _,rtx:=range rtxs{
+	for _, rtx := range rtxs {
 		var txset = make(map[*peer]*types.ReceptTransaction)
 
 		// Broadcast rtx to a batch of peers not knowing about it
@@ -934,8 +933,6 @@ func (pm *ProtocolManager) BroadcastRtx(rtxs []*types.ReceptTransaction) {
 	}
 
 }
-
-
 
 //ctxStore触发
 func (pm *ProtocolManager) BroadcastInternalCrossTransactionWithSignature(cwss []*types.CrossTransactionWithSignatures) {
@@ -956,20 +953,16 @@ func (pm *ProtocolManager) BroadcastInternalCrossTransactionWithSignature(cwss [
 	}
 }
 
-
 func (pm *ProtocolManager) SetMsgHandler(msgHandler types.MsgHandler) {
 	pm.msgHandler = msgHandler
 }
 
-func (pm *ProtocolManager) AddRemotes(txs []*types.Transaction) []error{
+func (pm *ProtocolManager) AddRemotes(txs []*types.Transaction) []error {
 	return pm.txpool.AddRemotes(txs)
 }
 
 func (pm *ProtocolManager) CanAcceptTxs() bool {
-	if atomic.LoadUint32(&pm.acceptTxs) == 0 {
-		return false
-	}
-	return true
+	return atomic.LoadUint32(&pm.acceptTxs) != 0
 }
 func (pm *ProtocolManager) NetworkId() uint64 {
 	return pm.networkID

@@ -46,14 +46,14 @@ type rtxStore interface {
 	//SubscribeNewRtxEvent(chan<- core.NewRTxEvent) event.Subscription
 	SubscribeRWssResultEvent(chan<- core.NewRWsEvent) event.Subscription
 
-	SubscribeNewRWssEvent(chan<- core.NewRWssEvent ) event.Subscription
+	SubscribeNewRWssEvent(chan<- core.NewRWssEvent) event.Subscription
 
 	AddLocals(...*types.ReceptTransactionWithSignatures) []error
 	RemoveLocals(finishes []*types.FinishInfo) error
 	//ReadFromLocals(ctxId common.Hash) *types.ReceptTransactionWithSignatures
 	//WriteToLocals(rtws *types.ReceptTransactionWithSignatures) error
 
-	ReadFromLocals(ctxId common.Hash) (*types.ReceptTransactionWithSignatures)
+	ReadFromLocals(ctxId common.Hash) *types.ReceptTransactionWithSignatures
 }
 
 type simplechain interface {

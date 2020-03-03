@@ -2,6 +2,9 @@ package core
 
 import (
 	"context"
+	"math/big"
+	"time"
+
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"github.com/simplechain-org/go-simplechain/common/math"
@@ -10,11 +13,9 @@ import (
 	"github.com/simplechain-org/go-simplechain/core/vm"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/params"
-	"math/big"
-	"time"
 )
 
-func QueryAnchor(config *params.ChainConfig, bc ChainContext,statedb *state.StateDB,header *types.Header,address common.Address,remoteChainId uint64) ([]common.Address,int) {
+func QueryAnchor(config *params.ChainConfig, bc ChainContext, statedb *state.StateDB, header *types.Header, address common.Address, remoteChainId uint64) ([]common.Address, int) {
 	cfg := vm.Config{}
 	var data []byte
 	getAnchor, _ := hexutil.Decode("0xe2ca8462")
@@ -25,11 +26,10 @@ func QueryAnchor(config *params.ChainConfig, bc ChainContext,statedb *state.Stat
 	//	chainId = common.LeftPadBytes(big.NewInt(1).Bytes(), 32)
 	//}
 
-
 	data = append(data, getAnchor...)
 	data = append(data, common.LeftPadBytes(big.NewInt(int64(remoteChainId)).Bytes(), 32)...)
 
-	log.Info("QueryAnchor","chainId",config.ChainID.String(),"contract",address.String(),"data",hexutil.Encode(data))
+	log.Info("QueryAnchor", "chainId", config.ChainID.String(), "contract", address.String(), "data", hexutil.Encode(data))
 	//构造消息
 	checkMsg := types.NewMessage(common.Address{}, &address, 0, big.NewInt(0), math.MaxUint64/2, big.NewInt(params.GWei), data, false)
 	var cancel context.CancelFunc
@@ -74,22 +74,19 @@ func QueryAnchor(config *params.ChainConfig, bc ChainContext,statedb *state.Stat
 
 	var anchors []common.Address
 	if len(res) > 64 {
-		log.Info("anchor query","result",hexutil.Encode(res),"gas",gas,"suc",suc)
-		signConfirmCount :=  new(big.Int).SetBytes(res[common.HashLength:common.HashLength*2]).Uint64()
-		anchorLen := new(big.Int).SetBytes(res[common.HashLength*2:common.HashLength*3]).Uint64()
+		log.Info("anchor query", "result", hexutil.Encode(res), "gas", gas, "suc", suc)
+		signConfirmCount := new(big.Int).SetBytes(res[common.HashLength : common.HashLength*2]).Uint64()
+		anchorLen := new(big.Int).SetBytes(res[common.HashLength*2 : common.HashLength*3]).Uint64()
 
 		var i uint64
 		var anchor common.Address
-		for i = 0; i < anchorLen; i ++ {
-			copy(anchor[:],res[common.HashLength*(4+i)-common.AddressLength:common.HashLength*(4+i)])
-			anchors = append(anchors,anchor)
+		for i = 0; i < anchorLen; i++ {
+			copy(anchor[:], res[common.HashLength*(4+i)-common.AddressLength:common.HashLength*(4+i)])
+			anchors = append(anchors, anchor)
 		}
-		return anchors,int(signConfirmCount)
+		return anchors, int(signConfirmCount)
 	} else {
-		return anchors,2
+		return anchors, 2
 	}
-
-
-
 
 }
