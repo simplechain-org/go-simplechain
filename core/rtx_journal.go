@@ -2,10 +2,10 @@ package core
 
 import (
 	"errors"
-	"github.com/simplechain-org/go-simplechain/common"
 	"io"
 	"os"
 
+	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/rlp"

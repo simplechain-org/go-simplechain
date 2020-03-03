@@ -210,9 +210,9 @@ func initGenesis(ctx *cli.Context) error {
 	stack := makeFullNode(ctx)
 	defer stack.Close()
 
-	role:=*utils.GlobalTextMarshaler(ctx, utils.RoleFlag.Name).(*common.ChainRole)
+	role := *utils.GlobalTextMarshaler(ctx, utils.RoleFlag.Name).(*common.ChainRole)
 
-	log.Info("initGenesis","role",role)
+	log.Info("initGenesis", "role", role)
 
 	if role.IsMainChain() {
 		for _, name := range []string{common.MainchainData, common.LightchainData} {
@@ -228,7 +228,7 @@ func initGenesis(ctx *cli.Context) error {
 			log.Info("Successfully wrote genesis state", "database", name, "hash", hash)
 		}
 
-	}else if role.IsSubChain() {
+	} else if role.IsSubChain() {
 		for _, name := range []string{common.SubchainData, common.LightchainData} {
 			chaindb, err := stack.OpenDatabase(name, 0, 0, "")
 			if err != nil {
@@ -241,9 +241,9 @@ func initGenesis(ctx *cli.Context) error {
 			chaindb.Close()
 			log.Info("Successfully wrote genesis state", "database", name, "hash", hash)
 		}
-	}else{
+	} else {
 
-		chaindb, err := stack.OpenDatabase(common.MainchainData, 0, 0,"")
+		chaindb, err := stack.OpenDatabase(common.MainchainData, 0, 0, "")
 		if err != nil {
 			utils.Fatalf("Failed to open database: %v", err)
 		}
@@ -268,7 +268,7 @@ func initGenesis(ctx *cli.Context) error {
 		if err := json.NewDecoder(file).Decode(genesis); err != nil {
 			utils.Fatalf("invalid genesis file: %v", err)
 		}
-		chaindb, err = stack.OpenDatabase(common.SubchainData, 0, 0,"")
+		chaindb, err = stack.OpenDatabase(common.SubchainData, 0, 0, "")
 		if err != nil {
 			utils.Fatalf("Failed to open database: %v", err)
 		}

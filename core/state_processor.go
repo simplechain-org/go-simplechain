@@ -22,17 +22,17 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/simplechain-org/go-simplechain/common/math"
 	"github.com/simplechain-org/go-simplechain/common"
+	"github.com/simplechain-org/go-simplechain/common/hexutil"
+	"github.com/simplechain-org/go-simplechain/common/math"
 	"github.com/simplechain-org/go-simplechain/consensus"
 	"github.com/simplechain-org/go-simplechain/consensus/misc"
 	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/core/vm"
 	"github.com/simplechain-org/go-simplechain/crypto"
-	"github.com/simplechain-org/go-simplechain/params"
-	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"github.com/simplechain-org/go-simplechain/log"
+	"github.com/simplechain-org/go-simplechain/params"
 )
 
 // StateProcessor is a basic Processor, which takes care of transitioning

@@ -24,8 +24,8 @@ import (
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/crypto"
-	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/log"
+	"github.com/simplechain-org/go-simplechain/params"
 )
 
 var (
@@ -212,12 +212,12 @@ func (fs FrontierSigner) Sender(tx *Transaction) (common.Address, error) {
 
 func recoverPlain(sighash common.Hash, R, S, Vb *big.Int, homestead bool) (common.Address, error) {
 	if Vb.BitLen() > 8 {
-		log.Info("recoverPlain","hash",sighash.String())
+		log.Info("recoverPlain", "hash", sighash.String())
 		return common.Address{}, ErrInvalidSig
 	}
 	V := byte(Vb.Uint64() - 27)
 	if !crypto.ValidateSignatureValues(V, R, S, homestead) {
-		log.Info("recoverPlain2","hash",sighash.String())
+		log.Info("recoverPlain2", "hash", sighash.String())
 		return common.Address{}, ErrInvalidSig
 	}
 	// encode the signature in uncompressed format

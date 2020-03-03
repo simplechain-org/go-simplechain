@@ -5,13 +5,14 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io/ioutil"
+	"log"
+	"math/big"
+
 	"github.com/simplechain-org/go-simplechain/accounts/abi"
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"github.com/simplechain-org/go-simplechain/rpc"
-	"io/ioutil"
-	"log"
-	"math/big"
 )
 
 var rawurlVar *string =flag.String("rawurl", "http://192.168.3.40:8545", "rpc url")
@@ -40,8 +41,8 @@ type SendTxArgs struct {
 	GasPrice *hexutil.Big    `json:"gasPrice"`
 	Value    *hexutil.Big    `json:"value"`
 	Nonce    *hexutil.Uint64 `json:"nonce"`
-	Data  *hexutil.Bytes `json:"data"`
-	Input *hexutil.Bytes `json:"input"`
+	Data     *hexutil.Bytes  `json:"data"`
+	Input    *hexutil.Bytes  `json:"input"`
 }
 
 func Maker(client *rpc.Client) {

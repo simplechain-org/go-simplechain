@@ -179,17 +179,17 @@ type BlockChain struct {
 	processor  Processor  // Block transaction processor interface
 	vmConfig   vm.Config
 
-	badBlocks       *lru.Cache                     // Bad block cache
-	shouldPreserve  func(*types.Block) bool        // Function used to determine whether should preserve the given block.
-	terminateInsert func(common.Hash, uint64) bool // Testing hook used to terminate ancient receipt chain insertion.
-	trigger         *UnconfirmedBlockLogs
-	CrossDemoAddress      common.Address
+	badBlocks        *lru.Cache                     // Bad block cache
+	shouldPreserve   func(*types.Block) bool        // Function used to determine whether should preserve the given block.
+	terminateInsert  func(common.Hash, uint64) bool // Testing hook used to terminate ancient receipt chain insertion.
+	trigger          *UnconfirmedBlockLogs
+	CrossDemoAddress common.Address
 }
 
 // NewBlockChain returns a fully initialised block chain using information
 // available in the database. It initialises the default Ethereum Validator and
 // Processor.
-func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *params.ChainConfig, engine consensus.Engine, vmConfig vm.Config,contract common.Address, shouldPreserve func(block *types.Block) bool) (*BlockChain, error) {
+func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *params.ChainConfig, engine consensus.Engine, vmConfig vm.Config, contract common.Address, shouldPreserve func(block *types.Block) bool) (*BlockChain, error) {
 	if cacheConfig == nil {
 		cacheConfig = &CacheConfig{
 			TrieCleanLimit: 256,
@@ -206,22 +206,22 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 	badBlocks, _ := lru.New(badBlockLimit)
 
 	bc := &BlockChain{
-		chainConfig:    chainConfig,
-		cacheConfig:    cacheConfig,
-		db:             db,
-		triegc:         prque.New(nil),
-		stateCache:     state.NewDatabaseWithCache(db, cacheConfig.TrieCleanLimit),
-		quit:           make(chan struct{}),
-		shouldPreserve: shouldPreserve,
-		bodyCache:      bodyCache,
-		bodyRLPCache:   bodyRLPCache,
-		receiptsCache:  receiptsCache,
-		blockCache:     blockCache,
-		txLookupCache:  txLookupCache,
-		futureBlocks:   futureBlocks,
-		engine:         engine,
-		vmConfig:       vmConfig,
-		badBlocks:      badBlocks,
+		chainConfig:      chainConfig,
+		cacheConfig:      cacheConfig,
+		db:               db,
+		triegc:           prque.New(nil),
+		stateCache:       state.NewDatabaseWithCache(db, cacheConfig.TrieCleanLimit),
+		quit:             make(chan struct{}),
+		shouldPreserve:   shouldPreserve,
+		bodyCache:        bodyCache,
+		bodyRLPCache:     bodyRLPCache,
+		receiptsCache:    receiptsCache,
+		blockCache:       blockCache,
+		txLookupCache:    txLookupCache,
+		futureBlocks:     futureBlocks,
+		engine:           engine,
+		vmConfig:         vmConfig,
+		badBlocks:        badBlocks,
 		CrossDemoAddress: contract,
 	}
 	bc.validator = NewBlockValidator(chainConfig, bc, engine)
@@ -1409,9 +1409,9 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 		bc.chainFeed.Send(ChainEvent{Block: block, Hash: block.Hash(), Logs: logs})
 		if len(logs) > 0 {
 			bc.logsFeed.Send(logs)
-			bc.StoreContractLog(block.NumberU64(),block.Hash(),logs)
+			bc.StoreContractLog(block.NumberU64(), block.Hash(), logs)
 		} else {
-			bc.StoreContractLog(block.NumberU64(),block.Hash(),logs)
+			bc.StoreContractLog(block.NumberU64(), block.Hash(), logs)
 		}
 		// In theory we should fire a ChainHeadEvent when we inject
 		// a canonical block, but sometimes we can insert a batch of
@@ -1658,7 +1658,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		}
 		// Process block using the parent state as reference point
 		substart := time.Now()
-		receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig,bc.CrossDemoAddress)
+		receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig, bc.CrossDemoAddress)
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
 			atomic.StoreUint32(&followupInterrupt, 1)
@@ -2243,16 +2243,12 @@ func (bc *BlockChain) SubscribeBlockProcessingEvent(ch chan<- bool) event.Subscr
 	return bc.scope.Track(bc.blockProcFeed.Subscribe(ch))
 }
 
-func (bc *BlockChain) StoreContractLog(blockNumber uint64,hash common.Hash, logs []*types.Log) {
+func (bc *BlockChain) StoreContractLog(blockNumber uint64, hash common.Hash, logs []*types.Log) {
 	var blockLogs []*types.Log
 	if logs != nil {
 		var rtxs []*types.ReceptTransaction
-		//var finishs []*types.FinishInfo
 		for _, v := range logs {
-			//TODO 合约变更
-			//data, err := json.Marshal(v)
-			//log.Info("StoreContractLog ", "v=", string(data), "err", err)
-			if len(v.Topics) > 0 &&  bc.IsCtxAddress(v.Address) {
+			if len(v.Topics) > 0 && bc.IsCtxAddress(v.Address) {
 				isLaunch := v.Topics[0] == params.MakerTopic
 				if bc.IsCtxAddress(v.Address) && isLaunch {
 					blockLogs = append(blockLogs, v)
@@ -2263,7 +2259,7 @@ func (bc *BlockChain) StoreContractLog(blockNumber uint64,hash common.Hash, logs
 					var to common.Address
 					copy(to[:], v.Topics[2][common.HashLength-common.AddressLength:])
 					ctxId := v.Topics[1]
-					count := common.BytesToHash(v.Data[common.HashLength*5:common.HashLength*6]).Big().Int64()
+					count := common.BytesToHash(v.Data[common.HashLength*5 : common.HashLength*6]).Big().Int64()
 					rtxs = append(rtxs,
 						types.NewReceptTransaction(
 							ctxId,
@@ -2279,11 +2275,6 @@ func (bc *BlockChain) StoreContractLog(blockNumber uint64,hash common.Hash, logs
 				}
 				isMakerFinish := v.Topics[0] == params.MakerFinishTopic
 				if isMakerFinish {
-				//	if len(v.Topics) >= 2 {
-				//		ctxId := v.Topics[1]
-				//		to := v.Topics[2]
-				//		finishs = append(finishs,&types.FinishInfo{ctxId, common.BytesToAddress(to[:])})
-				//	}
 					blockLogs = append(blockLogs, v)
 					continue
 				}
@@ -2300,22 +2291,11 @@ func (bc *BlockChain) StoreContractLog(blockNumber uint64,hash common.Hash, logs
 			}
 		}
 		if len(rtxs) > 0 {
-			go	bc.rtxsFeed.Send(NewRTxsEvent{rtxs}) //删除本地待接单
+			go bc.rtxsFeed.Send(NewRTxsEvent{rtxs}) //删除本地待接单
 		}
-		//if len(finishs) > 0 {
-		//	bc.FinishsFeed.Send(TransationFinishEvent{finishs}) //TODO
-		//}
-
 	}
-
-	if len(blockLogs) != bc.GetBlockByNumber(blockNumber).Transactions().Len() {
-		log.Warn("Insert","blockNumber",blockNumber,"log",len(blockLogs),"tx",bc.GetBlockByNumber(blockNumber).Transactions().Len())
-	} else {
-		log.Info("Insert","blockNumber",blockNumber,"log",len(blockLogs),"tx",bc.GetBlockByNumber(blockNumber).Transactions().Len())
-	}
-
 	if len(blockLogs) > 0 {
-		bc.trigger.Insert(blockNumber, hash ,blockLogs)
+		bc.trigger.Insert(blockNumber, hash, blockLogs)
 	} else {
 		bc.trigger.Insert(blockNumber, hash, nil)
 	}
@@ -2324,7 +2304,7 @@ func (bc *BlockChain) StoreContractLog(blockNumber uint64,hash common.Hash, logs
 
 // GetReceiptsByHash retrieves the receipts for all transactions in a given block.
 func (bc *BlockChain) GetReceiptsByTxHash(hash common.Hash) *types.Receipt {
-	rep, _, _, _ := rawdb.ReadReceipt(bc.db, hash,bc.chainConfig)
+	rep, _, _, _ := rawdb.ReadReceipt(bc.db, hash, bc.chainConfig)
 	if rep == nil {
 		return nil
 	}

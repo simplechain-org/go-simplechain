@@ -2,11 +2,11 @@ package core
 
 import (
 	"bytes"
+
 	"github.com/pkg/errors"
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/ethdb"
-
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/rlp"
 )

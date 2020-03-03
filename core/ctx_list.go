@@ -64,17 +64,16 @@ func ComparePrice(hi, hj *types.CrossTransactionWithSignatures) bool {
 	}
 }
 
-func ComparePrice2(chargei, valuei,chargej, valuej *big.Int) bool {
-	if valuei.Cmp(big.NewInt(0)) == 0 || valuej.Cmp(big.NewInt(0)) == 0{
+func ComparePrice2(chargei, valuei, chargej, valuej *big.Int) bool {
+	if valuei.Cmp(big.NewInt(0)) == 0 || valuej.Cmp(big.NewInt(0)) == 0 {
 		return false
 	}
 	zi := new(big.Int)
 	mi := new(big.Int)
-	zi, mi = zi.DivMod(chargei,valuei, mi)
+	zi, mi = zi.DivMod(chargei, valuei, mi)
 
 	zj := new(big.Int)
-	mj := new(big.Int)
-	zj, mj = zj.DivMod(chargej,valuej, mi)
+	zj, mj := zj.DivMod(chargej, valuej, mi)
 
 	switch zi.Cmp(zj) {
 	case -1:
@@ -92,9 +91,6 @@ func ComparePrice2(chargei, valuei,chargej, valuej *big.Int) bool {
 		}
 	}
 }
-
-
-
 
 func (h *valueHeap) Push(x interface{}) {
 	*h = append(*h, x.(*types.CrossTransactionWithSignatures))
@@ -114,14 +110,6 @@ type ctxValueList struct {
 	all    *ctxLookup // Pointer to the map of all transactions
 	items  *valueHeap // Heap of prices of all the stored transactions
 	stales int        // Number of stale price points to (re-heap trigger)
-}
-
-// newTxPricedList creates a new price-sorted transaction heap.
-func newCtxValueList(all *ctxLookup) *ctxValueList {
-	return &ctxValueList{
-		all:   all,
-		items: new(valueHeap),
-	}
 }
 
 // Put inserts a new transaction into the heap.
@@ -266,13 +254,6 @@ func (l *ctxValueList) Discard(count uint64) []*types.CrossTransactionWithSignat
 type ctxLookup struct {
 	all  map[common.Hash]*types.CrossTransactionWithSignatures
 	lock sync.RWMutex
-}
-
-// newTxLookup returns a new txLookup structure.
-func newCtxLookup() *ctxLookup {
-	return &ctxLookup{
-		all: make(map[common.Hash]*types.CrossTransactionWithSignatures),
-	}
 }
 
 // Range calls f on each key and value present in the map.

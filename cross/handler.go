@@ -3,7 +3,10 @@ package cross
 import (
 	"context"
 	"crypto/ecdsa"
+	"errors"
 	"fmt"
+	"math/big"
+
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"github.com/simplechain-org/go-simplechain/core"
@@ -13,8 +16,6 @@ import (
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/p2p"
 	"github.com/simplechain-org/go-simplechain/rpctx"
-	"errors"
-	"math/big"
 )
 
 const txChanSize = 4096
@@ -293,7 +294,6 @@ func (this *MsgHandler) HandleMsg(msg p2p.Msg, p Peer) error {
 		this.pm.BroadcastCWss(cwss)
 		for _, cws := range cwss {
 			p.MarkCrossTransactionWithSignatures(cws.ID())
-
 
 			//l := len(cws.Data.V)
 			//var vstring, rstring, sstring string

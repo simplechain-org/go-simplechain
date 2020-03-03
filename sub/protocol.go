@@ -47,38 +47,24 @@ const protocolMaxMsgSize = 10 * 1024 * 1024 // Maximum cap on the size of a prot
 
 // eth protocol message codes
 const (
-	//StatusMsg          = 0x00
-	//NewBlockHashesMsg  = 0x01
-	//TxMsg              = 0x02
-	//GetBlockHeadersMsg = 0x03
-	//BlockHeadersMsg    = 0x04
-	//GetBlockBodiesMsg  = 0x05
-	//BlockBodiesMsg     = 0x06
-	//NewBlockMsg        = 0x07
-	//GetNodeDataMsg     = 0x0d
-	//NodeDataMsg        = 0x0e
-	//GetReceiptsMsg     = 0x0f
-	//ReceiptsMsg        = 0x10
-	//CtxSignMsg          = 0x0c //多重签名过程中传消息
-	//CtxSignsMsg         = 0x0d //完成签名后的消息在对面链广播
-	//RtxSignMsg          = 0x0e //多重签名过程中传消息
-	//CtxSignsInternalMsg = 0x0f //完成签名后的消息在本链内传播
 	StatusMsg          = 0x00
 	NewBlockHashesMsg  = 0x01
-	TxMsg              = 0x02
+	TransactionMsg     = 0x02
 	GetBlockHeadersMsg = 0x03
 	BlockHeadersMsg    = 0x04
 	GetBlockBodiesMsg  = 0x05
 	BlockBodiesMsg     = 0x06
 	NewBlockMsg        = 0x07
-	GetNodeDataMsg     = 0x08
-	NodeDataMsg        = 0x09
-	GetReceiptsMsg     = 0x0a
-	ReceiptsMsg        = 0x0b
-	CtxSignMsg          = 0x0c //多重签名过程中传消息
-	CtxSignsMsg         = 0x0d //完成签名后的消息在对面链广播
-	RtxSignMsg          = 0x0e //多重签名过程中传消息
-	CtxSignsInternalMsg = 0x0f //完成签名后的消息在本链内传播
+	GetNodeDataMsg     = 0x0d
+	NodeDataMsg        = 0x0e
+	GetReceiptsMsg     = 0x0f
+	ReceiptsMsg        = 0x10
+
+	//for eth64
+	CtxSignMsg          = 0x31
+	CtxSignsMsg         = 0x32
+	RtxSignMsg          = 0x33
+	CtxSignsInternalMsg = 0x34
 )
 
 type errCode int
@@ -224,45 +210,3 @@ type blockBody struct {
 
 // blockBodiesData is the network packet for block content distribution.
 type blockBodiesData []*blockBody
-
-type ctxStore interface {
-
-	// AddRemotes should add the given transactions to the pool.
-	AddRemote(*types.CrossTransaction) error
-
-	// AddRemotes should add the given transactions to the pool.
-	AddLocal(*types.CrossTransaction) error
-
-	AddCWss([]*types.CrossTransactionWithSignatures) []error
-
-	ValidateCtx(*types.CrossTransaction) error
-
-	RemoveRemotes(common.Hash) error
-
-	RemoveLocals(common.Hash) error
-
-	RemoveFromLocalsByTransaction(common.Hash) error
-
-	SubscribeCWssResultEvent(chan<- core.NewCWsEvent) event.Subscription
-
-	//SubscribeNewCWssEvent(chan<- core.NewCWssEvent) event.Subscription
-
-	ReadFromLocals(common.Hash) *types.CrossTransactionWithSignatures
-}
-
-type rtxStore interface {
-
-	AddRemote(*types.ReceptTransaction) error
-
-	AddLocal(*types.ReceptTransaction) error
-
-	AddLocals([]*types.ReceptTransactionWithSignatures) []error
-
-	RemoveLocals([]*types.ReceptTransactionWithSignatures) error
-
-	ReadFromLocals(ctxId common.Hash) *types.ReceptTransactionWithSignatures
-
-	ValidateRtx(rtx *types.ReceptTransaction) error
-
-	SubscribeRWssResultEvent(chan<- core.NewRWsEvent) event.Subscription
-}

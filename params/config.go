@@ -327,8 +327,7 @@ func (c *ChainConfig) IsConstantinople(num *big.Int) bool {
 
 // IsMuirGlacier returns whether num is either equal to the Muir Glacier (EIP-2384) fork block or greater.
 func (c *ChainConfig) IsMuirGlacier(num *big.Int) bool {
-	//return isForked(c.MuirGlacierBlock, num)
-	return true
+	return isForked(c.MuirGlacierBlock, num)
 }
 
 // IsPetersburg returns whether num is either
@@ -341,8 +340,7 @@ func (c *ChainConfig) IsPetersburg(num *big.Int) bool {
 
 // IsIstanbul returns whether num is either equal to the Istanbul fork block or greater.
 func (c *ChainConfig) IsIstanbul(num *big.Int) bool {
-	//return isForked(c.IstanbulBlock, num)
-	return true
+	return isForked(c.IstanbulBlock, num)
 }
 
 // IsEWASM returns whether num represents a block number after the EWASM fork
@@ -534,4 +532,4 @@ func (c *ChainConfig) Rules(num *big.Int) Rules {
 }
 
 var MainChainCtxAddress = common.HexToAddress("0xe1d40e82947dd4b261c01a2fc8f0775449e37ce4")
-var SubChainCtxAddress  = common.HexToAddress("0xa51e9a93cf9cbdf11e5fb7bd1c78ed4763d7ba93")
+var SubChainCtxAddress = common.HexToAddress("0xa51e9a93cf9cbdf11e5fb7bd1c78ed4763d7ba93")

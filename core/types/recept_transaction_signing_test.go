@@ -22,7 +22,7 @@ func TestEIP155RtxSigning(t *testing.T) {
 		10000,
 		1,
 		[]byte{},
-		), signer, key)
+	), signer, key)
 	if err != nil {
 		t.Fatal(err)
 	}

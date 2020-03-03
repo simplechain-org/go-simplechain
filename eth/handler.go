@@ -730,7 +730,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			}
 		}
 
-	case msg.Code == TxMsg:
+	case msg.Code == TransactionMsg:
 		// Transactions arrived, make sure we have a valid and fresh chain to handle them
 		if atomic.LoadUint32(&pm.acceptTxs) == 0 {
 			break
@@ -751,9 +751,9 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		pm.AddRemotes(txs)
 
 	default:
-		if pm.msgHandler!=nil{
-			return pm.msgHandler.HandleMsg(msg,p)
-		}else{
+		if pm.msgHandler != nil {
+			return pm.msgHandler.HandleMsg(msg, p)
+		} else {
 			return errResp(ErrInvalidMsgCode, "%v", msg.Code)
 		}
 	}
@@ -944,10 +944,7 @@ func (pm *ProtocolManager) AddRemotes(txs []*types.Transaction) {
 }
 
 func (pm *ProtocolManager) CanAcceptTxs() bool {
-	if atomic.LoadUint32(&pm.acceptTxs) == 0 {
-		return false
-	}
-	return true
+	return atomic.LoadUint32(&pm.acceptTxs) != 0
 }
 func (pm *ProtocolManager) NetworkId() uint64 {
 	return pm.networkID
