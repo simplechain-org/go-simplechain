@@ -2,7 +2,9 @@ package backend
 
 import (
 	"crypto/ecdsa"
+	"errors"
 	"github.com/simplechain-org/go-simplechain/accounts"
+	"github.com/simplechain-org/go-simplechain/consensus/raft"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/eth/downloader"
 	"github.com/simplechain-org/go-simplechain/ethdb"
@@ -45,7 +47,14 @@ func New(ctx *node.ServiceContext, raftId, raftPort uint16, joinExisting bool, e
 		startPeers:     startPeers,
 		nodeKey:        ctx.NodeKey(),
 	}
-	service.minter = miner.New(service, &e.Config().Miner, e.ChainConfig(), e.EventMux(), e.Engine(), nil, ctxStore)
+
+	engine, ok := e.Engine().(*raft.Raft)
+	if !ok {
+		return nil, errors.New("raft service require raft engine") // never occur
+	}
+	engine.SetId(raftId)
+
+	service.minter = miner.New(service, &e.Config().Miner, e.ChainConfig(), e.EventMux(), engine, nil, ctxStore)
 
 	var err error
 	if service.raftProtocolManager, err = NewProtocolManager(raftId, raftPort, service.blockchain, service.eventMux, startPeers, joinExisting, datadir, service.minter, service.downloader); err != nil {
@@ -76,11 +85,6 @@ func (service *RaftService) APIs() []rpc.API {
 		},
 	}
 }
-
-// miner.RaftBackend interface methods:
-
-func (service *RaftService) NodeKey() *ecdsa.PrivateKey { return service.nodeKey }
-func (service *RaftService) RaftId() uint16             { return service.raftProtocolManager.raftId }
 
 // Start implements node.Service, starting the background data propagation thread
 // of the protocol.

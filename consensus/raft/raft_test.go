@@ -1,4 +1,4 @@
-package backend
+package raft
 
 import (
 	"math/big"
@@ -7,7 +7,6 @@ import (
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
-	"github.com/simplechain-org/go-simplechain/consensus/raft"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/node"
@@ -33,9 +32,12 @@ func TestSignHeader(t *testing.T) {
 		Time:       uint64(time.Now().UnixNano()),
 	}
 
+	engine := New(nodeKey)
+	engine.SetId(testRaftId)
+
 	headerHash := header.Hash()
-	extraDataBytes := raft.BuildExtraSeal(nodeKey, testRaftId, headerHash)
-	var seal *raft.ExtraSeal
+	extraDataBytes := engine.buildExtraSeal(headerHash)
+	var seal *ExtraSeal
 	err := rlp.DecodeBytes(extraDataBytes[:], &seal)
 	if err != nil {
 		t.Fatalf("Unable to decode seal: %s", err.Error())

@@ -1680,7 +1680,6 @@ func RegisterEthService(stack *node.Node, cfg *eth.Config) <-chan *sub.Ethereum 
 				return fullNode, err
 			})
 		} else if cfg.Role.IsSubChain() {
-
 			//subchain
 			err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
 				//subConfig := ToSubChainConfig(cfg)

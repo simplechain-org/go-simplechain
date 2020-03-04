@@ -21,6 +21,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/simplechain-org/go-simplechain/consensus/raft"
 	"math/big"
 	"runtime"
 	"sync"
@@ -335,6 +336,10 @@ func CreateConsensusEngine(ctx *node.ServiceContext, chainConfig *params.ChainCo
 		return istanbulBackend.New(&config.Istanbul, ctx.NodeKey(), db)
 	}
 
+	if chainConfig.Raft {
+		return raft.New(ctx.NodeKey())
+	}
+
 	// Otherwise assume proof-of-work
 	switch config.Ethash.PowMode {
 	case ethash.ModeFake:
@@ -347,10 +352,6 @@ func CreateConsensusEngine(ctx *node.ServiceContext, chainConfig *params.ChainCo
 		log.Warn("Ethash used in shared mode")
 		return ethash.NewShared()
 	default:
-		if chainConfig.Raft {
-			return ethash.NewFullFaker()
-		}
-
 		engine := ethash.New(ethash.Config{
 			CacheDir:       ctx.ResolvePath(config.Ethash.CacheDir),
 			CachesInMem:    config.Ethash.CachesInMem,
