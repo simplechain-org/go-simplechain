@@ -5,7 +5,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"math/big"
 
@@ -13,11 +12,10 @@ import (
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"github.com/simplechain-org/go-simplechain/rpc"
+	"github.com/simplechain-org/go-simplechain/params"
 )
 
 var rawurlVar *string =flag.String("rawurl", "http://192.168.3.40:8545", "rpc url")
-
-var abiPath *string =flag.String("abi", "../../contracts/crossdemo/crossdemo.abi", "abi文件路径")
 
 var contract *string =flag.String("contract", "0xAa22934Df3867B8d59574dD4557ef1BA6dA2f8f3", "合约地址")
 
@@ -47,9 +45,9 @@ type SendTxArgs struct {
 
 func Register(client *rpc.Client) {
 
-	data,err:=ioutil.ReadFile(*abiPath)
+	data, err := hexutil.Decode(params.CrossDemoAbi)
 
-	if err!=nil{
+	if err != nil {
 		fmt.Println(err)
 		return
 	}

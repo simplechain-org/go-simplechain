@@ -5,10 +5,7 @@ import (
 	"crypto/ecdsa"
 	"encoding/binary"
 	"errors"
-	"io/ioutil"
 	"math/big"
-	"path"
-	"runtime"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -355,13 +352,18 @@ func (rws *ReceptTransactionWithSignatures) ConstructData(gasUsed *big.Int) ([]b
 	//	data = append(data, common.LeftPadBytes(rws.Data.S[i].Bytes(), 32)...)
 	//}
 	//data = append(data, rws.Data.Input...) //makeFinish input字段
-	const dataFile = "../contracts/crossdemo/crossdemo.abi"
-	_, filename, _, _ := runtime.Caller(1)
-	datapath := path.Join(path.Dir(filename), dataFile)
-	data, err := ioutil.ReadFile(datapath)
+	//const dataFile = "../contracts/crossdemo/crossdemo.abi"
+	//_, filename, _, _ := runtime.Caller(1)
+	//datapath := path.Join(path.Dir(filename), dataFile)
+	//data, err := ioutil.ReadFile(datapath)
+	//if err != nil {
+	//	return nil, err
+	//}
+	data, err := hexutil.Decode(params.CrossDemoAbi)
 	if err != nil {
-		return nil, err
+		return nil,err
 	}
+
 	abi, err := abi.JSON(bytes.NewReader(data))
 	if err != nil {
 		return nil, err

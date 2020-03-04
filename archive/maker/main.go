@@ -5,7 +5,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"math/big"
 
@@ -13,11 +12,10 @@ import (
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"github.com/simplechain-org/go-simplechain/rpc"
+	"github.com/simplechain-org/go-simplechain/params"
 )
 
-var rawurlVar *string =flag.String("rawurl", "http://192.168.3.40:8545", "rpc url")
-
-var abiPath *string =flag.String("abi", "../../contracts/crossdemo/crossdemo.abi", "abi文件路径")
+var rawurlVar *string =flag.String("rawurl", "http://127.0.0.1:8545", "rpc url")
 
 //var contract *string =flag.String("contract", "0x8eefA4bFeA64F2A89f3064D48646415168662a1e", "合约地址")
 var contract *string =flag.String("contract", "0xAa22934Df3867B8d59574dD4557ef1BA6dA2f8f3", "合约地址")
@@ -34,6 +32,8 @@ var fromVar *string=flag.String("from", "0x7964576407c299ec0e65991ba74019d622316
 
 var gaslimitVar *uint64=flag.Uint64("gaslimit", 60000, "gas最大值")
 
+var countTx *int=flag.Int("count", 500, "交易数")
+
 type SendTxArgs struct {
 	From     common.Address  `json:"from"`
 	To       *common.Address `json:"to"`
@@ -47,9 +47,9 @@ type SendTxArgs struct {
 
 func Maker(client *rpc.Client) {
 
-	data,err:=ioutil.ReadFile(*abiPath)
+	data, err := hexutil.Decode(params.CrossDemoAbi)
 
-	if err!=nil{
+	if err != nil {
 		fmt.Println(err)
 		return
 	}
@@ -113,7 +113,7 @@ func main() {
 		fmt.Println("dial", "err", err)
 		return
 	}
-	for i:=0; i< 20000; i++ {
+	for i:=0; i< *countTx; i++ {
 		Maker(client)
 	}
 }

@@ -5,7 +5,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"github.com/simplechain-org/go-simplechain/params"
 	"log"
 	"math/big"
 
@@ -17,14 +17,14 @@ import (
 
 var rawurlVar *string = flag.String("rawurl", "http://127.0.0.1:8556", "rpc url")
 
-var abiPath *string = flag.String("abi", "../../contracts/crossdemo/crossdemo.abi", "abi文件路径")
+//var abiPath *string = flag.String("abi", "../../contracts/crossdemo/crossdemo.abi", "abi文件路径")
 
 //var contract *string = flag.String("contract", "0xAa22934Df3867B8d59574dD4557ef1BA6dA2f8f3", "合约地址")
 var contract *string = flag.String("contract", "0x8eefA4bFeA64F2A89f3064D48646415168662a1e", "合约地址")
 
-var txId *string = flag.String("TxId", "", "跨链交易哈希值")
+var txId *string = flag.String("txId", "", "跨链交易哈希值")
 
-var fromVar *string = flag.String("From", "0xb9d7df1a34a28c7b82acc841c12959ba00b51131", "接单人地址")
+var fromVar *string = flag.String("from", "0xb9d7df1a34a28c7b82acc841c12959ba00b51131", "接单人地址")
 //var fromVar *string = flag.String("From", "0xb9d7df1a34a28c7b82acc841c12959ba00b51131", "接单人地址")
 
 var gaslimitVar *uint64 = flag.Uint64("gaslimit", 200000, "gas最大值")
@@ -47,12 +47,20 @@ func main() {
 
 func Match() {
 
-	data, err := ioutil.ReadFile(*abiPath)
+	//data, err := ioutil.ReadFile(*abiPath)
+	//
+	//if err != nil {
+	//	fmt.Println(err)
+	//	return
+	//}
+
+	data, err := hexutil.Decode(params.CrossDemoAbi)
 
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
+
 	client, err := rpc.Dial(*rawurlVar)
 	if err != nil {
 		fmt.Println("dial", "err", err)
