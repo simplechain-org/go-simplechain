@@ -354,14 +354,14 @@ func (this *MsgHandler) HandleMsg(msg p2p.Msg, p Peer) error {
 		for _, cws := range cwss {
 			p.MarkInternalCrossTransactionWithSignatures(cws.ID())
 		}
-	case msg.Code == GetCtxSignsMsg:
-		var Query GetCtxSignsData
-
-		if err := msg.Decode(&Query); err != nil {
-			return errResp(ErrDecode, "%v: %v", msg, err)
-		}
-		cwss := this.ctxStore.List(Query.Amount, Query.GetAll)
-		p.SendCrossTransactionWithSignatures(cwss)
+	//case msg.Code == GetCtxSignsMsg:
+	//	var Query GetCtxSignsData
+	//
+	//	if err := msg.Decode(&Query); err != nil {
+	//		return errResp(ErrDecode, "%v: %v", msg, err)
+	//	}
+	//	cwss := this.ctxStore.List(Query.Amount, Query.GetAll)
+	//	p.SendCrossTransactionWithSignatures(cwss)
 
 	default:
 		return errResp(ErrInvalidMsgCode, "%v", msg.Code)

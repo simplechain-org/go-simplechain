@@ -41,7 +41,7 @@ const protocolName = "sub"
 var ProtocolVersions = []uint{sub}
 
 // protocolLengths are the number of implemented message corresponding to different protocol versions.
-var protocolLengths = map[uint]uint64{sub: 21}
+var protocolLengths = map[uint]uint64{sub: 53}
 
 const protocolMaxMsgSize = 10 * 1024 * 1024 // Maximum cap on the size of a protocol message
 

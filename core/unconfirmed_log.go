@@ -151,7 +151,7 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 					set.chain.RtxsFeedSend(NewRTxsEvent{rtxs})
 				}
 				if len(finishes) > 0 {
-					//log.Info("finishs","blockNumber",next.index,"height",height,"l",len(finishs))
+					//log.Info("finishs","blockNumber",next.index,"height",height,"l",len(finishes))
 					set.chain.TransactionFinishFeedSend(TransationFinishEvent{
 						finishes})
 				}

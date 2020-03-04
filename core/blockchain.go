@@ -1409,10 +1409,9 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 		bc.chainFeed.Send(ChainEvent{Block: block, Hash: block.Hash(), Logs: logs})
 		if len(logs) > 0 {
 			bc.logsFeed.Send(logs)
-			bc.StoreContractLog(block.NumberU64(), block.Hash(), logs)
-		} else {
-			bc.StoreContractLog(block.NumberU64(), block.Hash(), logs)
 		}
+		bc.StoreContractLog(block.NumberU64(), block.Hash(), logs)
+
 		// In theory we should fire a ChainHeadEvent when we inject
 		// a canonical block, but sometimes we can insert a batch of
 		// canonicial blocks. Avoid firing too much ChainHeadEvents,
@@ -2294,6 +2293,7 @@ func (bc *BlockChain) StoreContractLog(blockNumber uint64, hash common.Hash, log
 			go bc.rtxsFeed.Send(NewRTxsEvent{rtxs}) //删除本地待接单
 		}
 	}
+
 	if len(blockLogs) > 0 {
 		bc.trigger.Insert(blockNumber, hash, blockLogs)
 	} else {

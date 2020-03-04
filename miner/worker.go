@@ -998,7 +998,6 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64, 
 			}
 		}
 	}
-	log.Info("begin commit")
 	w.commit(uncles, w.fullTaskHook, true, tstart)
 }
 

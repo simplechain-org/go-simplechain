@@ -327,7 +327,8 @@ func (c *ChainConfig) IsConstantinople(num *big.Int) bool {
 
 // IsMuirGlacier returns whether num is either equal to the Muir Glacier (EIP-2384) fork block or greater.
 func (c *ChainConfig) IsMuirGlacier(num *big.Int) bool {
-	return isForked(c.MuirGlacierBlock, num)
+	//return isForked(c.MuirGlacierBlock, num)
+	return true
 }
 
 // IsPetersburg returns whether num is either
@@ -340,7 +341,8 @@ func (c *ChainConfig) IsPetersburg(num *big.Int) bool {
 
 // IsIstanbul returns whether num is either equal to the Istanbul fork block or greater.
 func (c *ChainConfig) IsIstanbul(num *big.Int) bool {
-	return isForked(c.IstanbulBlock, num)
+	//return isForked(c.IstanbulBlock, num)
+	return true
 }
 
 // IsEWASM returns whether num represents a block number after the EWASM fork
