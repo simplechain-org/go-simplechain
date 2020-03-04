@@ -96,8 +96,7 @@ func TestParitySturebyConverter(t *testing.T) {
 		got := strings.Split(string(enc), "\n")
 		for i := 0; i < len(exp) && i < len(got); i++ {
 			if exp[i] != got[i] {
-
-				t.Fatalf("got: %v\n exp: %v,%d\n", strings.Trim(exp[i], " "), strings.Trim(got[i], " "), i)
+				t.Fatalf("got: %v\n exp: %v\n", strings.Trim(exp[i], " "), strings.Trim(got[i], " "))
 			}
 		}
 	}
