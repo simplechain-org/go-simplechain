@@ -641,7 +641,6 @@ func (c *Config) SubHTTPEndpoint() string {
 	return fmt.Sprintf("%s:%d", c.SubHTTPHost, c.SubHTTPPort)
 }
 
-
 // WSEndpoint resolves a websocket endpoint based on the configured host interface
 // and port parameters.
 func (c *Config) SubWSEndpoint() string {

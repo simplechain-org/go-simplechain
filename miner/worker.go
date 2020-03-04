@@ -742,7 +742,6 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 
 	var coalescedLogs []*types.Log
 	var txHashs []common.Hash
-
 	//var address	[]common.Address
 	//Loop:
 	for {
@@ -783,7 +782,6 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		//
 		// We use the eip155 signer regardless of the current hf.
 		from, _ := types.Sender(w.current.signer, tx)
-
 		//for _,add := range address {
 		//	if add == from { //TODO 解析交易应用
 		//		txHashs = append(txHashs,tx.Hash())
@@ -791,7 +789,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		//		continue Loop
 		//	}
 		//}
-		if !w.current.storeCheck(tx,w.ctxStore.CrossDemoAddress) {
+		if !w.current.storeCheck(tx, w.ctxStore.CrossDemoAddress) {
 			log.Info("ctxStore is busy!")
 			txs.Pop()
 		} else {
@@ -824,9 +822,9 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 				txs.Pop()
 
 			case core.ErrRepetitionCrossTransaction:
-				log.Trace("repetition", "sender", from,"hash",tx.Hash())
+				log.Trace("repetition", "sender", from, "hash", tx.Hash())
 				//address = append(address,from)
-				txHashs = append(txHashs,tx.Hash()) //record RepetitionCrossTransaction
+				txHashs = append(txHashs, tx.Hash()) //record RepetitionCrossTransaction
 				//txs.Shift()
 				txs.Pop()
 
@@ -906,16 +904,18 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64, 
 		return
 	}
 	// If we are care about TheDAO hard-fork check whether to override the extra-data or not
-
-	//// Check whether the block is among the fork extra-override range
-	//limit := new(big.Int).Add(daoBlock, params.DAOForkExtraRange)
-	//if header.Number.Cmp(daoBlock) >= 0 && header.Number.Cmp(limit) < 0 {
-	//	// Depending whether we support or oppose the fork, override differently
-	//    if bytes.Equal(header.Extra, params.DAOForkBlockExtra) {
-	//		header.Extra = []byte{} // If miner opposes, don't let it use the reserved extra-data
-	//	}
-	//}
-
+	if daoBlock := w.chainConfig.DAOForkBlock; daoBlock != nil {
+		// Check whether the block is among the fork extra-override range
+		limit := new(big.Int).Add(daoBlock, params.DAOForkExtraRange)
+		if header.Number.Cmp(daoBlock) >= 0 && header.Number.Cmp(limit) < 0 {
+			// Depending whether we support or oppose the fork, override differently
+			if w.chainConfig.DAOForkSupport {
+				header.Extra = common.CopyBytes(params.DAOForkBlockExtra)
+			} else if bytes.Equal(header.Extra, params.DAOForkBlockExtra) {
+				header.Extra = []byte{} // If miner opposes, don't let it use the reserved extra-data
+			}
+		}
+	}
 	// Could potentially happen if starting to mine in an odd state.
 	err := w.makeCurrent(parent, header, status)
 	if err != nil {
@@ -980,8 +980,8 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64, 
 			return
 		} else {
 			if len(hashs) > 0 {
-				log.Info("begin RemoveTx","hashs",len(hashs))
-				w.eth.TxPool().RemoveTx(hashs,true)
+				log.Info("begin RemoveTx", "hashs", len(hashs))
+				w.eth.TxPool().RemoveTx(hashs, true)
 			}
 		}
 	}
@@ -991,11 +991,10 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64, 
 			return
 		} else {
 			if len(hashs) > 0 {
-				w.eth.TxPool().RemoveTx(hashs,true)
+				w.eth.TxPool().RemoveTx(hashs, true)
 			}
 		}
 	}
-	log.Info("begin commit")
 	w.commit(uncles, w.fullTaskHook, true, tstart)
 }
 

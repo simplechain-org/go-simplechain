@@ -17,8 +17,6 @@
 package sub
 
 import (
-	"github.com/simplechain-org/go-simplechain/common"
-	"github.com/simplechain-org/go-simplechain/eth"
 	"math/big"
 	"os"
 	"os/user"
@@ -26,8 +24,10 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/consensus/ethash"
 	"github.com/simplechain-org/go-simplechain/core"
+	"github.com/simplechain-org/go-simplechain/eth"
 	"github.com/simplechain-org/go-simplechain/eth/downloader"
 	"github.com/simplechain-org/go-simplechain/eth/gasprice"
 	"github.com/simplechain-org/go-simplechain/miner"
@@ -62,9 +62,9 @@ var DefaultConfig = eth.Config{
 		Blocks:     20,
 		Percentile: 60,
 	},
-	CtxStore:      core.DefaultCtxStoreConfig,
-	RtxStore:      core.DefaultRtxStoreConfig,
-	Role:common.RoleSubChain,
+	CtxStore: core.DefaultCtxStoreConfig,
+	RtxStore: core.DefaultRtxStoreConfig,
+	Role:     common.RoleSubChain,
 }
 
 func init() {

@@ -19,9 +19,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/simplechain-org/go-simplechain/miner"
-	"github.com/simplechain-org/go-simplechain/stratum"
-	"github.com/simplechain-org/go-simplechain/sub"
 	"math"
 	"os"
 	"runtime"
@@ -44,7 +41,10 @@ import (
 	"github.com/simplechain-org/go-simplechain/les"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/metrics"
+	"github.com/simplechain-org/go-simplechain/miner"
 	"github.com/simplechain-org/go-simplechain/node"
+	"github.com/simplechain-org/go-simplechain/stratum"
+	"github.com/simplechain-org/go-simplechain/sub"
 	"gopkg.in/urfave/cli.v1"
 )
 

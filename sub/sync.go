@@ -144,6 +144,7 @@ func (pm *ProtocolManager) syncer() {
 	for {
 		select {
 		case <-pm.newPeerCh:
+			time.Sleep(time.Second * 10)
 			// Make sure we have peers to select from, then sync
 			if pm.peers.Len() < minDesiredPeerCount {
 				break
@@ -212,5 +213,90 @@ func (pm *ProtocolManager) synchronise(peer *peer) {
 		// degenerate connectivity, but it should be healthy for the mainnet too to
 		// more reliably update peers or the local TD state.
 		go pm.BroadcastBlock(head, false)
+	}
+}
+
+type ctxsync struct {
+	p   *peer
+	txs []*types.CrossTransactionWithSignatures
+}
+
+func (pm *ProtocolManager) syncCtxs(p *peer) {
+	var txs []*types.CrossTransactionWithSignatures
+	txs = pm.msgHandler.GetCtxstore().List(0, true)
+	if len(txs) == 0 {
+		return
+	}
+	log.Info("syncCtxs", "len", len(txs))
+	select {
+	case pm.ctxsyncCh <- &ctxsync{p, txs}:
+	case <-pm.quitSync:
+	}
+}
+
+func (pm *ProtocolManager) ctxsyncLoop() {
+	var (
+		pending = make(map[enode.ID]*ctxsync)
+		sending = false               // whether a send is active
+		pack    = new(ctxsync)        // the pack that is being sent
+		done    = make(chan error, 1) // result of the send
+	)
+
+	// send starts a sending a pack of transactions from the sync.
+	send := func(s *ctxsync) {
+		// Fill pack with transactions up to the target size.
+		size := common.StorageSize(0)
+		pack.p = s.p
+		pack.txs = pack.txs[:0]
+		for i := 0; i < len(s.txs) && size < txsyncPackSize; i++ {
+			pack.txs = append(pack.txs, s.txs[i])
+			size += s.txs[i].Size()
+		}
+		// Remove the transactions that will be sent.
+		s.txs = s.txs[:copy(s.txs, s.txs[len(pack.txs):])]
+		if len(s.txs) == 0 {
+			delete(pending, s.p.ID())
+		}
+		// Send the pack in the background.
+		s.p.Log().Info("Sending batch of CrossTransactionWithSignatures", "count", len(pack.txs), "bytes", size)
+		sending = true
+		go func() { done <- pack.p.SendCrossTransactionWithSignatures(pack.txs) }()
+	}
+
+	// pick chooses the next pending sync.
+	pick := func() *ctxsync {
+		if len(pending) == 0 {
+			return nil
+		}
+		n := rand.Intn(len(pending)) + 1
+		for _, s := range pending {
+			if n--; n == 0 {
+				return s
+			}
+		}
+		return nil
+	}
+
+	for {
+		select {
+		case s := <-pm.ctxsyncCh:
+			pending[s.p.ID()] = s
+			if !sending {
+				send(s)
+			}
+		case err := <-done:
+			sending = false
+			// Stop tracking peers that cause send failures.
+			if err != nil {
+				pack.p.Log().Info("CrossTransactionWithSignatures send failed", "err", err)
+				delete(pending, pack.p.ID())
+			}
+			// Schedule the next send.
+			if s := pick(); s != nil {
+				send(s)
+			}
+		case <-pm.quitSync:
+			return
+		}
 	}
 }

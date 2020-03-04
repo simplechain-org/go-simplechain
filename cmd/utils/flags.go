@@ -21,7 +21,6 @@ import (
 	"crypto/ecdsa"
 	"errors"
 	"fmt"
-	"github.com/simplechain-org/go-simplechain/sub"
 	"io"
 	"io/ioutil"
 	"math/big"
@@ -63,6 +62,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/p2p/netutil"
 	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/rpc"
+	"github.com/simplechain-org/go-simplechain/sub"
 	whisper "github.com/simplechain-org/go-simplechain/whisper/whisperv6"
 	cli "gopkg.in/urfave/cli.v1"
 )
@@ -1015,7 +1015,7 @@ func setHTTP(ctx *cli.Context, cfg *node.Config) {
 	if ctx.GlobalIsSet(RPCVirtualHostsFlag.Name) {
 		cfg.HTTPVirtualHosts = splitAndTrim(ctx.GlobalString(RPCVirtualHostsFlag.Name))
 	}
-	setSubHTTP(ctx,cfg)
+	setSubHTTP(ctx, cfg)
 }
 
 // setGraphQL creates the GraphQL listener interface string from the set
@@ -1054,7 +1054,7 @@ func setWS(ctx *cli.Context, cfg *node.Config) {
 	if ctx.GlobalIsSet(WSApiFlag.Name) {
 		cfg.WSModules = splitAndTrim(ctx.GlobalString(WSApiFlag.Name))
 	}
-	setSubWS(ctx,cfg)
+	setSubWS(ctx, cfg)
 }
 
 // setIPC creates an IPC path configuration from the set command line flags,
@@ -1067,7 +1067,7 @@ func setIPC(ctx *cli.Context, cfg *node.Config) {
 	case ctx.GlobalIsSet(IPCPathFlag.Name):
 		cfg.IPCPath = ctx.GlobalString(IPCPathFlag.Name)
 	}
-	setSubIPC(ctx,cfg)
+	setSubIPC(ctx, cfg)
 }
 
 // setLes configures the les server and ultra light client settings from the command line flags.
@@ -1289,8 +1289,8 @@ func SetNodeConfig(ctx *cli.Context, cfg *node.Config) {
 	if ctx.GlobalIsSet(InsecureUnlockAllowedFlag.Name) {
 		cfg.InsecureUnlockAllowed = ctx.GlobalBool(InsecureUnlockAllowedFlag.Name)
 	}
-	if ctx.GlobalIsSet(RoleFlag.Name){
-		cfg.Role=*GlobalTextMarshaler(ctx, RoleFlag.Name).(*common.ChainRole)
+	if ctx.GlobalIsSet(RoleFlag.Name) {
+		cfg.Role = *GlobalTextMarshaler(ctx, RoleFlag.Name).(*common.ChainRole)
 	}
 }
 
@@ -1619,7 +1619,7 @@ func RegisterEthService(stack *node.Node, cfg *eth.Config) {
 			return les.New(ctx, cfg)
 		})
 	} else {
-		log.Info("RegisterEthService","Role",cfg.Role)
+		log.Info("RegisterEthService", "Role", cfg.Role)
 		if cfg.Role.IsMainChain() {
 			//mainchain
 			err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
@@ -1643,12 +1643,16 @@ func RegisterEthService(stack *node.Node, cfg *eth.Config) {
 				return fullNode, err
 			})
 		} else if cfg.Role.IsAnchor() {
-			subConfig:=*cfg
+			subConfig := *cfg
 			//mainchain
 			err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
 				fullNode, err := eth.New(ctx, cfg)
 				return fullNode, err
 			})
+			if err != nil {
+				Fatalf("Failed to register the Ethereum service: %v", err)
+				return
+			}
 			//subchain
 			err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
 				//subConfig := ToSubChainConfig(cfg)
@@ -1816,7 +1820,7 @@ func MakeChain(ctx *cli.Context, stack *node.Node) (chain *core.BlockChain, chai
 		cache.TrieDirtyLimit = ctx.GlobalInt(CacheFlag.Name) * ctx.GlobalInt(CacheGCFlag.Name) / 100
 	}
 	vmcfg := vm.Config{EnablePreimageRecording: ctx.GlobalBool(VMEnableDebugFlag.Name)}
-	chain, err = core.NewBlockChain(chainDb, cache, config, engine, vmcfg, common.Address{},nil)
+	chain, err = core.NewBlockChain(chainDb, cache, config, engine, vmcfg, common.Address{}, nil)
 	if err != nil {
 		Fatalf("Can't create BlockChain: %v", err)
 	}
@@ -1863,6 +1867,7 @@ func MigrateFlags(action func(ctx *cli.Context) error) func(*cli.Context) error 
 		return action(ctx)
 	}
 }
+
 // setHTTP creates the HTTP RPC listener interface string from the set
 // command line flags, returning empty if the HTTP endpoint is disabled.
 func setSubHTTP(ctx *cli.Context, cfg *node.Config) {

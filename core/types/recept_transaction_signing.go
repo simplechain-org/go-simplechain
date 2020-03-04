@@ -127,11 +127,10 @@ func (s EIP155RtxSigner) Hash(tx *ReceptTransaction) (h common.Hash) {
 	b = append(b, tx.Data.To.Bytes()...)
 	b = append(b, tx.Data.BlockHash.Bytes()...)
 	b = append(b, common.LeftPadBytes(tx.Data.DestinationId.Bytes(), 32)...)
-	b = append(b, common.LeftPadBytes(Uint64ToBytes(tx.Data.BlockNumber),8)...)
-	b = append(b, common.LeftPadBytes(Uint32ToBytes(tx.Data.Index),4)...)
+	b = append(b, common.LeftPadBytes(Uint64ToBytes(tx.Data.BlockNumber), 8)...)
+	b = append(b, common.LeftPadBytes(Uint32ToBytes(tx.Data.Index), 4)...)
 	b = append(b, tx.Data.Input...)
 	hash.Write(b)
 	hash.Sum(h[:0])
 	return h
 }
-

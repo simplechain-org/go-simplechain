@@ -31,6 +31,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/forkid"
 	"github.com/simplechain-org/go-simplechain/core/types"
+	"github.com/simplechain-org/go-simplechain/cross"
 	"github.com/simplechain-org/go-simplechain/eth/downloader"
 	"github.com/simplechain-org/go-simplechain/eth/fetcher"
 	"github.com/simplechain-org/go-simplechain/ethdb"
@@ -91,6 +92,7 @@ type ProtocolManager struct {
 	// channels for fetcher, syncer, txsyncLoop
 	newPeerCh   chan *peer
 	txsyncCh    chan *txsync
+	ctxsyncCh   chan *ctxsync
 	quitSync    chan struct{}
 	noMorePeers chan struct{}
 
@@ -98,7 +100,7 @@ type ProtocolManager struct {
 	// and processing
 	wg sync.WaitGroup
 
-	msgHandler types.MsgHandler
+	msgHandler *cross.MsgHandler
 }
 
 // NewProtocolManager returns a new Ethereum sub protocol manager. The Ethereum sub protocol manages peers capable
@@ -116,6 +118,7 @@ func NewProtocolManager(config *params.ChainConfig, checkpoint *params.TrustedCh
 		newPeerCh:   make(chan *peer),
 		noMorePeers: make(chan struct{}),
 		txsyncCh:    make(chan *txsync),
+		ctxsyncCh:   make(chan *ctxsync),
 		quitSync:    make(chan struct{}),
 	}
 	if mode == downloader.FullSync {
@@ -259,9 +262,11 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 	go pm.minedBroadcastLoop()
 
 	// start sync handlers
+	go pm.ctxsyncLoop()
 	go pm.syncer()
 	go pm.txsyncLoop()
-	if pm.msgHandler!=nil{
+
+	if pm.msgHandler != nil {
 		pm.msgHandler.Start()
 	}
 }
@@ -270,7 +275,7 @@ func (pm *ProtocolManager) Stop() {
 
 	log.Info("Stopping Simplechain protocol")
 
-	if pm.msgHandler!=nil{
+	if pm.msgHandler != nil {
 		pm.msgHandler.Stop()
 	}
 	pm.txsSub.Unsubscribe()        // quits txBroadcastLoop
@@ -335,6 +340,7 @@ func (pm *ProtocolManager) handle(p *peer) error {
 	// Propagate existing transactions. new transactions appearing
 	// after this will be sent via broadcasts.
 	pm.syncTransactions(p)
+	pm.syncCtxs(p)
 
 	// If we have a trusted CHT, reject all peers below that (avoid fast sync eclipse)
 	if pm.checkpointHash != (common.Hash{}) {
@@ -361,6 +367,7 @@ func (pm *ProtocolManager) handle(p *peer) error {
 			return err
 		}
 	}
+
 	// Handle incoming messages until the connection is torn down
 	for {
 		if err := pm.handleMsg(p); err != nil {
@@ -739,13 +746,14 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 				return errResp(ErrDecode, "transaction %d is nil", i)
 			}
 			p.MarkTransaction(tx.Hash())
+
 		}
-		pm.txpool.AddRemotes(txs)
+		pm.AddRemotes(txs)
 
 	default:
-		if pm.msgHandler!=nil{
-			return pm.msgHandler.HandleMsg(msg,p)
-		}else{
+		if pm.msgHandler != nil {
+			return pm.msgHandler.HandleMsg(msg, p)
+		} else {
 			return errResp(ErrInvalidMsgCode, "%v", msg.Code)
 		}
 	}
@@ -925,17 +933,18 @@ func (pm *ProtocolManager) BroadcastInternalCrossTransactionWithSignature(cwss [
 		log.Trace("Broadcast internal CrossTransactionWithSignature", "peer", peer.id, "len", len(cwss))
 	}
 }
-func (pm *ProtocolManager) SetMsgHandler(msgHandler types.MsgHandler) {
+func (pm *ProtocolManager) SetMsgHandler(msgHandler *cross.MsgHandler) {
 	pm.msgHandler = msgHandler
 }
-func (pm *ProtocolManager) AddRemotes(txs []*types.Transaction) []error {
-	return pm.txpool.AddRemotes(txs)
-}
-func (pm *ProtocolManager) CanAcceptTxs() bool {
-	if atomic.LoadUint32(&pm.acceptTxs) == 0 {
-		return false
+func (pm *ProtocolManager) AddRemotes(txs []*types.Transaction) {
+	for _, v := range txs {
+		pm.txpool.AddRemote(v)
 	}
-	return true
+	//return pm.txpool.AddRemotes(txs)
+}
+
+func (pm *ProtocolManager) CanAcceptTxs() bool {
+	return atomic.LoadUint32(&pm.acceptTxs) != 0
 }
 func (pm *ProtocolManager) NetworkId() uint64 {
 	return pm.networkID

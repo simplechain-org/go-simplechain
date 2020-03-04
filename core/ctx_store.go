@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/simplechain-org/go-simplechain/ethdb"
 	"math/big"
 	"sync"
 	"time"
@@ -16,6 +15,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/common/math"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/core/vm"
+	"github.com/simplechain-org/go-simplechain/ethdb"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/params"
@@ -656,8 +656,7 @@ func (store *CtxStore) verifyCtx(ctx *types.CrossTransactionWithSignatures) erro
 	getMakerTx, _ := hexutil.Decode("0x9624005b")
 	getTakerTx, _ := hexutil.Decode("0x356139f2")
 	var contractAddress common.Address
-	var config *params.ChainConfig
-	config = &params.ChainConfig{
+	config := &params.ChainConfig{
 		ChainID: store.config.ChainId,
 		Scrypt:  new(params.ScryptConfig),
 	}

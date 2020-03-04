@@ -17,11 +17,11 @@
 package core
 
 import (
-	"github.com/simplechain-org/go-simplechain/common"
 	"runtime"
 	"testing"
 	"time"
 
+	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/consensus/ethash"
 	"github.com/simplechain-org/go-simplechain/core/rawdb"
 	"github.com/simplechain-org/go-simplechain/core/types"
