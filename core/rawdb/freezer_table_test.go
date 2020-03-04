@@ -19,9 +19,11 @@ package rawdb
 import (
 	"bytes"
 	"fmt"
+	"io/ioutil"
 	"math/rand"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -40,19 +42,38 @@ func getChunk(size int, b int) []byte {
 	}
 	return data
 }
+func ListDir(t *testing.T, folder string, prefix string) {
+	files, err := ioutil.ReadDir(folder)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range files {
+		if !file.IsDir() {
+			filePath := filepath.Join(folder, string(filepath.Separator), file.Name())
+			if strings.HasPrefix(file.Name(), prefix) {
+				err := os.Remove(filePath)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+	}
+
+}
 
 // TestFreezerBasics test initializing a freezertable from scratch, writing to the table,
 // and reading it back.
 func TestFreezerBasics(t *testing.T) {
-	t.Parallel()
+	//t.Parallel()
 	// set cutoff at 50 bytes
+	fname := fmt.Sprintf("unittest-%d", rand.Uint64())
 	f, err := newCustomTable(os.TempDir(),
-		fmt.Sprintf("unittest-%d", rand.Uint64()),
+		fname,
 		metrics.NewMeter(), metrics.NewMeter(), metrics.NewGauge(), 50, true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+
 	// Write 15 bytes 255 times, results in 85 files
 	for x := 0; x < 255; x++ {
 		data := getChunk(15, x)
@@ -71,23 +92,28 @@ func TestFreezerBasics(t *testing.T) {
 		exp := getChunk(15, y)
 		got, err := f.Retrieve(uint64(y))
 		if err != nil {
+			f.Close()
 			t.Fatal(err)
 		}
 		if !bytes.Equal(got, exp) {
+			f.Close()
 			t.Fatalf("test %d, got \n%x != \n%x", y, got, exp)
 		}
 	}
 	// Check that we cannot read too far
 	_, err = f.Retrieve(uint64(255))
 	if err != errOutOfBounds {
+		f.Close()
 		t.Fatal(err)
 	}
+	f.Close()
+	ListDir(t, os.TempDir(), fname)
 }
 
 // TestFreezerBasicsClosing tests same as TestFreezerBasics, but also closes and reopens the freezer between
 // every operation
 func TestFreezerBasicsClosing(t *testing.T) {
-	t.Parallel()
+	//t.Parallel()
 	// set cutoff at 50 bytes
 	var (
 		fname      = fmt.Sprintf("basics-close-%d", rand.Uint64())
@@ -126,13 +152,16 @@ func TestFreezerBasicsClosing(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	ListDir(t, os.TempDir(), fname)
 }
 
 // TestFreezerRepairDanglingHead tests that we can recover if index entries are removed
 func TestFreezerRepairDanglingHead(t *testing.T) {
 	t.Parallel()
-	rm, wm, sg := metrics.NewMeter(), metrics.NewMeter(), metrics.NewGauge()
-	fname := fmt.Sprintf("dangling_headtest-%d", rand.Uint64())
+	var (
+		fname      = fmt.Sprintf("repair_dangling_headtest-%d", rand.Uint64())
+		rm, wm, sg = metrics.NewMeter(), metrics.NewMeter(), metrics.NewGauge()
+	)
 
 	{ // Fill table
 		f, err := newCustomTable(os.TempDir(), fname, rm, wm, sg, 50, true)
@@ -145,10 +174,12 @@ func TestFreezerRepairDanglingHead(t *testing.T) {
 			f.Append(uint64(x), data)
 		}
 		// The last item should be there
-		if _, err = f.Retrieve(0xfe); err != nil {
+		if _, err = f.Retrieve(254); err != nil {
+			f.Close()
 			t.Fatal(err)
 		}
 		f.Close()
+
 	}
 	// open the index
 	idxFile, err := os.OpenFile(filepath.Join(os.TempDir(), fmt.Sprintf("%s.ridx", fname)), os.O_RDWR, 0644)
@@ -174,8 +205,10 @@ func TestFreezerRepairDanglingHead(t *testing.T) {
 		}
 		// The one before should still be there
 		if _, err = f.Retrieve(0xfd); err != nil {
+			f.Close()
 			t.Fatalf("Expected no error, got %v", err)
 		}
+		f.Close()
 	}
 }
 
@@ -183,7 +216,7 @@ func TestFreezerRepairDanglingHead(t *testing.T) {
 func TestFreezerRepairDanglingHeadLarge(t *testing.T) {
 	t.Parallel()
 	rm, wm, sg := metrics.NewMeter(), metrics.NewMeter(), metrics.NewGauge()
-	fname := fmt.Sprintf("dangling_headtest-%d", rand.Uint64())
+	fname := fmt.Sprintf("repair_dangling_headtest_large-%d", rand.Uint64())
 
 	{ // Fill a table and close it
 		f, err := newCustomTable(os.TempDir(), fname, rm, wm, sg, 50, true)
@@ -191,15 +224,14 @@ func TestFreezerRepairDanglingHeadLarge(t *testing.T) {
 			t.Fatal(err)
 		}
 		// Write 15 bytes 255 times
-		for x := 0; x < 0xff; x++ {
+		for x := 0; x < 255; x++ {
 			data := getChunk(15, x)
 			f.Append(uint64(x), data)
 		}
 		// The last item should be there
-		if _, err = f.Retrieve(f.items - 1); err == nil {
-			if err != nil {
-				t.Fatal(err)
-			}
+		if _, err = f.Retrieve(f.items - 1); err != nil {
+			f.Close()
+			t.Fatal(err)
 		}
 		f.Close()
 	}
@@ -220,6 +252,7 @@ func TestFreezerRepairDanglingHeadLarge(t *testing.T) {
 		}
 		// The first item should be there
 		if _, err = f.Retrieve(0); err != nil {
+			f.Close()
 			t.Fatal(err)
 		}
 		// The second item should be missing
@@ -240,18 +273,20 @@ func TestFreezerRepairDanglingHeadLarge(t *testing.T) {
 			exp := getChunk(15, ^y)
 			got, err := f.Retrieve(uint64(y))
 			if err != nil {
+				f.Close()
 				t.Fatal(err)
 			}
 			if !bytes.Equal(got, exp) {
+				f.Close()
 				t.Fatalf("test %d, got \n%x != \n%x", y, got, exp)
 			}
 		}
+		f.Close()
 	}
 }
 
 // TestSnappyDetection tests that we fail to open a snappy database and vice versa
 func TestSnappyDetection(t *testing.T) {
-	t.Parallel()
 	rm, wm, sg := metrics.NewMeter(), metrics.NewMeter(), metrics.NewGauge()
 	fname := fmt.Sprintf("snappytest-%d", rand.Uint64())
 	// Open with snappy
@@ -261,7 +296,7 @@ func TestSnappyDetection(t *testing.T) {
 			t.Fatal(err)
 		}
 		// Write 15 bytes 255 times
-		for x := 0; x < 0xff; x++ {
+		for x := 0; x < 255; x++ {
 			data := getChunk(15, x)
 			f.Append(uint64(x), data)
 		}
@@ -277,6 +312,7 @@ func TestSnappyDetection(t *testing.T) {
 			f.Close()
 			t.Fatalf("expected empty table")
 		}
+		f.Close()
 	}
 
 	// Open with snappy
@@ -286,11 +322,13 @@ func TestSnappyDetection(t *testing.T) {
 			t.Fatal(err)
 		}
 		// There should be 255 items
-		if _, err = f.Retrieve(0xfe); err != nil {
+		if _, err = f.Retrieve(254); err != nil {
 			f.Close()
 			t.Fatalf("expected no error, got %v", err)
 		}
+		f.Close()
 	}
+	ListDir(t, os.TempDir(), fname)
 
 }
 func assertFileSize(f string, size int64) error {
@@ -358,14 +396,15 @@ func TestFreezerRepairDanglingIndex(t *testing.T) {
 			t.Fatalf("expected %d items, got %d", 7, f.items)
 		}
 		if err := assertFileSize(fileToCrop, 15); err != nil {
+			f.Close()
 			t.Fatal(err)
 		}
+		f.Close()
 	}
+	ListDir(t, os.TempDir(), fname)
 }
 
 func TestFreezerTruncate(t *testing.T) {
-
-	t.Parallel()
 	rm, wm, sg := metrics.NewMeter(), metrics.NewMeter(), metrics.NewGauge()
 	fname := fmt.Sprintf("truncation-%d", rand.Uint64())
 
@@ -381,6 +420,7 @@ func TestFreezerTruncate(t *testing.T) {
 		}
 		// The last item should be there
 		if _, err = f.Retrieve(f.items - 1); err != nil {
+			f.Close()
 			t.Fatal(err)
 		}
 		f.Close()
@@ -402,6 +442,7 @@ func TestFreezerTruncate(t *testing.T) {
 		}
 
 	}
+	ListDir(t, os.TempDir(), fname)
 
 }
 
@@ -421,6 +462,7 @@ func TestFreezerRepairFirstFile(t *testing.T) {
 		f.Append(1, getChunk(40, 0xEE))
 		// The last item should be there
 		if _, err = f.Retrieve(f.items - 1); err != nil {
+			f.Close()
 			t.Fatal(err)
 		}
 		f.Close()
@@ -456,6 +498,7 @@ func TestFreezerRepairFirstFile(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	ListDir(t, os.TempDir(), fname)
 }
 
 // TestFreezerReadAndTruncate tests:
@@ -479,6 +522,7 @@ func TestFreezerReadAndTruncate(t *testing.T) {
 		}
 		// The last item should be there
 		if _, err = f.Retrieve(f.items - 1); err != nil {
+			f.Close()
 			t.Fatal(err)
 		}
 		f.Close()
@@ -502,11 +546,13 @@ func TestFreezerReadAndTruncate(t *testing.T) {
 		for x := 0; x < 30; x++ {
 			data := getChunk(15, ^x)
 			if err := f.Append(uint64(x), data); err != nil {
+				f.Close()
 				t.Fatalf("error %v", err)
 			}
 		}
 		f.Close()
 	}
+	ListDir(t, os.TempDir(), fname)
 }
 
 func TestOffset(t *testing.T) {
@@ -580,28 +626,37 @@ func TestOffset(t *testing.T) {
 
 		// It should be fine to fetch 4,5,6
 		if got, err := f.Retrieve(4); err != nil {
+			f.Close()
 			t.Fatal(err)
 		} else if exp := getChunk(20, 0xbb); !bytes.Equal(got, exp) {
+			f.Close()
 			t.Fatalf("expected %x got %x", exp, got)
 		}
 		if got, err := f.Retrieve(5); err != nil {
+			f.Close()
 			t.Fatal(err)
 		} else if exp := getChunk(20, 0xaa); !bytes.Equal(got, exp) {
+			f.Close()
 			t.Fatalf("expected %x got %x", exp, got)
 		}
 		if got, err := f.Retrieve(6); err != nil {
+			f.Close()
 			t.Fatal(err)
 		} else if exp := getChunk(20, 0x99); !bytes.Equal(got, exp) {
+			f.Close()
 			t.Fatalf("expected %x got %x", exp, got)
 		}
 
 		// It should error at 0, 1,2,3
 		for i := 0; i < 4; i++ {
 			if _, err := f.Retrieve(uint64(i)); err == nil {
+				f.Close()
 				t.Fatal("expected err")
 			}
 		}
+		f.Close()
 	}
+	ListDir(t, os.TempDir(), fname)
 }
 
 // TODO (?)
