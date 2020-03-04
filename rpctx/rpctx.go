@@ -1,15 +1,16 @@
 package rpctx
 
-import(
+import (
 	"crypto/ecdsa"
-	"github.com/simplechain-org/go-simplechain/crypto"
+
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
+	"github.com/simplechain-org/go-simplechain/crypto"
 )
 
 var (
 	//ETH_SERVER = "http://127.0.0.1:8545"
 	//SUB_SERVER = "http://127.0.0.1:8555"
-	PrivateKey string  //todo 改用keystore
+	PrivateKey string //todo 改用keystore
 )
 
 //func SendTxForLockout(rtx *types.ReceptTransactionWithSignatures, gasUsed *big.Int, networkId uint64) (string, error) {

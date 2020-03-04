@@ -20,17 +20,18 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/eapache/channels"
-	"github.com/simplechain-org/go-simplechain/consensus/raft"
 	"math/big"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	mapset "github.com/deckarep/golang-set"
+	"github.com/eapache/channels"
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"github.com/simplechain-org/go-simplechain/consensus"
 	"github.com/simplechain-org/go-simplechain/consensus/misc"
+	"github.com/simplechain-org/go-simplechain/consensus/raft"
 	"github.com/simplechain-org/go-simplechain/consensus/scrypt"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/state"
@@ -38,8 +39,6 @@ import (
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/params"
-
-	mapset "github.com/deckarep/golang-set"
 )
 
 const (
@@ -304,7 +303,7 @@ func (w *worker) start() {
 	}
 	if w.chainConfig.Raft {
 		w.requestMinting()
-	} else{
+	} else {
 		w.startCh <- struct{}{}
 	}
 	for agent := range w.agents {
@@ -1052,7 +1051,6 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64, 
 			}
 		}
 	}
-	log.Info("begin commit")
 	w.commit(uncles, w.fullTaskHook, true, tstart)
 }
 

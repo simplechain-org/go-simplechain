@@ -3,7 +3,10 @@ package cross
 import (
 	"context"
 	"crypto/ecdsa"
+	"errors"
 	"fmt"
+	"math/big"
+
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"github.com/simplechain-org/go-simplechain/core"
@@ -13,8 +16,6 @@ import (
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/p2p"
 	"github.com/simplechain-org/go-simplechain/rpctx"
-	"errors"
-	"math/big"
 )
 
 const txChanSize = 4096
@@ -41,10 +42,10 @@ func errResp(code errCode, format string, v ...interface{}) error {
 type MsgHandler struct {
 	roleHandler    RoleHandler
 	role           common.ChainRole
-	ctxStore       ctxStore
+	ctxStore       CtxStore
 	rtxStore       rtxStore
 	blockchain     *core.BlockChain
-	pm             types.ProtocolManager
+	pm             ProtocolManager
 	crossMsgReader <-chan interface{}
 	crossMsgWriter chan<- interface{}
 	//statementDb    *StatementDb
@@ -69,13 +70,13 @@ type MsgHandler struct {
 	rtxsinLogCh  chan core.NewRTxsEvent //通过该通道删除ctx_pool中的记录，TODO 普通节点无该功能
 	rtxsinLogSub event.Subscription
 	chain        simplechain
-	gpo          types.GasPriceOracle
+	gpo          GasPriceOracle
 	gasHelper    *GasHelper
 	MainChainCtxAddress common.Address
 	SubChainCtxAddress common.Address
 }
 
-func NewMsgHandler(chain simplechain, roleHandler RoleHandler, role common.ChainRole, ctxpool ctxStore, rtxStore rtxStore,
+func NewMsgHandler(chain simplechain, roleHandler RoleHandler, role common.ChainRole, ctxpool CtxStore, rtxStore rtxStore,
 	blockchain *core.BlockChain, crossMsgReader <-chan interface{},
 	crossMsgWriter chan<- interface{},mainAddr common.Address,subAddr common.Address ) *MsgHandler {
 	gasHelper := NewGasHelper(blockchain, chain)
@@ -96,7 +97,7 @@ func NewMsgHandler(chain simplechain, roleHandler RoleHandler, role common.Chain
 		knownRwssTx:    make(map[common.Hash]*TranParam),
 	}
 }
-func (this *MsgHandler) SetProtocolManager(pm types.ProtocolManager) {
+func (this *MsgHandler) SetProtocolManager(pm ProtocolManager) {
 	this.pm = pm
 }
 
@@ -232,7 +233,7 @@ func (this *MsgHandler) loop() {
 			return
 		//case ev := <-this.transactionRemoveCh:
 		//	for _, v := range ev.Transactions {
-		//		this.ctxStore.RemoveFromLocalsByTransaction(v.Hash())
+		//		this.CtxStore.RemoveFromLocalsByTransaction(v.Hash())
 		//	}
 		//case <-this.transactionRemoveSub.Err():
 		//	return
@@ -262,7 +263,7 @@ func (this *MsgHandler) Stop() {
 	log.Info("Simplechain MsgHandler stopped")
 }
 
-func (this *MsgHandler) HandleMsg(msg p2p.Msg, p types.Peer) error {
+func (this *MsgHandler) HandleMsg(msg p2p.Msg, p Peer) error {
 	switch {
 	case msg.Code == CtxSignMsg:
 		if !this.pm.CanAcceptTxs() {
@@ -293,7 +294,6 @@ func (this *MsgHandler) HandleMsg(msg p2p.Msg, p types.Peer) error {
 		this.pm.BroadcastCWss(cwss)
 		for _, cws := range cwss {
 			p.MarkCrossTransactionWithSignatures(cws.ID())
-
 
 			//l := len(cws.Data.V)
 			//var vstring, rstring, sstring string
@@ -354,7 +354,14 @@ func (this *MsgHandler) HandleMsg(msg p2p.Msg, p types.Peer) error {
 		for _, cws := range cwss {
 			p.MarkInternalCrossTransactionWithSignatures(cws.ID())
 		}
-	case msg.Code == GetCtxSignsMsg:
+	//case msg.Code == GetCtxSignsMsg:
+	//	var Query GetCtxSignsData
+	//
+	//	if err := msg.Decode(&Query); err != nil {
+	//		return errResp(ErrDecode, "%v: %v", msg, err)
+	//	}
+	//	cwss := this.ctxStore.List(Query.Amount, Query.GetAll)
+	//	p.SendCrossTransactionWithSignatures(cwss)
 
 	default:
 		return errResp(ErrInvalidMsgCode, "%v", msg.Code)
@@ -465,11 +472,14 @@ func (this *MsgHandler) GetTxForLockOut(rwss []*types.ReceptTransactionWithSigna
 
 		txs = append(txs,tx)
 		count ++
+		if len(txs) >= 200 {
+			break
+		}
 		if count >= 1024 { //TODO
 			break
 		}
 	}
-	log.Info("GetTxForLockOut", "errorRws", len(errorRws),"exec",exec,"errtx1",errTx1,"errtx2",errTx2,"tx",len(txs),"send",send,"role",this.role.String())
+	log.Info("GetTxForLockOut", "errorRws", len(errorRws),"exec",exec,"errtx1",errTx1,"errtx2",errTx2,"tx",len(txs),"sent",send,"role",this.role.String())
 	return txs, nil
 }
 
@@ -486,7 +496,7 @@ func (this *MsgHandler) RecordStatement(finishes []*types.FinishInfo) error {
 	//var count,pass int
 	//for _,v := range finishes {
 	//	ctxId := v.TxId
-	//	ctx := this.ctxStore.ReadFromLocals(ctxId)
+	//	ctx := this.CtxStore.ReadFromLocals(ctxId)
 	//	if ctx == nil {
 	//		pass ++
 	//		continue
@@ -556,7 +566,7 @@ func (this *MsgHandler) GetContractAddress() common.Address {
 	}
 	return tokenAddress
 }
-func (this *MsgHandler) SetGasPriceOracle(gpo types.GasPriceOracle) {
+func (this *MsgHandler) SetGasPriceOracle(gpo GasPriceOracle) {
 	this.gpo = gpo
 }
 func (this *MsgHandler) CreateTransaction(key *ecdsa.PrivateKey,address common.Address,rws *types.ReceptTransactionWithSignatures, gasUsed *big.Int) (*TranParam, error) {
@@ -604,8 +614,18 @@ func (this *MsgHandler) CheckTransaction(key *ecdsa.PrivateKey,address,tokenAddr
 	return this.gasHelper.CheckExec(context.Background(), callArgs)
 }
 
+func (this *MsgHandler) GetCtxstore() CtxStore {
+	return this.ctxStore
+}
+
 type TranParam struct {
 	gasLimit     uint64
 	gasPrice	 *big.Int
 	data         []byte
 }
+
+type GetCtxSignsData struct {
+	Amount int  // Maximum number of headers to retrieve
+	GetAll bool // Query all
+}
+

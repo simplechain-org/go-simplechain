@@ -2,11 +2,12 @@ package core
 
 import (
 	"fmt"
-	"github.com/simplechain-org/go-simplechain/common"
-	"github.com/simplechain-org/go-simplechain/core/types"
 	"math/big"
 	"math/rand"
 	"testing"
+
+	"github.com/simplechain-org/go-simplechain/common"
+	"github.com/simplechain-org/go-simplechain/core/types"
 )
 
 func TestCWssList_Add(t *testing.T) {
@@ -20,7 +21,7 @@ func TestCWssList_Add(t *testing.T) {
 			common.Hash{},
 			common.Hash{},
 			common.Address{},
-		nil))
+			nil))
 	}
 	cwss := newCWssList(100)
 	for _, v := range txs {

@@ -20,25 +20,24 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"github.com/simplechain-org/go-simplechain/common"
-	"github.com/simplechain-org/go-simplechain/sub"
 	"math/big"
 	"os"
 	"reflect"
 	"strings"
 	"unicode"
 
-	cli "gopkg.in/urfave/cli.v1"
-
 	"github.com/naoina/toml"
 	"github.com/simplechain-org/go-simplechain/cmd/utils"
+	"github.com/simplechain-org/go-simplechain/common"
 	raftBackend "github.com/simplechain-org/go-simplechain/consensus/raft/backend"
 	"github.com/simplechain-org/go-simplechain/eth"
 	"github.com/simplechain-org/go-simplechain/node"
 	"github.com/simplechain-org/go-simplechain/p2p/enode"
 	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/rpctx"
+	"github.com/simplechain-org/go-simplechain/sub"
 	whisper "github.com/simplechain-org/go-simplechain/whisper/whisperv6"
+	cli "gopkg.in/urfave/cli.v1"
 )
 
 var (

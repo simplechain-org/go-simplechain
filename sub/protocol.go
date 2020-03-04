@@ -41,7 +41,7 @@ const protocolName = "sub"
 var ProtocolVersions = []uint{sub}
 
 // protocolLengths are the number of implemented message corresponding to different protocol versions.
-var protocolLengths = map[uint]uint64{sub: 21}
+var protocolLengths = map[uint]uint64{sub: 53}
 
 const protocolMaxMsgSize = 10 * 1024 * 1024 // Maximum cap on the size of a protocol message
 
@@ -100,7 +100,7 @@ var errorToString = map[int]string{
 
 type txPool interface {
 	// AddRemotes should add the given transactions to the pool.
-	AddRemotes([]*types.Transaction) []error
+	AddRemote(*types.Transaction) error
 
 	// Pending should return pending transactions.
 	// The slice should be modifiable by the caller.
@@ -210,45 +210,3 @@ type blockBody struct {
 
 // blockBodiesData is the network packet for block content distribution.
 type blockBodiesData []*blockBody
-
-type ctxStore interface {
-
-	// AddRemotes should add the given transactions to the pool.
-	AddRemote(*types.CrossTransaction) error
-
-	// AddRemotes should add the given transactions to the pool.
-	AddLocal(*types.CrossTransaction) error
-
-	AddCWss([]*types.CrossTransactionWithSignatures) []error
-
-	ValidateCtx(*types.CrossTransaction) error
-
-	RemoveRemotes(common.Hash) error
-
-	RemoveLocals(common.Hash) error
-
-	RemoveFromLocalsByTransaction(common.Hash) error
-
-	SubscribeCWssResultEvent(chan<- core.NewCWsEvent) event.Subscription
-
-	//SubscribeNewCWssEvent(chan<- core.NewCWssEvent) event.Subscription
-
-	ReadFromLocals(common.Hash) *types.CrossTransactionWithSignatures
-}
-
-type rtxStore interface {
-
-	AddRemote(*types.ReceptTransaction) error
-
-	AddLocal(*types.ReceptTransaction) error
-
-	AddLocals([]*types.ReceptTransactionWithSignatures) []error
-
-	RemoveLocals([]*types.ReceptTransactionWithSignatures) error
-
-	ReadFromLocals(ctxId common.Hash) *types.ReceptTransactionWithSignatures
-
-	ValidateRtx(rtx *types.ReceptTransaction) error
-
-	SubscribeRWssResultEvent(chan<- core.NewRWsEvent) event.Subscription
-}

@@ -18,6 +18,7 @@ package vm
 
 import (
 	"fmt"
+
 	"github.com/simplechain-org/go-simplechain/params"
 )
 
@@ -90,13 +91,13 @@ func enable2200(jt *JumpTable) {
 	jt[SSTORE].dynamicGas = gasSStoreEIP2200
 }
 
-func enableNonce(jt *JumpTable)  {
+func enableNonce(jt *JumpTable) {
 	jt[NONCE] = operation{
-			execute:     opNonce,
-			constantGas: GasQuickStep,
-			minStack:    minStack(0, 1),
-			maxStack:    maxStack(0, 1),
-			valid:       true,
+		execute:     opNonce,
+		constantGas: GasQuickStep,
+		minStack:    minStack(0, 1),
+		maxStack:    maxStack(0, 1),
+		valid:       true,
 	}
 }
 

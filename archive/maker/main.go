@@ -5,30 +5,34 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log"
+	"math/big"
+
 	"github.com/simplechain-org/go-simplechain/accounts/abi"
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"github.com/simplechain-org/go-simplechain/rpc"
-	"io/ioutil"
-	"log"
-	"math/big"
+	"github.com/simplechain-org/go-simplechain/params"
 )
 
-var rawurlVar *string =flag.String("rawurl", "http://127.0.0.1:8556", "rpc url")
+var rawurlVar *string =flag.String("rawurl", "http://127.0.0.1:8545", "rpc url")
 
-var abiPath *string =flag.String("abi", "../../contracts/crossdemo/crossdemo.abi", "abi文件路径")
-
-var contract *string =flag.String("contract", "0x8eefA4bFeA64F2A89f3064D48646415168662a1e", "合约地址")
+//var contract *string =flag.String("contract", "0x8eefA4bFeA64F2A89f3064D48646415168662a1e", "合约地址")
+var contract *string =flag.String("contract", "0xAa22934Df3867B8d59574dD4557ef1BA6dA2f8f3", "合约地址")
 
 var value *uint64 = flag.Uint64("value", 1e+18, "转入合约的数量")
 
 var destValue *uint64=flag.Uint64("destValue", 1e+18, "兑换数量")
 
-var chainId *uint64=flag.Uint64("chainId", 1, "目的链id")
+//var chainId *uint64=flag.Uint64("chainId", 1, "目的链id")
+var chainId *uint64=flag.Uint64("chainId", 512, "目的链id")
 
-var fromVar *string=flag.String("from", "0x8029fcfc954ff7be80afd4db9f77f18c8aa1ecbc", "发起人地址")
+//var fromVar *string=flag.String("from", "0x8029fcfc954ff7be80afd4db9f77f18c8aa1ecbc", "发起人地址")
+var fromVar *string=flag.String("from", "0x7964576407c299ec0e65991ba74019d622316a0d", "发起人地址")
 
 var gaslimitVar *uint64=flag.Uint64("gaslimit", 60000, "gas最大值")
+
+var countTx *int=flag.Int("count", 500, "交易数")
 
 type SendTxArgs struct {
 	From     common.Address  `json:"from"`
@@ -37,15 +41,15 @@ type SendTxArgs struct {
 	GasPrice *hexutil.Big    `json:"gasPrice"`
 	Value    *hexutil.Big    `json:"value"`
 	Nonce    *hexutil.Uint64 `json:"nonce"`
-	Data  *hexutil.Bytes `json:"data"`
-	Input *hexutil.Bytes `json:"input"`
+	Data     *hexutil.Bytes  `json:"data"`
+	Input    *hexutil.Bytes  `json:"input"`
 }
 
 func Maker(client *rpc.Client) {
 
-	data,err:=ioutil.ReadFile(*abiPath)
+	data, err := hexutil.Decode(params.CrossDemoAbi)
 
-	if err!=nil{
+	if err != nil {
 		fmt.Println(err)
 		return
 	}
@@ -109,7 +113,7 @@ func main() {
 		fmt.Println("dial", "err", err)
 		return
 	}
-	for i:=0; i< 20000; i++ {
+	for i:=0; i< *countTx; i++ {
 		Maker(client)
 	}
 }

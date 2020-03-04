@@ -19,7 +19,6 @@ package sub
 import (
 	"crypto/ecdsa"
 	"fmt"
-	"github.com/simplechain-org/go-simplechain/common"
 	"io"
 	"math"
 	"math/rand"
@@ -28,6 +27,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/mclock"
 	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/ethdb"

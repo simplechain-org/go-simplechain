@@ -1795,6 +1795,7 @@ func (s *PublicNetAPI) PeerCount() hexutil.Uint {
 func (s *PublicNetAPI) Version() string {
 	return fmt.Sprintf("%d", s.networkVersion)
 }
+
 // PublicTxPoolAPI offers and API for the transaction pool. It only operates on data that is non confidential.
 type PublicCtxPoolAPI struct {
 	b Backend
@@ -1808,18 +1809,18 @@ func NewPublicCtxPoolAPI(b Backend) *PublicCtxPoolAPI {
 func (s *PublicCtxPoolAPI) CtxContent() map[string]map[uint64][]*RPCCrossTransaction {
 	content := map[string]map[uint64][]*RPCCrossTransaction{
 		"remote": make(map[uint64][]*RPCCrossTransaction),
-		"local": make(map[uint64][]*RPCCrossTransaction),
+		"local":  make(map[uint64][]*RPCCrossTransaction),
 	}
 	remotes, locals := s.b.CtxPoolContent()
 	for k, txs := range remotes {
-		for _,tx := range txs {
-			content["remote"][k] = append(content["remote"][k],newRPCCrossTransaction(tx))
+		for _, tx := range txs {
+			content["remote"][k] = append(content["remote"][k], newRPCCrossTransaction(tx))
 		}
 
 	}
 	for s, txs := range locals {
-		for _,tx := range txs {
-			content["local"][s] =  append(content["local"][s],newRPCCrossTransaction(tx))
+		for _, tx := range txs {
+			content["local"][s] = append(content["local"][s], newRPCCrossTransaction(tx))
 		}
 	}
 	return content
@@ -1829,42 +1830,62 @@ func (s *PublicCtxPoolAPI) CtxStats() int {
 	return s.b.CtxStats()
 }
 
+func (s *PublicCtxPoolAPI) CtxQuery(ctx context.Context, hash common.Hash) *RPCCrossTransaction {
+	remotes, locals := s.b.CtxPoolContent()
+	for _, txs := range remotes {
+		for _,tx := range txs {
+			if tx.Data.TxHash == hash {
+				return newRPCCrossTransaction(tx)
+			}
+		}
+
+	}
+	for _, txs := range locals {
+		for _,tx := range txs {
+			if tx.Data.TxHash == hash {
+				return newRPCCrossTransaction(tx)
+			}
+		}
+	}
+	return nil
+}
+
 // RPCTransaction represents a transaction that will serialize to the RPC representation of a transaction
 type RPCCrossTransaction struct {
-	Value     *hexutil.Big       `json:"value"`
-	CTxId     common.Hash    `json:"ctxId"`
-	TxHash    common.Hash    `json:"txHash"`
-	From      common.Address `json:"from"`
-	BlockHash common.Hash    `json:"blockHash"`
-	DestinationId    *hexutil.Big `json:"destinationId"`
-	DestinationValue *hexutil.Big `json:"destinationValue"`
-	Input            hexutil.Bytes `json:"input"`
-	V []*hexutil.Big  `json:"v"`
-	R []*hexutil.Big  `json:"r"`
-	S []*hexutil.Big  `json:"s"`
+	Value            *hexutil.Big   `json:"value"`
+	CTxId            common.Hash    `json:"ctxId"`
+	TxHash           common.Hash    `json:"txHash"`
+	From             common.Address `json:"from"`
+	BlockHash        common.Hash    `json:"blockHash"`
+	DestinationId    *hexutil.Big   `json:"destinationId"`
+	DestinationValue *hexutil.Big   `json:"destinationValue"`
+	Input            hexutil.Bytes  `json:"input"`
+	V                []*hexutil.Big `json:"v"`
+	R                []*hexutil.Big `json:"r"`
+	S                []*hexutil.Big `json:"s"`
 }
 
 // newRPCTransaction returns a transaction that will serialize to the RPC
 // representation, with the given location metadata set (if available).
 func newRPCCrossTransaction(tx *types.CrossTransactionWithSignatures) *RPCCrossTransaction {
 	result := &RPCCrossTransaction{
-		Value:    (*hexutil.Big)(tx.Data.Value),
-		CTxId:	  tx.Data.CTxId,
-		TxHash:   tx.Data.TxHash,
-		From:     tx.Data.From,
-		BlockHash:tx.Data.BlockHash,
-		DestinationId:(*hexutil.Big)(tx.Data.DestinationId),
-		DestinationValue:(*hexutil.Big)(tx.Data.DestinationValue),
-		Input:    tx.Data.Input,
+		Value:            (*hexutil.Big)(tx.Data.Value),
+		CTxId:            tx.Data.CTxId,
+		TxHash:           tx.Data.TxHash,
+		From:             tx.Data.From,
+		BlockHash:        tx.Data.BlockHash,
+		DestinationId:    (*hexutil.Big)(tx.Data.DestinationId),
+		DestinationValue: (*hexutil.Big)(tx.Data.DestinationValue),
+		Input:            tx.Data.Input,
 	}
-	for _,v := range tx.Data.V {
-		result.V = append(result.V,(*hexutil.Big)(v))
+	for _, v := range tx.Data.V {
+		result.V = append(result.V, (*hexutil.Big)(v))
 	}
-	for _,r := range tx.Data.R {
-		result.R = append(result.R,(*hexutil.Big)(r))
+	for _, r := range tx.Data.R {
+		result.R = append(result.R, (*hexutil.Big)(r))
 	}
-	for _,s := range tx.Data.S {
-		result.S = append(result.S,(*hexutil.Big)(s))
+	for _, s := range tx.Data.S {
+		result.S = append(result.S, (*hexutil.Big)(s))
 	}
 
 	return result

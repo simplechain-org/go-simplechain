@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"math"
 	"math/big"
 	"sort"
@@ -28,14 +27,15 @@ import (
 	"time"
 
 	"github.com/simplechain-org/go-simplechain/common"
+	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"github.com/simplechain-org/go-simplechain/common/prque"
+	"github.com/simplechain-org/go-simplechain/consensus"
 	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/metrics"
 	"github.com/simplechain-org/go-simplechain/params"
-	"github.com/simplechain-org/go-simplechain/consensus"
 )
 
 const (
@@ -134,12 +134,11 @@ type blockChain interface {
 	SubscribeChainHeadEvent(ch chan<- ChainHeadEvent) event.Subscription
 
 	Engine() consensus.Engine
-
 }
 
 var (
 	finishID, _ = hexutil.Decode("0xaff64dae")
-	takerID, _ = hexutil.Decode("0x48741a9d")
+	takerID, _  = hexutil.Decode("0x48741a9d")
 )
 
 // TxPoolConfig are the configuration parameters of the transaction pool.
@@ -242,13 +241,13 @@ type TxPool struct {
 	locals  *accountSet // Set of local transaction to exempt from eviction rules
 	journal *txJournal  // Journal of local transaction to back up to disk
 
-	pending map[common.Address]*txList   // All currently processable transactions
-	queue   map[common.Address]*txList   // Queued but non-processable transactions
-	beats   map[common.Address]time.Time // Last heartbeat from each known account
-	all     *txLookup                    // All transactions to allow lookups
-	priced  *txPricedList                // All transactions sorted by price
+	pending          map[common.Address]*txList   // All currently processable transactions
+	queue            map[common.Address]*txList   // Queued but non-processable transactions
+	beats            map[common.Address]time.Time // Last heartbeat from each known account
+	all              *txLookup                    // All transactions to allow lookups
+	priced           *txPricedList                // All transactions sorted by price
 	crossDemoAddress common.Address
-	anchors map[uint64][]common.Address
+	anchors          map[uint64][]common.Address
 
 	chainHeadCh     chan ChainHeadEvent
 	chainHeadSub    event.Subscription
@@ -266,29 +265,29 @@ type txpoolResetRequest struct {
 
 // NewTxPool creates a new transaction pool to gather, sort and filter inbound
 // transactions from the network.
-func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain blockChain,contractAddress common.Address) *TxPool {
+func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain blockChain, contractAddress common.Address) *TxPool {
 	// Sanitize the input to ensure no vulnerable gas prices are set
 	config = (&config).sanitize()
 
 	// Create the transaction pool with its initial settings
 	pool := &TxPool{
-		config:          config,
-		chainconfig:     chainconfig,
-		chain:           chain,
-		signer:          types.NewEIP155Signer(chainconfig.ChainID),
-		pending:         make(map[common.Address]*txList),
-		queue:           make(map[common.Address]*txList),
-		beats:           make(map[common.Address]time.Time),
-		all:             newTxLookup(common.Address{}), //todo 参数传入
-		chainHeadCh:     make(chan ChainHeadEvent, chainHeadChanSize),
-		reqResetCh:      make(chan *txpoolResetRequest),
-		reqPromoteCh:    make(chan *accountSet),
-		queueTxEventCh:  make(chan *types.Transaction),
-		reorgDoneCh:     make(chan chan struct{}),
-		reorgShutdownCh: make(chan struct{}),
-		gasPrice:        new(big.Int).SetUint64(config.PriceLimit),
-		crossDemoAddress:contractAddress, //todo 参数传入
-		anchors:     	 make(map[uint64][]common.Address),
+		config:           config,
+		chainconfig:      chainconfig,
+		chain:            chain,
+		signer:           types.NewEIP155Signer(chainconfig.ChainID),
+		pending:          make(map[common.Address]*txList),
+		queue:            make(map[common.Address]*txList),
+		beats:            make(map[common.Address]time.Time),
+		all:              newTxLookup(common.Address{}), //todo 参数传入
+		chainHeadCh:      make(chan ChainHeadEvent, chainHeadChanSize),
+		reqResetCh:       make(chan *txpoolResetRequest),
+		reqPromoteCh:     make(chan *accountSet),
+		queueTxEventCh:   make(chan *types.Transaction),
+		reorgDoneCh:      make(chan chan struct{}),
+		reorgShutdownCh:  make(chan struct{}),
+		gasPrice:         new(big.Int).SetUint64(config.PriceLimit),
+		crossDemoAddress: contractAddress, //todo 参数传入
+		anchors:          make(map[uint64][]common.Address),
 	}
 	pool.locals = newAccountSet(pool.signer)
 	for _, addr := range config.Locals {
@@ -517,8 +516,8 @@ func (pool *TxPool) local() map[common.Address]types.Transactions {
 	txs := make(map[common.Address]types.Transactions)
 	for addr := range pool.locals.accounts {
 		var exit bool
-		for _,anchors := range pool.anchors {
-			for _,v := range anchors {
+		for _, anchors := range pool.anchors {
+			for _, v := range anchors {
 				if v == addr {
 					exit = true
 				}
@@ -643,7 +642,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 	//from, _ := types.Sender(pool.signer, tx) // already validated
 	if list := pool.pending[from]; list != nil && list.Overlaps(tx) {
 		// Nonce already pending, check if required price bump is met
-		inserted, old := list.Add(tx, pool.config.PriceBump,isAnchor)
+		inserted, old := list.Add(tx, pool.config.PriceBump, isAnchor)
 		if !inserted {
 			pendingDiscardMeter.Mark(1)
 			return false, ErrReplaceUnderpriced
@@ -696,7 +695,7 @@ func (pool *TxPool) enqueueTx(hash common.Hash, tx *types.Transaction) (bool, er
 		pool.queue[from] = newTxList(false)
 	}
 	isAnchor := pool.IsAnchor(tx)
-	inserted, old := pool.queue[from].Add(tx, pool.config.PriceBump,isAnchor)
+	inserted, old := pool.queue[from].Add(tx, pool.config.PriceBump, isAnchor)
 	if !inserted {
 		// An older transaction was better, discard this
 		queuedDiscardMeter.Mark(1)
@@ -741,7 +740,7 @@ func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.T
 	}
 	list := pool.pending[addr]
 	isAnchor := pool.IsAnchor(tx)
-	inserted, old := list.Add(tx, pool.config.PriceBump,isAnchor)
+	inserted, old := list.Add(tx, pool.config.PriceBump, isAnchor)
 	if !inserted {
 		// An older transaction was better, discard this
 		pool.all.Remove(hash)
@@ -842,9 +841,9 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local, sync bool) []error {
 		types.Sender(pool.signer, tx)
 	}
 	// Process all the new transaction and merge any errors into the original slice
-	//pool.mu.Lock()
+	pool.mu.Lock()
 	newErrs, dirtyAddrs := pool.addTxsLocked(news, local)
-	//pool.mu.Unlock()
+	pool.mu.Unlock()
 	//log.Info("addTx lock end","txs",len(news))
 
 	var nilSlot = 0
@@ -868,10 +867,10 @@ func (pool *TxPool) addTxsLocked(txs []*types.Transaction, local bool) ([]error,
 	dirty := newAccountSet(pool.signer)
 	errs := make([]error, len(txs))
 	for i, tx := range txs {
-		pool.mu.Lock()
+		//pool.mu.Lock()
 		//log.Info("addTx lock begin","tx",tx.Hash().String())
 		replaced, err := pool.add(tx, local)
-		pool.mu.Unlock()
+		//pool.mu.Unlock()
 		//log.Info("addTx lock end","tx",tx.Hash().String())
 		errs[i] = err
 		if err == nil && !replaced {
@@ -1069,7 +1068,7 @@ func (pool *TxPool) runReorg(done chan struct{}, reset *txpoolResetRequest, dirt
 	if dirtyAccounts != nil {
 		promoteAddrs = dirtyAccounts.flatten()
 	}
-	//pool.mu.Lock()
+	pool.mu.Lock()
 	if reset != nil {
 		// Reset from the old head to the new, rescheduling any reorged transactions
 		pool.reset(reset.oldHead, reset.newHead)
@@ -1087,7 +1086,7 @@ func (pool *TxPool) runReorg(done chan struct{}, reset *txpoolResetRequest, dirt
 			promoteAddrs = append(promoteAddrs, addr)
 		}
 	}
-	pool.mu.Lock()
+	//pool.mu.Lock()
 	// Check for pending transactions for every account that sent new ones
 	promoted := pool.promoteExecutables(promoteAddrs)
 	for _, tx := range promoted {
@@ -1120,6 +1119,9 @@ func (pool *TxPool) runReorg(done chan struct{}, reset *txpoolResetRequest, dirt
 		for _, set := range events {
 			txs = append(txs, set.Flatten()...)
 		}
+		//if len(txs) > 1 {
+		//	log.Info("txFeed.Send","txs",len(txs))
+		//}
 		pool.txFeed.Send(NewTxsEvent{txs})
 	}
 }
@@ -1424,9 +1426,9 @@ func (pool *TxPool) demoteUnexecutables() {
 			pool.all.Remove(hash)
 			if len(tx.Data()) > 68 && tx.To() != nil && (*tx.To() == pool.crossDemoAddress) {
 				if bytes.Equal(tx.Data()[:4], finishID) {
-					pool.removeTxByCtxId(common.BytesToHash(common.LeftPadBytes(tx.Data()[4:36], 32)),finishID,true)
+					pool.removeTxByCtxId(common.BytesToHash(common.LeftPadBytes(tx.Data()[4:36], 32)), finishID, true)
 				} else if bytes.Equal(tx.Data()[:4], takerID) {
-					pool.removeTxByCtxId(common.BytesToHash(common.LeftPadBytes(tx.Data()[36:68], 32)),takerID,true)
+					pool.removeTxByCtxId(common.BytesToHash(common.LeftPadBytes(tx.Data()[36:68], 32)), takerID, true)
 				}
 			}
 			log.Trace("Removed old pending transaction", "hash", hash)
@@ -1560,16 +1562,16 @@ func (as *accountSet) merge(other *accountSet) {
 // peeking into the pool in TxPool.Get without having to acquire the widely scoped
 // TxPool.mu mutex.
 type txLookup struct {
-	all  map[common.Hash]*types.Transaction
+	all              map[common.Hash]*types.Transaction
 	crossDemoAddress common.Address
-	lock sync.RWMutex
+	lock             sync.RWMutex
 }
 
 // newTxLookup returns a new txLookup structure.
 func newTxLookup(address common.Address) *txLookup {
 	return &txLookup{
-		all: make(map[common.Hash]*types.Transaction),
-		crossDemoAddress:address,
+		all:              make(map[common.Hash]*types.Transaction),
+		crossDemoAddress: address,
 	}
 }
 
@@ -1617,20 +1619,20 @@ func (t *txLookup) Remove(hash common.Hash) {
 	delete(t.all, hash)
 }
 
-func (t *txLookup) GetCtxId(CtxId common.Hash,method []byte) []common.Hash{
+func (t *txLookup) GetCtxId(CtxId common.Hash, method []byte) []common.Hash {
 	t.lock.RLock()
 	defer t.lock.RUnlock()
 	var hashes []common.Hash
 
-	for k,v := range t.all {
+	for k, v := range t.all {
 		if len(v.Data()) > 68 && v.To() != nil && (*v.To() == t.crossDemoAddress) {
 			if bytes.Equal(finishID, method) {
-				if bytes.Equal(v.Data()[:4], method) && bytes.Equal(CtxId.Bytes(),common.LeftPadBytes(v.Data()[4:36], 32)) {
-					hashes = append(hashes,k)
+				if bytes.Equal(v.Data()[:4], method) && bytes.Equal(CtxId.Bytes(), common.LeftPadBytes(v.Data()[4:36], 32)) {
+					hashes = append(hashes, k)
 				}
 			} else if bytes.Equal(takerID, method) {
-				if bytes.Equal(v.Data()[:4], method)&&  bytes.Equal(CtxId.Bytes(),common.LeftPadBytes(v.Data()[36:68], 32)) {
-					hashes = append(hashes,k)
+				if bytes.Equal(v.Data()[:4], method) && bytes.Equal(CtxId.Bytes(), common.LeftPadBytes(v.Data()[36:68], 32)) {
+					hashes = append(hashes, k)
 				}
 			}
 		}
@@ -1658,34 +1660,34 @@ func (pool *TxPool) GetAnchorTxs(anchor common.Address) (map[common.Address]type
 	return pending, nil
 }
 
-func (pool *TxPool)IsAnchor(tx *types.Transaction) bool {
+func (pool *TxPool) IsAnchor(tx *types.Transaction) bool {
 	if tx.To() != nil && *tx.To() == pool.crossDemoAddress {
-		if len(tx.Data()) > 160 && bytes.Equal(tx.Data()[:4], finishID)  {
+		if len(tx.Data()) > 160 && bytes.Equal(tx.Data()[:4], finishID) {
 			//startTxHash := common.BytesToHash(tx.Data()[4+common.HashLength:4+common.HashLength*2])
-			remoteChainId := new(big.Int).SetBytes(tx.Data()[4+common.HashLength:4+common.HashLength*2]).Uint64()
+			remoteChainId := new(big.Int).SetBytes(tx.Data()[4+common.HashLength : 4+common.HashLength*2]).Uint64()
 			from, _ := types.Sender(pool.signer, tx)
-			if anchors,ok := pool.anchors[remoteChainId];ok {
-				for _,v := range anchors {
+			if anchors, ok := pool.anchors[remoteChainId]; ok {
+				for _, v := range anchors {
 					if from == v {
-						return  true
+						return true
 					}
 				}
 			} else {
-				log.Info("IsAnchor already","adress",pool.crossDemoAddress,"remoteChainId",remoteChainId)
+				log.Info("IsAnchor already", "address", pool.crossDemoAddress, "remoteChainId", remoteChainId)
 				newHead := pool.chain.CurrentBlock().Header() // Special case during testing
 				statedb, err := pool.chain.StateAt(newHead.Root)
 				if err != nil {
 					log.Error("Failed to reset txpool state", "err", err)
 				}
-				queryAnchors,signedCount := QueryAnchor(pool.chainconfig,pool.chain,statedb,newHead,pool.crossDemoAddress,remoteChainId)
+				queryAnchors, signedCount := QueryAnchor(pool.chainconfig, pool.chain, statedb, newHead, pool.crossDemoAddress, remoteChainId)
 				pool.anchors[remoteChainId] = queryAnchors
-				for _,v := range queryAnchors {
+				for _, v := range queryAnchors {
 					pool.locals.add(v)
 				}
 				requireSignatureCount = signedCount
-				for _,v := range queryAnchors {
+				for _, v := range queryAnchors {
 					if from == v {
-						return  true
+						return true
 					}
 				}
 			}
@@ -1696,18 +1698,18 @@ func (pool *TxPool)IsAnchor(tx *types.Transaction) bool {
 
 // RemoveTx removes a single transaction from the queue, moving all subsequent
 // transactions back to the future queue.
-func (pool *TxPool) removeTxByCtxId(CtxId common.Hash,method []byte, outofbound bool) {
-	hashes := pool.all.GetCtxId(CtxId,method)
-	for _,v := range hashes {
-		pool.removeTx(v,outofbound)
+func (pool *TxPool) removeTxByCtxId(CtxId common.Hash, method []byte, outofbound bool) {
+	hashes := pool.all.GetCtxId(CtxId, method)
+	for _, v := range hashes {
+		pool.removeTx(v, outofbound)
 	}
 }
 
 func (pool *TxPool) RemoveTx(hashs []common.Hash, outofbound bool) {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
-	log.Info("RemoveTx Lock","hashs",len(hashs))
-	for _,hash := range hashs {
-		pool.removeTx(hash,outofbound)
+	log.Info("RemoveTx Lock", "hashs", len(hashs))
+	for _, hash := range hashs {
+		pool.removeTx(hash, outofbound)
 	}
 }

@@ -2,11 +2,11 @@ package types
 
 import (
 	"bytes"
-	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"math/big"
 	"testing"
 
 	"github.com/simplechain-org/go-simplechain/common"
+	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"github.com/simplechain-org/go-simplechain/rlp"
 )
 

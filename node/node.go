@@ -279,7 +279,7 @@ func (n *Node) Start() error {
 			running.Stop()
 			return err
 		}
-	} else if n.config.Role.IsAnchor(){
+	} else if n.config.Role.IsAnchor() {
 		if err := n.startRPC(services); err != nil {
 			for _, service := range services {
 				service.Stop()
@@ -498,7 +498,7 @@ func (n *Node) Stop() error {
 	n.stopSubWS()
 	n.stopSubHTTP()
 	n.stopSubIPC()
-	n.subRpcAPIs=nil
+	n.subRpcAPIs = nil
 
 	failure := &StopError{
 		Services: make(map[reflect.Type]error),
@@ -875,12 +875,12 @@ func (n *Node) stopSubWS() {
 		n.subWsHandler = nil
 	}
 }
-func (n *Node) IsMainChain() bool{
+func (n *Node) IsMainChain() bool {
 	return n.config.Role.IsMainChain()
 }
-func (n *Node) IsSubChain()bool {
+func (n *Node) IsSubChain() bool {
 	return n.config.Role.IsSubChain()
 }
-func (n *Node) IsAnchor() bool{
+func (n *Node) IsAnchor() bool {
 	return n.config.Role.IsAnchor()
 }

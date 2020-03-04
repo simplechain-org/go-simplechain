@@ -5,26 +5,25 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log"
+	"math/big"
+
 	"github.com/simplechain-org/go-simplechain/accounts/abi"
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"github.com/simplechain-org/go-simplechain/rpc"
-	"io/ioutil"
-	"log"
-	"math/big"
+	"github.com/simplechain-org/go-simplechain/params"
 )
 
-var rawurlVar *string =flag.String("rawurl", "http://127.0.0.1:8556", "rpc url")
+var rawurlVar *string =flag.String("rawurl", "http://192.168.3.40:8545", "rpc url")
 
-var abiPath *string =flag.String("abi", "../../contracts/crossdemo/crossdemo.abi", "abi文件路径")
-
-var contract *string =flag.String("contract", "0x8eefA4bFeA64F2A89f3064D48646415168662a1e", "合约地址")
+var contract *string =flag.String("contract", "0xAa22934Df3867B8d59574dD4557ef1BA6dA2f8f3", "合约地址")
 
 var signConfirm *uint64=flag.Uint64("signConfirm", 2, "最小锚定节点数")
 
-var chainId *uint64=flag.Uint64("chainId", 1, "目的链id")
+var chainId *uint64=flag.Uint64("chainId", 512, "目的链id")
 
-var fromVar *string=flag.String("from", "0xb9d7df1a34a28c7b82acc841c12959ba00b51131", "发起人地址")
+var fromVar *string=flag.String("from", "0x7964576407c299ec0e65991ba74019d622316a0d", "发起人地址")
 
 var gaslimitVar *uint64=flag.Uint64("gaslimit", 2000000, "gas最大值")
 
@@ -46,9 +45,9 @@ type SendTxArgs struct {
 
 func Register(client *rpc.Client) {
 
-	data,err:=ioutil.ReadFile(*abiPath)
+	data, err := hexutil.Decode(params.CrossDemoAbi)
 
-	if err!=nil{
+	if err != nil {
 		fmt.Println(err)
 		return
 	}
