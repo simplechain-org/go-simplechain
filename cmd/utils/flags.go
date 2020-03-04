@@ -1700,7 +1700,7 @@ func RegisterEthService(stack *node.Node, cfg *eth.Config) <-chan *sub.Ethereum 
 			})
 			if err != nil {
 				Fatalf("Failed to register the Ethereum service: %v", err)
-				return
+				return nil
 			}
 			//subchain
 			err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
