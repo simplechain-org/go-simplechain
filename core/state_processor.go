@@ -61,7 +61,7 @@ func NewStateProcessor(config *params.ChainConfig, bc *BlockChain, engine consen
 // Process returns the receipts and logs accumulated during the process and
 // returns the amount of gas that was used in the process. If any of the
 // transactions failed to execute due to insufficient gas it will return an error.
-func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config,contractAddress common.Address) (types.Receipts, []*types.Log, uint64, error) {
+func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config, contractAddress common.Address) (types.Receipts, []*types.Log, uint64, error) {
 	var (
 		receipts types.Receipts
 		usedGas  = new(uint64)
@@ -76,7 +76,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
 		statedb.Prepare(tx.Hash(), block.Hash(), i)
-		receipt, err := ApplyTransaction(p.config, p.bc, nil, gp, statedb, header, tx, usedGas, cfg,contractAddress)
+		receipt, err := ApplyTransaction(p.config, p.bc, nil, gp, statedb, header, tx, usedGas, cfg, contractAddress)
 		if err != nil {
 			return nil, nil, 0, err
 		}
@@ -93,7 +93,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 // and uses the input parameters for its environment. It returns the receipt
 // for the transaction, gas used and an error if the transaction failed,
 // indicating the block was invalid.
-func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config,address common.Address) (*types.Receipt, error) {
+func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config, address common.Address) (*types.Receipt, error) {
 	msg, err := tx.AsMessage(types.MakeSigner(config, header.Number))
 	if err != nil {
 		return nil, err
@@ -158,7 +158,7 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 			//log.Info("applyTx","data",hexutil.Encode(data))
 			if result.Cmp(big.NewInt(0)) == 0 {
 				//log.Info("already finish!", "res", new(big.Int).SetBytes(res).Uint64(), "tx", tx.Hash().String())
-				return nil,  ErrRepetitionCrossTransaction
+				return nil, ErrRepetitionCrossTransaction
 			} else { //TODO 交易失败一直finish ok
 				//log.Info("finish ok!", "res", new(big.Int).SetBytes(res).Uint64(), "tx", tx.Hash().String())
 			}
@@ -167,7 +167,7 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 			paddedCtxId := common.LeftPadBytes(tx.Data()[4+32*4:4+32*5], 32) //CtxId
 			data = append(data, getTakerTx...)
 			data = append(data, paddedCtxId...)
-			data = append(data,tx.Data()[4+32:4+32*2]...)
+			data = append(data, tx.Data()[4+32:4+32*2]...)
 			//构造消息
 			//log.Info("ApplyTransaction","data",hexutil.Encode(data))
 			checkMsg := types.NewMessage(common.Address{}, tx.To(), 0, big.NewInt(0), math.MaxUint64/2, big.NewInt(params.GWei), data, false)

@@ -361,7 +361,7 @@ func (rws *ReceptTransactionWithSignatures) ConstructData(gasUsed *big.Int) ([]b
 	//}
 	data, err := hexutil.Decode(params.CrossDemoAbi)
 	if err != nil {
-		return nil,err
+		return nil, err
 	}
 
 	abi, err := abi.JSON(bytes.NewReader(data))

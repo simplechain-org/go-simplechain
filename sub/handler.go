@@ -31,6 +31,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/forkid"
 	"github.com/simplechain-org/go-simplechain/core/types"
+	"github.com/simplechain-org/go-simplechain/cross"
 	"github.com/simplechain-org/go-simplechain/eth/downloader"
 	"github.com/simplechain-org/go-simplechain/eth/fetcher"
 	"github.com/simplechain-org/go-simplechain/ethdb"
@@ -41,7 +42,6 @@ import (
 	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/rlp"
 	"github.com/simplechain-org/go-simplechain/trie"
-	"github.com/simplechain-org/go-simplechain/cross"
 )
 
 const (
@@ -102,9 +102,8 @@ type ProtocolManager struct {
 
 	serverPool *serverPool
 
-	msgHandler   *cross.MsgHandler
+	msgHandler *cross.MsgHandler
 }
-
 
 // NewProtocolManager returns a new Ethereum sub protocol manager. The Ethereum sub protocol manages peers capable
 // with the Ethereum network.
@@ -959,13 +958,12 @@ func (pm *ProtocolManager) BroadcastInternalCrossTransactionWithSignature(cwss [
 	}
 }
 
-
 func (pm *ProtocolManager) SetMsgHandler(msgHandler *cross.MsgHandler) {
 	pm.msgHandler = msgHandler
 }
 
 func (pm *ProtocolManager) AddRemotes(txs []*types.Transaction) {
-	for _,v := range txs {
+	for _, v := range txs {
 		pm.txpool.AddRemote(v)
 	}
 	//return pm.txpool.AddRemotes(txs)

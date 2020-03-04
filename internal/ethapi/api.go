@@ -1833,7 +1833,7 @@ func (s *PublicCtxPoolAPI) CtxStats() int {
 func (s *PublicCtxPoolAPI) CtxQuery(ctx context.Context, hash common.Hash) *RPCCrossTransaction {
 	remotes, locals := s.b.CtxPoolContent()
 	for _, txs := range remotes {
-		for _,tx := range txs {
+		for _, tx := range txs {
 			if tx.Data.TxHash == hash {
 				return newRPCCrossTransaction(tx)
 			}
@@ -1841,7 +1841,7 @@ func (s *PublicCtxPoolAPI) CtxQuery(ctx context.Context, hash common.Hash) *RPCC
 
 	}
 	for _, txs := range locals {
-		for _,tx := range txs {
+		for _, tx := range txs {
 			if tx.Data.TxHash == hash {
 				return newRPCCrossTransaction(tx)
 			}

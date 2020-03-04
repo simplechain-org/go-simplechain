@@ -144,7 +144,7 @@ func (pm *ProtocolManager) syncer() {
 	for {
 		select {
 		case <-pm.newPeerCh:
-			time.Sleep(time.Second*10)
+			//time.Sleep(time.Second*10)
 			// Make sure we have peers to select from, then sync
 			if pm.peers.Len() < minDesiredPeerCount {
 				break
@@ -222,12 +222,17 @@ type ctxsync struct {
 }
 
 func (pm *ProtocolManager) syncCtxs(p *peer) {
-	var txs []*types.CrossTransactionWithSignatures
-	txs = pm.msgHandler.GetCtxstore().List(0,true)
+	if pm.msgHandler == nil {
+		return
+	}
+	if pm.msgHandler.GetCtxstore() == nil {
+		return
+	}
+	txs := pm.msgHandler.GetCtxstore().List(0, true)
 	if len(txs) == 0 {
 		return
 	}
-	log.Info("syncCtxs","len",len(txs))
+	log.Info("syncCtxs", "len", len(txs))
 	select {
 	case pm.ctxsyncCh <- &ctxsync{p, txs}:
 	case <-pm.quitSync:
@@ -238,7 +243,7 @@ func (pm *ProtocolManager) ctxsyncLoop() {
 	var (
 		pending = make(map[enode.ID]*ctxsync)
 		sending = false               // whether a send is active
-		pack    = new(ctxsync)         // the pack that is being sent
+		pack    = new(ctxsync)        // the pack that is being sent
 		done    = make(chan error, 1) // result of the send
 	)
 

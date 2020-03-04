@@ -31,6 +31,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/forkid"
 	"github.com/simplechain-org/go-simplechain/core/types"
+	"github.com/simplechain-org/go-simplechain/cross"
 	"github.com/simplechain-org/go-simplechain/eth/downloader"
 	"github.com/simplechain-org/go-simplechain/eth/fetcher"
 	"github.com/simplechain-org/go-simplechain/ethdb"
@@ -41,7 +42,6 @@ import (
 	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/rlp"
 	"github.com/simplechain-org/go-simplechain/trie"
-	"github.com/simplechain-org/go-simplechain/cross"
 )
 
 const (
@@ -275,7 +275,7 @@ func (pm *ProtocolManager) Stop() {
 
 	log.Info("Stopping Simplechain protocol")
 
-	if pm.msgHandler != nil{
+	if pm.msgHandler != nil {
 		pm.msgHandler.Stop()
 	}
 	pm.txsSub.Unsubscribe()        // quits txBroadcastLoop
@@ -937,7 +937,7 @@ func (pm *ProtocolManager) SetMsgHandler(msgHandler *cross.MsgHandler) {
 	pm.msgHandler = msgHandler
 }
 func (pm *ProtocolManager) AddRemotes(txs []*types.Transaction) {
-	for _,v := range txs {
+	for _, v := range txs {
 		pm.txpool.AddRemote(v)
 	}
 	//return pm.txpool.AddRemotes(txs)
