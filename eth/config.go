@@ -158,8 +158,8 @@ type Config struct {
 	// CheckpointOracle is the configuration for checkpoint oracle.
 	CheckpointOracle *params.CheckpointOracleConfig `toml:",omitempty"`
 
-	// Moon block override (TODO: remove after the fork)
-	OverrideMoon *big.Int
+	// Singularity block override (TODO: remove after the fork)
+	OverrideSingularity *big.Int
 
 	Role common.ChainRole
 

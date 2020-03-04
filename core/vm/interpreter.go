@@ -93,8 +93,8 @@ func NewEVMInterpreter(evm *EVM, cfg Config) *EVMInterpreter {
 	if !cfg.JumpTable[STOP].valid {
 		var jt JumpTable
 		switch {
-		case evm.chainRules.IsMoon:
-			jt = moonInstructionSet
+		case evm.chainRules.IsSingularity:
+			jt = singularityInstructionSet
 		default:
 			jt = constantinopleInstructionSet
 		}

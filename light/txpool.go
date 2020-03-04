@@ -68,7 +68,7 @@ type TxPool struct {
 	mined        map[common.Hash][]*types.Transaction // mined transactions by block hash
 	clearIdx     uint64                               // earliest block nr that can contain mined tx info
 
-	singularity bool // Fork indicator whether we are in the moon stage.
+	singularity bool // Fork indicator whether we are in the singularity stage.
 }
 
 // TxRelayBackend provides an interface to the mechanism that forwards transacions

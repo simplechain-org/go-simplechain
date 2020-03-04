@@ -29,9 +29,9 @@ import (
 
 // TransactionTest checks RLP decoding and sender derivation of transactions.
 type TransactionTest struct {
-	RLP      hexutil.Bytes `json:"rlp"`
-	Moon     ttFork
-	Frontier ttFork
+	RLP         hexutil.Bytes `json:"rlp"`
+	Singularity ttFork
+	Frontier    ttFork
 }
 
 type ttFork struct {
@@ -41,7 +41,7 @@ type ttFork struct {
 
 func (tt *TransactionTest) Run(config *params.ChainConfig) error {
 
-	validateTx := func(rlpData hexutil.Bytes, signer types.Signer, moon bool) (*common.Address, *common.Hash, error) {
+	validateTx := func(rlpData hexutil.Bytes, signer types.Signer, singularity bool) (*common.Address, *common.Hash, error) {
 		tx := new(types.Transaction)
 		if err := rlp.DecodeBytes(rlpData, tx); err != nil {
 			return nil, nil, err
@@ -51,7 +51,7 @@ func (tt *TransactionTest) Run(config *params.ChainConfig) error {
 			return nil, nil, err
 		}
 		// Intrinsic gas
-		requiredGas, err := core.IntrinsicGas(tx.Data(), tx.To() == nil, moon)
+		requiredGas, err := core.IntrinsicGas(tx.Data(), tx.To() == nil, singularity)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -63,15 +63,15 @@ func (tt *TransactionTest) Run(config *params.ChainConfig) error {
 	}
 
 	for _, testcase := range []struct {
-		name   string
-		signer types.Signer
-		fork   ttFork
-		moon   bool
+		name        string
+		signer      types.Signer
+		fork        ttFork
+		singularity bool
 	}{
 		{"Frontier", types.FrontierSigner{}, tt.Frontier, false},
-		{"Moon", types.NewEIP155Signer(config.ChainID), tt.Moon, true},
+		{"Singularity", types.NewEIP155Signer(config.ChainID), tt.Singularity, true},
 	} {
-		sender, txhash, err := validateTx(tt.RLP, testcase.signer, testcase.moon)
+		sender, txhash, err := validateTx(tt.RLP, testcase.signer, testcase.singularity)
 
 		if testcase.fork.Sender == (common.UnprefixedAddress{}) {
 			if err == nil {

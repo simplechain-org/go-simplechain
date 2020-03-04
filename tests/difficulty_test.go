@@ -51,7 +51,7 @@ func TestDifficulty(t *testing.T) {
 	dt.config("Ropsten", *params.TestnetChainConfig)
 	dt.config("Morden", *params.TestnetChainConfig)
 	dt.config("Frontier", params.ChainConfig{})
-	dt.config("Moon", params.ChainConfig{
+	dt.config("Singularity", params.ChainConfig{
 		SingularityBlock: big.NewInt(0),
 	})
 

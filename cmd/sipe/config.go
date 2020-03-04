@@ -185,8 +185,8 @@ func enableWhisper(ctx *cli.Context) bool {
 
 func makeFullNode(ctx *cli.Context) *node.Node {
 	stack, cfg := makeConfigNode(ctx)
-	if ctx.GlobalIsSet(utils.OverrideMoonFlag.Name) {
-		cfg.Eth.OverrideMoon = new(big.Int).SetUint64(ctx.GlobalUint64(utils.OverrideMoonFlag.Name))
+	if ctx.GlobalIsSet(utils.OverrideSingularityFlag.Name) {
+		cfg.Eth.OverrideSingularity = new(big.Int).SetUint64(ctx.GlobalUint64(utils.OverrideSingularityFlag.Name))
 	}
 	role := *utils.GlobalTextMarshaler(ctx, utils.RoleFlag.Name).(*common.ChainRole)
 

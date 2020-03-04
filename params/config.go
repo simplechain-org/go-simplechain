@@ -171,7 +171,7 @@ type CheckpointOracleConfig struct {
 type ChainConfig struct {
 	ChainID *big.Int `json:"chainId"` // chainId identifies the current chain and is used for replay protection
 
-	SingularityBlock *big.Int `json:"singularityBlock,omitempty"` // Moon switch block (nil = no fork, 0 = already on moon)
+	SingularityBlock *big.Int `json:"singularityBlock,omitempty"` // Singularity switch block (nil = no fork, 0 = already on singularity)
 	EWASMBlock       *big.Int `json:"ewasmBlock,omitempty"`       // EWASM switch block (nil = no fork, 0 = already activated)
 
 	// Various consensus engines
@@ -227,8 +227,7 @@ func (c *ChainConfig) String() string {
 	)
 }
 
-
-// IsMoon returns whether num is either equal to the Istanbul fork block or greater.
+// IsSingularity returns whether num is either equal to the Istanbul fork block or greater.
 func (c *ChainConfig) IsSingularity(num *big.Int) bool {
 	return isForked(c.SingularityBlock, num)
 }
@@ -356,8 +355,8 @@ func (err *ConfigCompatError) Error() string {
 // Rules is a one time interface meaning that it shouldn't be used in between transition
 // phases.
 type Rules struct {
-	ChainID *big.Int
-	IsMoon  bool
+	ChainID       *big.Int
+	IsSingularity bool
 }
 
 // Rules ensures c's ChainID is not nil.
@@ -367,8 +366,8 @@ func (c *ChainConfig) Rules(num *big.Int) Rules {
 		chainID = new(big.Int)
 	}
 	return Rules{
-		ChainID: new(big.Int).Set(chainID),
-		IsMoon:  c.IsSingularity(num),
+		ChainID:       new(big.Int).Set(chainID),
+		IsSingularity: c.IsSingularity(num),
 	}
 }
 

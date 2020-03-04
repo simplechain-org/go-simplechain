@@ -190,11 +190,11 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 	}
 	msg := st.msg
 	sender := vm.AccountRef(msg.From())
-	isMoon := st.evm.ChainConfig().IsSingularity(st.evm.BlockNumber)
+	isSingularity := st.evm.ChainConfig().IsSingularity(st.evm.BlockNumber)
 	contractCreation := msg.To() == nil
 
 	// Pay intrinsic gas
-	gas, err := IntrinsicGas(st.data, contractCreation, isMoon)
+	gas, err := IntrinsicGas(st.data, contractCreation, isSingularity)
 	if err != nil {
 		return nil, 0, false, err
 	}

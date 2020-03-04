@@ -19,7 +19,6 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"reflect"
 	"strings"
@@ -94,10 +93,7 @@ func TestParitySturebyConverter(t *testing.T) {
 	if !bytes.Equal(expBlob, enc) {
 		t.Errorf("chainspec mismatch")
 		exp := strings.Split(string(expBlob), "\n")
-		fmt.Println(exp)
-
 		got := strings.Split(string(enc), "\n")
-		fmt.Println(got)
 		for i := 0; i < len(exp) && i < len(got); i++ {
 			if exp[i] != got[i] {
 				t.Fatalf("got: %v\n exp: %v\n", strings.Trim(exp[i], " "), strings.Trim(got[i], " "))

@@ -232,7 +232,7 @@ type TxPool struct {
 	signer      types.Signer
 	mu          sync.RWMutex
 
-	singularity bool // Fork indicator whether we are in the moon stage.
+	singularity bool // Fork indicator whether we are in the singularity stage.
 
 	currentState  *state.StateDB // Current state in the blockchain head
 	pendingNonces *txNoncer      // Pending state tracking virtual nonces
