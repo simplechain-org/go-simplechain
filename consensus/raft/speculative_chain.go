@@ -5,7 +5,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/log"
 
-	"github.com/deckarep/golang-set"
+	mapset "github.com/deckarep/golang-set"
 	"gopkg.in/oleiade/lane.v1"
 )
 

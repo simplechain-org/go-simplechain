@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/simplechain-org/go-simplechain/common"
-	"github.com/simplechain-org/go-simplechain/miner"
 	"net/http"
 	"net/url"
 	"os"
@@ -13,12 +11,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/consensus/raft"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/eth/downloader"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/log"
+	"github.com/simplechain-org/go-simplechain/miner"
 	"github.com/simplechain-org/go-simplechain/p2p"
 	"github.com/simplechain-org/go-simplechain/p2p/enode"
 	"github.com/simplechain-org/go-simplechain/p2p/enr"
@@ -662,7 +662,7 @@ func (pm *ProtocolManager) addPeer(address *raft.Address) {
 
 	// Add raft transport connection:
 	pm.transport.AddPeer(raftTypes.ID(raftId), []string{raftUrl(address)})
-	pm.peers[raftId] = &raft.Peer{address, p2pNode}
+	pm.peers[raftId] = &raft.Peer{Address: address, P2pNode: p2pNode}
 }
 
 func (pm *ProtocolManager) disconnectFromPeer(raftId uint16, peer *raft.Peer) {

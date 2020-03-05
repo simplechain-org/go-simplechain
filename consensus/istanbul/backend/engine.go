@@ -67,7 +67,7 @@ var (
 	// errInvalidUncleHash is returned if a block contains an non-empty uncle list.
 	errInvalidUncleHash = errors.New("non empty uncle hash")
 	// errInconsistentValidatorSet is returned if the validator set is inconsistent
-	errInconsistentValidatorSet = errors.New("non empty uncle hash")
+	//errInconsistentValidatorSet = errors.New("non empty uncle hash")
 	// errInvalidTimestamp is returned if the timestamp of a block is lower than the previous block's timestamp + the minimum block period.
 	errInvalidTimestamp = errors.New("invalid timestamp")
 	// errInvalidVotingChain is returned if an authorization list is attempted to
@@ -81,7 +81,7 @@ var (
 	// errEmptyCommittedSeals is returned if the field of committed seals is zero.
 	errEmptyCommittedSeals = errors.New("zero committed seals")
 	// errMismatchTxhashes is returned if the TxHash in header is mismatch.
-	errMismatchTxhashes = errors.New("mismatch transcations hashes")
+	errMismatchTxhashes = errors.New("mismatch transactions hashes")
 )
 var (
 	defaultDifficulty = big.NewInt(1)
@@ -308,7 +308,7 @@ func (sb *backend) verifyCommittedSeals(chain consensus.ChainReader, header *typ
 		return errInvalidCommittedSeals
 	}
 
-	// The length of validSeal should be larger than number of faulty node + 1  
+	// The length of validSeal should be larger than number of faulty node+1
 	if validSeal <= snap.ValSet.F() {
 		return errInvalidCommittedSeals
 	}

@@ -17,11 +17,11 @@
 package core
 
 import (
-	"github.com/simplechain-org/go-simplechain/log"
 	"time"
 
 	"github.com/simplechain-org/go-simplechain/consensus"
 	"github.com/simplechain-org/go-simplechain/consensus/istanbul"
+	"github.com/simplechain-org/go-simplechain/log"
 )
 
 func (c *core) sendPreprepare(request *istanbul.Request) {
@@ -49,7 +49,6 @@ func (c *core) sendPreprepare(request *istanbul.Request) {
 func (c *core) handlePreprepare(msg *message, src istanbul.Validator) error {
 	logger := c.logger.New("from", src, "state", c.state)
 	log.Warn("[istanbul] handlePreprepare", "msg", msg)
-
 
 	// Decode PRE-PREPARE
 	var preprepare *istanbul.Preprepare

@@ -2,6 +2,7 @@ package raft
 
 import (
 	"crypto/ecdsa"
+
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"github.com/simplechain-org/go-simplechain/consensus"

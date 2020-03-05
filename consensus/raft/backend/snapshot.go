@@ -7,7 +7,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/deckarep/golang-set"
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/consensus/raft"
 	"github.com/simplechain-org/go-simplechain/core/types"
@@ -18,6 +17,7 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/coreos/etcd/snap"
 	"github.com/coreos/etcd/wal/walpb"
+	mapset "github.com/deckarep/golang-set"
 )
 
 // Snapshot

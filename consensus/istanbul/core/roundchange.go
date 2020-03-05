@@ -68,7 +68,6 @@ func (c *core) sendRoundChange(round *big.Int) {
 func (c *core) handleRoundChange(msg *message, src istanbul.Validator) error {
 	logger := c.logger.New("state", c.state, "from", src.Address().Hex())
 
-
 	// Decode ROUND CHANGE message
 	var rc *istanbul.Subject
 	if err := msg.Decode(&rc); err != nil {
@@ -83,7 +82,6 @@ func (c *core) handleRoundChange(msg *message, src istanbul.Validator) error {
 	cv := c.currentView()
 	roundView := rc.View
 
-
 	// Add the ROUND CHANGE message to its message set and return how many
 	// messages we've got with the same round number and sequence number.
 	num, err := c.roundChangeSet.Add(roundView.Round, msg)
@@ -96,7 +94,7 @@ func (c *core) handleRoundChange(msg *message, src istanbul.Validator) error {
 	// Once we received f+1 ROUND CHANGE messages, those messages form a weak certificate.
 	// If our round number is smaller than the certificate's round number, we would
 	// try to catch up the round number.
-	if c.waitingForRoundChange && num == int(c.valSet.F()+1) {
+	if c.waitingForRoundChange && num == c.valSet.F()+1 {
 		if cv.Round.Cmp(roundView.Round) < 0 {
 			c.sendRoundChange(roundView.Round)
 		}

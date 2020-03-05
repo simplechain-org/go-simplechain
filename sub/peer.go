@@ -19,7 +19,6 @@ package sub
 import (
 	"errors"
 	"fmt"
-
 	"math/big"
 	"sync"
 	"time"
@@ -502,6 +501,7 @@ func (p *peer) String() string {
 func (p *peer) Send(msgcode uint64, data interface{}) error {
 	return p2p.Send(p.rw, msgcode, data)
 }
+
 // peerSet represents the collection of active peers currently participating in
 // the Ethereum sub-protocol.
 type peerSet struct {

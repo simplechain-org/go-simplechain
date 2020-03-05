@@ -3,6 +3,8 @@ package backend
 import (
 	"crypto/ecdsa"
 	"errors"
+	"sync"
+
 	"github.com/simplechain-org/go-simplechain/accounts"
 	"github.com/simplechain-org/go-simplechain/consensus/raft"
 	"github.com/simplechain-org/go-simplechain/core"
@@ -16,7 +18,6 @@ import (
 	"github.com/simplechain-org/go-simplechain/p2p/enode"
 	"github.com/simplechain-org/go-simplechain/rpc"
 	"github.com/simplechain-org/go-simplechain/sub"
-	"sync"
 )
 
 type RaftService struct {
@@ -54,7 +55,7 @@ func New(ctx *node.ServiceContext, raftId, raftPort uint16, joinExisting bool, e
 	}
 	engine.SetId(raftId)
 
-	service.minter = miner.New(service, &e.Config().Miner, e.ChainConfig(), e.EventMux(), engine, nil, ctxStore)
+	service.minter = miner.New(service, &e.Config().Miner, e.ChainConfig(), service.eventMux, engine, nil, ctxStore)
 
 	var err error
 	if service.raftProtocolManager, err = NewProtocolManager(raftId, raftPort, service.blockchain, service.eventMux, startPeers, joinExisting, datadir, service.minter, service.downloader); err != nil {

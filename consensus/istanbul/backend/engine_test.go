@@ -166,14 +166,12 @@ func TestSealStopChannel(t *testing.T) {
 	stop := make(chan struct{}, 1)
 	eventSub := engine.EventMux().Subscribe(istanbul.RequestEvent{})
 	eventLoop := func() {
-		select {
-		case ev := <-eventSub.Chan():
-			_, ok := ev.Data.(istanbul.RequestEvent)
-			if !ok {
-				t.Errorf("unexpected event comes: %v", reflect.TypeOf(ev.Data))
-			}
-			stop <- struct{}{}
+		ev := <-eventSub.Chan()
+		_, ok := ev.Data.(istanbul.RequestEvent)
+		if !ok {
+			t.Errorf("unexpected event comes: %v", reflect.TypeOf(ev.Data))
 		}
+		stop <- struct{}{}
 		eventSub.Unsubscribe()
 	}
 	go eventLoop()
@@ -202,14 +200,12 @@ func TestSealCommittedOtherHash(t *testing.T) {
 	stopChannel := make(chan struct{})
 
 	go func() {
-		select {
-		case ev := <-eventSub.Chan():
-			if _, ok := ev.Data.(istanbul.RequestEvent); !ok {
-				t.Errorf("unexpected event comes: %v", reflect.TypeOf(ev.Data))
-			}
-			if err := engine.Commit(otherBlock, [][]byte{expectedCommittedSeal}); err != nil {
-				t.Error(err.Error())
-			}
+		ev := <-eventSub.Chan()
+		if _, ok := ev.Data.(istanbul.RequestEvent); !ok {
+			t.Errorf("unexpected event comes: %v", reflect.TypeOf(ev.Data))
+		}
+		if err := engine.Commit(otherBlock, [][]byte{expectedCommittedSeal}); err != nil {
+			t.Error(err.Error())
 		}
 		eventSub.Unsubscribe()
 	}()
@@ -228,11 +224,9 @@ func TestSealCommittedOtherHash(t *testing.T) {
 		close(stopChannel)
 	}
 
-	select {
-	case output := <-blockOutputChannel:
-		if output != nil {
-			t.Error("Block not nil!")
-		}
+	output := <-blockOutputChannel
+	if output != nil {
+		t.Error("Block not nil!")
 	}
 }
 
@@ -437,7 +431,7 @@ OUT2:
 	}
 	// error header cases
 	headers[2].Number = big.NewInt(100)
-	abort, results = engine.VerifyHeaders(chain, headers, nil)
+	_, results = engine.VerifyHeaders(chain, headers, nil)
 	timeout = time.NewTimer(timeoutDura)
 	index = 0
 	errors := 0
@@ -489,7 +483,7 @@ func TestPrepareExtra(t *testing.T) {
 	// append useless information to extra-data
 	h.Extra = append(vanity, make([]byte, 15)...)
 
-	payload, err = prepareExtra(h, validators)
+	payload, _ = prepareExtra(h, validators)
 	if !reflect.DeepEqual(payload, expectedResult) {
 		t.Errorf("payload mismatch: have %v, want %v", payload, expectedResult)
 	}
