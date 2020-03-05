@@ -18,24 +18,24 @@ package eth
 
 import (
 	"fmt"
+	"github.com/simplechain-org/go-simplechain/consensus/scrypt"
+	"github.com/simplechain-org/go-simplechain/core"
+	"github.com/simplechain-org/go-simplechain/core/rawdb"
+	"github.com/simplechain-org/go-simplechain/core/vm"
+	"github.com/simplechain-org/go-simplechain/event"
+	"github.com/simplechain-org/go-simplechain/p2p/enode"
+	"github.com/simplechain-org/go-simplechain/params"
 	"math/big"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/simplechain-org/go-simplechain/common"
-	"github.com/simplechain-org/go-simplechain/consensus/ethash"
-	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/forkid"
-	"github.com/simplechain-org/go-simplechain/core/rawdb"
 	"github.com/simplechain-org/go-simplechain/core/types"
-	"github.com/simplechain-org/go-simplechain/core/vm"
 	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/eth/downloader"
-	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/p2p"
-	"github.com/simplechain-org/go-simplechain/p2p/enode"
-	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/rlp"
 )
 
@@ -155,15 +155,12 @@ func TestStatusMsgErrors64(t *testing.T) {
 
 func TestForkIDSplit(t *testing.T) {
 	var (
-		engine = ethash.NewFaker()
+		engine = scrypt.NewFaker()
 
-		configNoFork  = &params.ChainConfig{HomesteadBlock: big.NewInt(1)}
+		configNoFork  = &params.ChainConfig{SingularityBlock: big.NewInt(1)}
 		configProFork = &params.ChainConfig{
-			HomesteadBlock: big.NewInt(1),
-			EIP150Block:    big.NewInt(2),
-			EIP155Block:    big.NewInt(2),
-			EIP158Block:    big.NewInt(2),
-			ByzantiumBlock: big.NewInt(3),
+			SingularityBlock: big.NewInt(1),
+			EWASMBlock:       big.NewInt(2),
 		}
 		dbNoFork  = rawdb.NewMemoryDatabase()
 		dbProFork = rawdb.NewMemoryDatabase()

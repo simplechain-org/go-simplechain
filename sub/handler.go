@@ -104,6 +104,7 @@ type ProtocolManager struct {
 	serverPool *serverPool
 
 	msgHandler *cross.MsgHandler
+
 	raftMode   bool
 	engine     consensus.Engine // used for istanbul consensus
 }

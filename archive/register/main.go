@@ -93,6 +93,7 @@ func Register(client *rpc.Client) {
 		return
 	}
 
+
 	input := hexutil.Bytes(out)
 
 	fmt.Println("input=", input)

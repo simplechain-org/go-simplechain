@@ -188,12 +188,8 @@ func enableWhisper(ctx *cli.Context) bool {
 
 func makeFullNode(ctx *cli.Context) *node.Node {
 	stack, cfg := makeConfigNode(ctx)
-
-	if ctx.GlobalIsSet(utils.OverrideIstanbulFlag.Name) {
-		cfg.Eth.OverrideIstanbul = new(big.Int).SetUint64(ctx.GlobalUint64(utils.OverrideIstanbulFlag.Name))
-	}
-	if ctx.GlobalIsSet(utils.OverrideMuirGlacierFlag.Name) {
-		cfg.Eth.OverrideMuirGlacier = new(big.Int).SetUint64(ctx.GlobalUint64(utils.OverrideMuirGlacierFlag.Name))
+	if ctx.GlobalIsSet(utils.OverrideSingularityFlag.Name) {
+		cfg.Eth.OverrideSingularity = new(big.Int).SetUint64(ctx.GlobalUint64(utils.OverrideSingularityFlag.Name))
 	}
 	role := *utils.GlobalTextMarshaler(ctx, utils.RoleFlag.Name).(*common.ChainRole)
 
