@@ -26,7 +26,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hashicorp/golang-lru"
+	lru "github.com/hashicorp/golang-lru"
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/ethdb"
@@ -496,13 +496,11 @@ func (s *Snapshot) apply(headers []*types.Header) (*Snapshot, error) {
 func (s *Snapshot) removeExtraCandidate() {
 	// remove minimum tickets tally beyond candidateMaxLen
 	tallySlice := s.buildTallySlice()
-	sort.Sort(TallySlice(tallySlice))
+	sort.Sort(tallySlice)
 	if len(tallySlice) > candidateMaxLen {
 		removeNeedTally := tallySlice[candidateMaxLen:]
 		for _, tallySlice := range removeNeedTally {
-			if _, ok := s.SCCoinbase[tallySlice.addr]; ok {
-				delete(s.SCCoinbase, tallySlice.addr)
-			}
+			delete(s.SCCoinbase, tallySlice.addr)
 			delete(s.Candidates, tallySlice.addr)
 		}
 	}
@@ -736,9 +734,7 @@ func (s *Snapshot) calculateSCConfirmedNumber(record *SCRecord, minConfirmedSign
 				}
 			}
 			for i := confirmedNumber + 1; i < confirmedNumber+record.CountPerPeriod; i++ {
-				if _, ok = confirmedCoinbase[i]; ok {
-					delete(confirmedCoinbase, i)
-				}
+				delete(confirmedCoinbase, i)
 			}
 		}
 	}
@@ -790,9 +786,7 @@ func (s *Snapshot) updateSCConfirmation(headerNumber *big.Int) {
 			}
 
 			for i := record.LastConfirmedNumber + 1; i <= confirmedNumber; i++ {
-				if _, ok := s.SCRecordMap[scHash].Record[i]; ok {
-					delete(s.SCRecordMap[scHash].Record, i)
-				}
+				delete(s.SCRecordMap[scHash].Record, i)
 			}
 			s.SCRecordMap[scHash].LastConfirmedNumber = confirmedNumber
 		}
@@ -847,9 +841,7 @@ func (s *Snapshot) updateSnapshotByDeclares(declares []Declare, headerNumber *bi
 func (s *Snapshot) calculateProposalResult(headerNumber *big.Int) {
 	// process the expire proposal refund record
 	expiredHeaderNumber := headerNumber.Uint64() - proposalRefundExpiredLoopCount*s.config.MaxSignerCount
-	if _, ok := s.ProposalRefund[expiredHeaderNumber]; ok {
-		delete(s.ProposalRefund, expiredHeaderNumber)
-	}
+	delete(s.ProposalRefund, expiredHeaderNumber)
 
 	for hashKey, proposal := range s.Proposals {
 		// the result will be calculate at receiverdNumber + vlcnt + 1
@@ -902,9 +894,7 @@ func (s *Snapshot) calculateProposalResult(headerNumber *big.Int) {
 						s.SCRecordMap[proposal.SCHash].RewardPerPeriod = proposal.SCBlockRewardPerPeriod
 					}
 				case proposalTypeSideChainRemove:
-					if _, ok := s.SCRecordMap[proposal.SCHash]; ok {
-						delete(s.SCRecordMap, proposal.SCHash)
-					}
+					delete(s.SCRecordMap, proposal.SCHash)
 				case proposalTypeMinVoterBalanceModify:
 					s.MinVB = new(big.Int).Mul(new(big.Int).SetUint64(s.Proposals[hashKey].MinVoterBalance), big.NewInt(1e+18))
 				case proposalTypeProposalDepositModify:
@@ -1001,9 +991,7 @@ func (s *Snapshot) updateSnapshotForExpired(headerNumber *big.Int) {
 	// remove 0 stake tally
 	for address, tally := range s.Tally {
 		if tally.Cmp(big.NewInt(0)) <= 0 {
-			if _, ok := s.SCCoinbase[address]; ok {
-				delete(s.SCCoinbase, address)
-			}
+			delete(s.SCCoinbase, address)
 			delete(s.Tally, address)
 		}
 	}
@@ -1022,7 +1010,7 @@ func (s *Snapshot) updateSnapshotByConfirmations(confirmations []Confirmation) {
 				break
 			}
 		}
-		if addConfirmation == true {
+		if addConfirmation {
 			confirmSigner := confirmation.Signer
 			s.Confirmations[confirmation.BlockNumber.Uint64()] = append(s.Confirmations[confirmation.BlockNumber.Uint64()], &confirmSigner)
 		}
@@ -1168,7 +1156,7 @@ func (s *Snapshot) getLastConfirmedBlockNumber(confirmations []Confirmation) *bi
 				break
 			}
 		}
-		if addConfirmation == true {
+		if addConfirmation {
 			confirmSigner := confirmation.Signer
 			cpyConfirmations[confirmation.BlockNumber.Uint64()] = append(cpyConfirmations[confirmation.BlockNumber.Uint64()], &confirmSigner)
 		}

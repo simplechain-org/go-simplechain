@@ -37,8 +37,8 @@ const (
 	/*
 	 *  dpos:version:category:action/data
 	 */
-	dposPrefix            = "dpos"
-	dposVersion           = "1"
+	dposPrefix           = "dpos"
+	dposVersion          = "1"
 	dposCategoryEvent    = "event"
 	dposCategoryLog      = "oplog"
 	dposCategorySC       = "sc"
@@ -546,7 +546,7 @@ func (d *DPoS) processEventProposal(currentBlockProposals []Proposal, txDataInfo
 	return append(currentBlockProposals, proposal)
 }
 
-func (d *DPoS) processEventDeclare(currentBlockDeclares []Declare, txDataInfo []string, tx *types.Transaction, declarer common.Address) []Declare  {
+func (d *DPoS) processEventDeclare(currentBlockDeclares []Declare, txDataInfo []string, tx *types.Transaction, declarer common.Address) []Declare {
 	if len(txDataInfo) <= pEventDeclare+2 {
 		return currentBlockDeclares
 	}

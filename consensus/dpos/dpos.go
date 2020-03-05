@@ -39,7 +39,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/rlp"
 	"github.com/simplechain-org/go-simplechain/rpc"
 
-	"github.com/hashicorp/golang-lru"
+	lru "github.com/hashicorp/golang-lru"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -58,22 +58,22 @@ var (
 	defaultBlockPeriod               = uint64(3)                                               // Default minimum difference between two consecutive block's timestamps
 	defaultMaxSignerCount            = uint64(21)                                              //
 	minVoterBalance                  = new(big.Int).Mul(big.NewInt(100), big.NewInt(1e+18))
-	extraVanity                      = 32                                                    // Fixed number of extra-data prefix bytes reserved for signer vanity
-	extraSeal                        = 65                                                    // Fixed number of extra-data suffix bytes reserved for signer seal
-	uncleHash                        = types.CalcUncleHash(nil)                              // Always Keccak256(RLP([])) as uncles are meaningless outside of PoW.
-	defaultDifficulty                = big.NewInt(1)                                         // Default difficulty
-	defaultLoopCntRecalculateSigners = uint64(10)                                            // Default loop count to recreate signers from top tally
-	minerRewardPerThousand           = uint64(618)                                           // Default reward for miner in each block from block reward (618/1000)
-	candidateNeedPD                  = false                                                 // is new candidate need Proposal & Declare process
-	mcNetVersion                     = uint64(0)                                             // the net version of main chain
-	mcLoopStartTime                  = uint64(0)                                             // the loopstarttime of main chain
-	mcPeriod                         = uint64(0)                                             // the period of main chain
-	mcSignerLength                   = uint64(0)                                             // the maxsinger of main chain config
-	mcNonce                          = uint64(0)                                             // the current Nonce of coinbase on main chain
-	mcTxDefaultGasPrice              = big.NewInt(30000000)                                  // default gas price to build transaction for main chain
-	mcTxDefaultGasLimit              = uint64(3000000)                                       // default limit to build transaction for main chain
-	proposalDeposit                  = new(big.Int).Mul(big.NewInt(1e+18), big.NewInt(1e+4)) // default current proposalDeposit
-	scRentLengthRecommend            = uint64(0)                                             // block number for split each side chain rent fee
+	extraVanity                      = 32                       // Fixed number of extra-data prefix bytes reserved for signer vanity
+	extraSeal                        = 65                       // Fixed number of extra-data suffix bytes reserved for signer seal
+	uncleHash                        = types.CalcUncleHash(nil) // Always Keccak256(RLP([])) as uncles are meaningless outside of PoW.
+	defaultDifficulty                = big.NewInt(1)            // Default difficulty
+	defaultLoopCntRecalculateSigners = uint64(10)               // Default loop count to recreate signers from top tally
+	minerRewardPerThousand           = uint64(618)              // Default reward for miner in each block from block reward (618/1000)
+	candidateNeedPD                  = false                    // is new candidate need Proposal & Declare process
+	mcNetVersion                     = uint64(0)                // the net version of main chain
+	mcLoopStartTime                  = uint64(0)                // the loopstarttime of main chain
+	mcPeriod                         = uint64(0)                // the period of main chain
+	mcSignerLength                   = uint64(0)                // the maxsinger of main chain config
+	//mcNonce                          = uint64(0)                                             // the current Nonce of coinbase on main chain
+	mcTxDefaultGasPrice = big.NewInt(30000000)                                  // default gas price to build transaction for main chain
+	mcTxDefaultGasLimit = uint64(3000000)                                       // default limit to build transaction for main chain
+	proposalDeposit     = new(big.Int).Mul(big.NewInt(1e+18), big.NewInt(1e+4)) // default current proposalDeposit
+	//scRentLengthRecommend            = uint64(0)                                             // block number for split each side chain rent fee
 )
 
 // Various error messages to mark blocks invalid. These should be private to
@@ -611,18 +611,15 @@ func (d *DPoS) Prepare(chain consensus.ChainReader, header *types.Header) error 
 	// Count down for start
 	if header.Number.Uint64() == 1 {
 		for {
-			delay := time.Unix(int64(d.config.GenesisTimestamp-2), 0).Sub(time.Now())
+			delay := time.Until(time.Unix(int64(d.config.GenesisTimestamp-2), 0))
 			if delay <= time.Duration(0) {
 				log.Info("Ready for seal block", "time", time.Now())
 				break
 			} else if delay > time.Duration(d.config.Period)*time.Second {
 				delay = time.Duration(d.config.Period) * time.Second
 			}
-			log.Info("Waiting for seal block", "delay", common.PrettyDuration(time.Unix(int64(d.config.GenesisTimestamp-2), 0).Sub(time.Now())))
-			select {
-			case <-time.After(delay):
-				continue
-			}
+			log.Info("Waiting for seal block", "delay", common.PrettyDuration(time.Until(time.Unix(int64(d.config.GenesisTimestamp-2), 0))))
+			<-time.After(delay)
 		}
 	}
 
@@ -1002,7 +999,7 @@ func (d *DPoS) Seal(chain consensus.ChainReader, block *types.Block, results cha
 	}
 
 	// correct the time
-	delay := time.Unix(int64(header.Time), 0).Sub(time.Now())
+	delay := time.Until(time.Unix(int64(header.Time), 0))
 
 	// Sign all the things!
 	sighash, err := signFn(accounts.Account{Address: signer}, accounts.MimetypeDPoS, DposRLP(header))

@@ -116,7 +116,7 @@ func (s *Snapshot) createSignerQueue() ([]common.Address, error) {
 		// only recalculate signers from to tally per 10 loop,
 		// other loop end just reset the order of signers by block hash (nearly random)
 		tallySlice := s.buildTallySlice()
-		sort.Sort(TallySlice(tallySlice))
+		sort.Sort(tallySlice)
 		queueLength := int(s.config.MaxSignerCount)
 		if queueLength > len(tallySlice) {
 			queueLength = len(tallySlice)
@@ -131,13 +131,13 @@ func (s *Snapshot) createSignerQueue() ([]common.Address, error) {
 			for i, tallyItem := range tallySlice[defaultOfficialFirstLevelCount:defaultOfficialSecondLevelCount] {
 				signerSecondLevelSlice = append(signerSecondLevelSlice, SignerItem{tallyItem.addr, s.HistoryHash[len(s.HistoryHash)-1-i]})
 			}
-			sort.Sort(SignerSlice(signerSecondLevelSlice))
+			sort.Sort(signerSecondLevelSlice)
 			signerSlice = append(signerSlice, signerSecondLevelSlice[:6]...)
 			// 40%
 			for i, tallyItem := range tallySlice[defaultOfficialSecondLevelCount:defaultOfficialThirdLevelCount] {
 				signerThirdLevelSlice = append(signerThirdLevelSlice, SignerItem{tallyItem.addr, s.HistoryHash[len(s.HistoryHash)-1-i]})
 			}
-			sort.Sort(SignerSlice(signerThirdLevelSlice))
+			sort.Sort(signerThirdLevelSlice)
 			signerSlice = append(signerSlice, signerThirdLevelSlice[:4]...)
 			// choose 1 from last
 			maxValidCount := defaultOfficialMaxValidCount
@@ -147,7 +147,7 @@ func (s *Snapshot) createSignerQueue() ([]common.Address, error) {
 			for i, tallyItem := range tallySlice[defaultOfficialThirdLevelCount:maxValidCount] {
 				signerLastLevelSlice = append(signerLastLevelSlice, SignerItem{tallyItem.addr, s.HistoryHash[len(s.HistoryHash)-1-i]})
 			}
-			sort.Sort(SignerSlice(signerLastLevelSlice))
+			sort.Sort(signerLastLevelSlice)
 			signerSlice = append(signerSlice, signerLastLevelSlice[0])
 
 		} else {
@@ -163,7 +163,7 @@ func (s *Snapshot) createSignerQueue() ([]common.Address, error) {
 		}
 	}
 
-	sort.Sort(SignerSlice(signerSlice))
+	sort.Sort(signerSlice)
 	// Set the top candidates in random order base on block hash
 	if len(signerSlice) == 0 {
 		return nil, errSignerQueueEmpty

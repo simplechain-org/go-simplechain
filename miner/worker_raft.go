@@ -125,7 +125,7 @@ func (w *worker) commitRaftWork(status map[uint64]*core.Statistics) {
 	parent := w.raftCtx.speculativeChain.Head()
 
 	tstamp := time.Now().UnixNano()
-	if parentTime:=int64(parent.Time()); parentTime >= tstamp {
+	if parentTime := int64(parent.Time()); parentTime >= tstamp {
 		// Each successive block needs to be after its predecessor.
 		tstamp = parentTime + 1
 	}
