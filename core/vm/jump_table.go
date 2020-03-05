@@ -54,11 +54,11 @@ type operation struct {
 }
 
 var (
-	frontierInstructionSet         = newFrontierInstructionSet()
-	homesteadInstructionSet        = newHomesteadInstructionSet()
-	tangerineWhistleInstructionSet = newTangerineWhistleInstructionSet()
-	spuriousDragonInstructionSet   = newSpuriousDragonInstructionSet()
-	byzantiumInstructionSet        = newByzantiumInstructionSet()
+	FrontierInstructionSet         = newFrontierInstructionSet()
+	HomesteadInstructionSet        = newHomesteadInstructionSet()
+	TangerineWhistleInstructionSet = newTangerineWhistleInstructionSet()
+	SpuriousDragonInstructionSet   = newSpuriousDragonInstructionSet()
+	ByzantiumInstructionSet        = newByzantiumInstructionSet()
 	constantinopleInstructionSet   = newConstantinopleInstructionSet()
 	singularityInstructionSet      = newSingularityInstructionSet()
 )

@@ -110,10 +110,9 @@ var (
 	// This configuration is intentionally not using keyed fields to force anyone
 	// adding flags to the config to also have to set these fields.
 
-	AllCliqueProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, nil, &CliqueConfig{Period: 0, Epoch: 30000}, nil}
+	AllCliqueProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, nil, &CliqueConfig{Period: 0, Epoch: 30000}, nil, nil, false, nil}
 
-	AllDPoSProtocolChanges   = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, nil, nil, nil, &DPoSConfig{Period: 3, Epoch: 30000, MaxSignerCount: 21, MinVoterBalance: new(big.Int).Mul(big.NewInt(10000), big.NewInt(1000000000000000000))}, false, nil}
-
+	AllDPoSProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, nil, nil, nil, &DPoSConfig{Period: 3, Epoch: 30000, MaxSignerCount: 21, MinVoterBalance: new(big.Int).Mul(big.NewInt(10000), big.NewInt(1000000000000000000))}, false, nil}
 
 	// AllScryptProtocolChanges contains every protocol change (EIPs) introduced
 	// and accepted by the Ethereum core developers into the Scrypt consensus.
@@ -121,11 +120,11 @@ var (
 	// This configuration is intentionally not using keyed fields to force anyone
 	// adding flags to the config to also have to set these fields.
 
-	AllScryptProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, nil, nil, new(ScryptConfig)}
+	AllScryptProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, nil, nil, new(ScryptConfig), nil, false, nil}
 
-	TestChainConfig = &ChainConfig{big.NewInt(1), big.NewInt(0), nil, new(EthashConfig), nil, nil}
+	TestChainConfig = &ChainConfig{big.NewInt(1), big.NewInt(0), nil, new(EthashConfig), nil, nil, nil, false, nil}
 
-	TestRules       = TestChainConfig.Rules(new(big.Int))
+	TestRules = TestChainConfig.Rules(new(big.Int))
 )
 
 // TrustedCheckpoint represents a set of post-processed trie roots (CHT and
@@ -294,7 +293,6 @@ func (c *ChainConfig) String() string {
 		engine,
 	)
 }
-
 
 // IsSingularity returns whether num is either equal to the Istanbul fork block or greater.
 func (c *ChainConfig) IsSingularity(num *big.Int) bool {

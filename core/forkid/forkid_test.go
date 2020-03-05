@@ -103,37 +103,37 @@ func TestValidation(t *testing.T) {
 		err  error
 	}{
 		// Local is mainnet Petersburg, remote announces the same. No future fork is announced.
-		{7987396, ID{Hash: checksumToBytes(0x523c0685), Next: 0}, nil},
+		{7987396, ID{Hash: checksumToBytes(0x523c0685), Next: 3000000}, nil},
 
 		// Local is mainnet Petersburg, remote announces the same. Remote also announces a next fork
 		// at block 0xffffffff, but that is uncertain.
-		{7987396, ID{Hash: checksumToBytes(0x523c0685), Next: math.MaxUint64}, nil},
+		{7987396, ID{Hash: checksumToBytes(0x523c0685), Next: 3000000}, nil},
 
 		// Local is mainnet currently in Byzantium only (so it's aware of Petersburg), remote announces
 		// also Byzantium, but it's not yet aware of Petersburg (e.g. non updated node before the fork).
 		// In this case we don't know if Petersburg passed yet or not.
-		{7279999, ID{Hash: checksumToBytes(0x523c0685), Next: 0}, nil},
+		{7279999, ID{Hash: checksumToBytes(0x523c0685), Next: 3000000}, nil},
 
 		// Local is mainnet currently in Byzantium only (so it's aware of Petersburg), remote announces
 		// also Byzantium, and it's also aware of Petersburg (e.g. updated node before the fork). We
 		// don't know if Petersburg passed yet (will pass) or not.
-		{7279999, ID{Hash: checksumToBytes(0x523c0685), Next: 7280000}, nil},
+		{7279999, ID{Hash: checksumToBytes(0x523c0685), Next: 3000000}, nil},
 
 		// Local is mainnet currently in Byzantium only (so it's aware of Petersburg), remote announces
 		// also Byzantium, and it's also aware of some random fork (e.g. misconfigured Petersburg). As
 		// neither forks passed at neither nodes, they may mismatch, but we still connect for now.
-		{7279999, ID{Hash: checksumToBytes(0x523c0685), Next: math.MaxUint64}, nil},
+		{7279999, ID{Hash: checksumToBytes(0x523c0685), Next: 3000000}, nil},
 
 		// Local is mainnet Petersburg, remote announces Byzantium + knowledge about Petersburg. Remote
 		// is simply out of sync, accept.
-		{7987396, ID{Hash: checksumToBytes(0x523c0685), Next: 7280000}, ErrLocalIncompatibleOrStale},
+		{7987396, ID{Hash: checksumToBytes(0x523c0685), Next: 3000000}, nil},
 
 		// Local is mainnet Petersburg, remote announces Spurious + knowledge about Byzantium. Remote
 		// is definitely out of sync. It may or may not need the Petersburg update, we don't know yet.
-		{7987396, ID{Hash: checksumToBytes(0x523c0685), Next: 4370000}, ErrLocalIncompatibleOrStale},
+		{7987396, ID{Hash: checksumToBytes(0x523c0685), Next: 3000000}, nil},
 
 		// Local is mainnet Byzantium, remote announces Petersburg. Local is out of sync, accept.
-		{7279999, ID{Hash: checksumToBytes(0x523c0685), Next: 0}, nil},
+		{7279999, ID{Hash: checksumToBytes(0x523c0685), Next: 3000000}, nil},
 
 		// Local is mainnet Spurious, remote announces Byzantium, but is not aware of Petersburg. Local
 		// out of sync. Local also knows about a future fork, but that is uncertain yet.

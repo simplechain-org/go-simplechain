@@ -43,7 +43,7 @@ func (r *Raft) FinalizeAndAssemble(chain consensus.ChainReader, header *types.He
 	config := chain.Config()
 	// commit state root after all state transitions.
 	ethash.AccumulateRewards(config, state, header, nil)
-	header.Root = state.IntermediateRoot(config.IsEIP158(header.Number))
+	header.Root = state.IntermediateRoot(true)
 	header.Bloom = types.CreateBloom(receipts)
 
 	// update block hash since it is now available, but was not when the
@@ -65,7 +65,7 @@ func (r *Raft) FinalizeAndAssemble(chain consensus.ChainReader, header *types.He
 
 	block := types.NewBlock(header, txs, nil, receipts)
 
-	if _, err := state.Commit(config.IsEIP158(block.Number())); err != nil {
+	if _, err := state.Commit(true); err != nil {
 		return nil, err
 	}
 

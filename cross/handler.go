@@ -40,16 +40,16 @@ func errResp(code errCode, format string, v ...interface{}) error {
 }
 
 type MsgHandler struct {
-	roleHandler    RoleHandler
-	role           common.ChainRole
-	ctxStore       CtxStore
-	rtxStore       rtxStore
-	blockchain     *core.BlockChain
-	pm             ProtocolManager
-	crossMsgReader <-chan interface{}
-	crossMsgWriter chan<- interface{}
-	quitSync       chan struct{}
-	knownRwssTx    map[common.Hash]*TranParam
+	roleHandler         RoleHandler
+	role                common.ChainRole
+	ctxStore            CtxStore
+	rtxStore            rtxStore
+	blockchain          *core.BlockChain
+	pm                  ProtocolManager
+	crossMsgReader      <-chan interface{}
+	crossMsgWriter      chan<- interface{}
+	quitSync            chan struct{}
+	knownRwssTx         map[common.Hash]*TranParam
 	makerStartEventCh   chan core.NewCTxsEvent
 	makerStartEventSub  event.Subscription
 	makerSignedCh       chan core.NewCWsEvent
@@ -363,7 +363,6 @@ func (this *MsgHandler) GetTxForLockOut(rwss []*types.ReceptTransactionWithSigna
 	var errorRws []*types.ReceptTransactionWithSignatures
 	var count, send, exec, errTx1, errTx2 uint64
 	tokenAddress := this.GetContractAddress()
-
 
 	for _, rws := range rwss {
 		//TODO EstimateGas不仅测试GasLimit，同时能判断该交易是否执行成功

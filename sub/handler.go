@@ -105,8 +105,8 @@ type ProtocolManager struct {
 
 	msgHandler *cross.MsgHandler
 
-	raftMode   bool
-	engine     consensus.Engine // used for istanbul consensus
+	raftMode bool
+	engine   consensus.Engine // used for istanbul consensus
 }
 
 // NewProtocolManager returns a new Ethereum sub protocol manager. The Ethereum sub protocol manages peers capable

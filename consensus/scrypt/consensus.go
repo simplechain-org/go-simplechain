@@ -407,6 +407,7 @@ func (powScrypt *PowScrypt) Finalize(chain consensus.ChainReader, header *types.
 	// Accumulate any block and uncle rewards and commit the final state root
 	accumulateRewards(chain.Config(), state, header, uncles)
 	header.Root = state.IntermediateRoot(true)
+	return nil
 }
 
 // FinalizeAndAssemble implements consensus.Engine, accumulating the block and
