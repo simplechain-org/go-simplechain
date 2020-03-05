@@ -199,7 +199,7 @@ func (p *testPeer) handshake(t *testing.T, td *big.Int, head common.Hash, genesi
 			CurrentBlock:    head,
 			GenesisBlock:    genesis,
 		}
-	case p.version == eth64:
+	case p.version == eth64: //p.version == istanbul65
 		msg = &statusData{
 			ProtocolVersion: uint32(p.version),
 			NetworkID:       DefaultConfig.NetworkId,
@@ -223,4 +223,8 @@ func (p *testPeer) handshake(t *testing.T, td *big.Int, head common.Hash, genesi
 // manager of termination.
 func (p *testPeer) close() {
 	p.app.Close()
+}
+func (p *testTxPool) AddRemote(tx *types.Transaction) error {
+	errs := p.AddRemotes([]*types.Transaction{tx})
+	return errs[0]
 }

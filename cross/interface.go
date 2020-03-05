@@ -30,8 +30,6 @@ type CtxStore interface {
 
 	SubscribeCWssResultEvent(chan<- core.NewCWsEvent) event.Subscription
 
-	//SubscribeNewCWssEvent(chan<- core.NewCWssEvent) event.Subscription
-
 	ReadFromLocals(common.Hash) *types.CrossTransactionWithSignatures
 
 	List(int, bool) []*types.CrossTransactionWithSignatures

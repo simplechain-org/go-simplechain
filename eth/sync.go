@@ -144,16 +144,19 @@ func (pm *ProtocolManager) syncer() {
 	for {
 		select {
 		case <-pm.newPeerCh:
-			time.Sleep(time.Second * 10)
 			// Make sure we have peers to select from, then sync
 			if pm.peers.Len() < minDesiredPeerCount {
 				break
 			}
-			go pm.synchronise(pm.peers.BestPeer())
+			if !pm.raftMode {
+				go pm.synchronise(pm.peers.BestPeer())
+			}
 
 		case <-forceSync.C:
 			// Force a sync even if not enough peers are present
-			go pm.synchronise(pm.peers.BestPeer())
+			if !pm.raftMode {
+				go pm.synchronise(pm.peers.BestPeer())
+			}
 
 		case <-pm.noMorePeers:
 			return
@@ -222,8 +225,13 @@ type ctxsync struct {
 }
 
 func (pm *ProtocolManager) syncCtxs(p *peer) {
-	var txs []*types.CrossTransactionWithSignatures
-	txs = pm.msgHandler.GetCtxstore().List(0, true)
+	if pm.msgHandler == nil {
+		return
+	}
+	if pm.msgHandler.GetCtxstore() == nil {
+		return
+	}
+	txs := pm.msgHandler.GetCtxstore().List(0, true)
 	if len(txs) == 0 {
 		return
 	}

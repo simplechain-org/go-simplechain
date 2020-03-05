@@ -33,7 +33,10 @@ import (
 const (
 	eth63 = 63
 	eth64 = 64
+	//istanbul65 = 65
 )
+
+// move to consensus/protocol
 
 // protocolName is the official short name of the protocol used during capability negotiation.
 const protocolName = "eth"

@@ -890,8 +890,7 @@ func (req *findnodeV4) handle(t *UDPv4, from *net.UDPAddr, fromID enode.ID, mac 
 	// Determine closest nodes.
 	target := enode.ID(crypto.Keccak256Hash(req.Target[:]))
 	t.tab.mutex.Lock()
-	//closest := t.tab.closest(target, bucketSize, true).entries
-	closest := t.tab.closest(target, bucketSize, false).entries
+	closest := t.tab.closest(target, bucketSize, true).entries
 	t.tab.mutex.Unlock()
 
 	// Send neighbors in chunks with at most maxNeighbors per packet

@@ -158,6 +158,11 @@ var (
 		utils.ContractMainFlag,
 		utils.ContractSubFlag,
 		configFileFlag,
+		utils.RaftModeFlag,
+		utils.RaftJoinExistingFlag,
+		utils.RaftPortFlag,
+		utils.IstanbulRequestTimeoutFlag,
+		utils.IstanbulBlockPeriodFlag,
 	}
 
 	rpcFlags = []cli.Flag{

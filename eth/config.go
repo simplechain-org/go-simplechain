@@ -26,6 +26,7 @@ import (
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/consensus/ethash"
+	"github.com/simplechain-org/go-simplechain/consensus/istanbul"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/eth/downloader"
 	"github.com/simplechain-org/go-simplechain/eth/gasprice"
@@ -64,6 +65,7 @@ var DefaultConfig = Config{
 	CtxStore: core.DefaultCtxStoreConfig,
 	RtxStore: core.DefaultRtxStoreConfig,
 	Role:     common.RoleMainChain,
+	Istanbul: *istanbul.DefaultConfig,
 }
 
 func init() {
@@ -130,6 +132,9 @@ type Config struct {
 
 	// Ethash options
 	Ethash ethash.Config
+
+	// Istanbul options
+	Istanbul istanbul.Config
 
 	// Transaction pool options
 	TxPool core.TxPoolConfig

@@ -88,6 +88,12 @@ func Register(client *rpc.Client) {
 
 	out, err := abi.Pack("chainRegister", remoteChainId, signConfirmCount, anchors)
 
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+
 	input := hexutil.Bytes(out)
 
 	fmt.Println("input=", input)

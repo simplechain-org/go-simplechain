@@ -23,6 +23,7 @@ import (
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/crypto"
+	"github.com/simplechain-org/go-simplechain/rpc"
 )
 
 // Genesis hashes to enforce below configs on.
@@ -108,16 +109,22 @@ var (
 	//
 	// This configuration is intentionally not using keyed fields to force anyone
 	// adding flags to the config to also have to set these fields.
+
 	AllCliqueProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, nil, &CliqueConfig{Period: 0, Epoch: 30000}, nil}
+
+	AllDPoSProtocolChanges   = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, nil, nil, nil, &DPoSConfig{Period: 3, Epoch: 30000, MaxSignerCount: 21, MinVoterBalance: new(big.Int).Mul(big.NewInt(10000), big.NewInt(1000000000000000000))}, false, nil}
+
 
 	// AllScryptProtocolChanges contains every protocol change (EIPs) introduced
 	// and accepted by the Ethereum core developers into the Scrypt consensus.
 	//
 	// This configuration is intentionally not using keyed fields to force anyone
 	// adding flags to the config to also have to set these fields.
+
 	AllScryptProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, nil, nil, new(ScryptConfig)}
 
 	TestChainConfig = &ChainConfig{big.NewInt(1), big.NewInt(0), nil, new(EthashConfig), nil, nil}
+
 	TestRules       = TestChainConfig.Rules(new(big.Int))
 )
 
@@ -175,9 +182,12 @@ type ChainConfig struct {
 	EWASMBlock       *big.Int `json:"ewasmBlock,omitempty"`       // EWASM switch block (nil = no fork, 0 = already activated)
 
 	// Various consensus engines
-	Ethash *EthashConfig `json:"ethash,omitempty"`
-	Clique *CliqueConfig `json:"clique,omitempty"`
-	Scrypt *ScryptConfig `json:"scrypt,omitempty"`
+	Ethash   *EthashConfig   `json:"ethash,omitempty"`
+	Clique   *CliqueConfig   `json:"clique,omitempty"`
+	Scrypt   *ScryptConfig   `json:"scrypt,omitempty"`
+	DPoS     *DPoSConfig     `json:"dpos,omitempty"`
+	Raft     bool            `json:"raft,omitempty"`
+	Istanbul *IstanbulConfig `json:"istanbul,omitempty"`
 }
 
 // EthashConfig is the consensus engine configs for proof-of-work based sealing.
@@ -197,6 +207,64 @@ type CliqueConfig struct {
 // String implements the stringer interface, returning the consensus engine details.
 func (c *CliqueConfig) String() string {
 	return "clique"
+}
+
+// IstanbulConfig is the consensus engine configs for Istanbul based sealing.
+type IstanbulConfig struct {
+	Epoch          uint64   `json:"epoch"`                    // Epoch length to reset votes and checkpoint
+	ProposerPolicy uint64   `json:"policy"`                   // The policy for proposer selection
+	Ceil2Nby3Block *big.Int `json:"ceil2Nby3Block,omitempty"` // Number of confirmations required to move from one state to next [2F + 1 to Ceil(2N/3)]
+}
+
+type RaftConfig struct {
+	BlockTime uint64 `json:"blockTime"`
+}
+
+// String implements the stringer interface, returning the consensus engine details.
+func (c *IstanbulConfig) String() string {
+	return "istanbul"
+}
+
+type GenesisAccount struct {
+	Balance string `json:"balance"`
+}
+
+// DPoSLightConfig is the config for light node of dpos
+type DPoSLightConfig struct {
+	Alloc map[common.UnprefixedAddress]GenesisAccount `json:"alloc"`
+}
+
+// DPoSConfig is the consensus engine configs for delegated-proof-of-stake based sealing.
+type DPoSConfig struct {
+	Period           uint64                     `json:"period"`           // Number of seconds between blocks to enforce
+	Epoch            uint64                     `json:"epoch"`            // Epoch length to reset votes and checkpoint
+	MaxSignerCount   uint64                     `json:"maxSignersCount"`  // Max count of signers
+	MinVoterBalance  *big.Int                   `json:"minVoterBalance"`  // Min voter balance to valid this vote
+	GenesisTimestamp uint64                     `json:"genesisTimestamp"` // The LoopStartTime of first Block
+	SelfVoteSigners  []common.UnprefixedAddress `json:"signers"`          // Signers vote by themselves to seal the block, make sure the signer accounts are pre-funded
+	SideChain        bool                       `json:"sideChain"`        // If side chain or not
+	MCRPCClient      *rpc.Client                // Main chain rpc client for side chain
+	PBFTEnable       bool                       `json:"pbft"` //
+	VoterReward      bool                       `json:"voterReward"`
+
+	TrantorBlock  *big.Int         `json:"trantorBlock,omitempty"`  // Trantor switch block (nil = no fork)
+	TerminusBlock *big.Int         `json:"terminusBlock,omitempty"` // Terminus switch block (nil = no fork)
+	LightConfig   *DPoSLightConfig `json:"lightConfig,omitempty"`
+}
+
+// String implements the stringer interface, returning the consensus engine details.
+func (a *DPoSConfig) String() string {
+	return "dpos"
+}
+
+// IsTrantor returns whether num is either equal to the Trantor block or greater.
+func (a *DPoSConfig) IsTrantor(num *big.Int) bool {
+	return isForked(a.TrantorBlock, num)
+}
+
+// IsTerminus returns whether num is either equal to the Terminus block or greater.
+func (a *DPoSConfig) IsTerminus(num *big.Int) bool {
+	return isForked(a.TerminusBlock, num)
 }
 
 // ScryptConfig is the consensus engine configs for proof-of-work based sealing.
@@ -226,6 +294,7 @@ func (c *ChainConfig) String() string {
 		engine,
 	)
 }
+
 
 // IsSingularity returns whether num is either equal to the Istanbul fork block or greater.
 func (c *ChainConfig) IsSingularity(num *big.Int) bool {

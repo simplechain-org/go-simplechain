@@ -29,10 +29,13 @@ import (
 	"github.com/naoina/toml"
 	"github.com/simplechain-org/go-simplechain/cmd/utils"
 	"github.com/simplechain-org/go-simplechain/common"
+	raftBackend "github.com/simplechain-org/go-simplechain/consensus/raft/backend"
 	"github.com/simplechain-org/go-simplechain/eth"
 	"github.com/simplechain-org/go-simplechain/node"
+	"github.com/simplechain-org/go-simplechain/p2p/enode"
 	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/rpctx"
+	"github.com/simplechain-org/go-simplechain/sub"
 	whisper "github.com/simplechain-org/go-simplechain/whisper/whisperv6"
 	cli "gopkg.in/urfave/cli.v1"
 )
@@ -192,7 +195,10 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 
 	cfg.Eth.Role = role
 
-	utils.RegisterEthService(stack, &cfg.Eth)
+	subChan := utils.RegisterEthService(stack, &cfg.Eth)
+	if ctx.GlobalBool(utils.RaftModeFlag.Name) {
+		RegisterRaftService(stack, ctx, cfg, subChan)
+	}
 
 	// Whisper must be explicitly enabled by specifying at least 1 whisper flag or in dev mode
 	shhEnabled := enableWhisper(ctx)
@@ -218,6 +224,53 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 		utils.RegisterEthStatsService(stack, cfg.Ethstats.URL)
 	}
 	return stack
+}
+
+func RegisterRaftService(stack *node.Node, ctx *cli.Context, cfg gethConfig, subChan <-chan *sub.Ethereum) {
+	datadir := ctx.GlobalString(utils.DataDirFlag.Name)
+	joinExistingId := ctx.GlobalInt(utils.RaftJoinExistingFlag.Name)
+
+	raftPort := uint16(ctx.GlobalInt(utils.RaftPortFlag.Name))
+
+	if err := stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
+		privkey := cfg.Node.NodeKey()
+		strId := enode.PubkeyToIDV4(&privkey.PublicKey).String()
+		peers := cfg.Node.StaticNodes()
+
+		var myId uint16
+		var joinExisting bool
+
+		if joinExistingId > 0 {
+			myId = uint16(joinExistingId)
+			joinExisting = true
+		} else if len(peers) == 0 {
+			utils.Fatalf("Raft-based consensus requires either (1) an initial peers list (in static-nodes.json) including this enode hash (%v), or (2) the flag --raftjoinexisting RAFT_ID, where RAFT_ID has been issued by an existing cluster member calling `raft.addPeer(ENODE_ID)` with an enode ID containing this node's enode hash.", strId)
+		} else {
+			peerIds := make([]string, len(peers))
+
+			for peerIdx, peer := range peers {
+				if !peer.HasRaftPort() {
+					utils.Fatalf("raftport querystring parameter not specified in static-node enode ID: %v. please check your static-nodes.json file.", peer.String())
+				}
+
+				peerId := peer.ID().String()
+				peerIds[peerIdx] = peerId
+				if peerId == strId {
+					myId = uint16(peerIdx) + 1
+				}
+			}
+
+			if myId == 0 {
+				utils.Fatalf("failed to find local enode ID (%v) amongst peer IDs: %v", strId, peerIds)
+			}
+		}
+
+		ethereum := <-subChan
+		return raftBackend.New(ctx, myId, raftPort, joinExisting, ethereum, peers, datadir, ethereum.GetCtxStore())
+	}); err != nil {
+		utils.Fatalf("Failed to register the Raft service: %v", err)
+	}
+
 }
 
 // dumpConfig is the dumpconfig command.

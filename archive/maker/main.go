@@ -80,6 +80,10 @@ func Maker(client *rpc.Client) {
 
 	//out, err := abi.Pack("makerStart",remoteChainId ,des,[]byte("In the end, it’s not the years in your life that count. It’s the life in your years."))
 	out, err := abi.Pack("makerStart", remoteChainId, des, []byte{})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 	input := hexutil.Bytes(out)
 
 	//fmt.Println("input=",input,"id=",remoteChainId,"des=",des)

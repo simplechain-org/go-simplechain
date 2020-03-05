@@ -2,9 +2,10 @@ package cross
 
 import (
 	"context"
+	"math/big"
+
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/types"
-	"math/big"
 )
 
 type Peer interface {
@@ -21,15 +22,6 @@ type Peer interface {
 	AsyncSendInternalCrossTransactionWithSignatures(cwss []*types.CrossTransactionWithSignatures)
 }
 
-//type MsgHandler interface {
-//	Start()
-//	Stop()
-//	HandleMsg(msg p2p.Msg, p Peer) error
-//	SetProtocolManager(pm ProtocolManager)
-//	SetGasPriceOracle(gpo GasPriceOracle)
-//	GetCtxstore() cross.CtxStore
-//}
-
 type ProtocolManager interface {
 	BroadcastInternalCrossTransactionWithSignature(cwss []*types.CrossTransactionWithSignatures)
 	BroadcastCtx(ctx []*types.CrossTransaction)
@@ -40,7 +32,6 @@ type ProtocolManager interface {
 	BroadcastCWss(cwss []*types.CrossTransactionWithSignatures)
 	AddRemotes([]*types.Transaction)
 	SetMsgHandler(msgHandler *MsgHandler)
-	//Pending() (map[common.Address]Transactions, error)
 	GetAnchorTxs(address common.Address) (map[common.Address]types.Transactions, error)
 }
 

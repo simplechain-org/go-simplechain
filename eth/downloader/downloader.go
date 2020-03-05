@@ -1322,6 +1322,7 @@ func (d *Downloader) fetchParts(deliveryCh chan dataPack, deliver func(dataPack)
 				if progress {
 					progressed = true
 				}
+
 				if request == nil {
 					continue
 				}

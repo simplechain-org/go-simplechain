@@ -19,14 +19,18 @@ package miner
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"math/big"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/eapache/channels"
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"github.com/simplechain-org/go-simplechain/consensus"
+	"github.com/simplechain-org/go-simplechain/consensus/misc"
+	"github.com/simplechain-org/go-simplechain/consensus/raft"
 	"github.com/simplechain-org/go-simplechain/consensus/scrypt"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/state"
@@ -60,7 +64,8 @@ const (
 
 	// minRecommitInterval is the minimal time interval to recreate the mining block with
 	// any newly arrived transactions.
-	minRecommitInterval = 1 * time.Second
+	minRecommitInterval     = 1 * time.Second
+	minRaftRecommitInterval = 50 * time.Millisecond
 
 	// maxRecommitInterval is the maximum time interval to recreate the mining block with
 	// any newly arrived transactions.
@@ -178,7 +183,9 @@ type worker struct {
 	fullTaskHook func()                             // Method to call before pushing the full sealing task.
 	resubmitHook func(time.Duration, time.Duration) // Method to call upon updating resubmitting interval.
 	agents       map[Agent]struct{}
-	ctxStore     *core.CtxStore
+
+	ctxStore *core.CtxStore
+	raftCtx  *raftContext
 }
 
 func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus.Engine, eth Backend, mux *event.TypeMux, isLocalBlock func(*types.Block) bool, init bool, ctxStore *core.CtxStore) *worker {
@@ -207,6 +214,7 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 		agents:             make(map[Agent]struct{}),
 		ctxStore:           ctxStore,
 	}
+
 	// Subscribe NewTxsEvent for tx pool
 	worker.txsSub = eth.TxPool().SubscribeNewTxsEvent(worker.txsCh)
 	// Subscribe events for blockchain
@@ -215,9 +223,25 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 
 	// Sanitize recommit interval if the user-specified one is too short.
 	recommit := worker.config.Recommit
-	if recommit < minRecommitInterval {
+	if !chainConfig.Raft && recommit < minRecommitInterval {
 		log.Warn("Sanitizing miner recommit interval", "provided", recommit, "updated", minRecommitInterval)
 		recommit = minRecommitInterval
+	} else if chainConfig.Raft && recommit < minRaftRecommitInterval {
+		log.Warn("Sanitizing miner recommit interval", "provided", recommit, "updated", minRecommitInterval)
+		recommit = minRaftRecommitInterval
+	}
+
+	if chainConfig.Raft {
+		worker.raftCtx = &raftContext{
+			shouldMine:              channels.NewRingChannel(1),
+			speculativeChain:        raft.NewSpeculativeChain(),
+			invalidRaftOrderingChan: make(chan raft.InvalidRaftOrdering, 1),
+		}
+		worker.raftCtx.speculativeChain.Clear(worker.chain.CurrentBlock())
+
+		go worker.raftLoop()
+		go worker.mintingLoop(recommit)
+		return worker
 	}
 
 	go worker.mainLoop()
@@ -275,7 +299,14 @@ func (w *worker) start() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	atomic.StoreInt32(&w.running, 1)
-	w.startCh <- struct{}{}
+	if istanbul, ok := w.engine.(consensus.Istanbul); ok {
+		istanbul.Start(w.chain, w.chain.CurrentBlock, w.chain.HasBadBlock)
+	}
+	if w.chainConfig.Raft {
+		w.requestMinting()
+	} else {
+		w.startCh <- struct{}{}
+	}
 	for agent := range w.agents {
 		agent.Start()
 	}
@@ -289,6 +320,9 @@ func (w *worker) stop() {
 		for agent := range w.agents {
 			agent.Stop()
 		}
+	}
+	if istanbul, ok := w.engine.(consensus.Istanbul); ok {
+		istanbul.Stop()
 	}
 	atomic.StoreInt32(&w.running, 0)
 }
@@ -314,6 +348,13 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 
 	timer := time.NewTimer(0)
 	<-timer.C // discard the initial tick
+
+	// set the delay equal to period if use dpos consensus
+	dposDelay := time.Duration(300) * time.Second
+	if w.chainConfig.DPoS != nil && w.chainConfig.DPoS.Period > 0 {
+		dposDelay = time.Duration(w.chainConfig.DPoS.Period) * time.Second
+	}
+	dposTimer := time.NewTimer(dposDelay)
 
 	// commit aborts in-flight transaction execution with given signal and resubmits a new one.
 	commit := func(noempty bool, s int32) {
@@ -365,9 +406,21 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 			commit(false, commitInterruptNewHead)
 
 		case head := <-w.chainHeadCh:
+			if ist, ok := w.engine.(consensus.Istanbul); ok {
+				if err := ist.NewChainHead(); err != nil {
+					log.Warn("new istanbul chain head failed", "error", err.Error())
+				}
+			}
 			clearPending(head.Block.NumberU64())
 			timestamp = time.Now().Unix()
 			commit(false, commitInterruptNewHead)
+
+		case <-dposTimer.C:
+			// try to seal block in each period, even no new block received in dpos
+			if w.isRunning() && w.chainConfig.DPoS != nil && w.chainConfig.DPoS.Period > 0 {
+				commit(false, commitInterruptNewHead)
+				dposTimer.Reset(dposDelay)
+			}
 
 		case <-timer.C:
 			// If mining is running resubmit a new work cycle periodically to pull in
@@ -426,6 +479,7 @@ func (w *worker) mainLoop() {
 		select {
 		case req := <-w.newWorkCh:
 			w.commitNewWork(req.interrupt, req.noempty, req.timestamp, w.ctxStore.Status())
+
 		case ev := <-w.chainSideCh:
 			// Short circuit for duplicate side blocks
 			if _, exist := w.localUncles[ev.Block.Hash()]; exist {
@@ -987,7 +1041,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64, 
 
 // commit runs any post-transaction state modifications, assembles the final block
 // and commits new work if consensus engine is running.
-func (w *worker) commit(uncles []*types.Header, interval func(), update bool, start time.Time) error {
+func (w *worker) commit(uncles []*types.Header, interval func(), update bool, start time.Time) {
 	// Deep copy receipts here to avoid interaction between different tasks.
 	receipts := make([]*types.Receipt, len(w.current.receipts))
 	for i, l := range w.current.receipts {
@@ -997,7 +1051,8 @@ func (w *worker) commit(uncles []*types.Header, interval func(), update bool, st
 	s := w.current.state.Copy()
 	block, err := w.engine.FinalizeAndAssemble(w.chain, w.current.header, s, w.current.txs, uncles, w.current.receipts)
 	if err != nil {
-		return err
+		log.Warn("Fail to Finalize block", "err", err)
+		return
 	}
 	if w.isRunning() {
 		if interval != nil {
@@ -1006,6 +1061,13 @@ func (w *worker) commit(uncles []*types.Header, interval func(), update bool, st
 		select {
 		case w.taskCh <- &task{receipts: receipts, state: s, block: block, createdAt: time.Now()}:
 			w.unconfirmed.Shift(block.NumberU64() - 1)
+
+			if w.chainConfig.DPoS != nil && w.chainConfig.DPoS.PBFTEnable {
+				err = w.sendConfirmTx(block.NumberU64() - 1)
+				if err != nil {
+					log.Info("Fail to Sign the transaction by coinbase", "err", err)
+				}
+			}
 
 			feesWei := new(big.Int)
 			for i, tx := range block.Transactions() {
@@ -1023,7 +1085,6 @@ func (w *worker) commit(uncles []*types.Header, interval func(), update bool, st
 	if update {
 		w.updateSnapshot()
 	}
-	return nil
 }
 
 // postSideBlock fires a side chain event, only use it for testing.
@@ -1057,6 +1118,40 @@ func (w *worker) seal(work *types.Block) {
 	for agent := range w.agents {
 		agent.DispatchWork(work)
 	}
+}
+
+func (w *worker) sendConfirmTx(blockNumber uint64) error {
+	wallets := w.eth.AccountManager().Wallets()
+	// wallets check
+	if len(wallets) == 0 {
+		return nil
+	}
+	for _, wallet := range wallets {
+		if len(wallet.Accounts()) == 0 {
+			continue
+		} else {
+			for _, account := range wallet.Accounts() {
+				if account.Address == w.coinbase {
+					// coinbase account found
+					// send custom tx
+					nonce := w.snapshotState.GetNonce(account.Address)
+					tmpTx := types.NewTransaction(nonce, account.Address, big.NewInt(0), uint64(100000), big.NewInt(10000), []byte(fmt.Sprintf("dpos:1:event:confirm:%d", blockNumber)))
+					signedTx, err := wallet.SignTx(account, tmpTx, w.eth.BlockChain().Config().ChainID)
+					if err != nil {
+						return err
+					} else {
+						err = w.eth.TxPool().AddLocal(signedTx)
+						if err != nil {
+							return err
+						}
+					}
+					return nil
+				}
+			}
+		}
+
+	}
+	return nil
 }
 
 func (env *environment) storeCheck(tx *types.Transaction, address common.Address) bool {

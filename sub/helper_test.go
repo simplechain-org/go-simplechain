@@ -210,3 +210,7 @@ func (p *testPeer) handshake(t *testing.T, td *big.Int, head common.Hash, genesi
 func (p *testPeer) close() {
 	p.app.Close()
 }
+func (p *testTxPool) AddRemote(tx *types.Transaction) error {
+	errs := p.AddRemotes([]*types.Transaction{tx})
+	return errs[0]
+}
