@@ -32,6 +32,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/core/forkid"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/cross"
+	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/eth/downloader"
 	"github.com/simplechain-org/go-simplechain/eth/fetcher"
 	"github.com/simplechain-org/go-simplechain/ethdb"
@@ -103,6 +104,8 @@ type ProtocolManager struct {
 	serverPool *serverPool
 
 	msgHandler *cross.MsgHandler
+	raftMode   bool
+	engine     consensus.Engine // used for istanbul consensus
 }
 
 // NewProtocolManager returns a new Ethereum sub protocol manager. The Ethereum sub protocol manages peers capable
@@ -123,7 +126,14 @@ func NewProtocolManager(config *params.ChainConfig, checkpoint *params.TrustedCh
 		ctxsyncCh:   make(chan *ctxsync),
 		quitSync:    make(chan struct{}),
 		serverPool:  serverPool,
+		raftMode:    config.Raft,
+		engine:      engine,
 	}
+
+	if istanbul, ok := manager.engine.(consensus.Istanbul); ok {
+		istanbul.SetBroadcaster(manager)
+	}
+
 	if mode == downloader.FullSync {
 		// The database seems empty as the current block is the genesis. Yet the fast
 		// block is ahead, so fast sync was enabled for this node at a certain point.
@@ -265,9 +275,16 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 	pm.txsSub = pm.txpool.SubscribeNewTxsEvent(pm.txsCh)
 	go pm.txBroadcastLoop()
 
-	// broadcast mined blocks
-	pm.minedBlockSub = pm.eventMux.Subscribe(core.NewMinedBlockEvent{})
-	go pm.minedBroadcastLoop()
+	if !pm.raftMode {
+		// broadcast mined blocks
+		pm.minedBlockSub = pm.eventMux.Subscribe(core.NewMinedBlockEvent{})
+		go pm.minedBroadcastLoop()
+	} else {
+		// We set this immediately in raft mode to make sure the miner never drops
+		// incoming txes. Raft mode doesn't use the fetcher or downloader, and so
+		// this would never be set otherwise.
+		atomic.StoreUint32(&pm.acceptTxs, 1)
+	}
 
 	// start sync handlers
 	go pm.ctxsyncLoop()
@@ -283,8 +300,10 @@ func (pm *ProtocolManager) Stop() {
 
 	log.Info("Stopping Subchain protocol")
 
-	pm.txsSub.Unsubscribe()        // quits txBroadcastLoop
-	pm.minedBlockSub.Unsubscribe() // quits blockBroadcastLoop
+	pm.txsSub.Unsubscribe() // quits txBroadcastLoop
+	if !pm.raftMode {
+		pm.minedBlockSub.Unsubscribe() // quits blockBroadcastLoop
+	}
 
 	// Quit the sync loop.
 	// After this send has completed, no new peers will be accepted.
@@ -403,6 +422,26 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		return errResp(ErrMsgTooLarge, "%v > %v", msg.Size, protocolMaxMsgSize)
 	}
 	defer msg.Discard()
+
+	if pm.raftMode {
+		if msg.Code != TransactionMsg &&
+			msg.Code != GetBlockHeadersMsg && msg.Code != BlockHeadersMsg &&
+			msg.Code != GetBlockBodiesMsg && msg.Code != BlockBodiesMsg {
+
+			log.Info("raft: ignoring message", "code", msg.Code)
+
+			return nil
+		}
+	}
+
+	if istanbul, ok := pm.engine.(consensus.Istanbul); ok {
+		pubKey := p.Node().Pubkey()
+		addr := crypto.PubkeyToAddress(*pubKey)
+		handled, err := istanbul.HandleMsg(addr, msg)
+		if handled {
+			return err
+		}
+	}
 
 	// Handle the message depending on its contents
 	switch {
@@ -986,4 +1025,20 @@ func (pm *ProtocolManager) GetNonce(address common.Address) uint64 {
 
 func (pm *ProtocolManager) GetAnchorTxs(address common.Address) (map[common.Address]types.Transactions, error) {
 	return pm.txpool.GetAnchorTxs(address)
+}
+
+func (pm *ProtocolManager) Enqueue(id string, block *types.Block) {
+	pm.fetcher.Enqueue(id, block)
+}
+
+func (pm *ProtocolManager) FindPeers(targets map[common.Address]bool) map[common.Address]consensus.Peer {
+	m := make(map[common.Address]consensus.Peer)
+	for _, p := range pm.peers.Peers() {
+		pubKey := p.Node().Pubkey()
+		addr := crypto.PubkeyToAddress(*pubKey)
+		if targets[addr] {
+			m[addr] = p
+		}
+	}
+	return m
 }

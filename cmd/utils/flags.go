@@ -782,6 +782,38 @@ var (
 		Usage: "Restrict connection between two whisper light clients",
 	}
 
+	// Raft flags
+	RaftModeFlag = cli.BoolFlag{
+		Name:  "raft",
+		Usage: "If enabled, uses Raft instead of Quorum Chain for consensus",
+	}
+	RaftJoinExistingFlag = cli.IntFlag{
+		Name:  "raftjoinexisting",
+		Usage: "The raft ID to assume when joining an pre-existing cluster",
+		Value: 0,
+	}
+	EmitCheckpointsFlag = cli.BoolFlag{
+		Name:  "emitcheckpoints",
+		Usage: "If enabled, emit specially formatted logging checkpoints",
+	}
+	RaftPortFlag = cli.IntFlag{
+		Name:  "raftport",
+		Usage: "The port to bind for the raft transport",
+		Value: 50400,
+	}
+
+	// Istanbul settings
+	IstanbulRequestTimeoutFlag = cli.Uint64Flag{
+		Name:  "istanbul.requesttimeout",
+		Usage: "Timeout for each Istanbul round in milliseconds",
+		Value: eth.DefaultConfig.Istanbul.RequestTimeout,
+	}
+	IstanbulBlockPeriodFlag = cli.Uint64Flag{
+		Name:  "istanbul.blockperiod",
+		Usage: "Default minimum difference between two consecutive block's timestamps in seconds",
+		Value: eth.DefaultConfig.Istanbul.BlockPeriod,
+	}
+
 	// Metrics flags
 	MetricsEnabledFlag = cli.BoolFlag{
 		Name:  "metrics",
@@ -1435,6 +1467,15 @@ func setMiner(ctx *cli.Context, cfg *miner.Config) {
 	}
 }
 
+func setIstanbul(ctx *cli.Context, cfg *eth.Config) {
+	if ctx.GlobalIsSet(IstanbulRequestTimeoutFlag.Name) {
+		cfg.Istanbul.RequestTimeout = ctx.GlobalUint64(IstanbulRequestTimeoutFlag.Name)
+	}
+	if ctx.GlobalIsSet(IstanbulBlockPeriodFlag.Name) {
+		cfg.Istanbul.BlockPeriod = ctx.GlobalUint64(IstanbulBlockPeriodFlag.Name)
+	}
+}
+
 func setWhitelist(ctx *cli.Context, cfg *eth.Config) {
 	whitelist := ctx.GlobalString(WhitelistFlag.Name)
 	if whitelist == "" {
@@ -1528,6 +1569,7 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 	setTxPool(ctx, &cfg.TxPool)
 	setEthash(ctx, cfg)
 	setMiner(ctx, &cfg.Miner)
+	setIstanbul(ctx, cfg)
 	setWhitelist(ctx, cfg)
 	setLes(ctx, cfg)
 
@@ -1616,8 +1658,11 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 }
 
 // RegisterEthService adds an Ethereum client to the stack.
-func RegisterEthService(stack *node.Node, cfg *eth.Config) {
-	var err error
+func RegisterEthService(stack *node.Node, cfg *eth.Config) <-chan *sub.Ethereum {
+	var (
+		err     error
+		subChan = make(chan *sub.Ethereum, 1)
+	)
 	if cfg.SyncMode == downloader.LightSync {
 		err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
 			return les.New(ctx, cfg)
@@ -1635,7 +1680,6 @@ func RegisterEthService(stack *node.Node, cfg *eth.Config) {
 				return fullNode, err
 			})
 		} else if cfg.Role.IsSubChain() {
-
 			//subchain
 			err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
 				//subConfig := ToSubChainConfig(cfg)
@@ -1644,6 +1688,7 @@ func RegisterEthService(stack *node.Node, cfg *eth.Config) {
 					ls, _ := les.NewLesServer(fullNode, cfg)
 					fullNode.AddLesServer(ls)
 				}
+				subChan <- fullNode
 				return fullNode, err
 			})
 		} else if cfg.Role.IsAnchor() {
@@ -1655,12 +1700,13 @@ func RegisterEthService(stack *node.Node, cfg *eth.Config) {
 			})
 			if err != nil {
 				Fatalf("Failed to register the Ethereum service: %v", err)
-				return
+				return nil
 			}
 			//subchain
 			err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
 				//subConfig := ToSubChainConfig(cfg)
 				fullNode, err := sub.New(ctx, &subConfig)
+				subChan <- fullNode
 				return fullNode, err
 			})
 		}
@@ -1668,6 +1714,7 @@ func RegisterEthService(stack *node.Node, cfg *eth.Config) {
 	if err != nil {
 		Fatalf("Failed to register the Ethereum service: %v", err)
 	}
+	return subChan
 }
 
 // RegisterShhService configures Whisper and adds it to the given node.

@@ -23,6 +23,9 @@ var Modules = map[string]string{
 	"chequebook": ChequebookJs,
 	"clique":     CliqueJs,
 	"ethash":     EthashJs,
+	"dpos":       DPoS_JS,
+	"raft":       Raft_JS,
+	"istanbul":   Istanbul_JS,
 	"debug":      DebugJs,
 	"eth":        EthJs,
 	"miner":      MinerJs,
@@ -140,6 +143,133 @@ web3._extend({
 			name: 'submitHashRate',
 			call: 'ethash_submitHashRate',
 			params: 2,
+		}),
+	]
+});
+`
+
+const DPoS_JS = `
+web3._extend({
+	property: 'dpos',
+	methods: [
+		new web3._extend.Method({
+			name: 'getSnapshot',
+			call: 'dpos_getSnapshot',
+			params: 1,
+			inputFormatter: [null]
+		}),
+		new web3._extend.Method({
+			name: 'getSnapshotAtHash',
+			call: 'dpos_getSnapshotAtHash',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'getSnapshotAtNumber',
+			call: 'dpos_getSnapshotAtNumber',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'getSnapshotByHeaderTime',
+			call: 'dpos_getSnapshotByHeaderTime',
+			params: 2
+		}),
+	]
+});
+`
+
+const Raft_JS = `
+web3._extend({
+       property: 'raft',
+       methods:
+       [
+       ],
+       properties:
+       [
+               new web3._extend.Property({
+                       name: 'role',
+                       getter: 'raft_role'
+               }),
+               new web3._extend.Method({
+                       name: 'addPeer',
+                       call: 'raft_addPeer',
+                       params: 1
+               }),
+               new web3._extend.Method({
+                       name: 'removePeer',
+                       call: 'raft_removePeer',
+                       params: 1
+               }),
+               new web3._extend.Property({
+                       name: 'leader',
+                       getter: 'raft_leader'
+               }),
+               new web3._extend.Property({
+                       name: 'cluster',
+                       getter: 'raft_cluster'
+               }),
+       ]
+})
+`
+
+const Istanbul_JS = `
+web3._extend({
+	property: 'istanbul',
+	methods:
+	[
+		new web3._extend.Method({
+			name: 'getSnapshot',
+			call: 'istanbul_getSnapshot',
+			params: 1,
+			inputFormatter: [null]
+		}),
+		new web3._extend.Method({
+			name: 'getSnapshotAtHash',
+			call: 'istanbul_getSnapshotAtHash',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'getValidators',
+			call: 'istanbul_getValidators',
+			params: 1,
+			inputFormatter: [null]
+		}),
+		new web3._extend.Method({
+			name: 'getValidatorsAtHash',
+			call: 'istanbul_getValidatorsAtHash',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'propose',
+			call: 'istanbul_propose',
+			params: 2
+		}),
+		new web3._extend.Method({
+			name: 'discard',
+			call: 'istanbul_discard',
+			params: 1
+		}),
+
+		new web3._extend.Method({
+			name: 'getSignersFromBlock',
+			call: 'istanbul_getSignersFromBlock',
+			params: 1,
+			inputFormatter: [web3._extend.formatters.inputBlockNumberFormatter]
+		}),
+		new web3._extend.Method({
+			name: 'getSignersFromBlockByHash',
+			call: 'istanbul_getSignersFromBlockByHash',
+			params: 1
+		}),
+	],
+	properties:
+	[
+		new web3._extend.Property({
+			name: 'candidates',
+			getter: 'istanbul_candidates'
+		}),
+		new web3._extend.Property({
+			name: 'nodeAddress',
+			getter: 'istanbul_nodeAddress'
 		}),
 	]
 });

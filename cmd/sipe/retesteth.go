@@ -230,13 +230,14 @@ func (e *NoRewardEngine) accumulateRewards(config *params.ChainConfig, state *st
 }
 
 func (e *NoRewardEngine) Finalize(chain consensus.ChainReader, header *types.Header, statedb *state.StateDB, txs []*types.Transaction,
-	uncles []*types.Header) {
+	uncles []*types.Header, receipts []*types.Receipt) error {
 	if e.rewardsOn {
-		e.inner.Finalize(chain, header, statedb, txs, uncles)
+		return e.inner.Finalize(chain, header, statedb, txs, uncles, receipts)
 	} else {
 		e.accumulateRewards(chain.Config(), statedb, header, uncles)
 		header.Root = statedb.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 	}
+	return nil
 }
 
 func (e *NoRewardEngine) FinalizeAndAssemble(chain consensus.ChainReader, header *types.Header, statedb *state.StateDB, txs []*types.Transaction,
@@ -267,6 +268,10 @@ func (e *NoRewardEngine) CalcDifficulty(chain consensus.ChainReader, time uint64
 func (e *NoRewardEngine) APIs(chain consensus.ChainReader) []rpc.API {
 	return e.inner.APIs(chain)
 }
+
+//func (e *NoRewardEngine) Protocol() consensus.Protocol {
+//	return consensus.EthProtocol
+//}
 
 func (e *NoRewardEngine) Close() error {
 	return e.inner.Close()

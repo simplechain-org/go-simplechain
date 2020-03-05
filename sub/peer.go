@@ -499,6 +499,9 @@ func (p *peer) String() string {
 	)
 }
 
+func (p *peer) Send(msgcode uint64, data interface{}) error {
+	return p2p.Send(p.rw, msgcode, data)
+}
 // peerSet represents the collection of active peers currently participating in
 // the Ethereum sub-protocol.
 type peerSet struct {
@@ -610,6 +613,18 @@ func (ps *peerSet) BestPeer() *peer {
 		}
 	}
 	return bestPeer
+}
+
+// Peers returns all registered peers
+func (ps *peerSet) Peers() map[string]*peer {
+	ps.lock.RLock()
+	defer ps.lock.RUnlock()
+
+	set := make(map[string]*peer)
+	for id, p := range ps.peers {
+		set[id] = p
+	}
+	return set
 }
 
 // Close disconnects all peers.
