@@ -170,7 +170,6 @@ func (c *core) IsCurrentProposal(blockHash common.Hash) bool {
 }
 
 func (c *core) commit() {
-	log.Error("[istanbul] commit block")
 	c.setState(StateCommitted)
 
 	proposal := c.current.Proposal()
