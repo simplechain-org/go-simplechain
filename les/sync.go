@@ -19,6 +19,7 @@ package les
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/simplechain-org/go-simplechain/common"
@@ -96,6 +97,7 @@ func (h *clientHandler) synchronise(peer *peer) {
 	latest := h.backend.blockchain.CurrentHeader()
 	currentTd := rawdb.ReadTd(h.backend.chainDb, latest.Hash(), latest.Number.Uint64())
 	if currentTd != nil && peer.headBlockInfo().Td.Cmp(currentTd) < 0 {
+		fmt.Println("peer.headBlockInfo().Td.Cmp(currentTd)")
 		return
 	}
 	// Recap the checkpoint.
@@ -127,13 +129,13 @@ func (h *clientHandler) synchronise(peer *peer) {
 	switch {
 	case checkpoint.Empty():
 		mode = lightSync
-		log.Debug("Disable checkpoint syncing", "reason", "empty checkpoint")
+		fmt.Println("Disable checkpoint syncing", "reason", "empty checkpoint")
 	case latest.Number.Uint64() >= (checkpoint.SectionIndex+1)*h.backend.iConfig.ChtSize-1:
 		mode = lightSync
-		log.Debug("Disable checkpoint syncing", "reason", "local chain beyond the checkpoint")
+		fmt.Println("Disable checkpoint syncing", "reason", "local chain beyond the checkpoint")
 	case hardcoded:
 		mode = legacyCheckpointSync
-		log.Debug("Disable checkpoint syncing", "reason", "checkpoint is hardcoded")
+		fmt.Println("Disable checkpoint syncing", "reason", "checkpoint is hardcoded")
 	case h.backend.oracle == nil || !h.backend.oracle.isRunning():
 		if h.checkpoint == nil {
 			mode = lightSync // Downgrade to light sync unfortunately.
@@ -141,7 +143,7 @@ func (h *clientHandler) synchronise(peer *peer) {
 			checkpoint = h.checkpoint
 			mode = legacyCheckpointSync
 		}
-		log.Debug("Disable checkpoint syncing", "reason", "checkpoint syncing is not activated")
+		fmt.Println("Disable checkpoint syncing", "reason", "checkpoint syncing is not activated")
 	}
 	// Notify testing framework if syncing has completed(for testing purpose).
 	defer func() {
@@ -160,7 +162,7 @@ func (h *clientHandler) synchronise(peer *peer) {
 			}
 			h.backend.blockchain.AddTrustedCheckpoint(checkpoint)
 		}
-		log.Debug("Checkpoint syncing start", "peer", peer.id, "checkpoint", checkpoint.SectionIndex)
+		fmt.Println("Checkpoint syncing start", "peer", peer.id, "checkpoint", checkpoint.SectionIndex)
 
 		// Fetch the start point block header.
 		//
@@ -179,8 +181,8 @@ func (h *clientHandler) synchronise(peer *peer) {
 	}
 	// Fetch the remaining block headers based on the current chain header.
 	if err := h.downloader.Synchronise(peer.id, peer.Head(), peer.Td(), downloader.LightSync); err != nil {
-		log.Debug("Synchronise failed", "reason", err)
+		fmt.Println("Synchronise failed", "reason", err)
 		return
 	}
-	log.Debug("Synchronise finished", "elapsed", common.PrettyDuration(time.Since(start)))
+	fmt.Println("Synchronise finished", "elapsed", common.PrettyDuration(time.Since(start)))
 }
