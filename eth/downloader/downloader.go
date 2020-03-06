@@ -239,6 +239,7 @@ func New(checkpoint uint64, stateDb ethdb.Database, stateBloom *trie.SyncBloom, 
 			processed: rawdb.ReadFastTrieProgress(stateDb),
 		},
 		trackStateReq: make(chan *stateReq),
+		synchronising: 0,
 	}
 	go dl.qosTuner()
 	go dl.stateFetcher()
