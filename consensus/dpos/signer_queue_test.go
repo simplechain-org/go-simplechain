@@ -128,7 +128,7 @@ func TestQueue(t *testing.T) {
 		{
 			/* 	Case 5:
 			*   fllow test case 0. the tally is changed and history hash is a,b,c
-			*   step 1: the top 3(maxSignerCount) is selected order by tally -> but same t ally
+			*   step 1: the top 3(maxSignerCount) is selected order by tally -> but same tally
 			*   step 2: order by address (NOT A, B, C , address is [20]byte) desc, different by each test.
 			*   step 3: the top 3 signer is map to historyHash
 			*   step 4: the result order is set by historyHash decrease
@@ -209,7 +209,7 @@ func TestQueue(t *testing.T) {
 		}
 		if len(tt.result) == 0 {
 			for j, signer := range signerQueue {
-				if j >= 1 && signerQueue[j-1].String() < signerQueue[j].String() {
+				if j >= 1 && bytes.Compare(signerQueue[j-1].Bytes(), signerQueue[j].Bytes()) < 0 {
 					t.Errorf("test %d: result is not correct, signerQueue(%d) %s larger than signerQueue(%d) %s ", i, j, signer.Hex(), j-1, signerQueue[j-1].Hex())
 				}
 			}
