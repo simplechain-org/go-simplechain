@@ -1,5 +1,4 @@
 language: go
-os: ['linux','osx']
 go_import_path: github.com/simplechain-org/go-simplechain
 jobs:
   include:
