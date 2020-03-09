@@ -538,7 +538,7 @@ func testCheckpointChallenge(t *testing.T, syncmode downloader.SyncMode, checkpo
 		}
 	}
 	// Wait until the test timeout passes to ensure proper cleanup
-	time.Sleep(syncChallengeTimeout + 100*time.Millisecond)
+	time.Sleep(syncChallengeTimeout + 250*time.Millisecond)
 
 	// Verify that the remote peer is maintained or dropped
 	if drop {
@@ -612,7 +612,7 @@ func testBroadcastBlock(t *testing.T, totalPeers, broadcastExpected int) {
 			}
 		}(peer)
 	}
-	timeout := time.After(time.Second)
+	timeout := time.After(2 * time.Second)
 	var receivedCount int
 outer:
 	for {
