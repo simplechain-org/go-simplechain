@@ -505,7 +505,7 @@ func testCheckpointChallenge(t *testing.T, syncmode downloader.SyncMode, checkpo
 	defer pm.Stop()
 
 	// Connect a new peer and check that we receive the checkpoint challenge
-	peer, _ := newTestPeer("peer", sub, pm, true)
+	peer, _ := newTestPeer("peer", 63, pm, true)
 
 	defer peer.close()
 
