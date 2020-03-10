@@ -157,13 +157,10 @@ func TestForkIDSplit(t *testing.T) {
 	var (
 		engine = ethash.NewFaker()
 
-		configNoFork  = &params.ChainConfig{HomesteadBlock: big.NewInt(1)}
+		configNoFork  = &params.ChainConfig{SingularityBlock: big.NewInt(1)}
 		configProFork = &params.ChainConfig{
-			HomesteadBlock: big.NewInt(1),
-			EIP150Block:    big.NewInt(2),
-			EIP155Block:    big.NewInt(2),
-			EIP158Block:    big.NewInt(2),
-			ByzantiumBlock: big.NewInt(3),
+			SingularityBlock: big.NewInt(1),
+			EWASMBlock:       big.NewInt(2),
 		}
 		dbNoFork  = rawdb.NewMemoryDatabase()
 		dbProFork = rawdb.NewMemoryDatabase()

@@ -54,13 +54,13 @@ type operation struct {
 }
 
 var (
-	frontierInstructionSet         = newFrontierInstructionSet()
-	homesteadInstructionSet        = newHomesteadInstructionSet()
-	tangerineWhistleInstructionSet = newTangerineWhistleInstructionSet()
-	spuriousDragonInstructionSet   = newSpuriousDragonInstructionSet()
-	byzantiumInstructionSet        = newByzantiumInstructionSet()
+	FrontierInstructionSet         = newFrontierInstructionSet()
+	HomesteadInstructionSet        = newHomesteadInstructionSet()
+	TangerineWhistleInstructionSet = newTangerineWhistleInstructionSet()
+	SpuriousDragonInstructionSet   = newSpuriousDragonInstructionSet()
+	ByzantiumInstructionSet        = newByzantiumInstructionSet()
 	constantinopleInstructionSet   = newConstantinopleInstructionSet()
-	istanbulInstructionSet         = newIstanbulInstructionSet()
+	singularityInstructionSet      = newSingularityInstructionSet()
 )
 
 // JumpTable contains the EVM opcodes supported at a given fork.
@@ -68,7 +68,7 @@ type JumpTable [256]operation
 
 // newIstanbulInstructionSet returns the frontier, homestead
 // byzantium, contantinople and petersburg instructions.
-func newIstanbulInstructionSet() JumpTable {
+func newSingularityInstructionSet() JumpTable {
 	instructionSet := newConstantinopleInstructionSet()
 
 	enable1344(&instructionSet) // ChainID opcode - https://eips.ethereum.org/EIPS/eip-1344
