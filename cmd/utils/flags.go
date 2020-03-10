@@ -781,16 +781,12 @@ var (
 	// Raft flags
 	RaftModeFlag = cli.BoolFlag{
 		Name:  "raft",
-		Usage: "If enabled, uses Raft instead of Quorum Chain for consensus",
+		Usage: "If enabled, uses Raft consensus",
 	}
 	RaftJoinExistingFlag = cli.IntFlag{
 		Name:  "raftjoinexisting",
 		Usage: "The raft ID to assume when joining an pre-existing cluster",
 		Value: 0,
-	}
-	EmitCheckpointsFlag = cli.BoolFlag{
-		Name:  "emitcheckpoints",
-		Usage: "If enabled, emit specially formatted logging checkpoints",
 	}
 	RaftPortFlag = cli.IntFlag{
 		Name:  "raftport",
