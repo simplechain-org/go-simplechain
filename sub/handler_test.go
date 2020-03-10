@@ -466,7 +466,6 @@ func TestCheckpointChallenge(t *testing.T) {
 }
 
 func testCheckpointChallenge(t *testing.T, syncmode downloader.SyncMode, checkpoint bool, timeout bool, empty bool, match bool, drop bool) {
-	rand.Seed(time.Now().Unix())
 	// Reduce the checkpoint handshake challenge timeout
 	defer func(old time.Duration) { syncChallengeTimeout = old }(syncChallengeTimeout)
 	syncChallengeTimeout = 250 * time.Millisecond
@@ -537,7 +536,7 @@ func testCheckpointChallenge(t *testing.T, syncmode downloader.SyncMode, checkpo
 		}
 	}
 	// Wait until the test timeout passes to ensure proper cleanup
-	time.Sleep(syncChallengeTimeout + 100*time.Millisecond)
+	time.Sleep(syncChallengeTimeout + 250*time.Millisecond)
 	// Verify that the remote peer is maintained or dropped
 	if drop {
 		if peers := pm.peers.Len(); peers != 0 {

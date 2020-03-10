@@ -353,7 +353,6 @@ func (d *Downloader) synchronise(id string, hash common.Hash, td *big.Int, mode 
 	}
 	// Make sure only one goroutine is ever allowed past this point at once
 	if !atomic.CompareAndSwapInt32(&d.synchronising, 0, 1) {
-		fmt.Println("Downloader synchronise", d.synchronising)
 		return errBusy
 	}
 	defer atomic.StoreInt32(&d.synchronising, 0)
