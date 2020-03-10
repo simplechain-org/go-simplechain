@@ -10,9 +10,9 @@
 
 2. Start the DPoS nodes: 
     ``` 
-    sipe --datadir=dposdata/dd1 --mine --etherbase=<account1> --unlock=<account1> --password=<(echo ) --port=30303  --role=subchain
-    sipe --datadir=dposdata/dd2 --mine --etherbase=<account2> --unlock=<account2> --password=<(echo ) --port=30304  --role=subchain --bootnodes={enode1}
-    sipe --datadir=dposdata/dd3 --mine --etherbase=<account3> --unlock=<account3> --password=<(echo ) --port=30305  --role=subchain --bootnodes={enode1}
+    sipe --datadir=dposdata/dd1 --mine --etherbase=<account1> --unlock=<account1> --password=<(echo ) --port=30303  --role=subchain --v5disc
+    sipe --datadir=dposdata/dd2 --mine --etherbase=<account2> --unlock=<account2> --password=<(echo ) --port=30304  --role=subchain --v5disc --bootnodesv5={enode1} --bootnodesv4={enode1}
+    sipe --datadir=dposdata/dd3 --mine --etherbase=<account3> --unlock=<account3> --password=<(echo ) --port=30305  --role=subchain --v5disc --bootnodesv5={enode1} --bootnodesv4={enode1}
     ```  
    
 3. Vote Transaction:
