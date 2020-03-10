@@ -275,9 +275,6 @@ func CreateDB(ctx *node.ServiceContext, config *Config, name string) (ethdb.Data
 	if err != nil {
 		return nil, err
 	}
-	//if db, ok := db.(*ethdb.LDBDatabase); ok {
-	//	db.Meter("eth/db/" + name + "/")
-	//}
 	return db, nil
 }
 
@@ -286,7 +283,7 @@ func makeExtraData(extra []byte) []byte {
 		// create default extradata
 		extra, _ = rlp.EncodeToBytes([]interface{}{
 			uint(params.VersionMajor<<16 | params.VersionMinor<<8 | params.VersionPatch),
-			"geth",
+			"sipe",
 			runtime.Version(),
 			runtime.GOOS,
 		})
