@@ -548,10 +548,8 @@ func (pm *ProtocolManager) handleRoleChange(roleC <-chan interface{}) {
 			}
 
 			if intRole == raft.MinterRole {
-				log.EmitCheckpoint(log.BecameMinter)
 				pm.minter.Start(common.Address{})
 			} else { // verifier
-				log.EmitCheckpoint(log.BecameVerifier)
 				pm.minter.Stop()
 			}
 
@@ -883,17 +881,11 @@ func (pm *ProtocolManager) applyNewChainHead(block *types.Block) {
 			}
 		}
 
-		for _, tx := range block.Transactions() {
-			log.EmitCheckpoint(log.TxAccepted, "tx", tx.Hash().Hex())
-		}
-
 		_, err := pm.blockchain.InsertChain([]*types.Block{block})
 
 		if err != nil {
 			panic(fmt.Sprintf("failed to extend chain: %s", err.Error()))
 		}
-
-		log.EmitCheckpoint(log.BlockCreated, "block", fmt.Sprintf("%x", block.Hash()))
 	}
 }
 

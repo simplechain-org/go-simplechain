@@ -8,7 +8,6 @@ import (
 )
 
 // TODO: this is just copied over from cmd/utils/cmd.go. dedupe
-
 // Fatalf formats a message to standard error and exits the program.
 // The message is also printed to standard output if standard error
 // is redirected to a different file.

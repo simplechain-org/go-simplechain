@@ -277,7 +277,7 @@ func (pm *ProtocolManager) applyRaftSnapshot(raftSnapshot raftpb.Snapshot) {
 		pm.syncBlockchainUntil(latestBlockHash)
 		pm.logNewlyAcceptedTransactions(preSyncHead)
 
-		log.Info(raft.ChainExtensionMessage, "hash", pm.blockchain.CurrentBlock().Hash())
+		log.Info("Successfully extended chain", "hash", pm.blockchain.CurrentBlock().Hash())
 	} else {
 		// added for permissions changes to indicate node sync up has started
 		//TODO types.SetSyncStatus()
@@ -328,10 +328,5 @@ func (pm *ProtocolManager) logNewlyAcceptedTransactions(preSyncHead *types.Block
 
 		blocksSeen += 1
 		currBlock = pm.blockchain.GetBlockByHash(currBlock.ParentHash())
-	}
-	for _, block := range blocks {
-		for _, tx := range block.Transactions() {
-			log.EmitCheckpoint(log.TxAccepted, "tx", tx.Hash().Hex())
-		}
 	}
 }

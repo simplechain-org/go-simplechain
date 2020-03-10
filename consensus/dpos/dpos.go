@@ -20,10 +20,8 @@ package dpos
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"io"
 	"math/big"
-	"strings"
 	"sync"
 	"time"
 
@@ -48,7 +46,6 @@ const (
 	inMemorySignatures = 4096            // Number of recent block signatures to keep in memory
 	secondsPerYear     = 365 * 24 * 3600 // Number of seconds for one year
 	checkpointInterval = 360             // About N hours if config.period is N
-	scUnconfirmLoop    = 3               // First count of Loop not send confirm tx to main chain
 )
 
 // DPoS delegated-proof-of-stake protocol constants.
@@ -58,22 +55,14 @@ var (
 	defaultBlockPeriod               = uint64(3)                                               // Default minimum difference between two consecutive block's timestamps
 	defaultMaxSignerCount            = uint64(21)                                              //
 	minVoterBalance                  = new(big.Int).Mul(big.NewInt(100), big.NewInt(1e+18))
-	extraVanity                      = 32                       // Fixed number of extra-data prefix bytes reserved for signer vanity
-	extraSeal                        = 65                       // Fixed number of extra-data suffix bytes reserved for signer seal
-	uncleHash                        = types.CalcUncleHash(nil) // Always Keccak256(RLP([])) as uncles are meaningless outside of PoW.
-	defaultDifficulty                = big.NewInt(1)            // Default difficulty
-	defaultLoopCntRecalculateSigners = uint64(10)               // Default loop count to recreate signers from top tally
-	minerRewardPerThousand           = uint64(618)              // Default reward for miner in each block from block reward (618/1000)
-	candidateNeedPD                  = false                    // is new candidate need Proposal & Declare process
-	mcNetVersion                     = uint64(0)                // the net version of main chain
-	mcLoopStartTime                  = uint64(0)                // the loopstarttime of main chain
-	mcPeriod                         = uint64(0)                // the period of main chain
-	mcSignerLength                   = uint64(0)                // the maxsinger of main chain config
-	//mcNonce                          = uint64(0)                                             // the current Nonce of coinbase on main chain
-	mcTxDefaultGasPrice = big.NewInt(30000000)                                  // default gas price to build transaction for main chain
-	mcTxDefaultGasLimit = uint64(3000000)                                       // default limit to build transaction for main chain
-	proposalDeposit     = new(big.Int).Mul(big.NewInt(1e+18), big.NewInt(1e+4)) // default current proposalDeposit
-	//scRentLengthRecommend            = uint64(0)                                             // block number for split each side chain rent fee
+	extraVanity                      = 32                                                    // Fixed number of extra-data prefix bytes reserved for signer vanity
+	extraSeal                        = 65                                                    // Fixed number of extra-data suffix bytes reserved for signer seal
+	uncleHash                        = types.CalcUncleHash(nil)                              // Always Keccak256(RLP([])) as uncles are meaningless outside of PoW.
+	defaultDifficulty                = big.NewInt(1)                                         // Default difficulty
+	defaultLoopCntRecalculateSigners = uint64(10)                                            // Default loop count to recreate signers from top tally
+	minerRewardPerThousand           = uint64(618)                                           // Default reward for miner in each block from block reward (618/1000)
+	candidateNeedPD                  = false                                                 // is new candidate need Proposal & Declare process
+	proposalDeposit                  = new(big.Int).Mul(big.NewInt(1e+18), big.NewInt(1e+4)) // default current proposalDeposit
 )
 
 // Various error messages to mark blocks invalid. These should be private to
@@ -129,9 +118,6 @@ var (
 
 	// errSignerQueueEmpty is returned if no signer when calculate
 	errSignerQueueEmpty = errors.New("signer queue is empty")
-
-	// errGetLastLoopInfoFail is returned if get last loop info fail
-	errGetLastLoopInfoFail = errors.New("get last loop info fail")
 
 	// errInvalidNeighborSigner is returned if two neighbor block signed by same miner and time diff less period
 	errInvalidNeighborSigner = errors.New("invalid neighbor signer")
@@ -365,10 +351,6 @@ func (d *DPoS) verifyCascadingFields(chain consensus.ChainReader, header *types.
 
 // snapshot retrieves the authorization snapshot at a given point in time.
 func (d *DPoS) snapshot(chain consensus.ChainReader, number uint64, hash common.Hash, parents []*types.Header, genesisVotes []*Vote, lcrs uint64) (*Snapshot, error) {
-	// Don't keep snapshot for side chain
-	//if chain.Config().DPoS.SideChain {
-	//	return nil, nil
-	//}
 	// Search for a snapshot in memory or on disk for checkpoints
 	var (
 		headers []*types.Header
@@ -481,118 +463,85 @@ func (d *DPoS) verifySeal(chain consensus.ChainReader, header *types.Header, par
 		return err
 	}
 
-	if !chain.Config().DPoS.SideChain {
+	if number > d.config.MaxSignerCount {
+		var parent *types.Header
+		if len(parents) > 0 {
+			parent = parents[len(parents)-1]
+		} else {
+			parent = chain.GetHeader(header.ParentHash, number-1)
+		}
+		parentHeaderExtra := HeaderExtra{}
+		err = decodeHeaderExtra(d.config, parent.Number, parent.Extra[extraVanity:len(parent.Extra)-extraSeal], &parentHeaderExtra)
+		if err != nil {
+			log.Info("Fail to decode parent header", "err", err)
+			return err
+		}
+		currentHeaderExtra := HeaderExtra{}
+		err = decodeHeaderExtra(d.config, header.Number, header.Extra[extraVanity:len(header.Extra)-extraSeal], &currentHeaderExtra)
+		if err != nil {
+			log.Info("Fail to decode header", "err", err)
+			return err
+		}
+		// verify signerqueue
+		if number%d.config.MaxSignerCount == 0 {
+			err := snap.verifySignerQueue(currentHeaderExtra.SignerQueue)
+			if err != nil {
+				return err
+			}
 
-		if number > d.config.MaxSignerCount {
-			var parent *types.Header
-			if len(parents) > 0 {
-				parent = parents[len(parents)-1]
-			} else {
-				parent = chain.GetHeader(header.ParentHash, number-1)
+		} else {
+			for i := 0; i < int(d.config.MaxSignerCount); i++ {
+				if parentHeaderExtra.SignerQueue[i] != currentHeaderExtra.SignerQueue[i] {
+					return errInvalidSignerQueue
+				}
 			}
-			parentHeaderExtra := HeaderExtra{}
-			err = decodeHeaderExtra(d.config, parent.Number, parent.Extra[extraVanity:len(parent.Extra)-extraSeal], &parentHeaderExtra)
-			if err != nil {
-				log.Info("Fail to decode parent header", "err", err)
-				return err
+			if signer == parent.Coinbase && header.Time-parent.Time < chain.Config().DPoS.Period {
+				return errInvalidNeighborSigner
 			}
-			currentHeaderExtra := HeaderExtra{}
-			err = decodeHeaderExtra(d.config, header.Number, header.Extra[extraVanity:len(header.Extra)-extraSeal], &currentHeaderExtra)
-			if err != nil {
-				log.Info("Fail to decode header", "err", err)
-				return err
-			}
-			// verify signerqueue
-			if number%d.config.MaxSignerCount == 0 {
-				err := snap.verifySignerQueue(currentHeaderExtra.SignerQueue)
+
+		}
+
+		// verify missing signer for punish
+		var parentSignerMissing []common.Address
+		if d.config.IsTrantor(header.Number) {
+			var grandParentHeaderExtra HeaderExtra
+			if number%d.config.MaxSignerCount == 1 {
+				var grandParent *types.Header
+				if len(parents) > 1 {
+					grandParent = parents[len(parents)-2]
+				} else {
+					grandParent = chain.GetHeader(parent.ParentHash, number-2)
+				}
+				if grandParent == nil {
+					return errLastLoopHeaderFail
+				}
+				err := decodeHeaderExtra(d.config, grandParent.Number, grandParent.Extra[extraVanity:len(grandParent.Extra)-extraSeal], &grandParentHeaderExtra)
 				if err != nil {
+					log.Info("Fail to decode parent header", "err", err)
 					return err
 				}
-
-			} else {
-				for i := 0; i < int(d.config.MaxSignerCount); i++ {
-					if parentHeaderExtra.SignerQueue[i] != currentHeaderExtra.SignerQueue[i] {
-						return errInvalidSignerQueue
-					}
-				}
-				if signer == parent.Coinbase && header.Time-parent.Time < chain.Config().DPoS.Period {
-					return errInvalidNeighborSigner
-				}
-
 			}
-
-			// verify missing signer for punish
-			var parentSignerMissing []common.Address
-			if d.config.IsTrantor(header.Number) {
-				var grandParentHeaderExtra HeaderExtra
-				if number%d.config.MaxSignerCount == 1 {
-					var grandParent *types.Header
-					if len(parents) > 1 {
-						grandParent = parents[len(parents)-2]
-					} else {
-						grandParent = chain.GetHeader(parent.ParentHash, number-2)
-					}
-					if grandParent == nil {
-						return errLastLoopHeaderFail
-					}
-					err := decodeHeaderExtra(d.config, grandParent.Number, grandParent.Extra[extraVanity:len(grandParent.Extra)-extraSeal], &grandParentHeaderExtra)
-					if err != nil {
-						log.Info("Fail to decode parent header", "err", err)
-						return err
-					}
-				}
-				parentSignerMissing = getSignerMissingTrantor(parent.Coinbase, header.Coinbase, &parentHeaderExtra, &grandParentHeaderExtra)
-			} else {
-				newLoop := false
-				if number%d.config.MaxSignerCount == 0 {
-					newLoop = true
-				}
-				parentSignerMissing = getSignerMissing(parent.Coinbase, header.Coinbase, parentHeaderExtra, newLoop)
+			parentSignerMissing = getSignerMissingTrantor(parent.Coinbase, header.Coinbase, &parentHeaderExtra, &grandParentHeaderExtra)
+		} else {
+			newLoop := false
+			if number%d.config.MaxSignerCount == 0 {
+				newLoop = true
 			}
+			parentSignerMissing = getSignerMissing(parent.Coinbase, header.Coinbase, parentHeaderExtra, newLoop)
+		}
 
-			if len(parentSignerMissing) != len(currentHeaderExtra.SignerMissing) {
+		if len(parentSignerMissing) != len(currentHeaderExtra.SignerMissing) {
+			return errPunishedMissing
+		}
+		for i, signerMissing := range currentHeaderExtra.SignerMissing {
+			if parentSignerMissing[i] != signerMissing {
 				return errPunishedMissing
 			}
-			for i, signerMissing := range currentHeaderExtra.SignerMissing {
-				if parentSignerMissing[i] != signerMissing {
-					return errPunishedMissing
-				}
-			}
 		}
+	}
 
-		if !snap.inturn(signer, header.Time) {
-			return errUnauthorized
-		}
-	} else {
-		if notice, loopStartTime, period, signerLength, _, err := d.mcSnapshot(chain, signer, header.Time); err != nil {
-			return err
-		} else {
-			mcLoopStartTime = loopStartTime
-			mcPeriod = period
-			mcSignerLength = signerLength
-			// check gas charging
-			if notice != nil {
-				currentHeaderExtra := HeaderExtra{}
-				err = decodeHeaderExtra(d.config, header.Number, header.Extra[extraVanity:len(header.Extra)-extraSeal], &currentHeaderExtra)
-				if err != nil {
-					return err
-				}
-				if len(notice.CurrentCharging) != len(currentHeaderExtra.SideChainCharging) {
-					return errMCGasChargingInvalid
-				} else {
-					for _, charge := range currentHeaderExtra.SideChainCharging {
-						if v, ok := notice.CurrentCharging[charge.Hash]; !ok {
-							return err
-						} else {
-							if v.Volume != charge.Volume || v.Target != charge.Target {
-								return errMCGasChargingInvalid
-							}
-						}
-					}
-				}
-
-			}
-		}
+	if !snap.inturn(signer, header.Time) {
+		return errUnauthorized
 	}
 
 	return nil
@@ -624,126 +573,6 @@ func (d *DPoS) Prepare(chain consensus.ChainReader, header *types.Header) error 
 	}
 
 	return nil
-}
-
-// get the snapshot info from main chain and check if current signer inturn, if inturn then update the info
-func (d *DPoS) mcSnapshot(chain consensus.ChainReader, signer common.Address, headerTime uint64) (*CCNotice, uint64, uint64, uint64, uint64, error) {
-
-	if chain.Config().DPoS.SideChain {
-		chainHash := chain.GetHeaderByNumber(0).ParentHash
-		ms, err := d.getMainChainSnapshotByTime(chain, headerTime, chainHash)
-		if err != nil {
-			return nil, 0, 0, 0, 0, err
-		} else if len(ms.Signers) == 0 {
-			return nil, 0, 0, 0, 0, errSignerQueueEmpty
-		} else if ms.Period == 0 {
-			return nil, 0, 0, 0, 0, errMCPeriodMissing
-		}
-
-		loopIndex := int((headerTime-ms.LoopStartTime)/ms.Period) % len(ms.Signers)
-		if loopIndex >= len(ms.Signers) {
-			return nil, 0, 0, 0, 0, errInvalidSignerQueue
-		} else if *ms.Signers[loopIndex] != signer {
-			return nil, 0, 0, 0, 0, errUnauthorized
-		}
-		notice := &CCNotice{}
-		if mcNotice, ok := ms.SCNoticeMap[chainHash]; ok {
-			notice = mcNotice
-		}
-		return notice, ms.LoopStartTime, ms.Period, uint64(len(ms.Signers)), ms.Number, nil
-	}
-	return nil, 0, 0, 0, 0, errNotSideChain
-}
-
-func (d *DPoS) parseNoticeInfo(notice *CCNotice) string {
-	// if other notice exist, return string may be more than one
-	if notice != nil {
-		var charging []string
-		for hash := range notice.CurrentCharging {
-			charging = append(charging, hash.Hex())
-		}
-		return strings.Join(charging, "#")
-	}
-	return ""
-}
-
-func (d *DPoS) getLastLoopInfo(chain consensus.ChainReader, header *types.Header) (string, error) {
-	if chain.Config().DPoS.SideChain && mcLoopStartTime != 0 && mcPeriod != 0 && d.config.Period != 0 {
-		var loopHeaderInfo []string
-		inLastLoop := false
-		extraTime := (header.Time - mcLoopStartTime) % (mcPeriod * mcSignerLength)
-		for i := uint64(0); i < d.config.MaxSignerCount*2*(mcPeriod/d.config.Period); i++ {
-			header = chain.GetHeader(header.ParentHash, header.Number.Uint64()-1)
-			if header == nil {
-				return "", consensus.ErrUnknownAncestor
-			}
-			newTime := (header.Time - mcLoopStartTime) % (mcPeriod * mcSignerLength)
-			if newTime > extraTime {
-				if !inLastLoop {
-					inLastLoop = true
-				} else {
-					break
-				}
-			}
-			extraTime = newTime
-			if inLastLoop {
-				loopHeaderInfo = append(loopHeaderInfo, fmt.Sprintf("%d#%s", header.Number.Uint64(), header.Coinbase.Hex()))
-			}
-		}
-		if len(loopHeaderInfo) > 0 {
-			return strings.Join(loopHeaderInfo, "#"), nil
-		}
-	}
-	return "", errGetLastLoopInfoFail
-}
-
-func (d *DPoS) mcConfirmBlock(chain consensus.ChainReader, header *types.Header, notice *CCNotice) {
-
-	d.lock.RLock()
-	signer, signTxFn := d.signer, d.signTxFn
-	d.lock.RUnlock()
-
-	if signer != (common.Address{}) {
-		// todo update gaslimit , gasprice ,and get ChainID need to get from mainchain
-		if header.Number.Uint64() > d.lcsc && header.Number.Uint64() > d.config.MaxSignerCount*scUnconfirmLoop {
-			nonce, err := d.getTransactionCountFromMainChain(chain, signer)
-			if err != nil {
-				log.Info("Confirm tx sign fail", "err", err)
-				return
-			}
-
-			lastLoopInfo, err := d.getLastLoopInfo(chain, header)
-			if err != nil {
-				log.Info("Confirm tx sign fail", "err", err)
-				return
-			}
-
-			chargingInfo := d.parseNoticeInfo(notice)
-
-			txData := d.buildSCEventConfirmData(chain.GetHeaderByNumber(0).ParentHash, header.Number, header.Time, lastLoopInfo, chargingInfo)
-			tx := types.NewTransaction(nonce, header.Coinbase, big.NewInt(0), mcTxDefaultGasLimit, mcTxDefaultGasPrice, txData)
-
-			if mcNetVersion == 0 {
-				mcNetVersion, err = d.getNetVersionFromMainChain(chain)
-				if err != nil {
-					log.Info("Query main chain net version fail", "err", err)
-				}
-			}
-
-			signedTx, err := signTxFn(accounts.Account{Address: signer}, tx, big.NewInt(int64(mcNetVersion)))
-			if err != nil {
-				log.Info("Confirm tx sign fail", "err", err)
-			}
-			txHash, err := d.sendTransactionToMainChain(chain, signedTx)
-			if err != nil {
-				log.Info("Confirm tx send fail", "err", err)
-			} else {
-				log.Info("Confirm tx result", "txHash", txHash)
-				d.lcsc = header.Number.Uint64()
-			}
-		}
-	}
-
 }
 
 // Finalize implements consensus.Engine, ensuring no uncles are set, nor block
@@ -829,46 +658,39 @@ func (d *DPoS) Finalize(chain consensus.ChainReader, header *types.Header, state
 	if err != nil {
 		return err
 	}
-	if !chain.Config().DPoS.SideChain {
-		// calculate votes write into header.extra
-		mcCurrentHeaderExtra, refundGas, err := d.processCustomTx(currentHeaderExtra, chain, header, state, txs, receipts)
+
+	// calculate votes write into header.extra
+	mcCurrentHeaderExtra, refundGas, err := d.processCustomTx(currentHeaderExtra, chain, header, state, txs, receipts)
+	if err != nil {
+		return err
+	}
+	currentHeaderExtra = mcCurrentHeaderExtra
+	currentHeaderExtra.ConfirmedBlockNumber = snap.getLastConfirmedBlockNumber(currentHeaderExtra.CurrentBlockConfirmations).Uint64()
+	// write signerQueue in first header, from self vote signers in genesis block
+	if number == 1 {
+		currentHeaderExtra.LoopStartTime = d.config.GenesisTimestamp
+		if len(d.config.SelfVoteSigners) > 0 {
+			for i := 0; i < int(d.config.MaxSignerCount); i++ {
+				currentHeaderExtra.SignerQueue = append(currentHeaderExtra.SignerQueue, common.Address(d.config.SelfVoteSigners[i%len(d.config.SelfVoteSigners)]))
+			}
+		}
+	} else if number%d.config.MaxSignerCount == 0 {
+		//currentHeaderExtra.LoopStartTime = header.Time.Uint64()
+		currentHeaderExtra.LoopStartTime = currentHeaderExtra.LoopStartTime + d.config.Period*d.config.MaxSignerCount
+		// create random signersQueue in currentHeaderExtra by snapshot.Tally
+		currentHeaderExtra.SignerQueue = []common.Address{}
+		newSignerQueue, err := snap.createSignerQueue()
 		if err != nil {
 			return err
 		}
-		currentHeaderExtra = mcCurrentHeaderExtra
-		currentHeaderExtra.ConfirmedBlockNumber = snap.getLastConfirmedBlockNumber(currentHeaderExtra.CurrentBlockConfirmations).Uint64()
-		// write signerQueue in first header, from self vote signers in genesis block
-		if number == 1 {
-			currentHeaderExtra.LoopStartTime = d.config.GenesisTimestamp
-			if len(d.config.SelfVoteSigners) > 0 {
-				for i := 0; i < int(d.config.MaxSignerCount); i++ {
-					currentHeaderExtra.SignerQueue = append(currentHeaderExtra.SignerQueue, common.Address(d.config.SelfVoteSigners[i%len(d.config.SelfVoteSigners)]))
-				}
-			}
-		} else if number%d.config.MaxSignerCount == 0 {
-			//currentHeaderExtra.LoopStartTime = header.Time.Uint64()
-			currentHeaderExtra.LoopStartTime = currentHeaderExtra.LoopStartTime + d.config.Period*d.config.MaxSignerCount
-			// create random signersQueue in currentHeaderExtra by snapshot.Tally
-			currentHeaderExtra.SignerQueue = []common.Address{}
-			newSignerQueue, err := snap.createSignerQueue()
-			if err != nil {
-				return err
-			}
-			currentHeaderExtra.SignerQueue = newSignerQueue
-		}
-
-		// Accumulate any block rewards and commit the final state root
-		if err := accumulateRewards(chain.Config(), state, header, snap, refundGas); err != nil {
-			return errUnauthorized
-		}
-	} else {
-		// use currentHeaderExtra.SignerQueue as signer queue
-		currentHeaderExtra.SignerQueue = append([]common.Address{header.Coinbase}, parentHeaderExtra.SignerQueue...)
-		if len(currentHeaderExtra.SignerQueue) > int(d.config.MaxSignerCount) {
-			currentHeaderExtra.SignerQueue = currentHeaderExtra.SignerQueue[:int(d.config.MaxSignerCount)]
-		}
-		sideChainRewards(chain.Config(), state, header, snap)
+		currentHeaderExtra.SignerQueue = newSignerQueue
 	}
+
+	// Accumulate any block rewards and commit the final state root
+	if err := accumulateRewards(chain.Config(), state, header, snap, refundGas); err != nil {
+		return errUnauthorized
+	}
+
 	// encode header.extra
 	currentHeaderExtraEnc, err := encodeHeaderExtra(d.config, header.Number, currentHeaderExtra)
 	if err != nil {
@@ -938,7 +760,6 @@ func (d *DPoS) ApplyGenesis(chain consensus.ChainReader, genesisHash common.Hash
 
 // Seal implements consensus.Engine, attempting to create a sealed block using
 // the local signing credentials.
-//TODO
 func (d *DPoS) Seal(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
 	header := block.Header()
 
@@ -963,39 +784,9 @@ func (d *DPoS) Seal(chain consensus.ChainReader, block *types.Block, results cha
 		return err
 	}
 
-	if !chain.Config().DPoS.SideChain {
-		if !snap.inturn(signer, header.Time) {
-			//<-stop
-			return errUnauthorized
-		}
-	} else {
-		if notice, loopStartTime, period, signerLength, _, err := d.mcSnapshot(chain, signer, header.Time); err != nil {
-			//<-stop
-			return err
-		} else {
-			mcLoopStartTime = loopStartTime
-			mcPeriod = period
-			mcSignerLength = signerLength
-			if notice != nil {
-				// rebuild the header.Extra for gas charging
-				currentHeaderExtra := HeaderExtra{}
-				if err = decodeHeaderExtra(d.config, header.Number, header.Extra[extraVanity:len(header.Extra)-extraSeal], &currentHeaderExtra); err != nil {
-					return err
-				}
-				for _, charge := range notice.CurrentCharging {
-					currentHeaderExtra.SideChainCharging = append(currentHeaderExtra.SideChainCharging, charge)
-				}
-				currentHeaderExtraEnc, err := encodeHeaderExtra(d.config, header.Number, currentHeaderExtra)
-				if err != nil {
-					return err
-				}
-				header.Extra = header.Extra[:extraVanity]
-				header.Extra = append(header.Extra, currentHeaderExtraEnc...)
-				header.Extra = append(header.Extra, make([]byte, extraSeal)...)
-			}
-			// send tx to main chain to confirm this block
-			d.mcConfirmBlock(chain, header, notice)
-		}
+	if !snap.inturn(signer, header.Time) {
+		//<-stop
+		return errUnauthorized
 	}
 
 	// correct the time
@@ -1052,23 +843,6 @@ func (d *DPoS) APIs(chain consensus.ChainReader) []rpc.API {
 
 func (d *DPoS) Close() error {
 	return nil
-}
-
-// Protocol implements consensus.Engine.Protocol
-//func (d *DPoS) Protocol() consensus.Protocol {
-//	return consensus.EthProtocol
-//}
-
-func sideChainRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header, snap *Snapshot) {
-	// vanish gas fee
-	gasUsed := new(big.Int).SetUint64(header.GasUsed)
-	if state.GetBalance(header.Coinbase).Cmp(gasUsed) >= 0 {
-		state.SubBalance(header.Coinbase, gasUsed)
-	}
-	// gas charging
-	for target, volume := range snap.calculateGasCharging() {
-		state.AddBalance(target, volume)
-	}
 }
 
 // AccumulateRewards credits the coinbase of the given block with the mining reward.
@@ -1186,8 +960,3 @@ func getSignerMissingTrantor(lastSigner common.Address, currentSigner common.Add
 	return signerMissing
 
 }
-
-// Protocol implements consensus.Engine.Protocol
-//func (d *DPoS) Protocol() consensus.Protocol {
-//	return consensus.EthProtocol
-//}
