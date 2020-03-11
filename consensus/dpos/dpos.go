@@ -703,7 +703,7 @@ func (d *DPoS) Finalize(chain consensus.ChainReader, header *types.Header, state
 	// Set the correct difficulty
 	header.Difficulty = new(big.Int).Set(defaultDifficulty)
 
-	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
+	header.Root = state.IntermediateRoot(true)
 	// No uncle block
 	header.UncleHash = types.CalcUncleHash(nil)
 

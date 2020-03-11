@@ -142,7 +142,7 @@ type serverPool struct {
 }
 
 // newServerPool creates a new serverPool instance
-func newServerPool(db ethdb.Database, ulcServers []string) *serverPool {
+func newServerPool(db ethdb.Database) *serverPool {
 	pool := &serverPool{
 		db:           db,
 		entries:      make(map[enode.ID]*poolEntry),
@@ -156,7 +156,6 @@ func newServerPool(db ethdb.Database, ulcServers []string) *serverPool {
 		knownSelect:  newWeightedRandomSelect(),
 		newSelect:    newWeightedRandomSelect(),
 		fastDiscover: true,
-		trustedNodes: parseTrustedNodes(ulcServers),
 	}
 
 	pool.knownQueue = newPoolEntryQueue(maxKnownEntries, pool.removeEntry)
@@ -164,13 +163,21 @@ func newServerPool(db ethdb.Database, ulcServers []string) *serverPool {
 	return pool
 }
 
+func parseTrustedNodes(trustedNodes []*enode.Node) map[enode.ID]*enode.Node {
+	nodes := make(map[enode.ID]*enode.Node)
+	for _, node := range trustedNodes {
+		nodes[node.ID()] = node
+	}
+	return nodes
+}
+
 func (pool *serverPool) start(server *p2p.Server, topic discv5.Topic) {
+	pool.trustedNodes = parseTrustedNodes(server.TrustedNodes)
 	pool.server = server
 	pool.topic = topic
 	pool.dbKey = append([]byte("subPool/"), []byte(topic)...)
 	pool.loadNodes()
 	pool.connectToTrustedNodes()
-
 	if pool.server.DiscV5 != nil {
 		pool.discSetPeriod = make(chan time.Duration, 1)
 		pool.discNodes = make(chan *enode.Node, 100)
@@ -513,21 +520,6 @@ func (pool *serverPool) connectToTrustedNodes() {
 		pool.server.AddPeer(node)
 		log.Debug("Added trusted node", "id", node.ID().String())
 	}
-}
-
-// parseTrustedNodes returns valid and parsed enodes
-func parseTrustedNodes(trustedNodes []string) map[enode.ID]*enode.Node {
-	nodes := make(map[enode.ID]*enode.Node)
-
-	for _, node := range trustedNodes {
-		node, err := enode.Parse(enode.ValidSchemes, node)
-		if err != nil {
-			log.Warn("Trusted node URL invalid", "enode", node, "err", err)
-			continue
-		}
-		nodes[node.ID()] = node
-	}
-	return nodes
 }
 
 // saveNodes saves known nodes and their statistics into the database. Nodes are

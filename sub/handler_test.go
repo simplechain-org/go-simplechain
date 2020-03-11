@@ -480,8 +480,9 @@ func testCheckpointChallenge(t *testing.T, syncmode downloader.SyncMode, checkpo
 	// chllenge response.
 	var response *types.Header
 	var cht *params.TrustedCheckpoint
+	var index uint64
 	if checkpoint {
-		index := uint64(rand.Intn(500))
+		index = uint64(rand.Intn(500))
 		number := (index+1)*params.CHTFrequency - 1
 		response = &types.Header{Number: big.NewInt(int64(number)), Extra: []byte("valid")}
 
@@ -503,7 +504,8 @@ func testCheckpointChallenge(t *testing.T, syncmode downloader.SyncMode, checkpo
 	defer pm.Stop()
 
 	// Connect a new peer and check that we receive the checkpoint challenge
-	peer, _ := newTestPeer("peer", sub, pm, true)
+	peer, _ := newTestPeer("peer", 63, pm, true)
+
 	defer peer.close()
 
 	if checkpoint {
@@ -534,12 +536,11 @@ func testCheckpointChallenge(t *testing.T, syncmode downloader.SyncMode, checkpo
 		}
 	}
 	// Wait until the test timeout passes to ensure proper cleanup
-	time.Sleep(syncChallengeTimeout + 100*time.Millisecond)
-
+	time.Sleep(syncChallengeTimeout + 250*time.Millisecond)
 	// Verify that the remote peer is maintained or dropped
 	if drop {
 		if peers := pm.peers.Len(); peers != 0 {
-			t.Fatalf("peer count mismatch: have %d, want %d", peers, 0)
+			t.Fatalf("peer count mismatch: have %d, want %d,index=%d", peers, 0, index)
 		}
 	} else {
 		if peers := pm.peers.Len(); peers != 1 {
@@ -608,7 +609,7 @@ func testBroadcastBlock(t *testing.T, totalPeers, broadcastExpected int) {
 			}
 		}(peer)
 	}
-	timeout := time.After(time.Second)
+	timeout := time.After(3 * time.Second)
 	var receivedCount int
 outer:
 	for {

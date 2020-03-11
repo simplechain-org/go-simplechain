@@ -40,17 +40,16 @@ func errResp(code errCode, format string, v ...interface{}) error {
 }
 
 type MsgHandler struct {
-	roleHandler    RoleHandler
-	role           common.ChainRole
-	ctxStore       CtxStore
-	rtxStore       rtxStore
-	blockchain     *core.BlockChain
-	pm             ProtocolManager
-	crossMsgReader <-chan interface{}
-	crossMsgWriter chan<- interface{}
-	quitSync       chan struct{}
-	knownRwssTx    map[common.Hash]*TranParam
-
+	roleHandler         RoleHandler
+	role                common.ChainRole
+	ctxStore            CtxStore
+	rtxStore            rtxStore
+	blockchain          *core.BlockChain
+	pm                  ProtocolManager
+	crossMsgReader      <-chan interface{}
+	crossMsgWriter      chan<- interface{}
+	quitSync            chan struct{}
+	knownRwssTx         map[common.Hash]*TranParam
 	makerStartEventCh   chan core.NewCTxsEvent
 	makerStartEventSub  event.Subscription
 	makerSignedCh       chan core.NewCWsEvent
