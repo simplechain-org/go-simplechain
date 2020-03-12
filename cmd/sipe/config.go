@@ -34,10 +34,9 @@ import (
 	"github.com/simplechain-org/go-simplechain/node"
 	"github.com/simplechain-org/go-simplechain/p2p/enode"
 	"github.com/simplechain-org/go-simplechain/params"
-	"github.com/simplechain-org/go-simplechain/rpctx"
 	"github.com/simplechain-org/go-simplechain/sub"
 	whisper "github.com/simplechain-org/go-simplechain/whisper/whisperv6"
-	cli "gopkg.in/urfave/cli.v1"
+	"gopkg.in/urfave/cli.v1"
 )
 
 var (
@@ -169,9 +168,9 @@ func makeConfigNode(ctx *cli.Context) (*node.Node, gethConfig) {
 		}
 	}
 
-	if ctx.GlobalIsSet(utils.AnchorPriKeyFlag.Name) {
-		rpctx.PrivateKey = ctx.GlobalString(utils.AnchorPriKeyFlag.Name)
-	}
+	//if ctx.GlobalIsSet(utils.AnchorPriKeyFlag.Name) {
+	//	rpctx.PrivateKey = ctx.GlobalString(utils.AnchorPriKeyFlag.Name)
+	//}
 
 	return stack, cfg
 }

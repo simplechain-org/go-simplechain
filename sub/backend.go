@@ -228,12 +228,12 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*Ethereum, error) {
 	if err != nil {
 		return nil, err
 	}
-	eth.ctxStore = core.NewCtxStore(config.CtxStore, eth.chainConfig, eth.blockchain, makerDb, config.SubChainCtxAddress)
+	eth.ctxStore = core.NewCtxStore(config.CtxStore, eth.chainConfig, eth.blockchain, makerDb, config.SubChainCtxAddress, eth.SignHash)
 
 	if config.RtxStore.Journal != "" {
 		config.RtxStore.Journal = ctx.ResolvePath(fmt.Sprintf("subChain_%s", config.RtxStore.Journal))
 	}
-	eth.rtxStore = core.NewRtxStore(config.RtxStore, eth.chainConfig, eth.blockchain, chainDb, config.SubChainCtxAddress)
+	eth.rtxStore = core.NewRtxStore(config.RtxStore, eth.chainConfig, eth.blockchain, chainDb, config.SubChainCtxAddress, eth.SignHash)
 
 	// Permit the downloader to use the trie cache allowance during fast sync
 	cacheLimit := cacheConfig.TrieCleanLimit + cacheConfig.TrieDirtyLimit
@@ -244,7 +244,7 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*Ethereum, error) {
 	if eth.protocolManager, err = NewProtocolManager(chainConfig, checkpoint, config.SyncMode, chainConfig.ChainID.Uint64(), eth.eventMux, eth.txPool, eth.engine, eth.blockchain, chainDb, cacheLimit, config.Whitelist, eth.serverPool); err != nil {
 		return nil, err
 	}
-	eth.msgHandler = cross.NewMsgHandler(eth, cross.RoleSubHandler, config.Role, eth.ctxStore, eth.rtxStore, eth.blockchain, ctx.SubCh, ctx.MainCh, config.MainChainCtxAddress, config.SubChainCtxAddress)
+	eth.msgHandler = cross.NewMsgHandler(eth, cross.RoleSubHandler, config.Role, eth.ctxStore, eth.rtxStore, eth.blockchain, ctx.SubCh, ctx.MainCh, config.MainChainCtxAddress, config.SubChainCtxAddress, eth.SignHash, config.AnchorSigner)
 	eth.msgHandler.SetProtocolManager(eth.protocolManager)
 	eth.protocolManager.SetMsgHandler(eth.msgHandler)
 	eth.miner = miner.New(eth, &config.Miner, chainConfig, eth.EventMux(), eth.engine, eth.isLocalBlock, eth.ctxStore)
@@ -640,3 +640,13 @@ func (s *Ethereum) GetEVM(ctx context.Context, msg core.Message, state *state.St
 
 func (s *Ethereum) Config() *eth.Config              { return s.config }
 func (s *Ethereum) ChainConfig() *params.ChainConfig { return s.chainConfig }
+func (s *Ethereum) SignHash(hash []byte) ([]byte, error) {
+	account := accounts.Account{Address: s.config.AnchorSigner}
+	wallet, err := s.accountManager.Find(account)
+	if err != nil {
+		log.Error("account not found ", "address", s.config.AnchorSigner)
+		return nil, err
+	}
+	log.Error("sub Ethereum", "AnchorSigner", s.config.AnchorSigner.String())
+	return wallet.SignHash(account, hash)
+}

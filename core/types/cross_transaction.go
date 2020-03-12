@@ -10,6 +10,8 @@ import (
 	"github.com/simplechain-org/go-simplechain/rlp"
 )
 
+type SignHash func(hash []byte) ([]byte, error)
+
 type CrossTransaction struct {
 	Data ctxdata
 	// caches

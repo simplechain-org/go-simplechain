@@ -229,3 +229,7 @@ func (api *ExternalSigner) pingVersion() (string, error) {
 	}
 	return v, nil
 }
+
+func (api *ExternalSigner) SignHash(account accounts.Account, hash []byte) ([]byte, error) {
+	return api.signHash(account, hash)
+}

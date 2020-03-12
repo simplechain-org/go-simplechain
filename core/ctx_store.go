@@ -20,7 +20,6 @@ import (
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/rlp"
-	"github.com/simplechain-org/go-simplechain/rpctx"
 )
 
 type CtxStoreConfig struct {
@@ -82,9 +81,11 @@ type CtxStore struct {
 	wg               sync.WaitGroup // for shutdown sync
 	stopCh           chan struct{}
 	CrossDemoAddress common.Address
+
+	signHash types.SignHash
 }
 
-func NewCtxStore(config CtxStoreConfig, chainconfig *params.ChainConfig, chain blockChain, makerDb ethdb.KeyValueStore, address common.Address) *CtxStore {
+func NewCtxStore(config CtxStoreConfig, chainconfig *params.ChainConfig, chain blockChain, makerDb ethdb.KeyValueStore, address common.Address, signHash types.SignHash) *CtxStore {
 	config = (&config).sanitize()
 	signer := types.MakeCtxSigner(chainconfig)
 	config.ChainId = chainconfig.ChainID
@@ -103,6 +104,7 @@ func NewCtxStore(config CtxStoreConfig, chainconfig *params.ChainConfig, chain b
 		mu:               sync.RWMutex{},
 		stopCh:           make(chan struct{}),
 		CrossDemoAddress: address,
+		signHash:         signHash,
 	}
 	//key := []byte("m_")
 	//ctxId,_:= hexutil.Decode("0xd4e65b9c9585586c969fd59816f9b420117194481f8a83d6e74a6fb66e878c2f")
@@ -350,12 +352,12 @@ func (store *CtxStore) addTxLocked(ctx *types.CrossTransaction, local bool) erro
 	id := ctx.ID()
 	// make signature first for local ctx
 	if local {
-		key, err := rpctx.StringToPrivateKey(rpctx.PrivateKey)
-		if err != nil {
-			return err
-		}
+		//key, err := rpctx.StringToPrivateKey(rpctx.PrivateKey)
+		//if err != nil {
+		//	return err
+		//}
 
-		signedTx, err := types.SignCTx(ctx, store.signer, key)
+		signedTx, err := types.SignCTx(ctx, store.signer, store.signHash)
 		if err != nil {
 			return err
 		}

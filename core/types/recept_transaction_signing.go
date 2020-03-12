@@ -1,12 +1,10 @@
 package types
 
 import (
-	"crypto/ecdsa"
 	"fmt"
 	"math/big"
 
 	"github.com/simplechain-org/go-simplechain/common"
-	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/crypto/sha3"
 	"github.com/simplechain-org/go-simplechain/params"
 )
@@ -24,9 +22,9 @@ func MakeRtxSigner(config *params.ChainConfig) RtxSigner {
 }
 
 // SignTx signs the transaction using the given signer and private key
-func SignRTx(tx *ReceptTransaction, s RtxSigner, prv *ecdsa.PrivateKey) (*ReceptTransaction, error) {
+func SignRTx(tx *ReceptTransaction, s RtxSigner, signHash SignHash) (*ReceptTransaction, error) {
 	h := s.Hash(tx)
-	sig, err := crypto.Sign(h[:], prv)
+	sig, err := signHash(h[:])
 	if err != nil {
 		return nil, err
 	}
