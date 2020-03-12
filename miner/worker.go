@@ -983,7 +983,6 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64, 
 			return
 		} else {
 			if len(hashs) > 0 {
-				log.Info("begin RemoveTx", "hashs", len(hashs))
 				w.eth.TxPool().RemoveTx(hashs, true)
 			}
 		}

@@ -44,6 +44,9 @@ type MsgHandler struct {
 	role           common.ChainRole
 	ctxStore       CtxStore
 	rtxStore       rtxStore
+	ObCtxStore     CtxStore
+	ObRtxStore     rtxStore
+	txPool         txPool
 	blockchain     *core.BlockChain
 	pm             ProtocolManager
 	crossMsgReader <-chan interface{}
@@ -66,6 +69,16 @@ type MsgHandler struct {
 	makerFinishEventSub  event.Subscription
 	//transactionRemoveCh  chan core.TransationRemoveEvent
 	//transactionRemoveSub event.Subscription
+	//addAnchorEventCh     chan core.AnchorEvent
+	//addAnchorEventSub    event.Subscription
+	delAnchorEventCh     chan core.AnchorEvent
+	delAnchorEventSub    event.Subscription
+	updateSignedCh       chan core.NewCWsEvent
+	updateSignedSub      event.Subscription
+	updateTakerCh        chan core.NewRWsEvent
+	updateTakerSub       event.Subscription
+	updateAnchorCh       chan core.AnchorEvent
+	updateAnchorSub      event.Subscription
 
 	rtxsinLogCh  chan core.NewRTxsEvent //通过该通道删除ctx_pool中的记录，TODO 普通节点无该功能
 	rtxsinLogSub event.Subscription
@@ -76,7 +89,7 @@ type MsgHandler struct {
 	SubChainCtxAddress common.Address
 }
 
-func NewMsgHandler(chain simplechain, roleHandler RoleHandler, role common.ChainRole, ctxpool CtxStore, rtxStore rtxStore,
+func NewMsgHandler(chain simplechain, roleHandler RoleHandler, role common.ChainRole, ctxpool CtxStore, rtxStore rtxStore,pool txPool,
 	blockchain *core.BlockChain, crossMsgReader <-chan interface{},
 	crossMsgWriter chan<- interface{},mainAddr common.Address,subAddr common.Address ) *MsgHandler {
 	gasHelper := NewGasHelper(blockchain, chain)
@@ -88,6 +101,7 @@ func NewMsgHandler(chain simplechain, roleHandler RoleHandler, role common.Chain
 		role:           role,
 		ctxStore:       ctxpool,
 		rtxStore:       rtxStore,
+		txPool:         pool,
 		blockchain:     blockchain,
 		crossMsgReader: crossMsgReader,
 		crossMsgWriter: crossMsgWriter,
@@ -99,6 +113,14 @@ func NewMsgHandler(chain simplechain, roleHandler RoleHandler, role common.Chain
 }
 func (this *MsgHandler) SetProtocolManager(pm ProtocolManager) {
 	this.pm = pm
+}
+
+func (this *MsgHandler) SetObCtxStore(store CtxStore)  {
+	this.ObCtxStore = store
+}
+
+func (this *MsgHandler) SetObRtxStore(store rtxStore)  {
+	this.ObRtxStore = store
 }
 
 func (this *MsgHandler) Start() {
@@ -118,13 +140,22 @@ func (this *MsgHandler) Start() {
 	//this.makerFinishEventSub = this.blockchain.SubscribeTransactionFinishEvent(this.makerFinishEventCh)
 	this.makerFinishEventCh = make(chan core.TransationFinishEvent, txChanSize)
 	this.makerFinishEventSub = this.blockchain.SubscribeNewFinishsEvent(this.makerFinishEventCh)
+	//this.addAnchorEventCh = make(chan core.AnchorEvent, txChanSize)
+	//this.addAnchorEventSub = this.blockchain.SubscribeAddAnchorEvent(this.addAnchorEventCh)
+	this.delAnchorEventCh = make(chan core.AnchorEvent, txChanSize)
+	this.delAnchorEventSub = this.blockchain.SubscribeDelAnchorEvent(this.delAnchorEventCh)
+	this.updateSignedCh = make(chan core.NewCWsEvent, txChanSize)
+	this.updateSignedSub = this.ctxStore.SubscribeCWssUpdateEvent(this.updateSignedCh)
+	this.updateTakerCh = make(chan core.NewRWsEvent, txChanSize)
+	this.updateTakerSub = this.rtxStore.SubscribeUpdateResultEvent(this.updateTakerCh)
 
 	//单子已接
 	this.rtxsinLogCh = make(chan core.NewRTxsEvent, txChanSize)
 	this.rtxsinLogSub = this.blockchain.SubscribeNewRTxssEvent(this.rtxsinLogCh)
+	this.updateAnchorCh = make(chan core.AnchorEvent,txChanSize)
+	this.updateAnchorSub = this.blockchain.SubscribeUpdateAnchorEvent(this.updateAnchorCh)
 
 	go this.loop()
-
 	go this.ReadCrossMessage()
 
 }
@@ -156,21 +187,6 @@ func (this *MsgHandler) loop() {
 			return
 
 		case ev := <- this.availableTakerCh:
-			//if pengding,err := this.pm.Pending(); err == nil && len(pengding) ==0 {
-			//	for _,v := range ev.Tws {
-			//		if this.role.IsAnchor() && v.Data.DestinationId.Uint64() == this.pm.NetworkId() {
-			//			gasUsed, _ := new(big.Int).SetString("300000000000000", 10) //todo gasUsed
-			//				tx, err := this.GetTxForLockOut(v, gasUsed, this.pm.NetworkId())
-			//				if err != nil {
-			//					log.Info("availableTakerCh", "err", err,"network",this.pm.NetworkId(),"ctxId",v.ID().String())
-			//					//this.rtxStore.RemoveLocals(v)
-			//					continue
-			//				}
-			//				log.Info("send tx from rtx","tx",tx.Hash().String())
-			//				this.pm.AddRemotes([]*types.Transaction{tx})
-			//		}
-			//	}
-			//}
 			if this.role.IsAnchor() {
 				if len(ev.Tws) == 0 {
 					for k,_ := range this.knownRwssTx { //清理缓存
@@ -226,9 +242,7 @@ func (this *MsgHandler) loop() {
 		case <-this.takerSignedSub.Err():
 			return
 		case ev := <-this.rtxsinLogCh:
-			//for _, v := range ev.Txs {
-				this.ctxStore.RemoveRemotes(ev.Txs) //删除本地待接单
-			//}
+			this.ctxStore.RemoveRemotes(ev.Txs) //删除本地待接单
 		case <-this.rtxsinLogSub.Err():
 			return
 		//case ev := <-this.transactionRemoveCh:
@@ -243,13 +257,95 @@ func (this *MsgHandler) loop() {
 			}
 		case <-this.makerFinishEventSub.Err():
 			return
+		//case <-this.addAnchorEventSub.Err():
+		//	return
+		case <-this.delAnchorEventSub.Err():
+			return
+		case <-this.updateSignedSub.Err():
+			return
+		case <-this.updateTakerSub.Err():
+			return
+		case <-this.updateAnchorSub.Err():
+			return
+		//case ev := <-this.addAnchorEventCh:
+		//	for _,v := range ev.ChainInfo {
+		//		if err := this.ctxStore.UpdateAnchors(v); err != nil {
+		//			log.Info("ctxStore.UpdateAnchors","err",err)
+		//		}
+		//		if err := this.rtxStore.UpdateAnchors(v); err != nil {
+		//			log.Info("rtxStore.UpdateAnchors","err",err)
+		//		}
+		//		if err := this.txPool.UpdateAnchors(v.RemoteChainId); err != nil {
+		//			log.Info("txPool.UpdateAnchors","err",err)
+		//		}
+		//	}
 
+		case ev := <-this.delAnchorEventCh:
+			for _,v := range ev.ChainInfo {
+				//if err := this.ctxStore.UpdateAnchors(v); err != nil {
+				//	log.Info("ctxStore.UpdateAnchors","err",err)
+				//}
+				//if err := this.rtxStore.UpdateAnchors(v); err != nil {
+				//	log.Info("rtxStore.UpdateAnchors","err",err)
+				//}
+				//if err := this.txPool.UpdateAnchors(v.RemoteChainId); err != nil {
+				//	log.Info("txPool.UpdateAnchors","err",err)
+				//}
+
+				if this.role.IsAnchor() {
+					log.Info("delAnchorEventCh","RemoteChainId",v.RemoteChainId,"blockNumber",v.BlockNumber)
+					//_, local := this.ctxStore.Query() //TODO not Enough,already take,另外一个ctxStore里面的remote
+					remote,_ := this.ObCtxStore.Query()
+					if all,ok := remote[v.RemoteChainId]; ok {
+						for _,v := range all {
+							ctx := v.CrossTransaction()
+							this.ctxStore.UpdateLocal(ctx)
+							this.pm.UpdateCtx([]*types.CrossTransaction{ctx})
+						}
+					}
+
+					rtxs := this.ObRtxStore.Query()
+					for _,v:=range rtxs {
+						rtx := v.ReceptTransaction()
+						if err := this.rtxStore.UpdateLocal(rtx); err != nil {
+							log.Warn("Add local rtx", "err", err)
+						}
+						this.pm.UpdateRtx([]*types.ReceptTransaction{rtx})
+					}
+				}
+			}
+		case ev := <-this.updateSignedCh:
+			this.pm.UpdateInternalCrossTransactionWithSignature([]*types.CrossTransactionWithSignatures{ev.Txs}) //主网广播
+			if this.role.IsAnchor() {
+				this.WriteCrossMessage(&types.UpdateCrossTransactionWithSignatures{
+					Cws:ev.Txs,
+					Update:true,
+				})                                                                       //发送到子网
+			}
+		case ev := <-this.updateTakerCh:
+			if this.role.IsAnchor() {
+				this.WriteCrossMessage(&types.UpdateReceptTransactionWithSignatures{
+					Rws:ev.Tws,
+					Update:true,
+				})
+			}
+		case ev := <- this.updateAnchorCh:
+			for _,v := range ev.ChainInfo {
+				if err := this.ctxStore.UpdateAnchors(v); err != nil {
+					log.Info("ctxStore.UpdateAnchors","err",err)
+				}
+				if err := this.rtxStore.UpdateAnchors(v); err != nil {
+					log.Info("rtxStore.UpdateAnchors","err",err)
+				}
+				if err := this.txPool.UpdateAnchors(v.RemoteChainId); err != nil {
+					log.Info("txPool.UpdateAnchors","err",err)
+				}
+			}
 		}
 	}
 }
 
 func (this *MsgHandler) Stop() {
-	log.Info("Stopping Simplechain MsgHandler")
 	this.makerStartEventSub.Unsubscribe()
 	this.makerSignedSub.Unsubscribe()
 	//this.availableMakerSub.Unsubscribe()
@@ -259,6 +355,12 @@ func (this *MsgHandler) Stop() {
 	//this.transactionRemoveSub.Unsubscribe()
 	//this.makerFinishEventSub.Unsubscribe()
 	this.availableTakerSub.Unsubscribe()
+	//this.addAnchorEventSub.Unsubscribe()
+	this.delAnchorEventSub.Unsubscribe()
+	this.updateAnchorSub.Unsubscribe()
+	this.updateTakerSub.Unsubscribe()
+	this.updateSignedSub.Unsubscribe()
+	this.makerFinishEventSub.Unsubscribe()
 	close(this.quitSync)
 	log.Info("Simplechain MsgHandler stopped")
 }
@@ -274,7 +376,7 @@ func (this *MsgHandler) HandleMsg(msg p2p.Msg, p Peer) error {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
 		if err := this.ctxStore.ValidateCtx(ctx); err == nil {
-			p.MarkReceptTransaction(ctx.SignHash())
+			p.MarkCrossTransaction(ctx.SignHash())
 			//todo
 			this.pm.BroadcastCtx([]*types.CrossTransaction{ctx})
 			if err := this.ctxStore.AddRemote(ctx); err != nil {
@@ -286,39 +388,18 @@ func (this *MsgHandler) HandleMsg(msg p2p.Msg, p Peer) error {
 			break
 		}
 		var cwss []*types.CrossTransactionWithSignatures
+		var verifyCwss []*types.CrossTransactionWithSignatures
 		if err := msg.Decode(&cwss); err != nil {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
-
-		this.ctxStore.AddCWss(cwss)
-		this.pm.BroadcastCWss(cwss)
 		for _, cws := range cwss {
-			p.MarkCrossTransactionWithSignatures(cws.ID())
-
-			//l := len(cws.Data.V)
-			//var vstring, rstring, sstring string
-			//for i := 0; i < l; i++ {
-			//	if i == 0 {
-			//		vstring = fmt.Sprintf("[%s", cws.Data.V[i].String())
-			//		rstring = fmt.Sprintf("[\"%s\"", hexutil.Encode(common.LeftPadBytes(cws.Data.R[i].Bytes(), 32)))
-			//		sstring = fmt.Sprintf("[\"%s\"", hexutil.Encode(common.LeftPadBytes(cws.Data.S[i].Bytes(), 32)))
-			//	} else if i == l-1 {
-			//		vstring = fmt.Sprintf("%s,%s]", vstring, cws.Data.V[i].String())
-			//		rstring = fmt.Sprintf("%s,\"%s\"]", rstring, hexutil.Encode(common.LeftPadBytes(cws.Data.R[i].Bytes(), 32)))
-			//		sstring = fmt.Sprintf("%s,\"%s\"]", sstring, hexutil.Encode(common.LeftPadBytes(cws.Data.S[i].Bytes(), 32)))
-			//	} else {
-			//		vstring = fmt.Sprintf("%s,%s", vstring, cws.Data.V[i].String())
-			//		rstring = fmt.Sprintf("%s,\"%s\"", rstring, hexutil.Encode(common.LeftPadBytes(cws.Data.R[i].Bytes(), 32)))
-			//		sstring = fmt.Sprintf("%s,\"%s\"", sstring, hexutil.Encode(common.LeftPadBytes(cws.Data.S[i].Bytes(), 32)))
-			//	}
-			//}
-
-			//fmt.Printf("for match args.\n\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",%s,%s,%s\n",
-			//	cws.Data.Value.String(), cws.ID().String(), cws.Data.TxHash.String(), cws.Data.From.String(),
-			//	cws.Data.BlockHash.String(), cws.Data.DestinationId.String(), cws.Data.DestinationValue.String(),
-			//	big.NewInt(0).Sub(big.NewInt(1025), cws.Data.DestinationId).String(), vstring, rstring, sstring)
+			if this.ctxStore.VerifyCwsSigner2(cws) == nil {
+				p.MarkCrossTransactionWithSignatures(cws.ID())
+				verifyCwss = append(verifyCwss,cws)
+			}
 		}
-
+		this.ctxStore.AddCWss(verifyCwss)
+		this.pm.BroadcastCWss(verifyCwss)
 	case msg.Code == RtxSignMsg:
 		if !this.pm.CanAcceptTxs() {
 			break
@@ -341,28 +422,93 @@ func (this *MsgHandler) HandleMsg(msg p2p.Msg, p Peer) error {
 		}
 
 	case msg.Code == CtxSignsInternalMsg:
-		//if !this.pm.CanAcceptTxs() {
-		//	break
-		//}
+		if !this.pm.CanAcceptTxs() {
+			break
+		}
 		var cwss []*types.CrossTransactionWithSignatures
+		var verifyCwss []*types.CrossTransactionWithSignatures
 		if err := msg.Decode(&cwss); err != nil {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
 		//Receive and broadcast
-		this.ctxStore.AddCWss(cwss)
-		this.pm.BroadcastInternalCrossTransactionWithSignature(cwss)
 		for _, cws := range cwss {
-			p.MarkInternalCrossTransactionWithSignatures(cws.ID())
+			if this.ctxStore.VerifyCwsSigner(cws) == nil {
+				p.MarkInternalCrossTransactionWithSignatures(cws.ID())
+				verifyCwss = append(verifyCwss,cws)
+			}
 		}
-	//case msg.Code == GetCtxSignsMsg:
-	//	var Query GetCtxSignsData
-	//
-	//	if err := msg.Decode(&Query); err != nil {
-	//		return errResp(ErrDecode, "%v: %v", msg, err)
-	//	}
-	//	cwss := this.ctxStore.List(Query.Amount, Query.GetAll)
-	//	p.SendCrossTransactionWithSignatures(cwss)
+		this.ctxStore.AddCWss(verifyCwss)
+		this.pm.BroadcastInternalCrossTransactionWithSignature(verifyCwss)
+	case msg.Code == CtxSignUpdate:
+		if !this.pm.CanAcceptTxs() {
+			break
+		}
+		var ctx *types.CrossTransaction
+		if err := msg.Decode(&ctx); err != nil {
+			return errResp(ErrDecode, "msg %v: %v", msg, err)
+		}
+		if err := this.ctxStore.ValidateUpdateCtx(ctx); err == nil { //todo
+			p.MarkUpdateCrossTransaction(ctx.SignHash())
+			this.pm.UpdateCtx([]*types.CrossTransaction{ctx})
+			if err := this.ctxStore.UpdateRemote(ctx); err != nil { //todo
+				log.Debug("Add remote ctx", "err", err)
+			}
+		}
+	case msg.Code == CtxSignsUpdate:
+		if !this.pm.CanAcceptTxs() {
+			break
+		}
+		var cwss []*types.CrossTransactionWithSignatures
+		var verifyCwss []*types.CrossTransactionWithSignatures
+		if err := msg.Decode(&cwss); err != nil {
+			return errResp(ErrDecode, "msg %v: %v", msg, err)
+		}
 
+		for _, cws := range cwss {
+			if this.ctxStore.VerifyUpdateCwsSigner2(cws) == nil {
+				verifyCwss = append(verifyCwss,cws)
+				p.MarkUpdateCrossTransactionWithSignatures(cws.ID())
+			}
+		}
+		this.ctxStore.UpdateCWss(verifyCwss)
+		this.pm.UpdateCWss(verifyCwss)
+	case msg.Code == RtxSignUpdate:
+		if !this.pm.CanAcceptTxs() {
+			break
+		}
+		var rtx *types.ReceptTransaction
+		if err := msg.Decode(&rtx); err != nil {
+			return errResp(ErrDecode, "msg %v: %v", msg, err)
+		}
+
+		if err := this.rtxStore.ValidateUpdateRtx(rtx); err == nil {
+			p.MarkUpdateReceptTransaction(rtx.SignHash())
+			this.pm.UpdateRtx([]*types.ReceptTransaction{rtx})
+			if err := this.rtxStore.UpdateRemote(rtx); err != nil { //todo
+				//log.Warn("Add remote rtx", "err", err)
+			}
+		} else {
+			//log.Warn("Add remote rtx", "err", err)
+			break
+		}
+	case msg.Code == SignsInternalUpdate:
+		if !this.pm.CanAcceptTxs() {
+			break
+		}
+		var cwss []*types.CrossTransactionWithSignatures
+		var verifyCwss []*types.CrossTransactionWithSignatures
+		if err := msg.Decode(&cwss); err != nil {
+			return errResp(ErrDecode, "msg %v: %v", msg, err)
+		}
+
+		for _, cws := range cwss {
+			if this.ctxStore.VerifyUpdateCwsSigner(cws) == nil {
+				p.MarkUpdateInternalCrossTransactionWithSignatures(cws.ID())
+				verifyCwss = append(verifyCwss,cws)
+			}
+		}
+		this.ctxStore.UpdateCWss(verifyCwss)
+		this.pm.UpdateInternalCrossTransactionWithSignature(verifyCwss)
 	default:
 		return errResp(ErrInvalidMsgCode, "%v", msg.Code)
 	}
@@ -397,6 +543,7 @@ func (this *MsgHandler) ReadCrossMessage() {
 						}
 					}
 				}
+				break
 				//log.Info("send tx for rtx")
 				//gasUsed, _ := new(big.Int).SetString("300000000000000", 10) //todo gasUsed
 				//tx, err := this.GetTxForLockOut(rws, gasUsed, this.pm.NetworkId())
@@ -407,7 +554,38 @@ func (this *MsgHandler) ReadCrossMessage() {
 				//
 				////锚定节点本地存储
 				//this.pm.AddRemotes([]*types.Transaction{tx})
+			}
+			ucw, ok := v.(*types.UpdateCrossTransactionWithSignatures)
+			if ok && ucw.Cws.Data.DestinationId.Uint64() == this.pm.NetworkId() {
+				this.ctxStore.UpdateCWss([]*types.CrossTransactionWithSignatures{ucw.Cws})
+				this.pm.UpdateCWss([]*types.CrossTransactionWithSignatures{ucw.Cws})
 				break
+			}
+			urw, ok := v.(*types.UpdateReceptTransactionWithSignatures)
+			//if ok {
+			//	log.Info("ReadCrossMessage", "networkID", this.pm.NetworkId(), "destId", rws.Data.DestinationId.Uint64())
+			//}
+			if ok && urw.Rws.Data.DestinationId.Uint64() == this.pm.NetworkId() {
+				//if v := this.rtxStore.ReadFromLocals(rws.Data.CTxId); v == nil {
+				//	errs := this.rtxStore.AddLocals(rws)
+				//	for _, err := range errs {
+				//		if err != nil {
+				//			log.Error("MsgHandler signed rtx save error")
+				//			break
+				//		}
+				//	}
+				//}
+				this.rtxStore.UpdateLocals(urw.Rws)
+				//log.Info("send tx for rtx")
+				//gasUsed, _ := new(big.Int).SetString("300000000000000", 10) //todo gasUsed
+				//tx, err := this.GetTxForLockOut(rws, gasUsed, this.pm.NetworkId())
+				//if err != nil {
+				//	log.Info("ReadCrossMessage", "err", err)
+				//	break
+				//}
+				//
+				////锚定节点本地存储
+				//this.pm.AddRemotes([]*types.Transaction{tx})
 			}
 		case <-this.quitSync:
 			return
@@ -493,55 +671,6 @@ func (this *MsgHandler) WriteCrossMessage(v interface{}) {
 }
 
 func (this *MsgHandler) RecordStatement(finishes []*types.FinishInfo) error {
-	//var count,pass int
-	//for _,v := range finishes {
-	//	ctxId := v.TxId
-	//	ctx := this.CtxStore.ReadFromLocals(ctxId)
-	//	if ctx == nil {
-	//		pass ++
-	//		continue
-	//		//return errors.New(fmt.Sprintf("no ctx for %v", ctxId))
-	//	}
-	//
-	//	rtx := this.rtxStore.ReadFromLocals(ctxId)
-	//	if rtx == nil {
-	//		pass ++
-	//		continue
-	//		//return errors.New(fmt.Sprintf("no rtx for %v", ctxId))
-	//	}
-	//	if err := this.rtxStore.RemoveLocals([]*types.ReceptTransactionWithSignatures{rtx}); err != nil {
-	//		pass ++
-	//		continue
-	//	}
-	//	//if this.statementDb == nil {
-	//	//	pass ++
-	//	//	continue
-	//	//	//return errors.New("MsgHandler statementDb is nil")
-	//	//}
-	//	//if this.statementDb.Has(ctxId) {
-	//	//	pass ++
-	//	//	continue
-	//	//	//return errors.New("db has record")
-	//	//}
-	//	//statement := &types.Statement{
-	//	//	CtxId:        ctxId,
-	//	//	Maker:        ctx.Data.From,
-	//	//	Taker:        rtx.Data.To,
-	//	//	Value:        ctx.Data.Value,
-	//	//	DestValue:    ctx.Data.DestinationValue,
-	//	//	MakerChainId: rtx.Data.DestinationId,
-	//	//	TakerChainId: ctx.Data.DestinationId,
-	//	//	MakerHash:    ctx.Data.TxHash,
-	//	//	TakerHash:    rtx.Data.TxHash,
-	//	//}
-	//	//err := this.statementDb.Write(statement)
-	//	//if err != nil {
-	//	//	pass ++
-	//	//	continue
-	//	//	//return err
-	//	//}
-	//	//count ++
-	//}
 	if err := this.ctxStore.RemoveLocals(finishes); err != nil {
 		return errors.New("rm ctx error")
 	}
@@ -553,9 +682,6 @@ func (this *MsgHandler) RecordStatement(finishes []*types.FinishInfo) error {
 	return nil
 }
 
-//func (this *MsgHandler) SetStatementDb(statementDb *StatementDb) {
-//	this.statementDb = statementDb
-//}
 func (this *MsgHandler) GetContractAddress() common.Address {
 	var tokenAddress common.Address
 	switch this.roleHandler {

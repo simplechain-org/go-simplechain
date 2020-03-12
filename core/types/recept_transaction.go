@@ -265,6 +265,18 @@ func (rws *ReceptTransactionWithSignatures) Resolve() []*ReceptTransaction {
 	return rtxs
 }
 
+func (rws *ReceptTransactionWithSignatures) ReceptTransaction() *ReceptTransaction {
+	d := receptdata{
+		CTxId:         rws.Data.CTxId,
+		TxHash:        rws.Data.TxHash,
+		To:            rws.Data.To,
+		BlockHash:     rws.Data.BlockHash,
+		DestinationId: rws.Data.DestinationId,
+		Input:         rws.Data.Input,
+	}
+	return &ReceptTransaction{Data: d}
+}
+
 func (rws *ReceptTransactionWithSignatures) Key() []byte {
 	key := []byte{1}
 	key = append(key, rws.Data.CTxId.Bytes()...)
@@ -521,4 +533,9 @@ func EventTopic(name string) string {
 	hash := sha3.NewKeccak256()
 	hash.Write(transferFnSignature)
 	return hexutil.Encode(hash.Sum(nil))
+}
+
+type UpdateReceptTransactionWithSignatures struct {
+	Rws *ReceptTransactionWithSignatures
+	Update bool
 }

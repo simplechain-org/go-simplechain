@@ -933,6 +933,7 @@ func (pm *ProtocolManager) BroadcastInternalCrossTransactionWithSignature(cwss [
 		log.Trace("Broadcast internal CrossTransactionWithSignature", "peer", peer.id, "len", len(cwss))
 	}
 }
+
 func (pm *ProtocolManager) SetMsgHandler(msgHandler *cross.MsgHandler) {
 	pm.msgHandler = msgHandler
 }
@@ -960,4 +961,73 @@ func (pm *ProtocolManager) GetNonce(address common.Address) uint64 {
 
 func (pm *ProtocolManager) GetAnchorTxs(address common.Address) (map[common.Address]types.Transactions, error) {
 	return pm.txpool.GetAnchorTxs(address)
+}
+
+//更新多签完成的Ctx
+func (pm *ProtocolManager) UpdateCWss(cwss []*types.CrossTransactionWithSignatures) {
+	var txset = make(map[*peer][]*types.CrossTransactionWithSignatures)
+
+	// Broadcast transactions to a batch of peers not knowing about it
+	for _, cws := range cwss {
+		peers := pm.peers.PeersWithoutUpdateCWss(cws.ID())
+		for _, peer := range peers {
+			txset[peer] = append(txset[peer], cws)
+		}
+		log.Trace("Broadcast transaction", "hash", cws.ID(), "recipients", len(peers))
+	}
+	// FIXME include this again: peers = peers[:int(math.Sqrt(float64(len(peers))))]
+	for peer, css := range txset {
+		peer.AsyncUpdateCrossTransactionWithSignatures(css)
+		log.Debug("BroadcastCWss", "peer", peer.id, "len", len(cwss))
+	}
+}
+
+//锚定节点广播签名Ctx
+func (pm *ProtocolManager) UpdateCtx(ctxs []*types.CrossTransaction) {
+	for _, ctx := range ctxs {
+		var txset = make(map[*peer]*types.CrossTransaction)
+		// Broadcast ctx to a batch of peers not knowing about it
+		peers := pm.peers.PeersWithoutUpdateCTx(ctx.SignHash())
+		for _, peer := range peers {
+			txset[peer] = ctx
+		}
+		for peer, rt := range txset {
+			peer.AsyncUpdateCrossTransaction(rt)
+			log.Debug("Broadcast CrossTransaction", "hash", ctx.SignHash(), "peer", peer.id)
+		}
+	}
+}
+
+//锚定节点广播签名Rtx
+func (pm *ProtocolManager) UpdateRtx(rtxs []*types.ReceptTransaction) {
+	for _, rtx := range rtxs {
+		var txset = make(map[*peer]*types.ReceptTransaction)
+		// Broadcast rtx to a batch of peers not knowing about it
+		peers := pm.peers.PeersWithoutUpdateRTx(rtx.SignHash())
+		for _, peer := range peers {
+			txset[peer] = rtx
+		}
+		log.Trace("Broadcast transaction", "hash", rtx.Hash(), "recipients", len(peers))
+		for peer, rt := range txset {
+			peer.AsyncUpdateReceptTransaction(rt)
+		}
+	}
+}
+
+//inside the chain
+func (pm *ProtocolManager) UpdateInternalCrossTransactionWithSignature(cwss []*types.CrossTransactionWithSignatures) {
+	var txset = make(map[*peer][]*types.CrossTransactionWithSignatures)
+
+	// Broadcast CrossTransaction to a batch of peers not knowing about it
+	for _, cws := range cwss {
+		peers := pm.peers.PeersWithoutUpdateInternalCrossTransactionWithSignatures(cws.ID())
+		for _, peer := range peers {
+			txset[peer] = append(txset[peer], cws)
+		}
+		log.Trace("Broadcast CrossTransaction", "hash", cws.ID(), "recipients", len(peers))
+	}
+	for peer, css := range txset {
+		peer.AsyncUpdateInternalCrossTransactionWithSignatures(css)
+		log.Trace("Update internal CrossTransactionWithSignature", "peer", peer.id, "len", len(cwss))
+	}
 }

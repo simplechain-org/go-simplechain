@@ -313,7 +313,31 @@ func (cws *CrossTransactionWithSignatures) Size() common.StorageSize {
 	return common.StorageSize(c)
 }
 
+func (cws *CrossTransactionWithSignatures) CrossTransaction() *CrossTransaction {
+	d := ctxdata{
+		Value:     cws.Data.Value,
+		CTxId:     cws.Data.CTxId,
+		TxHash:    cws.Data.TxHash,
+		From:      cws.Data.From,
+		BlockHash: cws.Data.BlockHash,
+		DestinationId:    cws.Data.DestinationId,
+		DestinationValue: cws.Data.DestinationValue,
+		Input:            cws.Data.Input,
+	}
+	return &CrossTransaction{Data:d}
+}
+
 type FinishInfo struct {
 	TxId  common.Hash
 	Taker common.Address
+}
+
+type RemoteChainInfo struct {
+	RemoteChainId uint64
+	BlockNumber   uint64
+} 
+
+type UpdateCrossTransactionWithSignatures struct {
+	Cws *CrossTransactionWithSignatures
+	Update bool
 }

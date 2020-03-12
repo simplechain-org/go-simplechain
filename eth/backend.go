@@ -102,8 +102,8 @@ type Ethereum struct {
 	lock sync.RWMutex // Protects the variadic fields (e.g. gas price and etherbase)
 
 	genesisHash common.Hash
-	ctxStore    *core.CtxStore
-	rtxStore    *core.RtxStore
+	CtxStore    *core.CtxStore
+	RtxStore    *core.RtxStore
 	msgHandler  *cross.MsgHandler
 	chainConfig *params.ChainConfig
 }
@@ -111,6 +111,16 @@ type Ethereum struct {
 func (s *Ethereum) AddLesServer(ls LesServer) {
 	s.lesServer = ls
 	ls.SetBloomBitsIndexer(s.bloomIndexer)
+}
+
+func (s *Ethereum) SetObCtxStore(store *core.CtxStore) {
+	s.msgHandler.SetObCtxStore(store)
+	log.Info("eth SetObCtxStore")
+}
+
+func (s *Ethereum) SetObRtxStore(store *core.RtxStore) {
+	s.msgHandler.SetObRtxStore(store)
+	log.Info("eth SetObRtxStore")
 }
 
 // SetClient sets a rpc client which connecting to our local node.
@@ -217,12 +227,12 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 	if err != nil {
 		return nil, err
 	}
-	eth.ctxStore = core.NewCtxStore(config.CtxStore, eth.chainConfig, eth.blockchain, makerDb, config.MainChainCtxAddress)
+	eth.CtxStore = core.NewCtxStore(config.CtxStore, eth.chainConfig, eth.blockchain, makerDb, config.MainChainCtxAddress)
 
 	if config.RtxStore.Journal != "" {
 		config.RtxStore.Journal = ctx.ResolvePath(fmt.Sprintf("mainChain_%s", config.RtxStore.Journal))
 	}
-	eth.rtxStore = core.NewRtxStore(config.RtxStore, eth.chainConfig, eth.blockchain, chainDb, config.MainChainCtxAddress)
+	eth.RtxStore = core.NewRtxStore(config.RtxStore, eth.chainConfig, eth.blockchain, chainDb, config.MainChainCtxAddress)
 
 	// Permit the downloader to use the trie cache allowance during fast sync
 	cacheLimit := cacheConfig.TrieCleanLimit + cacheConfig.TrieDirtyLimit
@@ -234,13 +244,13 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 		return nil, err
 	}
 
-	eth.msgHandler = cross.NewMsgHandler(eth, cross.RoleMainHandler, config.Role, eth.ctxStore, eth.rtxStore, eth.blockchain, ctx.MainCh, ctx.SubCh, config.MainChainCtxAddress, config.SubChainCtxAddress)
+	eth.msgHandler = cross.NewMsgHandler(eth, cross.RoleMainHandler, config.Role, eth.CtxStore, eth.RtxStore,eth.txPool, eth.blockchain, ctx.MainCh, ctx.SubCh, config.MainChainCtxAddress, config.SubChainCtxAddress)
 
 	eth.msgHandler.SetProtocolManager(eth.protocolManager)
 
 	eth.protocolManager.SetMsgHandler(eth.msgHandler)
 
-	eth.miner = miner.New(eth, &config.Miner, chainConfig, eth.EventMux(), eth.engine, eth.isLocalBlock, eth.ctxStore)
+	eth.miner = miner.New(eth, &config.Miner, chainConfig, eth.EventMux(), eth.engine, eth.isLocalBlock, eth.CtxStore)
 	eth.miner.SetExtra(makeExtraData(config.Miner.ExtraData))
 
 	eth.APIBackend = &EthAPIBackend{ctx.ExtRPCEnabled(), eth, nil}
@@ -610,8 +620,8 @@ func (s *Ethereum) Stop() error {
 	s.bloomIndexer.Close()
 	s.blockchain.Stop()
 	s.engine.Close()
-	s.ctxStore.Stop()
-	s.rtxStore.Stop()
+	s.CtxStore.Stop()
+	s.RtxStore.Stop()
 	s.protocolManager.Stop()
 	if s.lesServer != nil {
 		s.lesServer.Stop()

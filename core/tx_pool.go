@@ -1470,6 +1470,30 @@ func (pool *TxPool) demoteUnexecutables() {
 	}
 }
 
+func (pool *TxPool) UpdateAnchors(remoteChainId uint64) error {
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+	if anchors, ok := pool.anchors[remoteChainId]; ok {
+		for _,v := range anchors {
+			pool.locals.del(v)
+		}
+	}
+
+	newHead := pool.chain.CurrentBlock().Header() // Special case during testing
+	statedb, err := pool.chain.StateAt(newHead.Root)
+	if err != nil {
+		log.Error("Failed to reset txpool state", "err", err)
+		return err
+	}
+	queryAnchors, signedCount := QueryAnchor(pool.chainconfig, pool.chain, statedb, newHead, pool.crossDemoAddress, remoteChainId)
+	pool.anchors[remoteChainId] = queryAnchors
+	for _, v := range queryAnchors {
+		pool.locals.add(v)
+	}
+	requireSignatureCount = signedCount
+	return nil
+}
+
 // addressByHeartbeat is an account address tagged with its last activity timestamp.
 type addressByHeartbeat struct {
 	address   common.Address
@@ -1549,6 +1573,11 @@ func (as *accountSet) merge(other *accountSet) {
 	for addr := range other.accounts {
 		as.accounts[addr] = struct{}{}
 	}
+	as.cache = nil
+}
+
+func (as *accountSet) del(addr common.Address) {
+	delete(as.accounts,addr)
 	as.cache = nil
 }
 
@@ -1708,7 +1737,6 @@ func (pool *TxPool) removeTxByCtxId(CtxId common.Hash, method []byte, outofbound
 func (pool *TxPool) RemoveTx(hashs []common.Hash, outofbound bool) {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
-	log.Info("RemoveTx Lock", "hashs", len(hashs))
 	for _, hash := range hashs {
 		pool.removeTx(hash, outofbound)
 	}

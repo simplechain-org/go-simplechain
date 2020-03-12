@@ -77,10 +77,15 @@ type NewRWssEvent struct {
 type TransationRemoveEvent struct {
 	Transactions types.Transactions
 }
+
 type TransationFinishEvent struct {
 	Finish []*types.FinishInfo
 }
 
 type NewCtxStatusEvent struct {
 	Status map[uint64]*Statistics
+}
+
+type AnchorEvent struct {
+	ChainInfo []*types.RemoteChainInfo
 }

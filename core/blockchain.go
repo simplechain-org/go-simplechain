@@ -151,6 +151,9 @@ type BlockChain struct {
 	rtxFeed       event.Feed
 	rtxsFeed      event.Feed
 	FinishsFeed   event.Feed
+	//addAnchorFeed event.Feed
+	delAnchorFeed event.Feed
+	updateAnchorFeed event.Feed
 	scope         event.SubscriptionScope
 	genesisBlock  *types.Block
 
@@ -2246,15 +2249,15 @@ func (bc *BlockChain) StoreContractLog(blockNumber uint64, hash common.Hash, log
 	var blockLogs []*types.Log
 	if logs != nil {
 		var rtxs []*types.ReceptTransaction
+		var add  []*types.RemoteChainInfo
+		var delete []*types.RemoteChainInfo
 		for _, v := range logs {
 			if len(v.Topics) > 0 && bc.IsCtxAddress(v.Address) {
-				isLaunch := v.Topics[0] == params.MakerTopic
-				if bc.IsCtxAddress(v.Address) && isLaunch {
+				if v.Topics[0] == params.MakerTopic {
 					blockLogs = append(blockLogs, v)
 					continue
 				}
-				isMatching := v.Topics[0] == params.TakerTopic
-				if isMatching {
+				if len(v.Topics) >= 3 && v.Topics[0] == params.TakerTopic && len(v.Data) >= common.HashLength*6 {
 					var to common.Address
 					copy(to[:], v.Topics[2][common.HashLength-common.AddressLength:])
 					ctxId := v.Topics[1]
@@ -2272,33 +2275,50 @@ func (bc *BlockChain) StoreContractLog(blockNumber uint64, hash common.Hash, log
 					blockLogs = append(blockLogs, v)
 					continue
 				}
-				isMakerFinish := v.Topics[0] == params.MakerFinishTopic
-				if isMakerFinish {
+				if v.Topics[0] == params.MakerFinishTopic {
 					blockLogs = append(blockLogs, v)
 					continue
 				}
-				isAddAnchors := v.Topics[0] == params.AddAnchorsTopic
-				if isAddAnchors {
-					blockLogs = append(blockLogs, v)
+				if v.Topics[0] == params.AddAnchorsTopic {
+					add = append(add,
+						&types.RemoteChainInfo{
+							RemoteChainId:common.BytesToHash(v.Data[:common.HashLength]).Big().Uint64(),
+							BlockNumber:v.BlockNumber,
+						})
+					//blockLogs = append(blockLogs, v)
 					continue
+				}
+				if v.Topics[0] == params.RemoveAnchors {
+					delete = append(delete,
+						&types.RemoteChainInfo{
+							RemoteChainId:common.BytesToHash(v.Data[:common.HashLength]).Big().Uint64(),
+							BlockNumber:v.BlockNumber,
+						})
+					blockLogs = append(blockLogs, v)
 				}
 
-				isRemoveAnchors := v.Topics[0] == params.AddAnchorsTopic
-				if isRemoveAnchors {
-					blockLogs = append(blockLogs, v)
-				}
+
 			}
 		}
 		if len(rtxs) > 0 {
 			go bc.rtxsFeed.Send(NewRTxsEvent{rtxs}) //删除本地待接单
 		}
+
+		if len(add) > 0 {
+			go bc.updateAnchorFeed.Send(AnchorEvent{add})
+		}
+
+		if len(delete) > 0 {
+			go bc.updateAnchorFeed.Send(AnchorEvent{delete})
+		}
 	}
 
-	if len(blockLogs) > 0 {
-		bc.trigger.Insert(blockNumber, hash, blockLogs)
-	} else {
-		bc.trigger.Insert(blockNumber, hash, nil)
-	}
+	bc.trigger.Insert(blockNumber, hash, blockLogs)
+	//if len(blockLogs) > 0 {
+	//	bc.trigger.Insert(blockNumber, hash, blockLogs)
+	////} else {
+	//	bc.trigger.Insert(blockNumber, hash, nil)
+	//}
 
 }
 
@@ -2339,20 +2359,28 @@ func (bc *BlockChain) SubscribeNewRTxssEvent(ch chan<- NewRTxsEvent) event.Subsc
 	return bc.scope.Track(bc.rtxsFeed.Subscribe(ch))
 }
 
-//func (bc *BlockChain) SubscribeTransactionRemoveEvent(ch chan<- TransationRemoveEvent) event.Subscription {
-//	return bc.scope.Track(bc.transactionRemove.Subscribe(ch))
-//}
-//
-//func (bc *BlockChain) SubscribeTransactionFinishEvent(ch chan<- TransationFinishEvent) event.Subscription {
-//	return bc.scope.Track(bc.transactionFinishFeed.Subscribe(ch))
-//}
-//
 func (bc *BlockChain) TransactionFinishFeedSend(tx TransationFinishEvent) int {
 	return bc.FinishsFeed.Send(tx)
 }
 
 func (bc *BlockChain) SubscribeNewFinishsEvent(ch chan<- TransationFinishEvent) event.Subscription {
 	return bc.scope.Track(bc.FinishsFeed.Subscribe(ch))
+}
+
+//func (bc *BlockChain) SubscribeAddAnchorEvent(ch chan<- AnchorEvent) event.Subscription {
+//	return bc.scope.Track(bc.addAnchorFeed.Subscribe(ch))
+//}
+//
+//func (bc *BlockChain) AddAnchorFeedSend(chainInfo AnchorEvent) int {
+//	return bc.addAnchorFeed.Send(chainInfo)
+//}
+
+func (bc *BlockChain) SubscribeDelAnchorEvent(ch chan<- AnchorEvent) event.Subscription {
+	return bc.scope.Track(bc.delAnchorFeed.Subscribe(ch))
+}
+
+func (bc *BlockChain) DelAnchorFeedSend(chainInfo AnchorEvent) int {
+	return bc.delAnchorFeed.Send(chainInfo)
 }
 
 func (bc *BlockChain) IsCtxAddress(addr common.Address) bool {
@@ -2369,4 +2397,8 @@ func (bc *BlockChain) IsCtxAddress(addr common.Address) bool {
 
 func (bc *BlockChain) GetBlockNumber(hash common.Hash) *uint64 {
 	return bc.hc.GetBlockNumber(hash)
+}
+
+func (bc *BlockChain) SubscribeUpdateAnchorEvent(ch chan<- AnchorEvent) event.Subscription {
+	return bc.scope.Track(bc.updateAnchorFeed.Subscribe(ch))
 }

@@ -18,6 +18,8 @@ type headerRetriever interface {
 	CtxsFeedSend(transaction NewCTxsEvent) int
 	RtxsFeedSend(transaction NewRTxsEvent) int
 	TransactionFinishFeedSend(transaction TransationFinishEvent) int
+	//AddAnchorFeedSend(chainInfo AnchorEvent) int
+	DelAnchorFeedSend(chainInfo AnchorEvent) int
 	IsCtxAddress(addr common.Address) bool
 }
 
@@ -86,76 +88,96 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 		case header == nil:
 			log.Warn("Failed to retrieve header of mined block", "number", next.index, "hash", next.hash)
 		case header.Hash() == next.hash:
-			if next.logs != nil {
-				var ctxs []*types.CrossTransaction
-				var rtxs []*types.ReceptTransaction
-				var finishes []*types.FinishInfo
-				//todo add and del anchors
-				for _, v := range next.logs {
-					tx, blockHash, blockNumber := set.chain.GetTransactionByTxHash(v.TxHash)
-					if tx != nil && blockHash == v.BlockHash && blockNumber == v.BlockNumber {
-						isLaunch := v.Topics[0] == params.MakerTopic
-						if set.chain.IsCtxAddress(v.Address) && isLaunch {
-							var from common.Address
-							copy(from[:], v.Topics[2][common.HashLength-common.AddressLength:])
-							ctxId := v.Topics[1]
-							count := common.BytesToHash(v.Data[common.HashLength*4 : common.HashLength*5]).Big().Int64()
-							ctxs = append(ctxs,
-								types.NewCrossTransaction(
-									common.BytesToHash(v.Data[common.HashLength:common.HashLength*2]).Big(),
-									common.BytesToHash(v.Data[common.HashLength*2:common.HashLength*3]).Big(),
-									common.BytesToHash(v.Data[:common.HashLength]).Big(),
-									ctxId,
-									v.TxHash,
-									v.BlockHash,
-									from,
-									v.Data[common.HashLength*5:common.HashLength*5+count])) //todo
-							continue
-						}
+			//if next.logs != nil {
+			var ctxs []*types.CrossTransaction
+			var rtxs []*types.ReceptTransaction
+			var finishes []*types.FinishInfo
+			//var add  []*types.RemoteChainInfo
+			var delete []*types.RemoteChainInfo
+			//todo add and del anchors
+			for _, v := range next.logs {
+				tx, blockHash, blockNumber := set.chain.GetTransactionByTxHash(v.TxHash)
+				if tx != nil && set.chain.IsCtxAddress(v.Address) && blockHash == v.BlockHash && blockNumber == v.BlockNumber {
+					if len(v.Topics) >= 3 && len(v.Data) >= common.HashLength*5 && v.Topics[0] == params.MakerTopic {
+						var from common.Address
+						copy(from[:], v.Topics[2][common.HashLength-common.AddressLength:])
+						ctxId := v.Topics[1]
+						count := common.BytesToHash(v.Data[common.HashLength*4 : common.HashLength*5]).Big().Int64()
+						ctxs = append(ctxs,
+							types.NewCrossTransaction(
+								common.BytesToHash(v.Data[common.HashLength:common.HashLength*2]).Big(),
+								common.BytesToHash(v.Data[common.HashLength*2:common.HashLength*3]).Big(),
+								common.BytesToHash(v.Data[:common.HashLength]).Big(),
+								ctxId,
+								v.TxHash,
+								v.BlockHash,
+								from,
+								v.Data[common.HashLength*5:common.HashLength*5+count])) //todo
+						continue
+					}
 
-						isMatching := v.Topics[0] == params.TakerTopic
-						if set.chain.IsCtxAddress(v.Address) && isMatching {
-							var to common.Address
-							copy(to[:], v.Topics[2][common.HashLength-common.AddressLength:])
+					if len(v.Topics) >= 3 && len(v.Data) >= common.HashLength*6 && v.Topics[0] == params.TakerTopic {
+						var to common.Address
+						copy(to[:], v.Topics[2][common.HashLength-common.AddressLength:])
+						ctxId := v.Topics[1]
+						count := common.BytesToHash(v.Data[common.HashLength*5 : common.HashLength*6]).Big().Int64()
+						rtxs = append(rtxs,
+							types.NewReceptTransaction(
+								ctxId,
+								v.TxHash,
+								v.BlockHash,
+								to,
+								common.BytesToHash(v.Data[:common.HashLength]).Big(),
+								v.BlockNumber,
+								v.TxIndex,
+								v.Data[common.HashLength*6:common.HashLength*6+count]))
+						continue
+					}
+					if len(v.Topics) >= 3 && v.Topics[0] == params.MakerFinishTopic {
+						if len(v.Topics) >= 2 {
 							ctxId := v.Topics[1]
-							count := common.BytesToHash(v.Data[common.HashLength*5 : common.HashLength*6]).Big().Int64()
-							rtxs = append(rtxs,
-								types.NewReceptTransaction(
-									ctxId,
-									v.TxHash,
-									v.BlockHash,
-									to,
-									common.BytesToHash(v.Data[:common.HashLength]).Big(),
-									v.BlockNumber,
-									v.TxIndex,
-									v.Data[common.HashLength*6:common.HashLength*6+count]))
-							continue
+							to := v.Topics[2]
+							finishes = append(finishes, &types.FinishInfo{TxId: ctxId, Taker: common.BytesToAddress(to[:])})
 						}
-						// delete statement
-						isFinish := v.Topics[0] == params.MakerFinishTopic
-						if set.chain.IsCtxAddress(v.Address) && isFinish {
-							if len(v.Topics) >= 2 {
-								ctxId := v.Topics[1]
-								to := v.Topics[2]
-								finishes = append(finishes, &types.FinishInfo{TxId: ctxId, Taker: common.BytesToAddress(to[:])})
-							}
-						}
+						continue
+					}
+					//if len(v.Topics) > 0 && v.Topics[0] == params.AddAnchorsTopic {
+					//	add = append(add,
+					//		&types.RemoteChainInfo{
+					//			RemoteChainId:common.BytesToHash(v.Data[:common.HashLength]).Big().Uint64(),
+					//			BlockNumber:v.BlockNumber,
+					//		})
+					//	continue
+					//}
+					if len(v.Topics) > 0 && v.Topics[0] == params.RemoveAnchors {
+						delete = append(delete,
+							&types.RemoteChainInfo{
+								RemoteChainId:common.BytesToHash(v.Data[:common.HashLength]).Big().Uint64(),
+								BlockNumber:v.BlockNumber,
+							})
 					}
 				}
-				if len(ctxs) > 0 {
-					//log.Info("ctxs", "next.index",next.index,"height",height,"l",len(ctxs))
-					set.chain.CtxsFeedSend(NewCTxsEvent{ctxs})
-				}
-				if len(rtxs) > 0 {
-					//log.Info("rtxs","next.index",next.index,"height",height,"l",len(rtxs))
-					set.chain.RtxsFeedSend(NewRTxsEvent{rtxs})
-				}
-				if len(finishes) > 0 {
-					//log.Info("finishs","blockNumber",next.index,"height",height,"l",len(finishes))
-					set.chain.TransactionFinishFeedSend(TransationFinishEvent{
-						finishes})
-				}
 			}
+			if len(ctxs) > 0 {
+				//log.Info("ctxs", "next.index",next.index,"height",height,"l",len(ctxs))
+				set.chain.CtxsFeedSend(NewCTxsEvent{ctxs})
+			}
+			if len(rtxs) > 0 {
+				//log.Info("rtxs","next.index",next.index,"height",height,"l",len(rtxs))
+				set.chain.RtxsFeedSend(NewRTxsEvent{rtxs})
+			}
+			if len(finishes) > 0 {
+				//log.Info("finishs","blockNumber",next.index,"height",height,"l",len(finishes))
+				set.chain.TransactionFinishFeedSend(TransationFinishEvent{
+					finishes})
+			}
+			//if len(add) > 0 {
+			//	set.chain.AddAnchorFeedSend(AnchorEvent{add})
+			//}
+			if len(delete) > 0 {
+				set.chain.DelAnchorFeedSend(AnchorEvent{delete})
+			}
+			//}
 		default:
 			log.Info("⑂ block  became a side fork", "number", next.index, "hash", next.hash)
 		}

@@ -397,6 +397,15 @@ func (t *CWssList) Add(tx *types.CrossTransactionWithSignatures) {
 	}
 }
 
+func (t *CWssList) Update(tx *types.CrossTransactionWithSignatures) {
+	if _, ok := t.all[tx.ID()]; !ok {
+		t.Add(tx)
+	} else {
+		t.Remove(tx.ID())
+		t.Add(tx)
+	}
+}
+
 // Remove removes a transaction from the all.
 func (t *CWssList) Remove(hash common.Hash) {
 	//t.lock.Lock()

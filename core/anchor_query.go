@@ -57,7 +57,7 @@ func QueryAnchor(config *params.ChainConfig, bc ChainContext, statedb *state.Sta
 	// Setup the gas pool (also for unmetered requests)
 	// and apply the messages
 	testgp := new(GasPool).AddGas(math.MaxUint64)
-	res, gas, suc, err := ApplyMessage(vmenv1, checkMsg, testgp)
+	res, _, _, err := ApplyMessage(vmenv1, checkMsg, testgp)
 	if err != nil {
 		log.Info("ApplyTransaction", "err", err)
 	}
@@ -74,7 +74,7 @@ func QueryAnchor(config *params.ChainConfig, bc ChainContext, statedb *state.Sta
 
 	var anchors []common.Address
 	if len(res) > 64 {
-		log.Info("anchor query", "result", hexutil.Encode(res), "gas", gas, "suc", suc)
+		//log.Info("anchor query", "result", hexutil.Encode(res), "gas", gas, "suc", suc)
 		signConfirmCount := new(big.Int).SetBytes(res[common.HashLength : common.HashLength*2]).Uint64()
 		anchorLen := new(big.Int).SetBytes(res[common.HashLength*2 : common.HashLength*3]).Uint64()
 

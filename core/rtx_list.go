@@ -46,7 +46,7 @@ func (h *rwsHeap) Pop() interface{} {
 type rwsList struct {
 	all    *rwsLookup // Pointer to the map of all transactions
 	items  *rwsHeap   // Heap of prices of all the stored transactions
-	stales int        // Number of stale price points to (re-heap trigger)
+	//stales int        // Number of stale price points to (re-heap trigger)
 }
 
 // newTxPricedList creates a new price-sorted transaction heap.
@@ -67,14 +67,15 @@ func (l *rwsList) Put(tx *types.ReceptTransactionWithSignatures) {
 // the heap if a large enough ratio of transactions go stale.
 func (l *rwsList) Removed() {
 	// Bump the stale counter, but exit if still too low (< 25%)
-	l.stales++
-	if l.stales <= len(*l.items)/4 {
-		return
-	}
+	//l.stales++
+	//if l.stales <= len(*l.items)/4 {
+	//	return
+	//}
 	// Seems we've reached a critical number of stale transactions, reheap
 	reheap := make(rwsHeap, 0, l.all.Count())
 
-	l.stales, l.items = 0, &reheap
+	//l.stales, l.items = 0, &reheap
+	l.items = &reheap
 	l.all.Range(func(hash common.Hash, tx *types.ReceptTransactionWithSignatures) bool {
 		*l.items = append(*l.items, tx)
 		return true
@@ -141,10 +142,10 @@ func (l *rwsList) Discard(count uint64) []*types.ReceptTransactionWithSignatures
 	for len(*l.items) > 0 && count > 0 {
 		// Discard stale transactions if found during cleanup
 		tx := heap.Pop(l.items).(*types.ReceptTransactionWithSignatures)
-		if l.all.Get(tx.ID()) == nil {
-			l.stales--
-			continue
-		}
+		//if l.all.Get(tx.ID()) == nil {
+		//	l.stales--
+		//	continue
+		//}
 
 		drop = append(drop, tx)
 		count--

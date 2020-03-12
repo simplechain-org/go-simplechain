@@ -379,6 +379,21 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 		lesService.SetContractBackend(ethClient)
 	}
 
+	if stack.IsAnchor() {
+		var ethService *eth.Ethereum
+		var subService *sub.Ethereum
+		if err := stack.Service(&ethService); err != nil {
+			utils.Fatalf("Failed to retrieve ethereum service: %v", err)
+		}
+		if err := stack.Service(&subService); err != nil {
+			utils.Fatalf("Failed to retrieve ethereum service: %v", err)
+		}
+		ethService.SetObCtxStore(subService.CtxStore)
+		ethService.SetObRtxStore(subService.RtxStore)
+		subService.SetObCtxStore(ethService.CtxStore)
+		subService.SetObRtxStore(ethService.RtxStore)
+	}
+
 	go func() {
 		// Open any wallets already attached
 		for _, wallet := range stack.AccountManager().Wallets() {

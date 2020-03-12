@@ -302,9 +302,9 @@ func (b *EthAPIBackend) ServiceFilter(ctx context.Context, session *bloombits.Ma
 	}
 }
 func (b *EthAPIBackend) CtxStats() (pending int) {
-	return b.eth.ctxStore.Stats()
+	return b.eth.CtxStore.Stats()
 }
 
 func (b *EthAPIBackend) CtxPoolContent() (map[uint64][]*types.CrossTransactionWithSignatures, map[uint64][]*types.CrossTransactionWithSignatures) {
-	return b.eth.ctxStore.Query()
+	return b.eth.CtxStore.Query()
 }
