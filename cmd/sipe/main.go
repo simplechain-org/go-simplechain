@@ -163,6 +163,7 @@ var (
 		utils.RaftPortFlag,
 		utils.IstanbulRequestTimeoutFlag,
 		utils.IstanbulBlockPeriodFlag,
+		utils.AnchorSignerFlag,
 	}
 
 	rpcFlags = []cli.Flag{

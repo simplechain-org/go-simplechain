@@ -6,15 +6,13 @@ import (
 	"sync"
 	"time"
 
+	lru "github.com/hashicorp/golang-lru"
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/ethdb"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/params"
-	"github.com/simplechain-org/go-simplechain/rpctx"
-
-	lru "github.com/hashicorp/golang-lru"
 )
 
 const (
@@ -78,9 +76,10 @@ type RtxStore struct {
 	all              *rwsLookup
 	task             *rwsList
 	CrossDemoAddress common.Address
+	signHash         types.SignHash
 }
 
-func NewRtxStore(config RtxStoreConfig, chainconfig *params.ChainConfig, chain blockChain, chainDb ethdb.KeyValueStore, address common.Address) *RtxStore {
+func NewRtxStore(config RtxStoreConfig, chainconfig *params.ChainConfig, chain blockChain, chainDb ethdb.KeyValueStore, address common.Address, signHash types.SignHash) *RtxStore {
 	// Sanitize the input to ensure no vulnerable gas prices are set
 	config = (&config).sanitize()
 
@@ -104,6 +103,7 @@ func NewRtxStore(config RtxStoreConfig, chainconfig *params.ChainConfig, chain b
 		all:              newRwsLookup(),
 		CrossDemoAddress: address,
 		anchors:          make(map[uint64]*anchorAccountSet),
+		signHash:         signHash,
 	}
 	//newHead := store.chain.CurrentBlock().Header() // Special case during testing
 	//statedb, err := store.chain.StateAt(newHead.Root)
@@ -164,12 +164,12 @@ func (store *RtxStore) Stop() {
 }
 
 func (store *RtxStore) AddLocal(rtx *types.ReceptTransaction /*, record *types.CrossRecord*/) error {
-	// add local from block syncing, sigh it first
-	key, err := rpctx.StringToPrivateKey(rpctx.PrivateKey)
-	if err != nil {
-		return err
-	}
-	if signedTx, err := types.SignRTx(rtx, store.signer, key); err != nil {
+	//// add local from block syncing, sigh it first
+	//key, err := rpctx.StringToPrivateKey(rpctx.PrivateKey)
+	//if err != nil {
+	//	return err
+	//}
+	if signedTx, err := types.SignRTx(rtx, store.signer, store.signHash); err != nil {
 		return err
 	} else {
 		rtx.Data.V = signedTx.Data.V

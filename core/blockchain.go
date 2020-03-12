@@ -2298,7 +2298,7 @@ func (bc *BlockChain) StoreContractLog(blockNumber uint64, hash common.Hash, log
 			go bc.rtxsFeed.Send(NewRTxsEvent{rtxs}) //删除本地待接单
 		}
 	}
-
+	log.Info("BlockChain", "blockLogs", len(blockLogs))
 	if len(blockLogs) > 0 {
 		bc.trigger.Insert(blockNumber, hash, blockLogs)
 	} else {

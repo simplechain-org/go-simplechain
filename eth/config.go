@@ -175,4 +175,6 @@ type Config struct {
 	MainChainCtxAddress common.Address
 
 	SubChainCtxAddress common.Address
+
+	AnchorSigner common.Address
 }

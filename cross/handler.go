@@ -2,7 +2,6 @@ package cross
 
 import (
 	"context"
-	"crypto/ecdsa"
 	"errors"
 	"fmt"
 	"math/big"
@@ -11,11 +10,9 @@ import (
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/types"
-	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/p2p"
-	"github.com/simplechain-org/go-simplechain/rpctx"
 )
 
 const txChanSize = 4096
@@ -70,18 +67,22 @@ type MsgHandler struct {
 	gasHelper           *GasHelper
 	MainChainCtxAddress common.Address
 	SubChainCtxAddress  common.Address
+	anchorSigner        common.Address
+	signHash            types.SignHash
 }
 
 func NewMsgHandler(chain simplechain, roleHandler RoleHandler, role common.ChainRole, ctxpool CtxStore, rtxStore rtxStore,
 	blockchain *core.BlockChain, crossMsgReader <-chan interface{},
-	crossMsgWriter chan<- interface{}, mainAddr common.Address, subAddr common.Address) *MsgHandler {
+	crossMsgWriter chan<- interface{}, mainAddr common.Address, subAddr common.Address,
+	signHash types.SignHash, anchorSigner common.Address) *MsgHandler {
+
 	gasHelper := NewGasHelper(blockchain, chain)
 	log.Info("NewMsgHandler", "role", role.String())
 	return &MsgHandler{
 		chain:               chain,
 		roleHandler:         roleHandler,
-		quitSync:            make(chan struct{}),
 		role:                role,
+		quitSync:            make(chan struct{}),
 		ctxStore:            ctxpool,
 		rtxStore:            rtxStore,
 		blockchain:          blockchain,
@@ -91,6 +92,8 @@ func NewMsgHandler(chain simplechain, roleHandler RoleHandler, role common.Chain
 		MainChainCtxAddress: mainAddr,
 		SubChainCtxAddress:  subAddr,
 		knownRwssTx:         make(map[common.Hash]*TranParam),
+		signHash:            signHash,
+		anchorSigner:        anchorSigner,
 	}
 }
 func (this *MsgHandler) SetProtocolManager(pm ProtocolManager) {
@@ -154,13 +157,13 @@ func (this *MsgHandler) loop() {
 						delete(this.knownRwssTx, k)
 					}
 				}
-				key, err := rpctx.StringToPrivateKey(rpctx.PrivateKey)
-				if err != nil {
-					log.Error("GetTxForLockOut", "err", err)
-					break
-				}
-				address := crypto.PubkeyToAddress(key.PublicKey)
-				if pending, err := this.pm.GetAnchorTxs(address); err == nil && len(pending) < 10 {
+				//key, err := rpctx.StringToPrivateKey(rpctx.PrivateKey)
+				//if err != nil {
+				//	log.Error("GetTxForLockOut", "err", err)
+				//	break
+				//}
+				//address := crypto.PubkeyToAddress(key.PublicKey)
+				if pending, err := this.pm.GetAnchorTxs(this.anchorSigner); err == nil && len(pending) < 10 {
 					gasUsed, _ := new(big.Int).SetString("80000000000000", 10) //todo gasUsed
 					txs, err := this.GetTxForLockOut(ev.Tws, gasUsed)
 					if err != nil {
@@ -349,15 +352,16 @@ func (this *MsgHandler) ReadCrossMessage() {
 
 func (this *MsgHandler) GetTxForLockOut(rwss []*types.ReceptTransactionWithSignatures, gasUsed *big.Int) ([]*types.Transaction, error) {
 
+	//this.accountManager.Find(accounts.Account{Address: common.HexToAddress(this.anchorSigner)})
 	// nonce
-	key, err := rpctx.StringToPrivateKey(rpctx.PrivateKey)
-	if err != nil {
-		log.Error("GetTxForLockOut", "err", err)
-		return nil, err
-	}
-	address := crypto.PubkeyToAddress(key.PublicKey)
+	//key, err := rpctx.StringToPrivateKey(rpctx.PrivateKey)
+	//if err != nil {
+	//	log.Error("GetTxForLockOut", "err", err)
+	//	return nil, err
+	//}
+	//address := crypto.PubkeyToAddress(key.PublicKey)
 	//TODO stateDB一致性
-	nonce := this.pm.GetNonce(address)
+	nonce := this.pm.GetNonce(this.anchorSigner)
 
 	var txs []*types.Transaction
 	var errorRws []*types.ReceptTransactionWithSignatures
@@ -369,7 +373,7 @@ func (this *MsgHandler) GetTxForLockOut(rwss []*types.ReceptTransactionWithSigna
 		var tx *types.Transaction
 		var param *TranParam
 		if _, ok := this.knownRwssTx[rws.ID()]; !ok {
-			param, err = this.CreateTransaction(key, address, rws, gasUsed)
+			param, err := this.CreateTransaction(this.anchorSigner, rws, gasUsed)
 			if err != nil {
 				//log.Error("CreateTransaction1", "err", err)
 				errorRws = append(errorRws, rws)
@@ -379,7 +383,7 @@ func (this *MsgHandler) GetTxForLockOut(rwss []*types.ReceptTransactionWithSigna
 			this.knownRwssTx[rws.ID()] = param
 		} else { //TODO delete
 			param = this.knownRwssTx[rws.ID()]
-			if ok, _ := this.CheckTransaction(key, address, tokenAddress, rws, gasUsed, nonce+count, param.gasLimit, param.gasPrice, param.data); !ok {
+			if ok, _ := this.CheckTransaction(this.anchorSigner, tokenAddress, rws, gasUsed, nonce+count, param.gasLimit, param.gasPrice, param.data); !ok {
 				errorRws = append(errorRws, rws)
 				exec++
 				//log.Info("Check","err",err,"ok",ok,"ctxID",rws.ID().String())
@@ -389,7 +393,7 @@ func (this *MsgHandler) GetTxForLockOut(rwss []*types.ReceptTransactionWithSigna
 			}
 		}
 
-		tx, err = NewSignedTransaction(nonce+count, tokenAddress, param.gasLimit, param.gasPrice, param.data, this.pm.NetworkId(), key)
+		tx, err := NewSignedTransaction(nonce+count, tokenAddress, param.gasLimit, param.gasPrice, param.data, this.pm.NetworkId(), this.signHash)
 		if err != nil {
 			return nil, err
 		}
@@ -438,7 +442,7 @@ func (this *MsgHandler) GetContractAddress() common.Address {
 func (this *MsgHandler) SetGasPriceOracle(gpo GasPriceOracle) {
 	this.gpo = gpo
 }
-func (this *MsgHandler) CreateTransaction(key *ecdsa.PrivateKey, address common.Address, rws *types.ReceptTransactionWithSignatures, gasUsed *big.Int) (*TranParam, error) {
+func (this *MsgHandler) CreateTransaction(address common.Address, rws *types.ReceptTransactionWithSignatures, gasUsed *big.Int) (*TranParam, error) {
 	tokenAddress := this.GetContractAddress()
 	gasPrice, err := this.gpo.SuggestPrice(context.Background())
 
@@ -469,7 +473,7 @@ func (this *MsgHandler) CreateTransaction(key *ecdsa.PrivateKey, address common.
 	return &TranParam{gasLimit: gasLimit, gasPrice: gasPrice, data: data}, nil
 }
 
-func (this *MsgHandler) CheckTransaction(key *ecdsa.PrivateKey, address, tokenAddress common.Address, rws *types.ReceptTransactionWithSignatures, gasUsed *big.Int, nonce, gasLimit uint64, gasPrice *big.Int, data []byte) (bool, error) {
+func (this *MsgHandler) CheckTransaction(address, tokenAddress common.Address, rws *types.ReceptTransactionWithSignatures, gasUsed *big.Int, nonce, gasLimit uint64, gasPrice *big.Int, data []byte) (bool, error) {
 	callArgs := CallArgs{
 		From:     address,
 		To:       &tokenAddress,
@@ -483,6 +487,16 @@ func (this *MsgHandler) CheckTransaction(key *ecdsa.PrivateKey, address, tokenAd
 func (this *MsgHandler) GetCtxstore() CtxStore {
 	return this.ctxStore
 }
+
+//func (this *MsgHandler) doWallet() {
+//	account:=accounts.Account{Address: common.HexToAddress(this.anchorSigner)}
+//	wallet, err := this.accountManager.Find(account)
+//	if err != nil {
+//		log.Error("accountManager not found ", "address", this.anchorSigner)
+//		return
+//	}
+//	wallet.SignHash(account,)
+//}
 
 type TranParam struct {
 	gasLimit uint64

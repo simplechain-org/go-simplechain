@@ -8,9 +8,9 @@ import (
 )
 
 var (
-	//ETH_SERVER = "http://127.0.0.1:8545"
-	//SUB_SERVER = "http://127.0.0.1:8555"
-	PrivateKey string //todo 改用keystore
+//ETH_SERVER = "http://127.0.0.1:8545"
+//SUB_SERVER = "http://127.0.0.1:8555"
+//PrivateKey string //todo 改用keystore
 )
 
 //func SendTxForLockout(rtx *types.ReceptTransactionWithSignatures, gasUsed *big.Int, networkId uint64) (string, error) {
