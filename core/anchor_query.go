@@ -83,7 +83,6 @@ func QueryAnchor(config *params.ChainConfig, bc ChainContext, statedb *state.Sta
 		for i = 0; i < anchorLen; i++ {
 			copy(anchor[:], res[common.HashLength*(4+i)-common.AddressLength:common.HashLength*(4+i)])
 			anchors = append(anchors, anchor)
-			log.Info("QueryAnchor", " anchor", anchor.String())
 		}
 		return anchors, int(signConfirmCount)
 	} else {

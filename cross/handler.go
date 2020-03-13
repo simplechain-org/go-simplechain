@@ -77,7 +77,6 @@ func NewMsgHandler(chain simplechain, roleHandler RoleHandler, role common.Chain
 	signHash types.SignHash, anchorSigner common.Address) *MsgHandler {
 
 	gasHelper := NewGasHelper(blockchain, chain)
-	log.Info("NewMsgHandler", "role", role.String())
 	return &MsgHandler{
 		chain:               chain,
 		roleHandler:         roleHandler,
@@ -145,7 +144,7 @@ func (this *MsgHandler) loop() {
 		case ev := <-this.makerSignedCh:
 			this.pm.BroadcastInternalCrossTransactionWithSignature([]*types.CrossTransactionWithSignatures{ev.Txs}) //主网广播
 			if this.role.IsAnchor() {
-				this.WriteCrossMessage(ev.Txs) //发送到子网
+				this.WriteCrossMessage(ev.Txs)
 			}
 		case <-this.makerSignedSub.Err():
 			return
@@ -153,25 +152,21 @@ func (this *MsgHandler) loop() {
 		case ev := <-this.availableTakerCh:
 			if this.role.IsAnchor() {
 				if len(ev.Tws) == 0 {
-					for k := range this.knownRwssTx { //清理缓存
+					for k := range this.knownRwssTx {
 						delete(this.knownRwssTx, k)
 					}
+					break
 				}
-				//key, err := rpctx.StringToPrivateKey(rpctx.PrivateKey)
-				//if err != nil {
-				//	log.Error("GetTxForLockOut", "err", err)
-				//	break
-				//}
-				//address := crypto.PubkeyToAddress(key.PublicKey)
 				if pending, err := this.pm.GetAnchorTxs(this.anchorSigner); err == nil && len(pending) < 10 {
 					gasUsed, _ := new(big.Int).SetString("80000000000000", 10) //todo gasUsed
 					txs, err := this.GetTxForLockOut(ev.Tws, gasUsed)
 					if err != nil {
-						log.Info("availableTakerCh", "err", err)
-						//记录延迟，不能删
-						// this.rtxStore.RemoveLocals([]*types.ReceptTransactionWithSignatures{rws})
+						log.Error("GetTxForLockOut", "err", err)
 					}
-					this.pm.AddRemotes(txs)
+					if len(txs) > 0 {
+						this.pm.AddRemotes(txs)
+					}
+
 				}
 			}
 		case <-this.availableTakerSub.Err():
@@ -235,10 +230,9 @@ func (this *MsgHandler) HandleMsg(msg p2p.Msg, p Peer) error {
 		}
 		if err := this.ctxStore.ValidateCtx(ctx); err == nil {
 			p.MarkReceptTransaction(ctx.SignHash())
-			//todo
 			this.pm.BroadcastCtx([]*types.CrossTransaction{ctx})
 			if err := this.ctxStore.AddRemote(ctx); err != nil {
-				log.Debug("Add remote ctx", "err", err)
+				log.Error("Add remote ctx", "err", err)
 			}
 		}
 	case msg.Code == CtxSignsMsg:
@@ -276,9 +270,9 @@ func (this *MsgHandler) HandleMsg(msg p2p.Msg, p Peer) error {
 		}
 
 	case msg.Code == CtxSignsInternalMsg:
-		//if !this.pm.CanAcceptTxs() {
-		//	break
-		//}
+		if !this.pm.CanAcceptTxs() {
+			break
+		}
 		var cwss []*types.CrossTransactionWithSignatures
 		if err := msg.Decode(&cwss); err != nil {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
@@ -289,14 +283,6 @@ func (this *MsgHandler) HandleMsg(msg p2p.Msg, p Peer) error {
 		for _, cws := range cwss {
 			p.MarkInternalCrossTransactionWithSignatures(cws.ID())
 		}
-	//case msg.Code == GetCtxSignsMsg:
-	//	var Query GetCtxSignsData
-	//
-	//	if err := msg.Decode(&Query); err != nil {
-	//		return errResp(ErrDecode, "%v: %v", msg, err)
-	//	}
-	//	cwss := this.ctxStore.List(Query.Amount, Query.GetAll)
-	//	p.SendCrossTransactionWithSignatures(cwss)
 
 	default:
 		return errResp(ErrInvalidMsgCode, "%v", msg.Code)
@@ -308,20 +294,15 @@ func (this *MsgHandler) ReadCrossMessage() {
 	for {
 		select {
 		case v := <-this.crossMsgReader:
-			//log.Info("ReadCrossMessage")
 			cws, ok := v.(*types.CrossTransactionWithSignatures)
-			//if ok {
-			//	log.Info("ReadCrossMessage", "networkID", this.pm.NetworkId(), "destId", cws.Data.DestinationId.Uint64())
-			//}
+
 			if ok && cws.Data.DestinationId.Uint64() == this.pm.NetworkId() {
 				this.ctxStore.AddCWss([]*types.CrossTransactionWithSignatures{cws})
 				this.pm.BroadcastCWss([]*types.CrossTransactionWithSignatures{cws})
 				break
 			}
 			rws, ok := v.(*types.ReceptTransactionWithSignatures)
-			//if ok {
-			//	log.Info("ReadCrossMessage", "networkID", this.pm.NetworkId(), "destId", rws.Data.DestinationId.Uint64())
-			//}
+
 			if ok && rws.Data.DestinationId.Uint64() == this.pm.NetworkId() {
 				if v := this.rtxStore.ReadFromLocals(rws.Data.CTxId); v == nil {
 					errs := this.rtxStore.AddLocals(rws)
@@ -332,16 +313,6 @@ func (this *MsgHandler) ReadCrossMessage() {
 						}
 					}
 				}
-				//log.Info("send tx for rtx")
-				//gasUsed, _ := new(big.Int).SetString("300000000000000", 10) //todo gasUsed
-				//tx, err := this.GetTxForLockOut(rws, gasUsed, this.pm.NetworkId())
-				//if err != nil {
-				//	log.Info("ReadCrossMessage", "err", err)
-				//	break
-				//}
-				//
-				////锚定节点本地存储
-				//this.pm.AddRemotes([]*types.Transaction{tx})
 				break
 			}
 		case <-this.quitSync:
@@ -351,16 +322,6 @@ func (this *MsgHandler) ReadCrossMessage() {
 }
 
 func (this *MsgHandler) GetTxForLockOut(rwss []*types.ReceptTransactionWithSignatures, gasUsed *big.Int) ([]*types.Transaction, error) {
-
-	//this.accountManager.Find(accounts.Account{Address: common.HexToAddress(this.anchorSigner)})
-	// nonce
-	//key, err := rpctx.StringToPrivateKey(rpctx.PrivateKey)
-	//if err != nil {
-	//	log.Error("GetTxForLockOut", "err", err)
-	//	return nil, err
-	//}
-	//address := crypto.PubkeyToAddress(key.PublicKey)
-	//TODO stateDB一致性
 	nonce := this.pm.GetNonce(this.anchorSigner)
 
 	var txs []*types.Transaction
@@ -368,14 +329,16 @@ func (this *MsgHandler) GetTxForLockOut(rwss []*types.ReceptTransactionWithSigna
 	var count, send, exec, errTx1, errTx2 uint64
 	tokenAddress := this.GetContractAddress()
 
+	var tx *types.Transaction
+	var param *TranParam
+	var err error
+
 	for _, rws := range rwss {
 		//TODO EstimateGas不仅测试GasLimit，同时能判断该交易是否执行成功
-		var tx *types.Transaction
-		var param *TranParam
 		if _, ok := this.knownRwssTx[rws.ID()]; !ok {
-			param, err := this.CreateTransaction(this.anchorSigner, rws, gasUsed)
+			param, err = this.CreateTransaction(this.anchorSigner, rws, gasUsed)
 			if err != nil {
-				//log.Error("CreateTransaction1", "err", err)
+				log.Error("CreateTransaction1", "err", err)
 				errorRws = append(errorRws, rws)
 				errTx1++
 				continue
@@ -393,11 +356,10 @@ func (this *MsgHandler) GetTxForLockOut(rwss []*types.ReceptTransactionWithSigna
 			}
 		}
 
-		tx, err := NewSignedTransaction(nonce+count, tokenAddress, param.gasLimit, param.gasPrice, param.data, this.pm.NetworkId(), this.signHash)
+		tx, err = NewSignedTransaction(nonce+count, tokenAddress, param.gasLimit, param.gasPrice, param.data, this.pm.NetworkId(), this.signHash)
 		if err != nil {
 			return nil, err
 		}
-
 		txs = append(txs, tx)
 		count++
 		if len(txs) >= 200 {
@@ -420,6 +382,9 @@ func (this *MsgHandler) WriteCrossMessage(v interface{}) {
 }
 
 func (this *MsgHandler) clearStore(finishes []*types.FinishInfo) error {
+	for _, finish := range finishes {
+		log.Info("cross transaction finish", "txId", finish.TxId.String())
+	}
 	if err := this.ctxStore.RemoveLocals(finishes); err != nil {
 		return errors.New("rm ctx error")
 	}
@@ -451,7 +416,7 @@ func (this *MsgHandler) CreateTransaction(address common.Address, rws *types.Rec
 	}
 	data, err := rws.ConstructData(gasUsed)
 	if err != nil {
-		log.Info("ConstructData", "err", err)
+		log.Error("ConstructData", "err", err)
 		return nil, err
 	}
 
@@ -467,9 +432,6 @@ func (this *MsgHandler) CreateTransaction(address common.Address, rws *types.Rec
 	if err != nil {
 		return nil, err
 	}
-
-	//gasPrice.Add(gasPrice,big.NewInt(1000000000))
-
 	return &TranParam{gasLimit: gasLimit, gasPrice: gasPrice, data: data}, nil
 }
 
@@ -487,16 +449,6 @@ func (this *MsgHandler) CheckTransaction(address, tokenAddress common.Address, r
 func (this *MsgHandler) GetCtxstore() CtxStore {
 	return this.ctxStore
 }
-
-//func (this *MsgHandler) doWallet() {
-//	account:=accounts.Account{Address: common.HexToAddress(this.anchorSigner)}
-//	wallet, err := this.accountManager.Find(account)
-//	if err != nil {
-//		log.Error("accountManager not found ", "address", this.anchorSigner)
-//		return
-//	}
-//	wallet.SignHash(account,)
-//}
 
 type TranParam struct {
 	gasLimit uint64

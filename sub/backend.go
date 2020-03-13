@@ -647,6 +647,5 @@ func (s *Ethereum) SignHash(hash []byte) ([]byte, error) {
 		log.Error("account not found ", "address", s.config.AnchorSigner)
 		return nil, err
 	}
-	log.Error("sub Ethereum", "AnchorSigner", s.config.AnchorSigner.String())
 	return wallet.SignHash(account, hash)
 }

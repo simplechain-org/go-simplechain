@@ -352,16 +352,10 @@ func (store *CtxStore) addTxLocked(ctx *types.CrossTransaction, local bool) erro
 	id := ctx.ID()
 	// make signature first for local ctx
 	if local {
-		//key, err := rpctx.StringToPrivateKey(rpctx.PrivateKey)
-		//if err != nil {
-		//	return err
-		//}
-
 		signedTx, err := types.SignCTx(ctx, store.signer, store.signHash)
 		if err != nil {
 			return err
 		}
-
 		*ctx = *signedTx
 	}
 

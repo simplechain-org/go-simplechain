@@ -6,7 +6,6 @@ import (
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/crypto/sha3"
-	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/params"
 )
 
@@ -26,7 +25,6 @@ func MakeCtxSigner(config *params.ChainConfig) CtxSigner {
 func SignCTx(tx *CrossTransaction, s CtxSigner, signHash SignHash) (*CrossTransaction, error) {
 	h := s.Hash(tx)
 	sig, err := signHash(h[:])
-	log.Info("SignCTx", "h[:]", h[:], "sig", sig)
 	if err != nil {
 		return nil, err
 	}

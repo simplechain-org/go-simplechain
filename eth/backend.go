@@ -716,9 +716,8 @@ func (s *Ethereum) SignHash(hash []byte) ([]byte, error) {
 	account := accounts.Account{Address: s.config.AnchorSigner}
 	wallet, err := s.accountManager.Find(account)
 	if err != nil {
-		log.Error("accountManager not found ", "address", s.config.AnchorSigner)
+		log.Error("account not found ", "address", s.config.AnchorSigner)
 		return nil, err
 	}
-	log.Error("eth Ethereum", "AnchorSigner", s.config.AnchorSigner.String())
 	return wallet.SignHash(account, hash)
 }
