@@ -15,9 +15,7 @@
       "voterReward": true,
       "genesisTimestamp": 1554004800,
       "signers": [],
-      "sideChain": false,
-      "MCRPCClient": null,
-      "pbft": false
+      "pbft": true
     }
   },
   "nonce": "0x0",

@@ -137,9 +137,7 @@ type DPoS struct {
 	signatures *lru.ARCCache      // Signatures of recent blocks to speed up mining
 	signer     common.Address     // Ethereum address of the signing key
 	signFn     SignerFn           // Signer function to authorize hashes with
-	signTxFn   SignTxFn           // Sign transaction function to sign tx
 	lock       sync.RWMutex       // Protects the signer fields
-	lcsc       uint64             // Last confirmed side chain
 }
 
 // SignerFn is a signer callback function to request a hash to be signed by a
@@ -471,13 +469,13 @@ func (d *DPoS) verifySeal(chain consensus.ChainReader, header *types.Header, par
 			parent = chain.GetHeader(header.ParentHash, number-1)
 		}
 		parentHeaderExtra := HeaderExtra{}
-		err = decodeHeaderExtra(d.config, parent.Number, parent.Extra[extraVanity:len(parent.Extra)-extraSeal], &parentHeaderExtra)
+		err = decodeHeaderExtra(parent.Extra[extraVanity:len(parent.Extra)-extraSeal], &parentHeaderExtra)
 		if err != nil {
 			log.Info("Fail to decode parent header", "err", err)
 			return err
 		}
 		currentHeaderExtra := HeaderExtra{}
-		err = decodeHeaderExtra(d.config, header.Number, header.Extra[extraVanity:len(header.Extra)-extraSeal], &currentHeaderExtra)
+		err = decodeHeaderExtra(header.Extra[extraVanity:len(header.Extra)-extraSeal], &currentHeaderExtra)
 		if err != nil {
 			log.Info("Fail to decode header", "err", err)
 			return err
@@ -502,33 +500,24 @@ func (d *DPoS) verifySeal(chain consensus.ChainReader, header *types.Header, par
 		}
 
 		// verify missing signer for punish
-		var parentSignerMissing []common.Address
-		if d.config.IsTrantor(header.Number) {
-			var grandParentHeaderExtra HeaderExtra
-			if number%d.config.MaxSignerCount == 1 {
-				var grandParent *types.Header
-				if len(parents) > 1 {
-					grandParent = parents[len(parents)-2]
-				} else {
-					grandParent = chain.GetHeader(parent.ParentHash, number-2)
-				}
-				if grandParent == nil {
-					return errLastLoopHeaderFail
-				}
-				err := decodeHeaderExtra(d.config, grandParent.Number, grandParent.Extra[extraVanity:len(grandParent.Extra)-extraSeal], &grandParentHeaderExtra)
-				if err != nil {
-					log.Info("Fail to decode parent header", "err", err)
-					return err
-				}
+		var grandParentHeaderExtra HeaderExtra
+		if number%d.config.MaxSignerCount == 1 {
+			var grandParent *types.Header
+			if len(parents) > 1 {
+				grandParent = parents[len(parents)-2]
+			} else {
+				grandParent = chain.GetHeader(parent.ParentHash, number-2)
 			}
-			parentSignerMissing = getSignerMissingTrantor(parent.Coinbase, header.Coinbase, &parentHeaderExtra, &grandParentHeaderExtra)
-		} else {
-			newLoop := false
-			if number%d.config.MaxSignerCount == 0 {
-				newLoop = true
+			if grandParent == nil {
+				return errLastLoopHeaderFail
 			}
-			parentSignerMissing = getSignerMissing(parent.Coinbase, header.Coinbase, parentHeaderExtra, newLoop)
+			err := decodeHeaderExtra(grandParent.Extra[extraVanity:len(grandParent.Extra)-extraSeal], &grandParentHeaderExtra)
+			if err != nil {
+				log.Info("Fail to decode parent header", "err", err)
+				return err
+			}
 		}
+		parentSignerMissing := getSignerMissingTrantor(parent.Coinbase, header.Coinbase, &parentHeaderExtra, &grandParentHeaderExtra)
 
 		if len(parentSignerMissing) != len(currentHeaderExtra.SignerMissing) {
 			return errPunishedMissing
@@ -620,7 +609,7 @@ func (d *DPoS) Finalize(chain consensus.ChainReader, header *types.Header, state
 		}
 	} else {
 		// decode extra from last header.extra
-		err := decodeHeaderExtra(d.config, parent.Number, parent.Extra[extraVanity:len(parent.Extra)-extraSeal], &parentHeaderExtra)
+		err := decodeHeaderExtra(parent.Extra[extraVanity:len(parent.Extra)-extraSeal], &parentHeaderExtra)
 		if err != nil {
 			log.Info("Fail to decode parent header", "err", err)
 			return err
@@ -629,27 +618,19 @@ func (d *DPoS) Finalize(chain consensus.ChainReader, header *types.Header, state
 		currentHeaderExtra.SignerQueue = parentHeaderExtra.SignerQueue
 		currentHeaderExtra.LoopStartTime = parentHeaderExtra.LoopStartTime
 
-		if d.config.IsTrantor(header.Number) {
-			var grandParentHeaderExtra HeaderExtra
-			if number%d.config.MaxSignerCount == 1 {
-				grandParent := chain.GetHeader(parent.ParentHash, number-2)
-				if grandParent == nil {
-					return errLastLoopHeaderFail
-				}
-				err := decodeHeaderExtra(d.config, grandParent.Number, grandParent.Extra[extraVanity:len(grandParent.Extra)-extraSeal], &grandParentHeaderExtra)
-				if err != nil {
-					log.Info("Fail to decode parent header", "err", err)
-					return err
-				}
+		var grandParentHeaderExtra HeaderExtra
+		if number%d.config.MaxSignerCount == 1 {
+			grandParent := chain.GetHeader(parent.ParentHash, number-2)
+			if grandParent == nil {
+				return errLastLoopHeaderFail
 			}
-			currentHeaderExtra.SignerMissing = getSignerMissingTrantor(parent.Coinbase, header.Coinbase, &parentHeaderExtra, &grandParentHeaderExtra)
-		} else {
-			newLoop := false
-			if number%d.config.MaxSignerCount == 0 {
-				newLoop = true
+			err := decodeHeaderExtra(grandParent.Extra[extraVanity:len(grandParent.Extra)-extraSeal], &grandParentHeaderExtra)
+			if err != nil {
+				log.Info("Fail to decode parent header", "err", err)
+				return err
 			}
-			currentHeaderExtra.SignerMissing = getSignerMissing(parent.Coinbase, header.Coinbase, parentHeaderExtra, newLoop)
 		}
+		currentHeaderExtra.SignerMissing = getSignerMissingTrantor(parent.Coinbase, header.Coinbase, &parentHeaderExtra, &grandParentHeaderExtra)
 
 	}
 
@@ -692,7 +673,7 @@ func (d *DPoS) Finalize(chain consensus.ChainReader, header *types.Header, state
 	}
 
 	// encode header.extra
-	currentHeaderExtraEnc, err := encodeHeaderExtra(d.config, header.Number, currentHeaderExtra)
+	currentHeaderExtraEnc, err := encodeHeaderExtra(currentHeaderExtra)
 	if err != nil {
 		return err
 	}
@@ -720,13 +701,12 @@ func (d *DPoS) FinalizeAndAssemble(chain consensus.ChainReader, header *types.He
 }
 
 // Authorize injects a private key into the consensus engine to mint new blocks with.
-func (d *DPoS) Authorize(signer common.Address, signFn SignerFn, signTxFn SignTxFn) {
+func (d *DPoS) Authorize(signer common.Address, signFn SignerFn) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
 	d.signer = signer
 	d.signFn = signFn
-	d.signTxFn = signTxFn
 }
 
 // ApplyGenesis
@@ -875,12 +855,6 @@ func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header 
 		state.AddBalance(proposer, refund)
 	}
 
-	scReward, minerLeft := snap.calculateSCReward(minerReward)
-	minerReward.Set(minerLeft)
-	// rewards for the side chain coinbase
-	for scCoinbase, reward := range scReward {
-		state.AddBalance(scCoinbase, reward)
-	}
 	// refund gas for custom txs (confirm event)
 	for sender, gas := range refundGas {
 		state.AddBalance(sender, gas)

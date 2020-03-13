@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -1061,9 +1062,9 @@ func (w *worker) commit(uncles []*types.Header, interval func(), update bool, st
 		case w.taskCh <- &task{receipts: receipts, state: s, block: block, createdAt: time.Now()}:
 			w.unconfirmed.Shift(block.NumberU64() - 1)
 
-			if w.chainConfig.DPoS != nil && w.chainConfig.DPoS.PBFTEnable {
+			if w.chainConfig.DPoS != nil && w.chainConfig.DPoS.PBFTEnable && block.NumberU64() > 1 {
 				err = w.sendConfirmTx(block.NumberU64() - 1)
-				if err != nil {
+				if err != nil && !strings.Contains(err.Error(), "known transaction") {
 					log.Info("Fail to Sign the transaction by coinbase", "err", err)
 				}
 			}
