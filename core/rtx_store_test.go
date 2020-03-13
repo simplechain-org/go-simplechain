@@ -1,7 +1,6 @@
 package core
 
 import (
-	"crypto/ecdsa"
 	"math/big"
 	"testing"
 
@@ -13,13 +12,13 @@ import (
 	"github.com/simplechain-org/go-simplechain/ethdb/memorydb"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/params"
-	"github.com/simplechain-org/go-simplechain/rpctx"
 )
 
 func TestNewRtxStoreAdd(t *testing.T) {
 	key, _ := crypto.GenerateKey()
-	//addr := crypto.PubkeyToAddress(key.PublicKey)
-
+	signHash := func(hash []byte) ([]byte, error) {
+		return crypto.Sign(hash, key)
+	}
 	signer := types.NewEIP155RtxSigner(big.NewInt(18))
 	tx1, err := types.SignRTx(types.NewReceptTransaction(
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
@@ -30,12 +29,12 @@ func TestNewRtxStoreAdd(t *testing.T) {
 		10000,
 		1,
 		[]byte{},
-	), signer, key)
+	), signer, signHash)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	rtxStore, key2 := setupRtxStore()
+	rtxStore := setupRtxStore()
 	tx2, err := types.SignRTx(types.NewReceptTransaction(
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
@@ -46,7 +45,7 @@ func TestNewRtxStoreAdd(t *testing.T) {
 		1,
 		[]byte{},
 	),
-		signer, key2)
+		signer, rtxStore.signHash)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +56,6 @@ func TestNewRtxStoreAdd(t *testing.T) {
 	if err := rtxStore.AddRemote(tx2); err != nil {
 		t.Fatal(err)
 	}
-	rpctx.PrivateKey = "0xd000e97f00cd717d581e751a14d9f51e78d3b3db4b748a87023ef96eaf18334e"
 	if err := rtxStore.AddLocal(types.NewReceptTransaction(
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
@@ -78,12 +76,15 @@ func TestNewRtxStoreAdd(t *testing.T) {
 	rtxStore.Stop()
 }
 
-func setupRtxStore() (*RtxStore, *ecdsa.PrivateKey) {
+func setupRtxStore() *RtxStore {
+	signHash := func(hash []byte) ([]byte, error) {
+		key, _ := crypto.GenerateKey()
+		return crypto.Sign(hash, key)
+	}
 	statedb, _ := state.New(common.Hash{}, state.NewDatabase(rawdb.NewMemoryDatabase()))
 	blockchain := &testBlockChain{statedb, 1000000, new(event.Feed)}
 	db := memorydb.New()
-	key, _ := crypto.GenerateKey()
-	pool := NewRtxStore(DefaultRtxStoreConfig, params.TestChainConfig, blockchain, db, common.Address{})
+	pool := NewRtxStore(DefaultRtxStoreConfig, params.TestChainConfig, blockchain, db, common.Address{}, signHash)
 
-	return pool, key
+	return pool
 }

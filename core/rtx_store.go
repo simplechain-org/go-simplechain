@@ -280,15 +280,6 @@ func (store *RtxStore) loop() {
 			taker := store.task.Discard(1024) //todo 当确认高度增长时，提高该值
 			log.Info("report", "taker", len(taker), "task", len(store.task.all.all))
 			store.mu.RUnlock()
-			//var cws []*types.ReceptTransactionWithSignatures
-			//var count int
-			//for _, v := range taker {
-			//	if count >= 500 {
-			//		break
-			//	}
-			//	count ++
-			//	cws = append(cws, v)
-			//}
 			go store.rwsFeed.Send(NewRWssEvent{taker})
 		case <-journal.C:
 			if store.journal != nil {
