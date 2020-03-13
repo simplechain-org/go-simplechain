@@ -21,6 +21,7 @@ import (
 	"io/ioutil"
 	"math/big"
 	"testing"
+	"time"
 
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/simplechain-org/go-simplechain/common"
@@ -87,7 +88,7 @@ func TestHandleNewBlockMessage_whenTypical(t *testing.T) {
 		t.Errorf("expected message being handled successfully but got %s", err)
 	}
 	if !handled {
-		t.Errorf("expected message being handled but not")
+		t.Fatalf("expected message being handled but not")
 	}
 	if _, err := ioutil.ReadAll(arbitraryP2PMessage.Payload); err != nil {
 		t.Errorf("expected p2p message payload is restored")
@@ -147,6 +148,8 @@ func postAndWait(backend *backend, block *types.Block, t *testing.T) {
 	stop := make(chan struct{}, 1)
 	eventLoop := func() {
 		<-eventSub.Chan()
+		// block until handleRequire finished
+		time.Sleep(time.Millisecond * 10)
 		stop <- struct{}{}
 	}
 	go eventLoop()
