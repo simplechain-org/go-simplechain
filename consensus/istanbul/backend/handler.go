@@ -42,15 +42,6 @@ var (
 	errDecodeFailed = errors.New("fail to decode istanbul message")
 )
 
-// Protocol implements consensus.Engine.Protocol
-//func (sb *backend) Protocol() consensus.Protocol {
-//	return consensus.Protocol{
-//		Name:     "istanbul",
-//		Versions: []uint{65},
-//		Lengths:  map[uint]uint64{65: 18},
-//	}
-//}
-
 func (sb *backend) decode(msg p2p.Msg) ([]byte, common.Hash, error) {
 	var data []byte
 	if err := msg.Decode(&data); err != nil {
