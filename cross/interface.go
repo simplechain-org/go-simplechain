@@ -55,6 +55,8 @@ type CtxStore interface {
 	VerifyCwsSigner2(cws *types.CrossTransactionWithSignatures) error
 
 	VerifyUpdateCwsSigner2(cws *types.CrossTransactionWithSignatures) error
+
+	Remotes () map[uint64][]*types.CrossTransactionWithSignatures
 }
 
 type rtxStore interface {

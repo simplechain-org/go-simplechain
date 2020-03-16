@@ -281,7 +281,7 @@ func (this *MsgHandler) loop() {
 		//	}
 
 		case ev := <-this.delAnchorEventCh:
-			for _,v := range ev.ChainInfo {
+			for _, del := range ev.ChainInfo {
 				//if err := this.ctxStore.UpdateAnchors(v); err != nil {
 				//	log.Info("ctxStore.UpdateAnchors","err",err)
 				//}
@@ -293,24 +293,28 @@ func (this *MsgHandler) loop() {
 				//}
 
 				if this.role.IsAnchor() {
-					log.Info("delAnchorEventCh","RemoteChainId",v.RemoteChainId,"blockNumber",v.BlockNumber)
+					log.Info("delAnchorEventCh","RemoteChainId", del.RemoteChainId,"blockNumber", del.BlockNumber)
 					//_, local := this.ctxStore.Query() //TODO not Enough,already take,另外一个ctxStore里面的remote
-					remote,_ := this.ObCtxStore.Query()
-					if all,ok := remote[v.RemoteChainId]; ok {
+					remote := this.ObCtxStore.Remotes()
+					if all,ok := remote[this.pm.NetworkId()]; ok {
 						for _,v := range all {
-							ctx := v.CrossTransaction()
-							this.ctxStore.UpdateLocal(ctx)
-							this.pm.UpdateCtx([]*types.CrossTransaction{ctx})
+							if v.Data.DestinationId.Uint64() == del.RemoteChainId {
+								ctx := v.CrossTransaction()
+								this.ctxStore.UpdateLocal(ctx)
+								this.pm.UpdateCtx([]*types.CrossTransaction{ctx})
+							}
 						}
 					}
 
 					rtxs := this.ObRtxStore.Query()
 					for _,v:=range rtxs {
-						rtx := v.ReceptTransaction()
-						if err := this.rtxStore.UpdateLocal(rtx); err != nil {
-							log.Warn("Add local rtx", "err", err)
+						if v.Data.DestinationId.Uint64() == del.RemoteChainId {
+							rtx := v.ReceptTransaction()
+							if err := this.rtxStore.UpdateLocal(rtx); err != nil {
+								log.Warn("Add local rtx", "err", err)
+							}
+							this.pm.UpdateRtx([]*types.ReceptTransaction{rtx})
 						}
-						this.pm.UpdateRtx([]*types.ReceptTransaction{rtx})
 					}
 				}
 			}
