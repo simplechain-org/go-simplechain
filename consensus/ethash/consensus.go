@@ -274,7 +274,7 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *
 	expected := ethash.CalcDifficulty(chain, header.Time, parent)
 
 	if expected.Cmp(header.Difficulty) != 0 {
-		return fmt.Errorf("invalid difficulty: have 0x%x, want 0x%x，block: %v", header.Difficulty, expected, header.Number.Uint64())
+		return fmt.Errorf("invalid difficulty: have %v, want %v", header.Difficulty, expected)
 	}
 	// Verify that the gas limit is <= 2^63-1
 	cap := uint64(0x7fffffffffffffff)
@@ -322,7 +322,6 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, p
 // given the parent block's time and difficulty.
 func CalcDifficulty(config *params.ChainConfig, time uint64, parent *types.Header) *big.Int {
 	next := new(big.Int).Add(parent.Number, big1)
-	fmt.Println("walker:   kj")
 	switch {
 	case config.IsSingularity(next):
 		return calcDifficultyEip2384(time, parent)
