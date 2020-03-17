@@ -31,7 +31,6 @@ import (
 type TransactionTest struct {
 	RLP         hexutil.Bytes `json:"rlp"`
 	Singularity ttFork
-	Frontier    ttFork
 }
 
 type ttFork struct {
@@ -68,7 +67,6 @@ func (tt *TransactionTest) Run(config *params.ChainConfig) error {
 		fork        ttFork
 		singularity bool
 	}{
-		{"Frontier", types.FrontierSigner{}, tt.Frontier, false},
 		{"Singularity", types.NewEIP155Signer(config.ChainID), tt.Singularity, true},
 	} {
 		sender, txhash, err := validateTx(tt.RLP, testcase.signer, testcase.singularity)
