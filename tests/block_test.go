@@ -26,6 +26,8 @@ func TestBlockchain(t *testing.T) {
 	bt := new(testMatcher)
 	// General state tests are 'exported' as blockchain tests, but we can run them natively.
 	bt.skipLoad(`^GeneralStateTests/`)
+	bt.skipLoad(`^TransitionTests/`)
+	bt.skipLoad(`^ValidBlocks/`)
 	// Skip random failures due to selfish mining test
 	bt.skipLoad(`.*bcForgedTest/bcForkUncle\.json`)
 
@@ -49,8 +51,4 @@ func TestBlockchain(t *testing.T) {
 			t.Error(err)
 		}
 	})
-
-	// There is also a LegacyTests folder, containing blockchain tests generated
-	// prior to Istanbul. However, they are all derived from GeneralStateTests,
-	// which run natively, so there's no reason to run them here.
 }

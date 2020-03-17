@@ -25,12 +25,9 @@ import (
 
 // Forks table defines supported forks and their chain config.
 var Forks = map[string]*params.ChainConfig{
-	"Frontier": {
-		ChainID: big.NewInt(1),
-	},
 	"Singularity": {
 		ChainID:          big.NewInt(1),
-		SingularityBlock: big.NewInt(1000),
+		SingularityBlock: big.NewInt(0),
 	},
 }
 
