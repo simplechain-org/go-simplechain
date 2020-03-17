@@ -23,7 +23,6 @@ import (
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/crypto"
-	"github.com/simplechain-org/go-simplechain/rpc"
 )
 
 // Genesis hashes to enforce below configs on.
@@ -241,28 +240,14 @@ type DPoSConfig struct {
 	MinVoterBalance  *big.Int                   `json:"minVoterBalance"`  // Min voter balance to valid this vote
 	GenesisTimestamp uint64                     `json:"genesisTimestamp"` // The LoopStartTime of first Block
 	SelfVoteSigners  []common.UnprefixedAddress `json:"signers"`          // Signers vote by themselves to seal the block, make sure the signer accounts are pre-funded
-	MCRPCClient      *rpc.Client                // Main chain rpc client for side chain
-	PBFTEnable       bool                       `json:"pbft"` //
+	PBFTEnable       bool                       `json:"pbft"`             //
 	VoterReward      bool                       `json:"voterReward"`
-
-	TrantorBlock  *big.Int         `json:"trantorBlock,omitempty"`  // Trantor switch block (nil = no fork)
-	TerminusBlock *big.Int         `json:"terminusBlock,omitempty"` // Terminus switch block (nil = no fork)
-	LightConfig   *DPoSLightConfig `json:"lightConfig,omitempty"`
+	LightConfig      *DPoSLightConfig           `json:"lightConfig,omitempty"`
 }
 
 // String implements the stringer interface, returning the consensus engine details.
 func (a *DPoSConfig) String() string {
 	return "dpos"
-}
-
-// IsTrantor returns whether num is either equal to the Trantor block or greater.
-func (a *DPoSConfig) IsTrantor(num *big.Int) bool {
-	return isForked(a.TrantorBlock, num)
-}
-
-// IsTerminus returns whether num is either equal to the Terminus block or greater.
-func (a *DPoSConfig) IsTerminus(num *big.Int) bool {
-	return isForked(a.TerminusBlock, num)
 }
 
 // ScryptConfig is the consensus engine configs for proof-of-work based sealing.

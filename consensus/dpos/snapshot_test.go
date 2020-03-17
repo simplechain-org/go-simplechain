@@ -926,15 +926,9 @@ func TestVoting(t *testing.T) {
 							Proposer:               accounts.address(trans.from),
 							TargetAddress:          accounts.address(trans.candidate),
 							MinerRewardPerThousand: minerRewardPerThousand,
-							SCHash:                 common.Hash{},
-							SCBlockCountPerPeriod:  1,
-							SCBlockRewardPerPeriod: 0,
 							Declares:               []*Declare{},
 							MinVoterBalance:        new(big.Int).Div(minVoterBalance, big.NewInt(1e+18)).Uint64(),
 							ProposalDeposit:        new(big.Int).Div(proposalDeposit, big.NewInt(1e+18)).Uint64(),
-							SCRentFee:              0,
-							SCRentRate:             1,
-							SCRentLength:           defaultSCRentLength,
 						})
 					}
 				} else if trans.isDeclare {
@@ -972,7 +966,7 @@ func TestVoting(t *testing.T) {
 				// decode parent header.extra
 				//rlp.DecodeBytes(headers[j-1].Extra[extraVanity:len(headers[j-1].Extra)-extraSeal], &currentHeaderExtra)
 
-				decodeHeaderExtra(dpos.config, headers[j-1].Number, headers[j-1].Extra[extraVanity:len(headers[j-1].Extra)-extraSeal], &currentHeaderExtra)
+				decodeHeaderExtra(headers[j-1].Extra[extraVanity:len(headers[j-1].Extra)-extraSeal], &currentHeaderExtra)
 				signer = currentHeaderExtra.SignerQueue[uint64(j)%tt.maxSignerCount]
 				// means header.Number % tt.maxSignerCount == 0
 				if (j+1)%int(tt.maxSignerCount) == 0 {
@@ -999,7 +993,7 @@ func TestVoting(t *testing.T) {
 			currentHeaderExtra.CurrentBlockProposals = currentBlockProposals
 			currentHeaderExtra.CurrentBlockDeclares = currentBlockDeclares
 			//currentHeaderExtraEnc, err := rlp.EncodeToBytes(currentHeaderExtra)
-			currentHeaderExtraEnc, err := encodeHeaderExtra(dpos.config, big.NewInt(int64(j)+1), currentHeaderExtra)
+			currentHeaderExtraEnc, err := encodeHeaderExtra(currentHeaderExtra)
 
 			if err != nil {
 				t.Errorf("test %d: failed to rlp encode to bytes: %v", i, err)

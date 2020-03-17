@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -29,6 +30,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"github.com/simplechain-org/go-simplechain/consensus"
+	"github.com/simplechain-org/go-simplechain/consensus/dpos"
 	"github.com/simplechain-org/go-simplechain/consensus/raft"
 	"github.com/simplechain-org/go-simplechain/consensus/scrypt"
 	"github.com/simplechain-org/go-simplechain/core"
@@ -608,7 +610,7 @@ func (w *worker) taskLoop() {
 			if ok {
 				w.seal(task.block)
 			} else {
-				if err := w.engine.Seal(w.chain, task.block, w.resultCh, stopCh); err != nil {
+				if err := w.engine.Seal(w.chain, task.block, w.resultCh, stopCh); err != nil && err != dpos.ErrUnauthorized {
 					log.Warn("Block sealing failed", "err", err)
 				}
 			}
@@ -1061,9 +1063,9 @@ func (w *worker) commit(uncles []*types.Header, interval func(), update bool, st
 		case w.taskCh <- &task{receipts: receipts, state: s, block: block, createdAt: time.Now()}:
 			w.unconfirmed.Shift(block.NumberU64() - 1)
 
-			if w.chainConfig.DPoS != nil && w.chainConfig.DPoS.PBFTEnable {
+			if w.chainConfig.DPoS != nil && w.chainConfig.DPoS.PBFTEnable && block.NumberU64() > 1 {
 				err = w.sendConfirmTx(block.NumberU64() - 1)
-				if err != nil {
+				if err != nil && !strings.Contains(err.Error(), "known transaction") {
 					log.Info("Fail to Sign the transaction by coinbase", "err", err)
 				}
 			}
