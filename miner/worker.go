@@ -30,6 +30,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"github.com/simplechain-org/go-simplechain/consensus"
+	"github.com/simplechain-org/go-simplechain/consensus/dpos"
 	"github.com/simplechain-org/go-simplechain/consensus/raft"
 	"github.com/simplechain-org/go-simplechain/consensus/scrypt"
 	"github.com/simplechain-org/go-simplechain/core"
@@ -609,7 +610,7 @@ func (w *worker) taskLoop() {
 			if ok {
 				w.seal(task.block)
 			} else {
-				if err := w.engine.Seal(w.chain, task.block, w.resultCh, stopCh); err != nil {
+				if err := w.engine.Seal(w.chain, task.block, w.resultCh, stopCh); err != nil && err != dpos.ErrUnauthorized {
 					log.Warn("Block sealing failed", "err", err)
 				}
 			}

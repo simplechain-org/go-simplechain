@@ -275,7 +275,7 @@ func (s *Snapshot) apply(headers []*types.Header) (*Snapshot, error) {
 			return nil, err
 		}
 		if coinbase.String() != header.Coinbase.String() {
-			return nil, errUnauthorized
+			return nil, ErrUnauthorized
 		}
 
 		headerExtra := HeaderExtra{}
@@ -396,7 +396,6 @@ func (s *Snapshot) updateSnapshotByDeclares(declares []Declare, headerNumber *bi
 			// add declare to proposal
 			s.Proposals[declare.ProposalHash].Declares = append(s.Proposals[declare.ProposalHash].Declares,
 				&Declare{declare.ProposalHash, declare.Declarer, declare.Decision})
-
 		}
 	}
 }

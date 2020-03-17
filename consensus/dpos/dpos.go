@@ -96,8 +96,8 @@ var (
 	// be modified via out-of-range or non-contiguous headers.
 	errInvalidVotingChain = errors.New("invalid voting chain")
 
-	// errUnauthorized is returned if a header is signed by a non-authorized entity.
-	errUnauthorized = errors.New("unauthorized")
+	// ErrUnauthorized is returned if a header is signed by a non-authorized entity.
+	ErrUnauthorized = errors.New("unauthorized")
 
 	// errPunishedMissing is returned if a header calculate punished signer is wrong.
 	errPunishedMissing = errors.New("punished signer missing")
@@ -530,7 +530,7 @@ func (d *DPoS) verifySeal(chain consensus.ChainReader, header *types.Header, par
 	}
 
 	if !snap.inturn(signer, header.Time) {
-		return errUnauthorized
+		return ErrUnauthorized
 	}
 
 	return nil
@@ -669,7 +669,7 @@ func (d *DPoS) Finalize(chain consensus.ChainReader, header *types.Header, state
 
 	// Accumulate any block rewards and commit the final state root
 	if err := accumulateRewards(chain.Config(), state, header, snap, refundGas); err != nil {
-		return errUnauthorized
+		return ErrUnauthorized
 	}
 
 	// encode header.extra
@@ -766,7 +766,7 @@ func (d *DPoS) Seal(chain consensus.ChainReader, block *types.Block, results cha
 
 	if !snap.inturn(signer, header.Time) {
 		//<-stop
-		return errUnauthorized
+		return ErrUnauthorized
 	}
 
 	// correct the time

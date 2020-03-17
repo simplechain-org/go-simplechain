@@ -72,7 +72,7 @@ const (
 	maxProposalDeposit       = 100000 // If no limit on max proposal deposit and 1 billion TTC deposit success passed, then no new proposal.
 )
 
-var devoteStake = big.NewInt(-1)
+var devoteStake = big.NewInt(0)
 
 // RefundGas :
 // refund gas to tx sender
@@ -216,12 +216,16 @@ func (d *DPoS) processCustomTx(headerExtra HeaderExtra, chain consensus.ChainRea
 								// check is vote or not
 								if txDataInfo[pEventVote] == dposEventVote && (!candidateNeedPD || snap.isCandidate(*tx.To())) && state.GetBalance(txSender).Cmp(snap.MinVB) > 0 {
 									headerExtra.CurrentBlockVotes = d.processEventVote(headerExtra.CurrentBlockVotes, state, tx, txSender)
+
 								} else if txDataInfo[pEventVote] == dposEventDeVote && snap.isVoter(txSender) {
 									headerExtra.CurrentBlockVotes = d.processEventDeVote(headerExtra.CurrentBlockVotes, txSender)
+
 								} else if txDataInfo[pEventConfirm] == dposEventConfirm && snap.isCandidate(txSender) {
 									headerExtra.CurrentBlockConfirmations, refundHash = d.processEventConfirm(headerExtra.CurrentBlockConfirmations, chain, txDataInfo, number, tx, txSender, refundHash)
+
 								} else if txDataInfo[pEventProposal] == dposEventProposal {
 									headerExtra.CurrentBlockProposals = d.processEventProposal(headerExtra.CurrentBlockProposals, txDataInfo, state, tx, txSender, snap)
+
 								} else if txDataInfo[pEventDeclare] == dposEventDeclare && snap.isCandidate(txSender) {
 									headerExtra.CurrentBlockDeclares = d.processEventDeclare(headerExtra.CurrentBlockDeclares, txDataInfo, tx, txSender)
 								}
@@ -379,9 +383,8 @@ func (d *DPoS) processEventVote(currentBlockVotes []Vote, state *state.StateDB, 
 
 func (d *DPoS) processEventDeVote(currentBlockVotes []Vote, voter common.Address) []Vote {
 	return append(currentBlockVotes, Vote{
-		Voter:     voter,
-		Candidate: nil,
-		Stake:     devoteStake,
+		Voter: voter,
+		Stake: devoteStake,
 	})
 }
 
@@ -424,7 +427,7 @@ func (d *DPoS) processEventConfirm(currentBlockConfirmations []Confirmation, cha
 
 func (d *DPoS) processPredecessorVoter(modifyPredecessorVotes []Vote, state *state.StateDB, tx *types.Transaction, voter common.Address, snap *Snapshot) []Vote {
 	// process normal transaction which relate to voter
-	if tx.Value().Cmp(big.NewInt(0)) > 0 && tx.To() != nil {
+	if tx.Value().Cmp(devoteStake) > 0 && tx.To() != nil {
 		if snap.isVoter(voter) {
 			d.lock.RLock()
 			stake := state.GetBalance(voter)
