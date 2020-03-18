@@ -904,7 +904,7 @@ func TestVoting(t *testing.T) {
 			var currentBlockVotes []Vote
 			var currentBlockProposals []Proposal
 			var currentBlockDeclares []Declare
-			var modifyPredecessorVotes []Vote
+			var modifyPredecessorVotes []PredecessorVoter
 			for _, trans := range header.txs {
 				if trans.isVote {
 					if trans.balance >= tt.minVoterBalance && (!candidateNeedPD || snap.isCandidate(accounts.address(trans.to))) {
@@ -945,7 +945,7 @@ func TestVoting(t *testing.T) {
 					// modify balance
 					// modifyPredecessorVotes
 					// only consider the voter
-					modifyPredecessorVotes = append(modifyPredecessorVotes, Vote{
+					modifyPredecessorVotes = append(modifyPredecessorVotes, PredecessorVoter{
 						Voter: accounts.address(trans.from),
 						Stake: big.NewInt(int64(trans.balance)),
 					})

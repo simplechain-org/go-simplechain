@@ -641,7 +641,7 @@ func (d *DPoS) Finalize(chain consensus.ChainReader, header *types.Header, state
 	}
 
 	// calculate votes write into header.extra
-	mcCurrentHeaderExtra, refundGas, err := d.processCustomTx(currentHeaderExtra, chain, header, state, txs, receipts)
+	mcCurrentHeaderExtra, refundGas, err := d.processTxEvent(currentHeaderExtra, chain, header, state, txs, receipts)
 	if err != nil {
 		return err
 	}

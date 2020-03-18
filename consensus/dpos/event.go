@@ -97,6 +97,11 @@ type Vote struct {
 	Stake     *big.Int
 }
 
+type PredecessorVoter struct {
+	Voter common.Address
+	Stake *big.Int
+}
+
 // Confirmation :
 // confirmation come  from custom tx which data like "dpos:1:event:confirm:123"
 // 123 is the block number be confirmed
@@ -161,7 +166,7 @@ type HeaderExtra struct {
 	CurrentBlockVotes         []Vote
 	CurrentBlockProposals     []Proposal
 	CurrentBlockDeclares      []Declare
-	ModifyPredecessorVotes    []Vote // modify when voter's balance changed
+	ModifyPredecessorVotes    []PredecessorVoter // modify when voter's balance changed
 	LoopStartTime             uint64
 	SignerQueue               []common.Address
 	SignerMissing             []common.Address
@@ -179,7 +184,7 @@ func decodeHeaderExtra(b []byte, val *HeaderExtra) error {
 }
 
 // Calculate Votes from transaction in this block, write into header.Extra
-func (d *DPoS) processCustomTx(headerExtra HeaderExtra, chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, receipts []*types.Receipt) (HeaderExtra, RefundGas, error) {
+func (d *DPoS) processTxEvent(headerExtra HeaderExtra, chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, receipts []*types.Receipt) (HeaderExtra, RefundGas, error) {
 	// if predecessor voter make transaction and vote in this block,
 	// just process as vote, do it in snapshot.apply
 	var (
@@ -425,30 +430,27 @@ func (d *DPoS) processEventConfirm(currentBlockConfirmations []Confirmation, cha
 	return currentBlockConfirmations, refundHash
 }
 
-func (d *DPoS) processPredecessorVoter(modifyPredecessorVotes []Vote, state *state.StateDB, tx *types.Transaction, voter common.Address, snap *Snapshot) []Vote {
+func (d *DPoS) processPredecessorVoter(modifyPredecessorVotes []PredecessorVoter, state *state.StateDB, tx *types.Transaction, voter common.Address, snap *Snapshot) []PredecessorVoter {
 	// process normal transaction which relate to voter
-	if tx.Value().Cmp(devoteStake) > 0 && tx.To() != nil {
-		if snap.isVoter(voter) {
-			d.lock.RLock()
-			stake := state.GetBalance(voter)
-			d.lock.RUnlock()
-			modifyPredecessorVotes = append(modifyPredecessorVotes, Vote{
-				Voter:     voter,
-				Candidate: common.Address{},
-				Stake:     stake,
-			})
-		}
-		if snap.isVoter(*tx.To()) {
-			d.lock.RLock()
-			stake := state.GetBalance(*tx.To())
-			d.lock.RUnlock()
-			modifyPredecessorVotes = append(modifyPredecessorVotes, Vote{
-				Voter:     *tx.To(),
-				Candidate: common.Address{},
-				Stake:     stake,
-			})
-		}
-
+	if snap.isVoter(voter) {
+		d.lock.RLock()
+		stake := state.GetBalance(voter)
+		d.lock.RUnlock()
+		modifyPredecessorVotes = append(modifyPredecessorVotes, PredecessorVoter{
+			Voter: voter,
+			Stake: stake,
+		})
 	}
+
+	if tx.To() != nil && snap.isVoter(*tx.To()) {
+		d.lock.RLock()
+		stake := state.GetBalance(*tx.To())
+		d.lock.RUnlock()
+		modifyPredecessorVotes = append(modifyPredecessorVotes, PredecessorVoter{
+			Voter: *tx.To(),
+			Stake: stake,
+		})
+	}
+
 	return modifyPredecessorVotes
 }
