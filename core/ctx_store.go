@@ -1168,3 +1168,19 @@ func (store *CtxStore) VerifyUpdateCwsSigner2(cws *types.CrossTransactionWithSig
 	}
 	return nil
 }
+
+func (store *CtxStore) Remotes () map[uint64][]*types.CrossTransactionWithSignatures {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	remotes := make(map[uint64][]*types.CrossTransactionWithSignatures)
+	for _, cws := range store.ctxDb.List() {
+		if cws.Data.DestinationId.Cmp(store.config.ChainId) == 0 {
+			keyId := cws.ChainId().Uint64()
+			remotes[keyId] = append(remotes[keyId],cws)
+		}
+	}
+	for k,v := range remotes {
+		log.Info("ctxStore Remotes","chainId",k,"len",len(v))
+	}
+	return remotes
+}
