@@ -1,12 +1,10 @@
 package types
 
 import (
-	"crypto/ecdsa"
 	"fmt"
 	"math/big"
 
 	"github.com/simplechain-org/go-simplechain/common"
-	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/crypto/sha3"
 	"github.com/simplechain-org/go-simplechain/params"
 )
@@ -24,9 +22,9 @@ func MakeCtxSigner(config *params.ChainConfig) CtxSigner {
 }
 
 // SignTx signs the transaction using the given signer and private key
-func SignCTx(tx *CrossTransaction, s CtxSigner, prv *ecdsa.PrivateKey) (*CrossTransaction, error) {
+func SignCTx(tx *CrossTransaction, s CtxSigner, signHash SignHash) (*CrossTransaction, error) {
 	h := s.Hash(tx)
-	sig, err := crypto.Sign(h[:], prv)
+	sig, err := signHash(h[:])
 	if err != nil {
 		return nil, err
 	}

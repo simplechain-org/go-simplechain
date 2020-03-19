@@ -233,12 +233,12 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 	if err != nil {
 		return nil, err
 	}
-	eth.ctxStore = core.NewCtxStore(config.CtxStore, eth.chainConfig, eth.blockchain, makerDb, config.MainChainCtxAddress)
+	eth.ctxStore = core.NewCtxStore(config.CtxStore, eth.chainConfig, eth.blockchain, makerDb, config.MainChainCtxAddress, eth.SignHash)
 
 	if config.RtxStore.Journal != "" {
 		config.RtxStore.Journal = ctx.ResolvePath(fmt.Sprintf("mainChain_%s", config.RtxStore.Journal))
 	}
-	eth.rtxStore = core.NewRtxStore(config.RtxStore, eth.chainConfig, eth.blockchain, chainDb, config.MainChainCtxAddress)
+	eth.rtxStore = core.NewRtxStore(config.RtxStore, eth.chainConfig, eth.blockchain, chainDb, config.MainChainCtxAddress, eth.SignHash)
 
 	// Permit the downloader to use the trie cache allowance during fast sync
 	cacheLimit := cacheConfig.TrieCleanLimit + cacheConfig.TrieDirtyLimit
@@ -250,7 +250,7 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 		return nil, err
 	}
 
-	eth.msgHandler = cross.NewMsgHandler(eth, cross.RoleMainHandler, config.Role, eth.ctxStore, eth.rtxStore, eth.blockchain, ctx.MainCh, ctx.SubCh, config.MainChainCtxAddress, config.SubChainCtxAddress)
+	eth.msgHandler = cross.NewMsgHandler(eth, cross.RoleMainHandler, config.Role, eth.ctxStore, eth.rtxStore, eth.blockchain, ctx.MainCh, ctx.SubCh, config.MainChainCtxAddress, config.SubChainCtxAddress, eth.SignHash, config.AnchorSigner)
 
 	eth.msgHandler.SetProtocolManager(eth.protocolManager)
 
@@ -710,4 +710,14 @@ func (s *Ethereum) GetEVM(ctx context.Context, msg core.Message, state *state.St
 	vmError := func() error { return nil }
 	context := core.NewEVMContext(msg, header, s.blockchain, nil)
 	return vm.NewEVM(context, state, s.chainConfig, vmCfg), vmError, nil
+}
+
+func (s *Ethereum) SignHash(hash []byte) ([]byte, error) {
+	account := accounts.Account{Address: s.config.AnchorSigner}
+	wallet, err := s.accountManager.Find(account)
+	if err != nil {
+		log.Error("account not found ", "address", s.config.AnchorSigner)
+		return nil, err
+	}
+	return wallet.SignHash(account, hash)
 }

@@ -85,6 +85,7 @@ var AppHelpFlagGroups = []flagGroup{
 			utils.AnchorAccountsFlag,
 			utils.ContractMainFlag,
 			utils.ContractSubFlag,
+			utils.AnchorSignerFlag,
 		},
 	},
 	{

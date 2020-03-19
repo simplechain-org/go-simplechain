@@ -11,7 +11,9 @@ import (
 func TestEIP155RtxSigning(t *testing.T) {
 	key, _ := crypto.GenerateKey()
 	addr := crypto.PubkeyToAddress(key.PublicKey)
-
+	signHash := func(hash []byte) ([]byte, error) {
+		return crypto.Sign(hash, key)
+	}
 	signer := NewEIP155RtxSigner(big.NewInt(18))
 	tx, err := SignRTx(NewReceptTransaction(
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
@@ -22,7 +24,7 @@ func TestEIP155RtxSigning(t *testing.T) {
 		10000,
 		1,
 		[]byte{},
-	), signer, key)
+	), signer, signHash)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +41,9 @@ func TestEIP155RtxSigning(t *testing.T) {
 func TestEIP155RtxChainId(t *testing.T) {
 	key, _ := crypto.GenerateKey()
 	//addr := crypto.PubkeyToAddress(key.PublicKey)
-
+	signHash := func(hash []byte) ([]byte, error) {
+		return crypto.Sign(hash, key)
+	}
 	signer := NewEIP155RtxSigner(big.NewInt(18))
 	tx, err := SignRTx(NewReceptTransaction(
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
@@ -50,7 +54,7 @@ func TestEIP155RtxChainId(t *testing.T) {
 		10000,
 		1,
 		[]byte{},
-	), signer, key)
+	), signer, signHash)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +108,9 @@ func TestEIP155RtxSigningVitalik(t *testing.T) {
 
 func TestRtxChainId(t *testing.T) {
 	key, _ := defaultTestKey()
-
+	signHash := func(hash []byte) ([]byte, error) {
+		return crypto.Sign(hash, key)
+	}
 	tx := NewReceptTransaction(
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
@@ -117,7 +123,7 @@ func TestRtxChainId(t *testing.T) {
 	)
 
 	var err error
-	tx, err = SignRTx(tx, NewEIP155RtxSigner(big.NewInt(1)), key)
+	tx, err = SignRTx(tx, NewEIP155RtxSigner(big.NewInt(1)), signHash)
 	if err != nil {
 		t.Fatal(err)
 	}

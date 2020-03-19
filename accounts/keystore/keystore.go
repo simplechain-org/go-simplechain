@@ -265,6 +265,7 @@ func (ks *KeyStore) SignHash(a accounts.Account, hash []byte) ([]byte, error) {
 	if !found {
 		return nil, ErrLocked
 	}
+
 	// Sign the hash using plain ECDSA operations
 	return crypto.Sign(hash, unlockedKey.PrivateKey)
 }

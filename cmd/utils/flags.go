@@ -886,6 +886,11 @@ var (
 		Usage: "define anchor's private key",
 		Value: "0x86840df867b8eb3ee29001f5878a494c38c3a5ed733f220e05b24111667780b5",
 	}
+	AnchorSignerFlag = cli.StringFlag{
+		Name:  "anchor.signer",
+		Usage: "public address of anchor signer",
+		Value: "0",
+	}
 )
 
 // MakeDataDir retrieves the currently requested data directory, terminating
@@ -1564,6 +1569,7 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 	setIstanbul(ctx, cfg)
 	setWhitelist(ctx, cfg)
 	setLes(ctx, cfg)
+	setAnchorSign(ctx, ks, cfg)
 
 	if ctx.GlobalIsSet(SyncModeFlag.Name) {
 		cfg.SyncMode = *GlobalTextMarshaler(ctx, SyncModeFlag.Name).(*downloader.SyncMode)
@@ -1963,5 +1969,24 @@ func setSubIPC(ctx *cli.Context, cfg *node.Config) {
 		cfg.SubIPCPath = ""
 	case ctx.GlobalIsSet(SUBIPCPathFlag.Name):
 		cfg.SubIPCPath = ctx.GlobalString(SUBIPCPathFlag.Name)
+	}
+}
+func setAnchorSign(ctx *cli.Context, ks *keystore.KeyStore, cfg *eth.Config) {
+	// Extract the current etherbase, new flag overriding legacy one
+	var anchorSign string
+	if ctx.GlobalIsSet(AnchorSignerFlag.Name) {
+		anchorSign = ctx.GlobalString(AnchorSignerFlag.Name)
+	}
+	// Convert the etherbase into an address and configure it
+	if anchorSign != "" {
+		if ks != nil {
+			account, err := MakeAddress(ks, anchorSign)
+			if err != nil {
+				Fatalf("Invalid anchorSigner: %v", err)
+			}
+			cfg.AnchorSigner = account.Address
+		} else {
+			Fatalf("No anchorSigner configured")
+		}
 	}
 }
