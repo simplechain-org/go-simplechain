@@ -322,7 +322,6 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, p
 // given the parent block's time and difficulty.
 func CalcDifficulty(config *params.ChainConfig, time uint64, parent *types.Header) *big.Int {
 	next := new(big.Int).Add(parent.Number, big1)
-	fmt.Println("walker:   kj")
 	switch {
 	case config.IsSingularity(next):
 		return calcDifficultyEip2384(time, parent)
@@ -337,7 +336,7 @@ var (
 	big1          = big.NewInt(1)
 	big2          = big.NewInt(2)
 	big9          = big.NewInt(9)
-	big10         = big.NewInt(10)
+	Big10         = big.NewInt(10)
 	bigMinus99    = big.NewInt(-99)
 )
 
