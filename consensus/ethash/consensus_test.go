@@ -19,8 +19,7 @@ package ethash
 import (
 	"encoding/json"
 	"math/big"
-	"os"
-	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/simplechain-org/go-simplechain/common/math"
@@ -57,15 +56,30 @@ func (d *diffTest) UnmarshalJSON(b []byte) (err error) {
 	return nil
 }
 
-func TestCalcDifficulty(t *testing.T) {
-	file, err := os.Open(filepath.Join("..", "..", "tests", "testdata", "BasicTests", "difficulty.json"))
-	if err != nil {
-		t.Skip(err)
-	}
-	defer file.Close()
+var testData string = `
+{
+    "preExpDiffIncrease" : {
+        "parentTimestamp" : "42",
+        "parentDifficulty" : "1000000",
+        "currentTimestamp" : "43",
+        "currentBlockNumber" : "42",
+        "currentDifficulty" : "1000976",
+	"parentUncles" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+    },
+    "preExpDiffDecrease" : {
+        "parentTimestamp" : "42",
+        "parentDifficulty" : "1000000",
+        "currentTimestamp" : "60",
+        "currentBlockNumber" : "42",
+        "currentDifficulty" : "1000000",
+	"parentUncles" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+    }
+}`
 
+func TestCalcDifficulty(t *testing.T) {
 	tests := make(map[string]diffTest)
-	err = json.NewDecoder(file).Decode(&tests)
+	strRead := strings.NewReader(testData)
+	err := json.NewDecoder(strRead).Decode(&tests)
 	if err != nil {
 		t.Fatal(err)
 	}
