@@ -19,6 +19,11 @@
     ```
     eth.sendTransaction({from:"<voter_account>",to:"<candidate_account>",value:0,data:web3.toHex("dpos:1:event:vote")})
     ``` 
+
+4. Cancel Vote Transaction:
+    ```
+    eth.sendTransaction({from:"<voter_account>",to:"<voter_account>",value:0,data:web3.toHex("dpos:1:event:devote")})
+    ``` 
    
 ## Starting the Raft sample network
 

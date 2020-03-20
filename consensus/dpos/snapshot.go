@@ -565,7 +565,7 @@ func (s *Snapshot) updateSnapshotByVotes(votes []Vote, headerNumber *big.Int) {
 	}
 }
 
-func (s *Snapshot) updateSnapshotByMPVotes(votes []Vote) {
+func (s *Snapshot) updateSnapshotByMPVotes(votes []PredecessorVoter) {
 	for _, txVote := range votes {
 		if lastVote, ok := s.Votes[txVote.Voter]; ok {
 			s.Tally[lastVote.Candidate].Sub(s.Tally[lastVote.Candidate], lastVote.Stake)
