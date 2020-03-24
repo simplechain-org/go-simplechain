@@ -1028,6 +1028,7 @@ func (pm *ProtocolManager) GetAnchorTxs(address common.Address) (map[common.Addr
 	return pm.txpool.GetAnchorTxs(address)
 }
 
+// Accept PBFT committed block
 func (pm *ProtocolManager) Enqueue(id string, block *types.Block) {
 	pm.fetcher.Enqueue(id, block)
 }
