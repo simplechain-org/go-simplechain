@@ -32,9 +32,9 @@ var MainnetBootnodes = []string{
 // TestnetBootnodes are the enode URLs of the P2P bootstrap nodes running on the
 // test network.
 var TestnetBootnodes = []string{
-	//"enode://bc6858a4de55d8715834a203def74162474e6ff8062c30093def22d577bcc96cd4755e9738be6b0c7e6f3ee7fcec5cc84a7c94b509692737e0744ada8bbde507@47.110.48.207:30312", // CN
-	//"enode://c72b5cb21086dac58bb9235bc68b217475e050e9c8c2a827867242193deb68a9c6abe13fd8da7cb64d3c2eb1d7ce6e4cdf5f48cd174b772934ef2446a21136a8@47.74.52.42:30312",   // JPN
-	//"enode://2e1162b335c72cfd767d2dffe617df942b9f71817557fffb28b24bff2aff5f2a18881ec7b58578498985400816e3fd62dcceed8cf842b9fd7dfa2fcbb464dea0@47.88.58.252:30312",  // US
+	"enode://bc6858a4de55d8715834a203def74162474e6ff8062c30093def22d577bcc96cd4755e9738be6b0c7e6f3ee7fcec5cc84a7c94b509692737e0744ada8bbde507@47.110.48.207:30312", // CN
+	"enode://c72b5cb21086dac58bb9235bc68b217475e050e9c8c2a827867242193deb68a9c6abe13fd8da7cb64d3c2eb1d7ce6e4cdf5f48cd174b772934ef2446a21136a8@47.74.52.42:30312",   // JPN
+	"enode://2e1162b335c72cfd767d2dffe617df942b9f71817557fffb28b24bff2aff5f2a18881ec7b58578498985400816e3fd62dcceed8cf842b9fd7dfa2fcbb464dea0@47.88.58.252:30312",  // US
 }
 
 // DiscoveryV5Bootnodes are the enode URLs of the P2P bootstrap nodes for the
