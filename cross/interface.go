@@ -33,6 +33,10 @@ type CtxStore interface {
 	ReadFromLocals(common.Hash) *types.CrossTransactionWithSignatures
 
 	List(int, bool) []*types.CrossTransactionWithSignatures
+
+	VerifyLocalCwsSigner(cws *types.CrossTransactionWithSignatures) error
+
+	VerifyRemoteCwsSigner(cws *types.CrossTransactionWithSignatures) error
 }
 
 type rtxStore interface {
