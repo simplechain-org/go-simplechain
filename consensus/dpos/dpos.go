@@ -834,13 +834,15 @@ func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header 
 	blockReward := new(big.Int).Rsh(initSignerBlockReward, uint(yearCount))
 
 	minerReward := new(big.Int).Set(blockReward)
-	minerReward.Mul(minerReward, new(big.Int).SetUint64(snap.MinerReward))
-	minerReward.Div(minerReward, big.NewInt(1000)) // cause the reward is calculate by cnt per thousand
 
-	votersReward := blockReward.Sub(blockReward, minerReward)
-
-	// rewards for the voters
 	if config.DPoS.VoterReward {
+
+		minerReward.Mul(minerReward, new(big.Int).SetUint64(snap.MinerReward))
+		minerReward.Div(minerReward, big.NewInt(1000)) // cause the reward is calculate by cnt per thousand
+		votersReward := blockReward.Sub(blockReward, minerReward)
+
+		// rewards for the voters
+
 		voteRewardMap, err := snap.calculateVoteReward(header.Coinbase, votersReward)
 		if err != nil {
 			return err

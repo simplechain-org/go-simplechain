@@ -1,13 +1,6 @@
 {
   "config": {
     "chainId": 10,
-    "homesteadBlock": 0,
-    "eip150Block": 0,
-    "eip150Hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-    "eip155Block": 0,
-    "eip158Block": 0,
-    "byzantiumBlock": 0,
-    "constantinopleBlock": 0,
     "raft": true
   },
   "nonce": "0x0",
@@ -15,7 +8,6 @@
   "extraData": "0x0000000000000000000000000000000000000000000000000000000000000000",
   "gasLimit": "0xe0000000",
   "difficulty": "0x0",
-  "mixHash": "0x00000000000000000000000000000000000000647572616c65787365646c6578",
   "coinbase": "0x0000000000000000000000000000000000000000",
   "number": "0x0",
   "gasUsed": "0x0",

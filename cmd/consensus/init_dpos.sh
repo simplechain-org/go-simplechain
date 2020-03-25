@@ -43,17 +43,17 @@ rm -rf ${dir}
 mkdir -p ${dir}/logs
 
 echo "[*] Configuring for $numNodes node(s)"
-echo $numNodes >${dir}/numberOfNodes
+echo "$numNodes" >${dir}/numberOfNodes
 
 go build
 
-cmd="./consensus newnode --consensus=dpos --nodedir=${dir}/nodekey --n=${numNodes} --genesis=genesis_dpos.json"
+cmd="./consensus dpos generate --nodedir=${dir}/nodekey --n=${numNodes} --genesis=genesis_dpos.json"
 $cmd
 
-echo "[*] Configuring node(s) successful"
+echo "[*] Configuring dpos node(s) successful"
 
-for i in $(seq 1 ${numNodes}); do
-  mkdir -p ${dir}/dd${i}/{keystore,sipe}
-  cp ${dir}/nodekey/keys/key${i} ${dir}/dd${i}/keystore/key${i}
-  sipe --datadir ${dir}/dd${i} init ${dir}/nodekey/genesis_dpos.json --role=subchain
+for i in $(seq 1 "${numNodes}"); do
+  mkdir -p ${dir}/dd"${i}"/{keystore,sipe}
+  cp ${dir}/nodekey/keys/key"${i}" ${dir}/dd"${i}"/keystore/key"${i}"
+  sipe --datadir ${dir}/dd"${i}" init ${dir}/nodekey/genesis_dpos.json --role=subchain
 done

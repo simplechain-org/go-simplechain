@@ -29,11 +29,11 @@ var app = cli.NewApp()
 
 func init() {
 	app.Commands = []cli.Command{
-		newnodeCommand,
+		dposCommand, raftCommand, pbftCommand,
 	}
 }
 
-//consensus newnode --n=2 --nodedir=nodetest \
+// consensus newnode --n=2 --nodedir=nodetest \
 // --ip=127.0.0.1 --port=21000 --discport=0 --raftport=50040 \
 // --ip=127.0.0.1 --port=21001 --discport=0 --raftport=50041
 func main() {
@@ -43,24 +43,24 @@ func main() {
 	}
 }
 
-func generate(consensus string, n int, ips []string, ports []int, discports []int, raftports []int, nodeDir, genesis string) (e error) {
+func generate(consensus ConsensusType, n int, ips []string, ports []int, discports []int, raftports []int, nodeDir, genesis string) (e error) {
 	fmt.Println("generate nodekey", "consensus", consensus, "n", n, "ips", ips, "ports", ports,
 		"discports", discports, "raftports", raftports, "nodedir", nodeDir, "genesis", genesis)
 
 	switch consensus {
-	case "raft":
+	case RAFT:
 		if len(ips) != n || len(ports) != n || len(discports) != n || len(raftports) != n {
 			return fmt.Errorf("raft require %d ip, port, discport, raftport", n)
 		}
-	case "istanbul":
+	case PBFT:
 		if len(ips) != n || len(ports) != n {
 			return fmt.Errorf("istanbul require %d ip, port", n)
 		}
-	case "dpos":
+	case DPOS:
 		//require nothing
 
 	default:
-		return fmt.Errorf("invalid consensus %s", consensus)
+		return fmt.Errorf("invalid consensus %d", consensus)
 	}
 
 	nodeKeys := make([]*ecdsa.PrivateKey, n)
@@ -74,7 +74,7 @@ func generate(consensus string, n int, ips []string, ports []int, discports []in
 
 		nodeKeys[i] = prikey
 
-		if consensus == "dpos" {
+		if consensus == DPOS {
 			continue
 		}
 
@@ -89,7 +89,7 @@ func generate(consensus string, n int, ips []string, ports []int, discports []in
 		}
 
 		var discport, raftport int
-		if consensus == "raft" {
+		if consensus == RAFT {
 			discport = discports[i]
 			if discport < 0 || discport > 65535 {
 				return fmt.Errorf("invalid discport %d", discport)
@@ -101,7 +101,7 @@ func generate(consensus string, n int, ips []string, ports []int, discports []in
 			}
 		}
 
-		enodes[i] = enode.NewV4WithRaft(prikey.Public().(*ecdsa.PublicKey), ip, port, discport, raftport).String()
+		enodes[i] = enode.NewV4WithRaft(&prikey.PublicKey, ip, port, discport, raftport).String()
 	}
 
 	if err := mkdir(nodeDir); err != nil {
@@ -123,7 +123,7 @@ func generate(consensus string, n int, ips []string, ports []int, discports []in
 		return err
 	}
 
-	if consensus != "dpos" {
+	if consensus != DPOS {
 		if err := writeNode(nodeKeys, nodeDir); err != nil {
 			return err
 		}
@@ -142,7 +142,7 @@ const (
 	NodeFile        = "static-nodes.json"
 	GenesisDPoSFile = "genesis_dpos.json"
 	GenesisRaftFile = "genesis_raft.json"
-	GenesisPbftFile = "genesis_istanbul.json"
+	GenesisPbftFile = "genesis_pbft.json"
 )
 
 func mkdir(dir string) error {
@@ -200,7 +200,7 @@ func writeFile(dir, name string, content []byte) error {
 	return file.Close()
 }
 
-func writeGenesis(consensus string, addresses []accounts.Account, dir, file string) error {
+func writeGenesis(consensus ConsensusType, addresses []accounts.Account, dir, file string) error {
 	gf, err := os.Open(file)
 	if err != nil {
 		return fmt.Errorf("open genesis file failed, %s", err.Error())
@@ -216,18 +216,20 @@ func writeGenesis(consensus string, addresses []accounts.Account, dir, file stri
 		return fmt.Errorf("unmarshal genesis file failed, %s", err.Error())
 	}
 
-	for _, addr := range addresses {
-		genesis.Alloc[addr.Address] = core.GenesisAccount{Balance: new(big.Int).Mul(big.NewInt(params.Ether), big.NewInt(1e4))}
+	if consensus == RAFT || consensus == DPOS {
+		for _, addr := range addresses {
+			genesis.Alloc[addr.Address] = core.GenesisAccount{Balance: new(big.Int).Mul(big.NewInt(params.Ether), big.NewInt(1e4))}
+		}
 	}
 
 	var GenesisFile string
 	switch consensus {
-	case "raft":
+	case RAFT:
 		GenesisFile = GenesisRaftFile
-	case "istanbul":
+	case PBFT:
 		GenesisFile = GenesisPbftFile
 		genesis.ExtraData, err = makeIstanbulExtra(addresses)
-	case "dpos":
+	case DPOS:
 		GenesisFile = GenesisDPoSFile
 		makeDPoSSigners(&genesis, addresses)
 	}
