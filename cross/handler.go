@@ -295,8 +295,8 @@ func (this *MsgHandler) loop() {
 				if this.role.IsAnchor() {
 					log.Info("delAnchorEventCh","RemoteChainId", del.RemoteChainId,"blockNumber", del.BlockNumber)
 					//_, local := this.ctxStore.Query() //TODO not Enough,already take,另外一个ctxStore里面的remote
-					remote := this.ObCtxStore.Remotes()
-					if all,ok := remote[this.pm.NetworkId()]; ok {
+					_,updates := this.ObCtxStore.Remotes()
+					if all,ok := updates[this.pm.NetworkId()]; ok {
 						for _,v := range all {
 							if v.Data.DestinationId.Uint64() == del.RemoteChainId {
 								ctx := v.CrossTransaction()
@@ -305,17 +305,31 @@ func (this *MsgHandler) loop() {
 							}
 						}
 					}
-
-					rtxs := this.ObRtxStore.Query()
-					for _,v:=range rtxs {
-						if v.Data.DestinationId.Uint64() == del.RemoteChainId {
-							rtx := v.ReceptTransaction()
-							if err := this.rtxStore.UpdateLocal(rtx); err != nil {
-								log.Warn("Add local rtx", "err", err)
-							}
-							this.pm.UpdateRtx([]*types.ReceptTransaction{rtx})
+					remotes,_ := this.ctxStore.Remotes()
+					if all,ok := remotes[del.RemoteChainId]; ok {
+						log.Info("remotes","all",len(all))
+						for _,v := range all {
+							//if this.ctxStore.VerifyUpdateCwsSigner2(v) == nil {
+							this.pm.UpdateCWss([]*types.CrossTransactionWithSignatures{v})
+							//}
 						}
 					}
+					//
+					//rtxs := this.ObRtxStore.Query()
+					//for _,v:=range rtxs {
+					//	if v.Data.DestinationId.Uint64() == del.RemoteChainId {
+					//		rtx := v.ReceptTransaction()
+					//		if err := this.rtxStore.UpdateLocal(rtx); err != nil {
+					//			log.Warn("Add local rtx", "err", err)
+					//		}
+					//		this.pm.UpdateRtx([]*types.ReceptTransaction{rtx})
+					//	}
+					//}
+
+					//rtxs := this.ctxStore.Query()
+					//for _,v := range rtxs {
+					//
+					//}
 				}
 			}
 		case ev := <-this.updateSignedCh:
@@ -402,7 +416,9 @@ func (this *MsgHandler) HandleMsg(msg p2p.Msg, p Peer) error {
 				verifyCwss = append(verifyCwss,cws)
 			}
 		}
-		this.ctxStore.AddCWss(verifyCwss)
+		if !this.role.IsAnchor() {
+			this.ctxStore.AddCWss(verifyCwss)
+		}
 		this.pm.BroadcastCWss(verifyCwss)
 	case msg.Code == RtxSignMsg:
 		if !this.pm.CanAcceptTxs() {
@@ -441,7 +457,9 @@ func (this *MsgHandler) HandleMsg(msg p2p.Msg, p Peer) error {
 				verifyCwss = append(verifyCwss,cws)
 			}
 		}
-		this.ctxStore.AddCWss(verifyCwss)
+		if !this.role.IsAnchor() {
+			this.ctxStore.AddCWss(verifyCwss)
+		}
 		this.pm.BroadcastInternalCrossTransactionWithSignature(verifyCwss)
 	case msg.Code == CtxSignUpdate:
 		if !this.pm.CanAcceptTxs() {
