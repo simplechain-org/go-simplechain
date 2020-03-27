@@ -50,7 +50,7 @@ var (
 	// MainnetChainConfig is the chain parameters to run a node on the main network.
 	MainnetChainConfig = &ChainConfig{
 		ChainID:          big.NewInt(1),
-		SingularityBlock: big.NewInt(3000000),
+		SingularityBlock: big.NewInt(5000000),
 		Scrypt:           new(ScryptConfig),
 	}
 
