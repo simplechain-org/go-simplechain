@@ -229,7 +229,7 @@ func (this *MsgHandler) HandleMsg(msg p2p.Msg, p Peer) error {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
 		if err := this.ctxStore.ValidateCtx(ctx); err == nil {
-			p.MarkReceptTransaction(ctx.SignHash())
+			p.MarkCrossTransaction(ctx.SignHash())
 			this.pm.BroadcastCtx([]*types.CrossTransaction{ctx})
 			if err := this.ctxStore.AddRemote(ctx); err != nil {
 				log.Error("Add remote ctx", "err", err)
@@ -347,7 +347,7 @@ func (this *MsgHandler) GetTxForLockOut(rwss []*types.ReceptTransactionWithSigna
 		if _, ok := this.knownRwssTx[rws.ID()]; !ok {
 			param, err = this.CreateTransaction(this.anchorSigner, rws, gasUsed)
 			if err != nil {
-				log.Error("CreateTransaction1", "err", err)
+				//log.Error("CreateTransaction1", "err", err)
 				errorRws = append(errorRws, rws)
 				errTx1++
 				continue
