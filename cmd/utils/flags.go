@@ -40,6 +40,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/consensus"
 	"github.com/simplechain-org/go-simplechain/consensus/clique"
 	"github.com/simplechain-org/go-simplechain/consensus/ethash"
+	"github.com/simplechain-org/go-simplechain/consensus/scrypt"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/vm"
 	"github.com/simplechain-org/go-simplechain/crypto"
@@ -1664,7 +1665,9 @@ func MakeChain(ctx *cli.Context, stack *node.Node) (chain *core.BlockChain, chai
 		Fatalf("%v", err)
 	}
 	var engine consensus.Engine
-	if config.Clique != nil {
+	if config.Scrypt != nil {
+		engine = scrypt.NewFaker()
+	} else if config.Clique != nil {
 		engine = clique.New(config.Clique, chainDb)
 	} else {
 		engine = ethash.NewFaker()
