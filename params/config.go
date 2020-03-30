@@ -78,7 +78,7 @@ var (
 	// TestnetChainConfig contains the chain parameters to run a node on the Ropsten test network.
 	TestnetChainConfig = &ChainConfig{
 		ChainID:          big.NewInt(3),
-		SingularityBlock: big.NewInt(2682122),
+		SingularityBlock: big.NewInt(2690000),
 		Scrypt:           new(ScryptConfig),
 	}
 
