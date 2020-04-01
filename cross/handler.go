@@ -229,7 +229,7 @@ func (this *MsgHandler) HandleMsg(msg p2p.Msg, p Peer) error {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
 		if err := this.ctxStore.ValidateCtx(ctx); err == nil {
-			p.MarkReceptTransaction(ctx.SignHash())
+			p.MarkCrossTransaction(ctx.SignHash())
 			this.pm.BroadcastCtx([]*types.CrossTransaction{ctx})
 			if err := this.ctxStore.AddRemote(ctx); err != nil {
 				log.Error("Add remote ctx", "err", err)
@@ -240,15 +240,20 @@ func (this *MsgHandler) HandleMsg(msg p2p.Msg, p Peer) error {
 			break
 		}
 		var cwss []*types.CrossTransactionWithSignatures
+		var verifyCwss []*types.CrossTransactionWithSignatures
 		if err := msg.Decode(&cwss); err != nil {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
 
-		this.ctxStore.AddCWss(cwss)
-		this.pm.BroadcastCWss(cwss)
 		for _, cws := range cwss {
-			p.MarkCrossTransactionWithSignatures(cws.ID())
+			if this.ctxStore.VerifyRemoteCwsSigner(cws) == nil {
+				p.MarkCrossTransactionWithSignatures(cws.ID())
+				verifyCwss = append(verifyCwss,cws)
+			}
 		}
+
+		this.ctxStore.AddCWss(verifyCwss)
+		this.pm.BroadcastCWss(verifyCwss)
 
 	case msg.Code == RtxSignMsg:
 		if !this.pm.CanAcceptTxs() {
@@ -274,15 +279,19 @@ func (this *MsgHandler) HandleMsg(msg p2p.Msg, p Peer) error {
 			break
 		}
 		var cwss []*types.CrossTransactionWithSignatures
+		var verifyCwss []*types.CrossTransactionWithSignatures
 		if err := msg.Decode(&cwss); err != nil {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
 		//Receive and broadcast
-		this.ctxStore.AddCWss(cwss)
-		this.pm.BroadcastInternalCrossTransactionWithSignature(cwss)
 		for _, cws := range cwss {
-			p.MarkInternalCrossTransactionWithSignatures(cws.ID())
+			if this.ctxStore.VerifyLocalCwsSigner(cws) == nil {
+				p.MarkInternalCrossTransactionWithSignatures(cws.ID())
+				verifyCwss = append(verifyCwss,cws)
+			}
 		}
+		this.ctxStore.AddCWss(verifyCwss)
+		this.pm.BroadcastInternalCrossTransactionWithSignature(verifyCwss)
 
 	default:
 		return errResp(ErrInvalidMsgCode, "%v", msg.Code)
@@ -338,7 +347,7 @@ func (this *MsgHandler) GetTxForLockOut(rwss []*types.ReceptTransactionWithSigna
 		if _, ok := this.knownRwssTx[rws.ID()]; !ok {
 			param, err = this.CreateTransaction(this.anchorSigner, rws, gasUsed)
 			if err != nil {
-				log.Error("CreateTransaction1", "err", err)
+				//log.Error("CreateTransaction1", "err", err)
 				errorRws = append(errorRws, rws)
 				errTx1++
 				continue

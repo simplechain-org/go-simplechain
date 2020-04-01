@@ -127,7 +127,7 @@ func NewCtxStore(config CtxStoreConfig, chainconfig *params.ChainConfig, chain b
 	//}
 	//anchors,_ := QueryAnchor(chainconfig,chain,statedb,newHead,address)
 	//store.config.Anchors = anchors
-	//store.anchors[1024] = newAnchorCtxSignerSet(store.config.Anchors, signer)
+	//store.anchors[1024] = newAnchorCtxSignerSet(store.config.Anchors, localSigner)
 
 	//if config.Journal != "" {
 	//	store.journal = newCTxJournal(config.Journal)
@@ -454,7 +454,7 @@ func (store *CtxStore) validateCtx(ctx *types.CrossTransaction) error {
 		anchors, signedCount := QueryAnchor(store.chainConfig, store.chain, statedb, newHead, store.CrossDemoAddress, ctx.Data.DestinationId.Uint64())
 		store.config.Anchors = anchors
 		requireSignatureCount = signedCount
-		store.anchors[ctx.Data.DestinationId.Uint64()] = newAnchorCtxSignerSet(store.config.Anchors, store.signer)
+		store.anchors[ctx.Data.DestinationId.Uint64()] = newAnchorCtxSignerSet(store.config.Anchors, store.signer,types.NewEIP155CtxSigner(ctx.Data.DestinationId))
 		if !store.anchors[ctx.Data.DestinationId.Uint64()].isAnchorTx(ctx) {
 			return fmt.Errorf("invalid signature of ctx:%s", id.String())
 		}
@@ -808,12 +808,13 @@ func (m *cwsSortedMap) RemoveUnderNum(num uint64) {
 }
 
 type anchorCtxSignerSet struct {
-	accounts map[common.Address]struct{}
-	signer   types.CtxSigner
+	accounts     map[common.Address]struct{}
+	localSigner  types.CtxSigner
+	remoteSigner types.CtxSigner
 }
 
-func newAnchorCtxSignerSet(anchors []common.Address, signer types.CtxSigner) *anchorCtxSignerSet {
-	as := &anchorCtxSignerSet{accounts: make(map[common.Address]struct{}, len(anchors)), signer: signer}
+func newAnchorCtxSignerSet(anchors []common.Address, signer,cSigner types.CtxSigner) *anchorCtxSignerSet {
+	as := &anchorCtxSignerSet{accounts: make(map[common.Address]struct{}, len(anchors)), localSigner: signer,remoteSigner:cSigner}
 	for _, a := range anchors {
 		as.accounts[a] = struct{}{}
 	}
@@ -826,7 +827,10 @@ func (as *anchorCtxSignerSet) isAnchor(addr common.Address) bool {
 }
 
 func (as anchorCtxSignerSet) isAnchorTx(tx *types.CrossTransaction) bool {
-	if addr, err := as.signer.Sender(tx); err == nil {
+	if addr, err := as.localSigner.Sender(tx); err == nil {
+		return as.isAnchor(addr)
+	}
+	if addr, err := as.remoteSigner.Sender(tx); err == nil {
 		return as.isAnchor(addr)
 	}
 	return false
@@ -835,4 +839,92 @@ func (as anchorCtxSignerSet) isAnchorTx(tx *types.CrossTransaction) bool {
 type Statistics struct {
 	Top       bool //到达限制长度
 	MinimumTx *types.CrossTransactionWithSignatures
+}
+
+func (store *CtxStore) VerifyLocalCwsSigner(cws *types.CrossTransactionWithSignatures) error {
+	for _,v := range cws.Resolution() {
+		if err := store.validateLocalCtx(v);err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (store *CtxStore) VerifyRemoteCwsSigner(cws *types.CrossTransactionWithSignatures) error {
+	for _,v := range cws.Resolution() {
+		if err := store.validateRemoteCtx(v);err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (store *CtxStore) validateLocalCtx(ctx *types.CrossTransaction) error {
+	id := ctx.ID()
+	// discard if finished
+	ok, err := store.db.Has(ctx.Key())
+	if err != nil {
+		return fmt.Errorf("db has failed, id: %s", id.String())
+	}
+	if ok {
+		return fmt.Errorf("ctx was already signatured, id: %s", id.String())
+	}
+
+	// discard if expired
+	if store.txExpired(ctx) {
+		return fmt.Errorf("ctx is already expired, id: %s", id.String())
+	}
+
+	if v, ok := store.anchors[ctx.Data.DestinationId.Uint64()]; ok {
+		if !v.isAnchorTx(ctx) {
+			return fmt.Errorf("invalid signature of ctx:%s", id.String())
+		}
+	} else {
+		newHead := store.chain.CurrentBlock().Header() // Special case during testing
+		statedb, err := store.chain.StateAt(newHead.Root)
+		if err != nil {
+			log.Error("Failed to reset txpool state", "err", err)
+			return fmt.Errorf("stateAt err:%s", err.Error())
+		}
+		anchors, signedCount := QueryAnchor(store.chainConfig, store.chain, statedb, newHead, store.CrossDemoAddress, ctx.Data.DestinationId.Uint64())
+		store.config.Anchors = anchors
+		requireSignatureCount = signedCount
+		store.anchors[ctx.Data.DestinationId.Uint64()] = newAnchorCtxSignerSet(store.config.Anchors, store.signer,types.NewEIP155CtxSigner(ctx.Data.DestinationId))
+		if !store.anchors[ctx.Data.DestinationId.Uint64()].isAnchorTx(ctx) {
+			return fmt.Errorf("invalid signature of ctx:%s", id.String())
+		}
+	}
+
+	return nil
+}
+
+func (store *CtxStore) validateRemoteCtx(ctx *types.CrossTransaction) error {
+	id := ctx.ID()
+
+	// discard if expired
+	if store.txExpired(ctx) {
+		return fmt.Errorf("ctx is already expired, id: %s", id.String())
+	}
+
+	if v, ok := store.anchors[ctx.ChainId().Uint64()]; ok {
+		if !v.isAnchorTx(ctx) {
+			return fmt.Errorf("invalid signature of ctx:%s", id.String())
+		}
+	} else {
+		newHead := store.chain.CurrentBlock().Header() // Special case during testing
+		statedb, err := store.chain.StateAt(newHead.Root)
+		if err != nil {
+			log.Error("Failed to reset txpool state", "err", err)
+			return fmt.Errorf("stateAt err:%s", err.Error())
+		}
+		anchors, signedCount := QueryAnchor(store.chainConfig, store.chain, statedb, newHead, store.CrossDemoAddress, ctx.ChainId().Uint64())
+		store.config.Anchors = anchors
+		requireSignatureCount = signedCount
+		store.anchors[ctx.ChainId().Uint64()] = newAnchorCtxSignerSet(store.config.Anchors, store.signer,types.NewEIP155CtxSigner(ctx.ChainId()))
+		if !store.anchors[ctx.ChainId().Uint64()].isAnchorTx(ctx) {
+			return fmt.Errorf("invalid signature of ctx:%s", id.String())
+		}
+	}
+
+	return nil
 }

@@ -211,13 +211,13 @@ func (l *ctxValueList) Discard(count uint64) []*types.CrossTransactionWithSignat
 	return drop
 }
 
-// accountSet is simply a set of addresses to check for existence, and a signer
+// accountSet is simply a set of addresses to check for existence, and a localSigner
 // capable of deriving addresses from transactions.
 //type makerSet struct {
 //	accounts map[common.Address]struct{}
 //}
 //
-//// newAccountSet creates a new address set with an associated signer for sender
+//// newAccountSet creates a new address set with an associated localSigner for sender
 //// derivations.
 //func newMakerSet () *makerSet {
 //	return &makerSet{
