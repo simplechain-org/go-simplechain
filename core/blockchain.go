@@ -2260,7 +2260,7 @@ func (bc *BlockChain) StoreContractLog(blockNumber uint64, hash common.Hash, log
 					continue
 				}
 
-				if v.Topics[0] == params.TakerTopic {
+				if v.Topics[0] == params.TakerTopic && len(v.Topics) >= 3 && len(v.Data) >= common.HashLength*6 {
 					var to common.Address
 					copy(to[:], v.Topics[2][common.HashLength-common.AddressLength:])
 					ctxId := v.Topics[1]
