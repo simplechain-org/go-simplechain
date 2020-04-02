@@ -35,14 +35,42 @@ type SendTxArgs struct {
 	Input    *hexutil.Bytes  `json:"input"`
 }
 
-func main() {
-	flag.Parse()
-	Match()
+type RPCCrossTransaction struct {
+	Value            *hexutil.Big   `json:"Value"`
+	CTxId            common.Hash    `json:"ctxId"`
+	TxHash           common.Hash    `json:"TxHash"`
+	From             common.Address `json:"From"`
+	BlockHash        common.Hash    `json:"BlockHash"`
+	DestinationId    *hexutil.Big   `json:"destinationId"`
+	DestinationValue *hexutil.Big   `json:"DestinationValue"`
+	Input            hexutil.Bytes  `json:"input"`
+	V                []*hexutil.Big `json:"V"`
+	R                []*hexutil.Big `json:"R"`
+	S                []*hexutil.Big `json:"S"`
 }
 
-func Match() {
-	data, err := hexutil.Decode(params.CrossDemoAbi)
+type Order struct {
+	Value            *big.Int
+	TxId             common.Hash
+	TxHash           common.Hash
+	From             common.Address
+	BlockHash        common.Hash
+	DestinationValue *big.Int
+	Data             []byte
+	V                []*big.Int
+	R                [][32]byte
+	S                [][32]byte
+}
 
+var signatures map[string]map[uint64][]*RPCCrossTransaction
+
+func main() {
+	flag.Parse()
+	match()
+}
+
+func match() {
+	data, err := hexutil.Decode(params.CrossDemoAbi)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -53,37 +81,8 @@ func Match() {
 		fmt.Println("dial", "err", err)
 		return
 	}
-	type RPCCrossTransaction struct {
-		Value            *hexutil.Big   `json:"Value"`
-		CTxId            common.Hash    `json:"ctxId"`
-		TxHash           common.Hash    `json:"TxHash"`
-		From             common.Address `json:"From"`
-		BlockHash        common.Hash    `json:"BlockHash"`
-		DestinationId    *hexutil.Big   `json:"destinationId"`
-		DestinationValue *hexutil.Big   `json:"DestinationValue"`
-		Input            hexutil.Bytes  `json:"input"`
-		V                []*hexutil.Big `json:"V"`
-		R                []*hexutil.Big `json:"R"`
-		S                []*hexutil.Big `json:"S"`
-	}
-
-	type Order struct {
-		Value            *big.Int
-		TxId             common.Hash
-		TxHash           common.Hash
-		From             common.Address
-		BlockHash        common.Hash
-		DestinationValue *big.Int
-		Data             []byte
-		V                []*big.Int
-		R                [][32]byte
-		S                [][32]byte
-	}
-
-	var signatures map[string]map[uint64][]*RPCCrossTransaction
 
 	err = client.CallContext(context.Background(), &signatures, "eth_ctxContent")
-
 	if err != nil {
 		fmt.Println("CallContext", "err", err)
 		return
@@ -91,30 +90,21 @@ func Match() {
 
 	//for _, Value := range signatures["remote"] {
 	for remoteId, value := range signatures["remote"] {
-
 		for i, v := range value {
-			//log.Println("1 V.CTxId=",V.CTxId.String(),"key",key)
-			//if V.CTxId.String() == *TxId {
-			if i <= 10000 {
+			if i <= 10000 { //自动最多接10000单交易
 				//账户地址
 				from := common.HexToAddress(*fromVar)
 				//合约地址
 				//在子链上接单就要填写子链上的合约地址
 				//在主链上接单就要填写主链上的合约地址
 				to := common.HexToAddress(*contract)
-
 				gas := hexutil.Uint64(*gaslimitVar)
-				//Value := hexutil.Big(*V.DestinationValue)
 
 				abi, err := abi.JSON(bytes.NewReader(data))
 				if err != nil {
 					log.Fatalln(err)
 					continue
 				}
-
-				//Data, _ := json.Marshal(V)
-				//
-				//fmt.Println("Data=", string(Data))
 
 				r := make([][32]byte, 0, len(v.R))
 				s := make([][32]byte, 0, len(v.S))
@@ -133,42 +123,22 @@ func Match() {
 				}
 				//在调用这个函数中调用的chainId其实就是表示的是发单的链id
 				//也就是maker的源头，那条链调用了maker,这个链id就对应那条链的id
-				//chainId := new(big.Int)
-				//
-				//if V.DestinationId.ToInt().Cmp(big.NewInt(1)) == 0 {
-				//	chainId.SetInt64(1024)
-				//	log.Println("1024")
-				//} else {
-				//	chainId.SetInt64(1)
-				//	log.Println("1")
-				//}
 				chainId := big.NewInt(int64(remoteId))
-				//fmt.Println(v.Value.String(),chainId.String())
-				//out, err := abi.Pack("taker", V.Value.ToInt(), V.CTxId, V.TxHash, V.From,
-				//	V.BlockHash, V.DestinationId.ToInt(), V.DestinationValue.ToInt(), chainId,
-				//	vv, R, S)
-				//b,err := v.Input.MarshalText()
-				if err != nil {
-					fmt.Println(err)
+
+				ord := Order{
+					Value:            v.Value.ToInt(),
+					TxId:             v.CTxId,
+					TxHash:           v.TxHash,
+					From:             v.From,
+					BlockHash:        v.BlockHash,
+					DestinationValue: v.DestinationValue.ToInt(),
+					Data:             v.Input,
+					V:                vv,
+					R:                r,
+					S:                s,
 				}
 
-				var ord Order
-				ord.Value = v.Value.ToInt()
-				ord.TxId = v.CTxId
-				ord.TxHash = v.TxHash
-				ord.From = v.From
-				ord.BlockHash = v.BlockHash
-				ord.DestinationValue = v.DestinationValue.ToInt()
-				ord.Data = v.Input
-				ord.V = vv
-				ord.R = r
-				ord.S = s
-				//out, err := abi.Pack("taker", V.Value.ToInt(), V.CTxId, V.TxHash, V.From,
-				//	V.BlockHash, V.DestinationValue.ToInt(), chainId,
-				//	vv, R, S)
-				//out, err := abi.Pack("taker",&ord,chainId,[]byte("When the whole world is about to rain, let’s make it clear in our heart together."))
 				out, err := abi.Pack("taker", &ord, chainId, []byte{})
-
 				if err != nil {
 					fmt.Println("abi.Pack err=", err)
 					continue
@@ -176,19 +146,14 @@ func Match() {
 
 				input := hexutil.Bytes(out)
 
-				args := &SendTxArgs{
+				var result common.Hash
+				if err := client.CallContext(context.Background(), &result, "eth_sendTransaction", &SendTxArgs{
 					From:  from,
 					To:    &to,
 					Gas:   &gas,
 					Value: v.DestinationValue,
 					Input: &input,
-				}
-
-				var result common.Hash
-
-				err = client.CallContext(context.Background(), &result, "eth_sendTransaction", args)
-
-				if err != nil {
+				}); err != nil {
 					fmt.Println("CallContext", "err", err)
 					return
 				}

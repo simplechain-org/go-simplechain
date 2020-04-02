@@ -42,8 +42,18 @@ type SendTxArgs struct {
 	Input    *hexutil.Bytes  `json:"input"`
 }
 
-func Register(client *rpc.Client) {
+//注册子链信息
+func main() {
+	flag.Parse()
+	register()
+}
 
+func register() {
+	client, err := rpc.Dial(*rawurlVar)
+	if err != nil {
+		fmt.Println("dial", "err", err)
+		return
+	}
 	data, err := hexutil.Decode(params.CrossDemoAbi)
 
 	if err != nil {
@@ -52,42 +62,20 @@ func Register(client *rpc.Client) {
 	}
 
 	from := common.HexToAddress(*fromVar)
-
 	to := common.HexToAddress(*contract)
-
 	gas := hexutil.Uint64(*gaslimitVar)
 
-	value := hexutil.Big(*big.NewInt(0))
-
 	abi, err := abi.JSON(bytes.NewReader(data))
-
 	if err != nil {
 		log.Fatalln(err)
 	}
-	////想要随机，请设置随机种子
-	//rand.Seed(time.Now().UnixNano())
-	//
-	////这个值必须改变，因为已经限定合约中，计算出来的txid不能相同
-	//nonce:=big.NewInt(0).SetUint64(rand.Uint64())
-	//nonce:=big.NewInt(0).SetUint64(9536605289005490782)
-
-	remoteChainId := big.NewInt(0).SetUint64(*chainId)
+	remoteChainId := new(big.Int).SetUint64(*chainId)
 
 	signConfirmCount := uint8(*signConfirm)
 
-	anchorA := common.HexToAddress(*anchor1)
-
-	anchorB := common.HexToAddress(*anchor2)
-
-	anchorC := common.HexToAddress(*anchor3)
-
-	var anchors []common.Address
-	anchors = append(anchors, anchorA)
-	anchors = append(anchors, anchorB)
-	anchors = append(anchors, anchorC)
+	anchors := []common.Address{common.HexToAddress(*anchor1), common.HexToAddress(*anchor2), common.HexToAddress(*anchor3)}
 
 	out, err := abi.Pack("chainRegister", remoteChainId, signConfirmCount, anchors)
-
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -97,34 +85,17 @@ func Register(client *rpc.Client) {
 
 	fmt.Println("input=", input)
 
-	args := &SendTxArgs{
+	var result common.Hash
+	if err = client.CallContext(context.Background(), &result, "eth_sendTransaction", &SendTxArgs{
 		From:  from,
 		To:    &to,
 		Gas:   &gas,
-		Value: &value,
+		Value: nil,
 		Input: &input,
-	}
-
-	var result common.Hash
-
-	err = client.CallContext(context.Background(), &result, "eth_sendTransaction", args)
-
-	if err != nil {
+	}); err != nil {
 		fmt.Println("CallContext", "err", err)
 		return
 	}
 
 	fmt.Println("result=", result.Hex())
-}
-
-//跨链交易发起人
-func main() {
-	flag.Parse()
-	client, err := rpc.Dial(*rawurlVar)
-	if err != nil {
-		fmt.Println("dial", "err", err)
-		return
-	}
-
-	Register(client)
 }
