@@ -2253,13 +2253,14 @@ func (bc *BlockChain) StoreContractLog(blockNumber uint64, hash common.Hash, log
 		var rtxs []*types.ReceptTransaction
 		for _, v := range logs {
 			if len(v.Topics) > 0 && bc.IsCtxAddress(v.Address) {
-				isLaunch := v.Topics[0] == params.MakerTopic
-				if bc.IsCtxAddress(v.Address) && isLaunch {
+
+				if v.Topics[0] == params.MakerTopic || v.Topics[0] == params.MakerFinishTopic ||
+					v.Topics[0] == params.AddAnchorsTopic || v.Topics[0] == params.RemoveAnchorsTopic {
 					blockLogs = append(blockLogs, v)
 					continue
 				}
-				isMatching := v.Topics[0] == params.TakerTopic
-				if isMatching {
+
+				if v.Topics[0] == params.TakerTopic {
 					var to common.Address
 					copy(to[:], v.Topics[2][common.HashLength-common.AddressLength:])
 					ctxId := v.Topics[1]
@@ -2274,22 +2275,6 @@ func (bc *BlockChain) StoreContractLog(blockNumber uint64, hash common.Hash, log
 							v.BlockNumber,
 							v.TxIndex,
 							v.Data[common.HashLength*6:common.HashLength*6+count])) //todo networkId read from contract
-					blockLogs = append(blockLogs, v)
-					continue
-				}
-				isMakerFinish := v.Topics[0] == params.MakerFinishTopic
-				if isMakerFinish {
-					blockLogs = append(blockLogs, v)
-					continue
-				}
-				isAddAnchors := v.Topics[0] == params.AddAnchorsTopic
-				if isAddAnchors {
-					blockLogs = append(blockLogs, v)
-					continue
-				}
-
-				isRemoveAnchors := v.Topics[0] == params.AddAnchorsTopic
-				if isRemoveAnchors {
 					blockLogs = append(blockLogs, v)
 				}
 			}

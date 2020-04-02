@@ -72,10 +72,11 @@ func (this *CtxDb) ListAll(add func([]*types.CrossTransactionWithSignatures)) er
 				result = result[:0]
 			}
 		}
-		if len(result) > 0 {
-			add(result)
-		}
 	}
+	if len(result) > 0 {
+		add(result)
+	}
+
 	log.Info("Loaded local signed cross transaction", "transactions", total)
 	return failure
 }
