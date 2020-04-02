@@ -143,15 +143,12 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 					}
 				}
 				if len(ctxs) > 0 {
-					//log.Info("ctxs", "next.index",next.index,"height",height,"l",len(ctxs))
 					set.chain.CtxsFeedSend(NewCTxsEvent{ctxs})
 				}
 				if len(rtxs) > 0 {
-					//log.Info("rtxs","next.index",next.index,"height",height,"l",len(rtxs))
 					set.chain.RtxsFeedSend(NewRTxsEvent{rtxs})
 				}
 				if len(finishes) > 0 {
-					//log.Info("finishs","blockNumber",next.index,"height",height,"l",len(finishes))
 					set.chain.TransactionFinishFeedSend(TransationFinishEvent{
 						finishes})
 				}

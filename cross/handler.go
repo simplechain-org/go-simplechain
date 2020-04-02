@@ -36,6 +36,17 @@ func errResp(code errCode, format string, v ...interface{}) error {
 	return fmt.Errorf("%v - %v", code, fmt.Sprintf(format, v...))
 }
 
+type TranParam struct {
+	gasLimit uint64
+	gasPrice *big.Int
+	data     []byte
+}
+
+type GetCtxSignsData struct {
+	Amount int  // Maximum number of headers to retrieve
+	GetAll bool // Query all
+}
+
 type MsgHandler struct {
 	roleHandler         RoleHandler
 	role                common.ChainRole
@@ -118,9 +129,7 @@ func (this *MsgHandler) Start() {
 	this.rtxsinLogSub = this.blockchain.SubscribeNewRTxssEvent(this.rtxsinLogCh)
 
 	go this.loop()
-
 	go this.ReadCrossMessage()
-
 }
 
 func (this *MsgHandler) loop() {
@@ -166,7 +175,6 @@ func (this *MsgHandler) loop() {
 					if len(txs) > 0 {
 						this.pm.AddRemotes(txs)
 					}
-
 				}
 			}
 		case <-this.availableTakerSub.Err():
@@ -215,6 +223,7 @@ func (this *MsgHandler) Stop() {
 	this.rtxsinLogSub.Unsubscribe()
 	this.availableTakerSub.Unsubscribe()
 	close(this.quitSync)
+
 	log.Info("Simplechain MsgHandler stopped")
 }
 
@@ -248,7 +257,7 @@ func (this *MsgHandler) HandleMsg(msg p2p.Msg, p Peer) error {
 		for _, cws := range cwss {
 			if this.ctxStore.VerifyRemoteCwsSigner(cws) == nil {
 				p.MarkCrossTransactionWithSignatures(cws.ID())
-				verifyCwss = append(verifyCwss,cws)
+				verifyCwss = append(verifyCwss, cws)
 			}
 		}
 
@@ -287,7 +296,7 @@ func (this *MsgHandler) HandleMsg(msg p2p.Msg, p Peer) error {
 		for _, cws := range cwss {
 			if this.ctxStore.VerifyLocalCwsSigner(cws) == nil {
 				p.MarkInternalCrossTransactionWithSignatures(cws.ID())
-				verifyCwss = append(verifyCwss,cws)
+				verifyCwss = append(verifyCwss, cws)
 			}
 		}
 		this.ctxStore.AddCWss(verifyCwss)
@@ -304,14 +313,13 @@ func (this *MsgHandler) ReadCrossMessage() {
 		select {
 		case v := <-this.crossMsgReader:
 			cws, ok := v.(*types.CrossTransactionWithSignatures)
-
 			if ok && cws.Data.DestinationId.Uint64() == this.pm.NetworkId() {
 				this.ctxStore.AddCWss([]*types.CrossTransactionWithSignatures{cws})
 				this.pm.BroadcastCWss([]*types.CrossTransactionWithSignatures{cws})
 				break
 			}
-			rws, ok := v.(*types.ReceptTransactionWithSignatures)
 
+			rws, ok := v.(*types.ReceptTransactionWithSignatures)
 			if ok && rws.Data.DestinationId.Uint64() == this.pm.NetworkId() {
 				if v := this.rtxStore.ReadFromLocals(rws.Data.CTxId); v == nil {
 					errs := this.rtxStore.AddLocals(rws)
@@ -322,7 +330,6 @@ func (this *MsgHandler) ReadCrossMessage() {
 						}
 					}
 				}
-				break
 			}
 		case <-this.quitSync:
 			return
@@ -347,7 +354,6 @@ func (this *MsgHandler) GetTxForLockOut(rwss []*types.ReceptTransactionWithSigna
 		if _, ok := this.knownRwssTx[rws.ID()]; !ok {
 			param, err = this.CreateTransaction(this.anchorSigner, rws, gasUsed)
 			if err != nil {
-				//log.Error("CreateTransaction1", "err", err)
 				errorRws = append(errorRws, rws)
 				errTx1++
 				continue
@@ -358,7 +364,6 @@ func (this *MsgHandler) GetTxForLockOut(rwss []*types.ReceptTransactionWithSigna
 			if ok, _ := this.CheckTransaction(this.anchorSigner, tokenAddress, rws, gasUsed, nonce+count, param.gasLimit, param.gasPrice, param.data); !ok {
 				errorRws = append(errorRws, rws)
 				exec++
-				//log.Info("Check","err",err,"ok",ok,"ctxID",rws.ID().String())
 				continue
 			} else {
 				send++
@@ -378,6 +383,7 @@ func (this *MsgHandler) GetTxForLockOut(rwss []*types.ReceptTransactionWithSigna
 			break
 		}
 	}
+
 	log.Info("GetTxForLockOut", "errorRws", len(errorRws), "exec", exec, "errtx1", errTx1, "errtx2", errTx2, "tx", len(txs), "sent", send, "role", this.role.String())
 	return txs, nil
 }
@@ -419,7 +425,6 @@ func (this *MsgHandler) SetGasPriceOracle(gpo GasPriceOracle) {
 func (this *MsgHandler) CreateTransaction(address common.Address, rws *types.ReceptTransactionWithSignatures, gasUsed *big.Int) (*TranParam, error) {
 	tokenAddress := this.GetContractAddress()
 	gasPrice, err := this.gpo.SuggestPrice(context.Background())
-
 	if err != nil {
 		return nil, err
 	}
@@ -429,43 +434,29 @@ func (this *MsgHandler) CreateTransaction(address common.Address, rws *types.Rec
 		return nil, err
 	}
 
-	//log.Info("data","data",data,"rws",rws,"chainid",rws.ChainId().String())
-	callArgs := CallArgs{
+	gasLimit, err := this.gasHelper.EstimateGas(context.Background(), CallArgs{
 		From:     address,
 		To:       &tokenAddress,
 		Data:     data,
 		GasPrice: hexutil.Big(*gasPrice),
-	}
-
-	gasLimit, err := this.gasHelper.EstimateGas(context.Background(), callArgs)
+	})
 	if err != nil {
 		return nil, err
 	}
+
 	return &TranParam{gasLimit: gasLimit, gasPrice: gasPrice, data: data}, nil
 }
 
 func (this *MsgHandler) CheckTransaction(address, tokenAddress common.Address, rws *types.ReceptTransactionWithSignatures, gasUsed *big.Int, nonce, gasLimit uint64, gasPrice *big.Int, data []byte) (bool, error) {
-	callArgs := CallArgs{
+	return this.gasHelper.CheckExec(context.Background(), CallArgs{
 		From:     address,
 		To:       &tokenAddress,
 		Data:     data,
 		GasPrice: hexutil.Big(*gasPrice),
 		Gas:      hexutil.Uint64(gasLimit),
-	}
-	return this.gasHelper.CheckExec(context.Background(), callArgs)
+	})
 }
 
 func (this *MsgHandler) GetCtxstore() CtxStore {
 	return this.ctxStore
-}
-
-type TranParam struct {
-	gasLimit uint64
-	gasPrice *big.Int
-	data     []byte
-}
-
-type GetCtxSignsData struct {
-	Amount int  // Maximum number of headers to retrieve
-	GetAll bool // Query all
 }

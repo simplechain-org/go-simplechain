@@ -5,5 +5,4 @@ const (
 	CtxSignsMsg         = 0x32
 	RtxSignMsg          = 0x33
 	CtxSignsInternalMsg = 0x34
-	//GetCtxSignsMsg      = 0x10
 )

@@ -531,24 +531,6 @@ func (pool *TxPool) local() map[common.Address]types.Transactions {
 				txs[addr] = append(txs[addr], queued.Flatten()...)
 			}
 		}
-		//if pending := pool.pending[addr]; pending != nil {
-		//	var pendTxs []*types.Transaction
-		//	for _,v := range pending.Flatten() {
-		//		if !pool.IsAnchor(v) {
-		//			pendTxs = append(pendTxs,v)
-		//		}
-		//	}
-		//	txs[addr] = append(txs[addr], pendTxs...)
-		//}
-		//if queued := pool.queue[addr]; queued != nil {
-		//	var queueTxs []*types.Transaction
-		//	for _,v := range queued.Flatten() {
-		//		if !pool.IsAnchor(v) {
-		//			queueTxs = append(queueTxs,v)
-		//		}
-		//	}
-		//	txs[addr] = append(txs[addr], queueTxs...)
-		//}
 	}
 	return txs
 }
