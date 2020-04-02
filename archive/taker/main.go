@@ -66,10 +66,10 @@ var signatures map[string]map[uint64][]*RPCCrossTransaction
 
 func main() {
 	flag.Parse()
-	match()
+	taker()
 }
 
-func match() {
+func taker() {
 	data, err := hexutil.Decode(params.CrossDemoAbi)
 	if err != nil {
 		fmt.Println(err)
@@ -88,7 +88,6 @@ func match() {
 		return
 	}
 
-	//for _, Value := range signatures["remote"] {
 	for remoteId, value := range signatures["remote"] {
 		for i, v := range value {
 			if i <= 10000 { //自动最多接10000单交易

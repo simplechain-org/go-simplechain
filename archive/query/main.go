@@ -28,10 +28,10 @@ type RPCCrossTransaction struct {
 
 func main() {
 	flag.Parse()
-	Match()
+	query()
 }
 
-func Match() {
+func query() {
 	client, err := rpc.Dial(*rawurlVar)
 	if err != nil {
 		fmt.Println("dial", "err", err)
