@@ -43,19 +43,20 @@ type FinishInfo struct {
 }
 
 func NewCrossTransaction(amount, charge, networkId *big.Int, id, txHash, bHash common.Hash, from common.Address, input []byte) *CrossTransaction {
-	return &CrossTransaction{Data: ctxdata{
-		Value:            amount,
-		CTxId:            id,
-		TxHash:           txHash,
-		From:             from,
-		BlockHash:        bHash,
-		DestinationId:    networkId,
-		DestinationValue: charge,
-		Input:            input,
-		V:                new(big.Int),
-		R:                new(big.Int),
-		S:                new(big.Int),
-	}}
+	return &CrossTransaction{
+		Data: ctxdata{
+			Value:            amount,
+			CTxId:            id,
+			TxHash:           txHash,
+			From:             from,
+			BlockHash:        bHash,
+			DestinationId:    networkId,
+			DestinationValue: charge,
+			Input:            input,
+			V:                new(big.Int),
+			R:                new(big.Int),
+			S:                new(big.Int),
+		}}
 }
 
 func (tx *CrossTransaction) WithSignature(signer CtxSigner, sig []byte) (*CrossTransaction, error) {

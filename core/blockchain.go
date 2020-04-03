@@ -2272,6 +2272,7 @@ func (bc *BlockChain) StoreContractLog(blockNumber uint64, hash common.Hash, log
 							v.BlockHash,
 							to,
 							common.BytesToHash(v.Data[:common.HashLength]).Big(),
+							types.RtxStatusImplementing,
 							v.BlockNumber,
 							v.TxIndex,
 							v.Data[common.HashLength*6:common.HashLength*6+count])) //todo networkId read from contract

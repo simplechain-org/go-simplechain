@@ -18,6 +18,7 @@ func TestRwssList_Add(t *testing.T) {
 			common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
 			common.HexToAddress("095e7baea6a6c7c4c2dfeb977efac326af552d87"),
 			big.NewInt(1),
+			types.RtxStatusWaiting,
 			10000,
 			1,
 			[]byte{}))

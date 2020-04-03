@@ -53,7 +53,6 @@ type NewCTxEvent struct{ Txs *types.CrossTransaction }
 
 type NewRTxEvent struct {
 	Txs *types.ReceptTransaction
-	//Record *types.CrossRecord
 }
 
 type NewRTxsEvent struct{ Txs []*types.ReceptTransaction }

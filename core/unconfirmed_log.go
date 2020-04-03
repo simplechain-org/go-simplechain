@@ -126,6 +126,7 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 									v.BlockHash,
 									to,
 									common.BytesToHash(v.Data[:common.HashLength]).Big(),
+									types.RtxStatusSuccessful,
 									v.BlockNumber,
 									v.TxIndex,
 									v.Data[common.HashLength*6:common.HashLength*6+count]))
