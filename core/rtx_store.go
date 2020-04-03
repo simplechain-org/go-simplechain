@@ -68,11 +68,9 @@ type RtxStore struct {
 	wg sync.WaitGroup // for shutdown sync
 
 	journal *RtxJournal
-	//records map[common.Hash]*types.CrossRecord
+
 	db ethdb.KeyValueStore // database to store cws
 
-	//locals map[common.Hash]*types.ReceptTransactionWithSignatures
-	//online map[common.Hash]*types.ReceptTransactionWithSignatures
 	all              *rwsLookup
 	task             *rwsList
 	CrossDemoAddress common.Address
@@ -87,46 +85,21 @@ func NewRtxStore(config RtxStoreConfig, chainconfig *params.ChainConfig, chain b
 	finishedCache, _ := lru.New(finishedCacheLimit)
 
 	store := &RtxStore{
-		config:      config,
-		chain:       chain,
-		chainConfig: chainconfig,
-		pending:     newRwsSortedMap(),
-		queued:      newRwsSortedMap(),
-		signer:      signer,
-		//anchors:       newAnchorAccountSet(config.Anchors, signer),
+		config:        config,
+		chain:         chain,
+		chainConfig:   chainconfig,
+		pending:       newRwsSortedMap(),
+		queued:        newRwsSortedMap(),
+		signer:        signer,
 		stopCh:        make(chan struct{}),
 		finishedCache: finishedCache,
-		//records:       make(map[common.Hash]*types.CrossRecord),
-		db: chainDb,
-		//online: make(map[common.Hash]*types.ReceptTransactionWithSignatures),
+		db:            chainDb,
 
 		all:              newRwsLookup(),
 		CrossDemoAddress: address,
 		anchors:          make(map[uint64]*anchorAccountSet),
 		signHash:         signHash,
 	}
-	//newHead := store.chain.CurrentBlock().Header() // Special case during testing
-	//statedb, err := store.chain.StateAt(newHead.Root)
-	//if err != nil {
-	//	log.Error("Failed to reset txpool state", "err", err)
-	//}
-	//anchors,_ := QueryAnchor(chainconfig,chain,statedb,newHead,address)
-	//store.config.Anchors = anchors
-	//store.anchors = newAnchorAccountSet(store.config.Anchors, signer)
-
-	//key := []byte{1}
-	//ctxId,_:= hexutil.Decode("0xd4e65b9c9585586c969fd59816f9b420117194481f8a83d6e74a6fb66e878c2f")
-	//key = append(key, ctxId...)
-	//
-	//ok, err := store.db.Has(key)
-	//if err != nil {
-	//	log.Warn("db.Has","err",err)
-	//}
-	//if ok {
-	//	log.Warn("rtx is already finished,0xd4e65b9c9585586c969fd59816f9b420117194481f8a83d6e74a6fb66e878c2f","journal",store.config.Journal)
-	//} else {
-	//	log.Warn("rtx is not finished","journal",store.config.Journal)
-	//}
 
 	store.task = newRwsList(store.all)
 	// If local transactions and journaling is enabled, load from disk
@@ -146,41 +119,30 @@ func NewRtxStore(config RtxStoreConfig, chainconfig *params.ChainConfig, chain b
 }
 
 func (store *RtxStore) Stop() {
-	//log.Info("RtxStore loop exists 1")
 	store.resultScope.Close()
-	//log.Info("RtxStore loop exists 2")
 	store.rwsScope.Close()
-	//log.Info("RtxStore loop exists 3")
 	store.db.Close()
-	//log.Info("RtxStore loop exists 4")
 	close(store.stopCh)
-	//log.Info("RtxStore loop exists 5")
 	store.wg.Wait()
-	//log.Info("RtxStore loop exists 6")
 	if store.journal != nil {
 		store.journal.close()
 	}
+
 	log.Info("Rtx store stopped")
 }
 
-func (store *RtxStore) AddLocal(rtx *types.ReceptTransaction /*, record *types.CrossRecord*/) error {
-	//// add local from block syncing, sigh it first
-	//key, err := rpctx.StringToPrivateKey(rpctx.PrivateKey)
-	//if err != nil {
-	//	return err
-	//}
-	if signedTx, err := types.SignRTx(rtx, store.signer, store.signHash); err != nil {
+func (store *RtxStore) AddLocal(rtx *types.ReceptTransaction) error {
+	signedTx, err := types.SignRTx(rtx, store.signer, store.signHash)
+	if err != nil {
 		return err
-	} else {
-		rtx.Data.V = signedTx.Data.V
-		rtx.Data.R = signedTx.Data.R
-		rtx.Data.S = signedTx.Data.S
 	}
+	rtx.Data.V = signedTx.Data.V
+	rtx.Data.R = signedTx.Data.R
+	rtx.Data.S = signedTx.Data.S
 
 	store.mu.Lock()
 	defer store.mu.Unlock()
 
-	//store.records[rtx.ID()] = record
 	return store.addTxLocked(rtx, true)
 }
 
@@ -188,30 +150,11 @@ func (store *RtxStore) AddLocals(rwss ...*types.ReceptTransactionWithSignatures)
 	return store.addTxs(rwss, true)
 }
 
-//func (store *RtxStore) AddRemotes(rtxs []*types.ReceptTransaction) []error {
-//	return store.addTxs(rtxs, false)
-//}
-
 func (store *RtxStore) AddRemote(rtx *types.ReceptTransaction) error {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	return store.addTxLocked(rtx, false)
 }
-
-//func (store *RtxStore) RemoveLocals(rwss []*types.ReceptTransactionWithSignatures) error {
-//	store.mu.Lock()
-//	defer store.mu.Unlock()
-//	for _,rws := range rwss {
-//		if v := store.all.Get(rws.ID()); v != nil {
-//			store.all.Remove(rws.ID())
-//		}
-//	}
-//	store.task.Removed()
-//	if store.journal != nil {
-//		return store.journal.rotate(store.all.GetAll())
-//	}
-//	return nil
-//}
 
 func (store *RtxStore) RemoveLocals(finishes []*types.FinishInfo) error {
 	store.mu.Lock()
@@ -263,7 +206,6 @@ func (store *RtxStore) loop() {
 		select {
 		// Be unsubscribed due to system stopped
 		case <-store.stopCh:
-			//log.Info("RtxStore loop exists")
 			return
 
 		case <-expire.C:
@@ -300,7 +242,6 @@ func (store *RtxStore) addTxs(rwss []*types.ReceptTransactionWithSignatures, loc
 	errs := make([]error, len(rwss))
 	if local {
 		for i, rws := range rwss {
-			//store.locals[rws.ID()] = rws
 			store.all.Add(rws)
 			errs[i] = store.journalTx(rws)
 			store.task.Put(rws)
@@ -312,7 +253,7 @@ func (store *RtxStore) addTxs(rwss []*types.ReceptTransactionWithSignatures, loc
 
 func (store *RtxStore) synced() []*types.ReceptTransaction {
 	pending := store.pending
-	var txs []*types.ReceptTransaction
+	txs := make([]*types.ReceptTransaction, len(pending.items))
 	for _, rws := range pending.items {
 		txs = append(txs, rws.Resolve()...)
 	}
@@ -348,7 +289,6 @@ func (store *RtxStore) addTxLocked(rtx *types.ReceptTransaction, local bool) err
 				log.Error("db.Put", "err", err)
 				return err
 			}
-			//go store.resultFeed.Send(NewRWsEvent{rws})
 			store.resultFeed.Send(NewRWsEvent{rws})
 		}
 		return nil
@@ -383,17 +323,13 @@ func (store *RtxStore) addTxLocked(rtx *types.ReceptTransaction, local bool) err
 		if err := rws.AddSignatures(rtx); err != nil {
 			return err
 		}
-
-	} else {
-		store.queued.Put(types.NewReceptTransactionWithSignatures(rtx), store.getNumber(bh))
 	}
+	store.queued.Put(types.NewReceptTransactionWithSignatures(rtx), store.getNumber(bh))
 	return nil
 }
 
 func (store *RtxStore) validateRtx(rtx *types.ReceptTransaction) error {
 	id := rtx.ID()
-	//store.mu.RLock()
-	//defer store.mu.RUnlock()
 
 	// discard if finished
 	if store.finishedCache.Contains(id) {
@@ -418,25 +354,22 @@ func (store *RtxStore) validateRtx(rtx *types.ReceptTransaction) error {
 		if !v.isAnchorTx(rtx) {
 			return fmt.Errorf("invalid signature of rtx:%s", id.String())
 		}
-	} else {
-		newHead := store.chain.CurrentBlock().Header() // Special case during testing
-		statedb, err := store.chain.StateAt(newHead.Root)
-		if err != nil {
-			log.Error("Failed to reset txpool state", "err", err)
-			return fmt.Errorf("stateAt err:%s", err.Error())
-		}
-		anchors, signedCount := QueryAnchor(store.chainConfig, store.chain, statedb, newHead, store.CrossDemoAddress, rtx.Data.DestinationId.Uint64())
-		store.config.Anchors = anchors
-		requireSignatureCount = signedCount
-		store.anchors[rtx.Data.DestinationId.Uint64()] = newAnchorAccountSet(store.config.Anchors, store.signer)
-		if !store.anchors[rtx.Data.DestinationId.Uint64()].isAnchorTx(rtx) {
-			return fmt.Errorf("invalid signature of ctx:%s", id.String())
-		}
 	}
-	//validate signature
-	//if !store.anchors.isAnchorTx(rtx) {
-	//	return fmt.Errorf("invalid signature of id:%s", id.String())
-	//}
+
+	newHead := store.chain.CurrentBlock().Header() // Special case during testing
+	statedb, err := store.chain.StateAt(newHead.Root)
+	if err != nil {
+		log.Error("Failed to reset txpool state", "err", err)
+		return fmt.Errorf("stateAt err:%s", err.Error())
+	}
+	anchors, signedCount := QueryAnchor(store.chainConfig, store.chain, statedb, newHead, store.CrossDemoAddress, rtx.Data.DestinationId.Uint64())
+	store.config.Anchors = anchors
+	requireSignatureCount = signedCount
+	store.anchors[rtx.Data.DestinationId.Uint64()] = newAnchorAccountSet(store.config.Anchors, store.signer)
+	if !store.anchors[rtx.Data.DestinationId.Uint64()].isAnchorTx(rtx) {
+		return fmt.Errorf("invalid signature of ctx:%s", id.String())
+	}
+
 	return nil
 }
 
@@ -498,14 +431,6 @@ func (m *rwsSortedMap) Put(rws *types.ReceptTransactionWithSignatures, number ui
 	m.index.Push(byBlockNum{id, number})
 }
 
-//func (m *rwsSortedMap) PopElder() *types.ReceptTransactionWithSignatures {
-//	id := (*m.index)[0].ctxId
-//	rtx := m.items[id]
-//	*m.index = (*m.index)[1:len(*m.index)]
-//	delete(m.items, id)
-//	return rtx
-//}
-
 func (m *rwsSortedMap) Len() int {
 	return len(m.items)
 }
@@ -553,28 +478,3 @@ func (as anchorAccountSet) isAnchorTx(tx *types.ReceptTransaction) bool {
 	}
 	return false
 }
-
-//func (store *RtxStore) WriteToLocals(rtws *types.ReceptTransactionWithSignatures) error {
-//	store.locals[rtws.ID()] = rtws
-//	enc, err := rlp.EncodeToBytes(rtws)
-//	if err != nil {
-//		return err
-//	}
-//	return store.db.Put(signedRtxKey(rtws.Data.CTxId[:]), enc)
-//}
-//
-//func (store *RtxStore) ReadFromLocals(ctxId common.Hash) (*types.ReceptTransactionWithSignatures, error) {
-//	if v, ok := store.locals[ctxId]; ok {
-//		return v, nil
-//	}
-//	data, err := store.db.Get(signedRtxKey(ctxId[:]))
-//	if err != nil {
-//		return nil, err
-//	}
-//	result := new(types.ReceptTransactionWithSignatures)
-//	err = rlp.Decode(bytes.NewReader(data), result)
-//	if err != nil {
-//		return nil, err
-//	}
-//	return result, nil
-//}

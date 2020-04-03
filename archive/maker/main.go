@@ -45,38 +45,36 @@ type SendTxArgs struct {
 	Input    *hexutil.Bytes  `json:"input"`
 }
 
-func Maker(client *rpc.Client) {
+//跨链交易发起人
+func main() {
+	flag.Parse()
+	maker()
+}
 
+func maker() {
+	client, err := rpc.Dial(*rawurlVar)
+	if err != nil {
+		fmt.Println("dial", "err", err)
+		return
+	}
 	data, err := hexutil.Decode(params.CrossDemoAbi)
-
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
 	from := common.HexToAddress(*fromVar)
-
 	to := common.HexToAddress(*contract)
-
 	gas := hexutil.Uint64(*gaslimitVar)
-
-	value := hexutil.Big(*big.NewInt(0).SetUint64(*value))
+	value := hexutil.Big(*new(big.Int).SetUint64(*value))
 
 	abi, err := abi.JSON(bytes.NewReader(data))
-
 	if err != nil {
 		log.Fatalln(err)
 	}
-	////想要随机，请设置随机种子
-	//rand.Seed(time.Now().UnixNano())
-	//
-	////这个值必须改变，因为已经限定合约中，计算出来的txid不能相同
-	//nonce:=big.NewInt(0).SetUint64(rand.Uint64())
-	//nonce:=big.NewInt(0).SetUint64(9536605289005490782)
+	remoteChainId := new(big.Int).SetUint64(*chainId)
 
-	remoteChainId := big.NewInt(0).SetUint64(*chainId)
-
-	des := big.NewInt(0).SetUint64(*destValue)
+	des := new(big.Int).SetUint64(*destValue)
 
 	//out, err := abi.Pack("makerStart",remoteChainId ,des,[]byte("In the end, it’s not the years in your life that count. It’s the life in your years."))
 	out, err := abi.Pack("makerStart", remoteChainId, des, []byte{})
@@ -86,37 +84,19 @@ func Maker(client *rpc.Client) {
 	}
 	input := hexutil.Bytes(out)
 
-	//fmt.Println("input=",input,"id=",remoteChainId,"des=",des)
-
-	args := &SendTxArgs{
-		From:  from,
-		To:    &to,
-		Gas:   &gas,
-		Value: &value,
-		Input: &input,
-	}
-
-	var result common.Hash
-
-	err = client.CallContext(context.Background(), &result, "eth_sendTransaction", args)
-
-	if err != nil {
-		fmt.Println("CallContext", "err", err)
-		return
-	}
-
-	fmt.Println("result=", result.Hex())
-}
-
-//跨链交易发起人
-func main() {
-	flag.Parse()
-	client, err := rpc.Dial(*rawurlVar)
-	if err != nil {
-		fmt.Println("dial", "err", err)
-		return
-	}
 	for i := 0; i < *countTx; i++ {
-		Maker(client)
+		var result common.Hash
+		if err = client.CallContext(context.Background(), &result, "eth_sendTransaction", &SendTxArgs{
+			From:  from,
+			To:    &to,
+			Gas:   &gas,
+			Value: &value,
+			Input: &input,
+		}); err != nil {
+			fmt.Println("CallContext", "err", err)
+			return
+		}
+
+		fmt.Println("result=", result.Hex())
 	}
 }

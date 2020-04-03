@@ -82,58 +82,6 @@ func (l *rwsList) Removed() {
 	heap.Init(l.items)
 }
 
-// Cap finds all the transactions below the given price threshold, drops them
-// from the priced list and returns them for further removal from the entire pool.
-//func (l *ctxValueList) Cap(threshold *big.Int, local *makerSet) []*types.CrossTransactionWithSignatures {
-//	drop := make([]*types.CrossTransactionWithSignatures, 0, 128) // Remote underpriced transactions to drop
-//	save := make([]*types.CrossTransactionWithSignatures, 0, 64)  // Local underpriced transactions to keep
-//
-//	for len(*l.items) > 0 {
-//		// Discard stale transactions if found during cleanup
-//		tx := heap.Pop(l.items).(*types.CrossTransactionWithSignatures)
-//		if l.all.Get(tx.Hash()) == nil {
-//			l.stales--
-//			continue
-//		}
-//		// Non stale transaction found, discard unless local
-//		if local.containsTx(tx) {
-//			save = append(save, tx)
-//		} else {
-//			drop = append(drop, tx)
-//		}
-//	}
-//	for _, tx := range save {
-//		heap.Push(l.items, tx)
-//	}
-//	return drop
-//}
-
-// Underpriced checks whether a transaction is cheaper than (or as cheap as) the
-// lowest priced transaction currently being tracked.
-//func (l *ctxValueList) Underpriced(tx *types.CrossTransactionWithSignatures, local *makerSet) bool {
-//	// Local transactions cannot be underpriced
-//	if local.containsTx(tx) {
-//		return false
-//	}
-//	// Discard stale price points if found at the heap start
-//	for len(*l.items) > 0 {
-//		head := []*types.CrossTransactionWithSignatures(*l.items)[0]
-//		if l.all.Get(head.Hash()) == nil {
-//			l.stales--
-//			heap.Pop(l.items)
-//			continue
-//		}
-//		break
-//	}
-//	// Check if the transaction is underpriced or not
-//	if len(*l.items) == 0 {
-//		log.Error("Pricing query for empty pool") // This cannot happen, print to catch programming errors
-//		return false
-//	}
-//	cheapest := []*types.CrossTransactionWithSignatures(*l.items)[0]
-//	return ComparePrice(tx,cheapest)
-//}
-
 // Discard finds a number of most underpriced transactions, removes them from the
 // priced list and returns them for further removal from the entire pool.
 func (l *rwsList) Discard(count uint64) []*types.ReceptTransactionWithSignatures {
@@ -154,37 +102,6 @@ func (l *rwsList) Discard(count uint64) []*types.ReceptTransactionWithSignatures
 	}
 	return drop
 }
-
-// accountSet is simply a set of addresses to check for existence, and a signer
-// capable of deriving addresses from transactions.
-//type makerSet struct {
-//	accounts map[common.Address]struct{}
-//}
-//
-//// newAccountSet creates a new address set with an associated signer for sender
-//// derivations.
-//func newMakerSet () *makerSet {
-//	return &makerSet{
-//		accounts: make(map[common.Address]struct{}),
-//	}
-//}
-//
-//// contains checks if a given address is contained within the set.
-//func (as *makerSet) contains(addr common.Address) bool {
-//	_, exist := as.accounts[addr]
-//	return exist
-//}
-//
-//// containsTx checks if the sender of a given tx is within the set. If the sender
-//// cannot be derived, this method returns false.
-//func (as *makerSet) containsTx(tx *types.CrossTransactionWithSignatures) bool {
-//	return as.contains(tx.Data.From)
-//}
-//
-//// add inserts a new address into the set to track.
-//func (as *makerSet) add(addr common.Address) {
-//	as.accounts[addr] = struct{}{}
-//}
 
 // txLookup is used internally by ctxStore to track transactions while allowing all without
 // mutex contention.
