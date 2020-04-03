@@ -93,9 +93,10 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 				//todo add and del anchors
 				for _, v := range next.logs {
 					tx, blockHash, blockNumber := set.chain.GetTransactionByTxHash(v.TxHash)
-					if tx != nil && blockHash == v.BlockHash && blockNumber == v.BlockNumber {
-						isLaunch := v.Topics[0] == params.MakerTopic
-						if set.chain.IsCtxAddress(v.Address) && isLaunch {
+					if tx != nil && blockHash == v.BlockHash && blockNumber == v.BlockNumber &&
+						set.chain.IsCtxAddress(v.Address) {
+
+						if v.Topics[0] == params.MakerTopic && len(v.Topics) >= 3 && len(v.Data) >= common.HashLength*5 {
 							var from common.Address
 							copy(from[:], v.Topics[2][common.HashLength-common.AddressLength:])
 							ctxId := v.Topics[1]
@@ -113,8 +114,7 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 							continue
 						}
 
-						isMatching := v.Topics[0] == params.TakerTopic
-						if set.chain.IsCtxAddress(v.Address) && isMatching {
+						if v.Topics[0] == params.TakerTopic && len(v.Topics) >= 3 && len(v.Data) >= common.HashLength*6 {
 							var to common.Address
 							copy(to[:], v.Topics[2][common.HashLength-common.AddressLength:])
 							ctxId := v.Topics[1]
@@ -131,9 +131,9 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 									v.Data[common.HashLength*6:common.HashLength*6+count]))
 							continue
 						}
+
 						// delete statement
-						isFinish := v.Topics[0] == params.MakerFinishTopic
-						if set.chain.IsCtxAddress(v.Address) && isFinish {
+						if v.Topics[0] == params.MakerFinishTopic && len(v.Topics) >= 3 {
 							if len(v.Topics) >= 2 {
 								ctxId := v.Topics[1]
 								to := v.Topics[2]
