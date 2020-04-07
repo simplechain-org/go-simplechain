@@ -25,7 +25,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/simplechain-org/go-simplechain/accounts"
 	"github.com/simplechain-org/go-simplechain/accounts/keystore"
 	"github.com/simplechain-org/go-simplechain/accounts/scwallet"
@@ -44,6 +43,8 @@ import (
 	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/rlp"
 	"github.com/simplechain-org/go-simplechain/rpc"
+
+	"github.com/davecgh/go-spew/spew"
 	"github.com/tyler-smith/go-bip39"
 )
 
@@ -1814,9 +1815,10 @@ func (s *PublicCtxPoolAPI) CtxContent() map[string]map[uint64][]*RPCCrossTransac
 	remotes, locals := s.b.CtxPoolContent()
 	for k, txs := range remotes {
 		for _, tx := range txs {
-			content["remote"][k] = append(content["remote"][k], newRPCCrossTransaction(tx))
+			if tx.Status == types.RtxStatusWaiting {
+				content["remote"][k] = append(content["remote"][k], newRPCCrossTransaction(tx))
+			}
 		}
-
 	}
 	for s, txs := range locals {
 		for _, tx := range txs {
@@ -1838,7 +1840,6 @@ func (s *PublicCtxPoolAPI) CtxQuery(ctx context.Context, hash common.Hash) *RPCC
 				return newRPCCrossTransaction(tx)
 			}
 		}
-
 	}
 	for _, txs := range locals {
 		for _, tx := range txs {

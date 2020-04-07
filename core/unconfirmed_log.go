@@ -17,6 +17,7 @@ type headerRetriever interface {
 	GetTransactionByTxHash(hash common.Hash) (*types.Transaction, common.Hash, uint64)
 	CtxsFeedSend(transaction NewCTxsEvent) int
 	RtxsFeedSend(transaction NewRTxsEvent) int
+	RtxsRemoveFeed(transaction NewRTxsRemoveEvent) int
 	TransactionFinishFeedSend(transaction TransationFinishEvent) int
 	IsCtxAddress(addr common.Address) bool
 }
@@ -88,7 +89,7 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 		case header.Hash() == next.hash:
 			if next.logs != nil {
 				var ctxs []*types.CrossTransaction
-				var rtxs []*types.ReceptTransaction
+				var rtxs []*types.RTxsInfo
 				var finishes []*types.FinishInfo
 				//todo add and del anchors
 				for _, v := range next.logs {
@@ -115,21 +116,10 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 						}
 
 						if v.Topics[0] == params.TakerTopic && len(v.Topics) >= 3 && len(v.Data) >= common.HashLength*6 {
-							var to common.Address
-							copy(to[:], v.Topics[2][common.HashLength-common.AddressLength:])
-							ctxId := v.Topics[1]
-							count := common.BytesToHash(v.Data[common.HashLength*5 : common.HashLength*6]).Big().Int64()
-							rtxs = append(rtxs,
-								types.NewReceptTransaction(
-									ctxId,
-									v.TxHash,
-									v.BlockHash,
-									to,
-									common.BytesToHash(v.Data[:common.HashLength]).Big(),
-									types.RtxStatusSuccessful,
-									v.BlockNumber,
-									v.TxIndex,
-									v.Data[common.HashLength*6:common.HashLength*6+count]))
+							rtxs = append(rtxs, &types.RTxsInfo{
+								DestinationId: common.BytesToHash(v.Data[:common.HashLength]).Big(),
+								CtxId:         v.Topics[1],
+							})
 							continue
 						}
 
@@ -138,7 +128,10 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 							if len(v.Topics) >= 2 {
 								ctxId := v.Topics[1]
 								to := v.Topics[2]
-								finishes = append(finishes, &types.FinishInfo{TxId: ctxId, Taker: common.BytesToAddress(to[:])})
+								finishes = append(finishes, &types.FinishInfo{
+									TxId:  ctxId,
+									Taker: common.BytesToAddress(to[:]),
+								})
 							}
 						}
 					}
@@ -147,7 +140,7 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 					set.chain.CtxsFeedSend(NewCTxsEvent{ctxs})
 				}
 				if len(rtxs) > 0 {
-					set.chain.RtxsFeedSend(NewRTxsEvent{rtxs})
+					set.chain.RtxsRemoveFeed(NewRTxsRemoveEvent{rtxs})
 				}
 				if len(finishes) > 0 {
 					set.chain.TransactionFinishFeedSend(TransationFinishEvent{

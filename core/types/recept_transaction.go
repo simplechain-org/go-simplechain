@@ -19,6 +19,11 @@ import (
 	"github.com/simplechain-org/go-simplechain/params"
 )
 
+type RTxsInfo struct {
+	DestinationId *big.Int
+	CtxId         common.Hash
+}
+
 var receptTxLastPrice = struct {
 	sync.RWMutex
 	mPrice  map[uint64]*big.Int
@@ -27,15 +32,6 @@ var receptTxLastPrice = struct {
 	mPrice:  make(map[uint64]*big.Int),
 	mNumber: make(map[uint64]uint64),
 }
-
-const (
-	// RtxStatusWaiting is the status code of a rtx transaction if waiting for orders.
-	RtxStatusWaiting = uint64(0)
-	// RtxStatusImplementing is the status code of a rtx transaction if execution implementing.
-	RtxStatusImplementing = uint64(1)
-	// RtxStatusSuccessful is the status code of a rtx transaction if execution succeeded.
-	RtxStatusSuccessful = uint64(2)
-)
 
 var maxPrice = big.NewInt(500 * params.GWei)
 
@@ -54,7 +50,6 @@ type receptData struct {
 	To            common.Address `json:"to" gencodec:"required"`            //Token buyer
 	BlockHash     common.Hash    `json:"blockHash" gencodec:"required"`     //The Hash of block in which the message resides
 	DestinationId *big.Int       `json:"destinationId" gencodec:"required"` //Message destination networkId
-	Status        uint64         `json:"status" gencodec:"required"`        // Status tx
 
 	BlockNumber uint64 `json:"blockNumber" gencodec:"required"` //The Height of block in which the message resides
 	Index       uint   `json:"index" gencodec:"required"`
@@ -65,7 +60,7 @@ type receptData struct {
 	S *big.Int `json:"s" gencodec:"required"`
 }
 
-func NewReceptTransaction(id, txHash, bHash common.Hash, to common.Address, networkId *big.Int, status uint64, blockNumber uint64, index uint, input []byte) *ReceptTransaction {
+func NewReceptTransaction(id, txHash, bHash common.Hash, to common.Address, networkId *big.Int, blockNumber uint64, index uint, input []byte) *ReceptTransaction {
 	return &ReceptTransaction{
 		Data: receptData{
 			CTxId:         id,
@@ -73,7 +68,6 @@ func NewReceptTransaction(id, txHash, bHash common.Hash, to common.Address, netw
 			To:            to,
 			BlockHash:     bHash,
 			DestinationId: networkId,
-			Status:        status,
 			BlockNumber:   blockNumber,
 			Index:         index,
 			Input:         input,

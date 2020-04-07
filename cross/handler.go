@@ -71,8 +71,11 @@ type MsgHandler struct {
 	makerFinishEventCh  chan core.TransationFinishEvent
 	makerFinishEventSub event.Subscription
 
-	rtxsinLogCh         chan core.NewRTxsEvent //通过该通道删除ctx_pool中的记录，TODO 普通节点无该功能
-	rtxsinLogSub        event.Subscription
+	rtxRemoveLogCh    chan core.NewRTxsRemoveEvent //通过该通道删除ctx_pool中的记录，TODO 普通节点无该功能
+	rtxRemoveLogSub   event.Subscription
+	rtxsinLogStampCh  chan core.NewStampStatusEvent
+	rtxsinLogStampSub event.Subscription
+
 	chain               simplechain
 	gpo                 GasPriceOracle
 	gasHelper           *GasHelper
@@ -125,8 +128,12 @@ func (this *MsgHandler) Start() {
 	this.makerFinishEventSub = this.blockchain.SubscribeNewFinishsEvent(this.makerFinishEventCh)
 
 	//单子已接
-	this.rtxsinLogCh = make(chan core.NewRTxsEvent, txChanSize)
-	this.rtxsinLogSub = this.blockchain.SubscribeNewRTxssEvent(this.rtxsinLogCh)
+	this.rtxRemoveLogCh = make(chan core.NewRTxsRemoveEvent, txChanSize)
+	this.rtxRemoveLogSub = this.blockchain.SubscribeNewRTxssRemoveEvent(this.rtxRemoveLogCh)
+
+	//标记已接单
+	this.rtxsinLogStampCh = make(chan core.NewStampStatusEvent, txChanSize)
+	this.rtxsinLogStampSub = this.blockchain.SubscribeNewStampStatusEvent(this.rtxsinLogStampCh)
 
 	go this.loop()
 	go this.ReadCrossMessage()
@@ -199,9 +206,13 @@ func (this *MsgHandler) loop() {
 			}
 		case <-this.takerSignedSub.Err():
 			return
-		case ev := <-this.rtxsinLogCh:
+		case ev := <-this.rtxsinLogStampCh:
+			this.ctxStore.StampStatus(ev.Txs)
+		case <-this.rtxsinLogStampSub.Err():
+			return
+		case ev := <-this.rtxRemoveLogCh:
 			this.ctxStore.RemoveRemotes(ev.Txs) //删除本地待接单
-		case <-this.rtxsinLogSub.Err():
+		case <-this.rtxRemoveLogSub.Err():
 			return
 		case ev := <-this.makerFinishEventCh:
 			if err := this.clearStore(ev.Finish); err != nil {
@@ -220,8 +231,10 @@ func (this *MsgHandler) Stop() {
 	this.makerSignedSub.Unsubscribe()
 	this.takerEventSub.Unsubscribe()
 	this.takerSignedSub.Unsubscribe()
-	this.rtxsinLogSub.Unsubscribe()
+	this.rtxRemoveLogSub.Unsubscribe()
+	this.rtxsinLogStampSub.Unsubscribe()
 	this.availableTakerSub.Unsubscribe()
+	this.makerFinishEventSub.Unsubscribe()
 	close(this.quitSync)
 
 	log.Info("Simplechain MsgHandler stopped")

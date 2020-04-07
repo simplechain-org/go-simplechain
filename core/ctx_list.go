@@ -175,6 +175,18 @@ func (t *CWssList) Remove(hash common.Hash) {
 	}
 }
 
+// Remove removes a transaction from the all.
+func (t *CWssList) StampTx(hash common.Hash) {
+	if _, ok := t.all[hash]; ok {
+		for _, v := range t.list {
+			if v.ID() == hash {
+				v.Status = types.RtxStatusImplementing
+				t.all[hash] = v
+			}
+		}
+	}
+}
+
 func (t *CWssList) GetList() []*types.CrossTransactionWithSignatures {
 	return t.list
 }

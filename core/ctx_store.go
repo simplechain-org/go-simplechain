@@ -461,21 +461,35 @@ func (store *CtxStore) Query() (map[uint64][]*types.CrossTransactionWithSignatur
 	return remotes, locals
 }
 
-func (store *CtxStore) RemoveRemotes(rtxs []*types.ReceptTransaction) error {
+func (store *CtxStore) StampStatus(rtxs []*types.RTxsInfo) error {
 	store.mu.Lock()
 	defer store.mu.Unlock()
+
 	for _, v := range rtxs {
-		if v.Data.Status == types.RtxStatusSuccessful {
-			if s, ok := store.remoteStore[v.Data.DestinationId.Uint64()]; ok {
-				s.Remove(v.ID())
-				if err := store.ctxDb.Delete(v.ID()); err != nil {
-					log.Warn("RemoveRemotes", "err", err)
-					return err
-				}
+		if s, ok := store.remoteStore[v.DestinationId.Uint64()]; ok {
+			s.StampTx(v.CtxId)
+		}
+	}
+
+	return nil
+}
+
+func (store *CtxStore) RemoveRemotes(rtxs []*types.RTxsInfo) error {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+
+	//删除store 和 db的数据
+	for _, v := range rtxs {
+		if s, ok := store.remoteStore[v.DestinationId.Uint64()]; ok {
+			s.Remove(v.CtxId)
+			if err := store.ctxDb.Delete(v.CtxId); err != nil {
+				log.Warn("RemoveRemotes", "err", err)
+				return err
 			}
 		}
 	}
 
+	//将db中的跨链交易放到store队列中 todo 优化重复遍历
 	if err := store.ctxDb.ListAll(store.addLocalTxs); err != nil {
 		log.Warn("Failed to load transaction journal", "err", err)
 	}

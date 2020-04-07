@@ -19,7 +19,8 @@ type CtxStore interface {
 	AddLocal(*types.CrossTransaction) error
 	AddCWss([]*types.CrossTransactionWithSignatures) []error
 	ValidateCtx(*types.CrossTransaction) error
-	RemoveRemotes([]*types.ReceptTransaction) error
+	StampStatus([]*types.RTxsInfo) error
+	RemoveRemotes([]*types.RTxsInfo) error
 	RemoveLocals([]*types.FinishInfo) error
 	RemoveFromLocalsByTransaction(common.Hash) error
 	SubscribeCWssResultEvent(chan<- core.NewCWsEvent) event.Subscription
