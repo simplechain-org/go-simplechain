@@ -299,7 +299,7 @@ func (rws *ReceptTransactionWithSignatures) Transaction(
 	return signedTx, nil
 }
 
-func (rws *ReceptTransactionWithSignatures) ConstructData(gasUsed *big.Int) ([]byte, error) {
+func (rws *ReceptTransactionWithSignatures) ConstructData() ([]byte, error) {
 	//paddedCtxId := common.LeftPadBytes(rws.Data.CTxId.Bytes(), 32)
 	//paddedTxHash := common.LeftPadBytes(rws.Data.TxHash.Bytes(), 32)
 	//paddedAddress := common.LeftPadBytes(rws.Data.To.Bytes(), 32)
@@ -407,7 +407,7 @@ func (rws *ReceptTransactionWithSignatures) ConstructData(gasUsed *big.Int) ([]b
 	rep.R = r
 	rep.S = s
 	//log.Info("ConstructData","input",hexutil.Encode(rep.Input),"rws.hash",rws.Hash().String(),"remoteChainId",rws.ChainId().String())
-	out, err := abi.Pack("makerFinish", rep, rws.ChainId(), gasUsed)
+	out, err := abi.Pack("makerFinish", rep, rws.ChainId())
 
 	if err != nil {
 		return nil, err

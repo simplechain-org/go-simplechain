@@ -158,8 +158,8 @@ func (this *MsgHandler) loop() {
 					break
 				}
 				if pending, err := this.pm.GetAnchorTxs(this.anchorSigner); err == nil && len(pending) < 10 {
-					gasUsed, _ := new(big.Int).SetString("80000000000000", 10) //todo gasUsed
-					txs, err := this.GetTxForLockOut(ev.Tws, gasUsed)
+					//gasUsed, _ := new(big.Int).SetString("80000000000000", 10) //todo gasUsed
+					txs, err := this.GetTxForLockOut(ev.Tws)
 					if err != nil {
 						log.Error("GetTxForLockOut", "err", err)
 					}
@@ -330,7 +330,7 @@ func (this *MsgHandler) ReadCrossMessage() {
 	}
 }
 
-func (this *MsgHandler) GetTxForLockOut(rwss []*types.ReceptTransactionWithSignatures, gasUsed *big.Int) ([]*types.Transaction, error) {
+func (this *MsgHandler) GetTxForLockOut(rwss []*types.ReceptTransactionWithSignatures) ([]*types.Transaction, error) {
 	nonce := this.pm.GetNonce(this.anchorSigner)
 
 	var txs []*types.Transaction
@@ -345,7 +345,7 @@ func (this *MsgHandler) GetTxForLockOut(rwss []*types.ReceptTransactionWithSigna
 	for _, rws := range rwss {
 		//TODO EstimateGas不仅测试GasLimit，同时能判断该交易是否执行成功
 		if _, ok := this.knownRwssTx[rws.ID()]; !ok {
-			param, err = this.CreateTransaction(this.anchorSigner, rws, gasUsed)
+			param, err = this.CreateTransaction(this.anchorSigner, rws)
 			if err != nil {
 				//log.Error("CreateTransaction1", "err", err)
 				errorRws = append(errorRws, rws)
@@ -355,7 +355,7 @@ func (this *MsgHandler) GetTxForLockOut(rwss []*types.ReceptTransactionWithSigna
 			this.knownRwssTx[rws.ID()] = param
 		} else { //TODO delete
 			param = this.knownRwssTx[rws.ID()]
-			if ok, _ := this.CheckTransaction(this.anchorSigner, tokenAddress, rws, gasUsed, nonce+count, param.gasLimit, param.gasPrice, param.data); !ok {
+			if ok, _ := this.CheckTransaction(this.anchorSigner, tokenAddress, rws, nonce+count, param.gasLimit, param.gasPrice, param.data); !ok {
 				errorRws = append(errorRws, rws)
 				exec++
 				//log.Info("Check","err",err,"ok",ok,"ctxID",rws.ID().String())
@@ -416,14 +416,14 @@ func (this *MsgHandler) GetContractAddress() common.Address {
 func (this *MsgHandler) SetGasPriceOracle(gpo GasPriceOracle) {
 	this.gpo = gpo
 }
-func (this *MsgHandler) CreateTransaction(address common.Address, rws *types.ReceptTransactionWithSignatures, gasUsed *big.Int) (*TranParam, error) {
+func (this *MsgHandler) CreateTransaction(address common.Address, rws *types.ReceptTransactionWithSignatures) (*TranParam, error) {
 	tokenAddress := this.GetContractAddress()
 	gasPrice, err := this.gpo.SuggestPrice(context.Background())
 
 	if err != nil {
 		return nil, err
 	}
-	data, err := rws.ConstructData(gasUsed)
+	data, err := rws.ConstructData()
 	if err != nil {
 		log.Error("ConstructData", "err", err)
 		return nil, err
@@ -444,7 +444,7 @@ func (this *MsgHandler) CreateTransaction(address common.Address, rws *types.Rec
 	return &TranParam{gasLimit: gasLimit, gasPrice: gasPrice, data: data}, nil
 }
 
-func (this *MsgHandler) CheckTransaction(address, tokenAddress common.Address, rws *types.ReceptTransactionWithSignatures, gasUsed *big.Int, nonce, gasLimit uint64, gasPrice *big.Int, data []byte) (bool, error) {
+func (this *MsgHandler) CheckTransaction(address, tokenAddress common.Address, rws *types.ReceptTransactionWithSignatures, nonce, gasLimit uint64, gasPrice *big.Int, data []byte) (bool, error) {
 	callArgs := CallArgs{
 		From:     address,
 		To:       &tokenAddress,
