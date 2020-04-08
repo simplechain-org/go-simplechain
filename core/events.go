@@ -74,7 +74,7 @@ type NewRTxsRemoveEvent struct {
 	Txs []*types.RTxsInfo
 }
 
-type NewStampStatusEvent struct {
+type NewTakerStampEvent struct {
 	Txs []*types.RTxsInfo
 }
 

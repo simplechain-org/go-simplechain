@@ -71,8 +71,8 @@ type MsgHandler struct {
 	makerFinishEventCh  chan core.TransationFinishEvent
 	makerFinishEventSub event.Subscription
 
-	rtxsinLogStampCh  chan core.NewStampStatusEvent
-	rtxsinLogStampSub event.Subscription
+	takerStampCh  chan core.NewTakerStampEvent
+	takerStampSub event.Subscription
 
 	chain               simplechain
 	gpo                 GasPriceOracle
@@ -126,8 +126,8 @@ func (this *MsgHandler) Start() {
 	this.makerFinishEventSub = this.blockchain.SubscribeNewFinishsEvent(this.makerFinishEventCh)
 
 	//标记已接单
-	this.rtxsinLogStampCh = make(chan core.NewStampStatusEvent, txChanSize)
-	this.rtxsinLogStampSub = this.blockchain.SubscribeNewStampStatusEvent(this.rtxsinLogStampCh)
+	this.takerStampCh = make(chan core.NewTakerStampEvent, txChanSize)
+	this.takerStampSub = this.blockchain.SubscribeNewStampEvent(this.takerStampCh)
 
 	go this.loop()
 	go this.ReadCrossMessage()
@@ -151,6 +151,7 @@ func (this *MsgHandler) loop() {
 			}
 		case <-this.makerStartEventSub.Err():
 			return
+
 		case ev := <-this.makerSignedCh:
 			this.pm.BroadcastInternalCrossTransactionWithSignature([]*types.CrossTransactionWithSignatures{ev.Txs}) //主网广播
 			if this.role.IsAnchor() {
@@ -180,6 +181,7 @@ func (this *MsgHandler) loop() {
 			}
 		case <-this.availableTakerSub.Err():
 			return
+
 		case ev := <-this.takerEventCh:
 			if !this.pm.CanAcceptTxs() {
 				break
@@ -192,20 +194,22 @@ func (this *MsgHandler) loop() {
 				}
 				this.pm.BroadcastRtx(ev.Txs)
 			}
-			this.ctxStore.RemoveRemotes(ev.Txs) //删除已接单
-
+			this.ctxStore.RemoveRemotes(ev.Txs)
 		case <-this.takerEventSub.Err():
 			return
+
 		case ev := <-this.takerSignedCh:
 			if this.role.IsAnchor() {
 				this.WriteCrossMessage(ev.Tws)
 			}
 		case <-this.takerSignedSub.Err():
 			return
-		case ev := <-this.rtxsinLogStampCh:
+
+		case ev := <-this.takerStampCh:
 			this.ctxStore.StampStatus(ev.Txs)
-		case <-this.rtxsinLogStampSub.Err():
+		case <-this.takerStampSub.Err():
 			return
+
 		case ev := <-this.makerFinishEventCh:
 			if err := this.clearStore(ev.Finish); err != nil {
 				log.Info("clearStore", "err", err)
@@ -223,7 +227,7 @@ func (this *MsgHandler) Stop() {
 	this.makerSignedSub.Unsubscribe()
 	this.takerEventSub.Unsubscribe()
 	this.takerSignedSub.Unsubscribe()
-	this.rtxsinLogStampSub.Unsubscribe()
+	this.takerStampSub.Unsubscribe()
 	this.availableTakerSub.Unsubscribe()
 	this.makerFinishEventSub.Unsubscribe()
 	close(this.quitSync)

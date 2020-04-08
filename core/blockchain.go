@@ -139,22 +139,22 @@ type BlockChain struct {
 	triegc *prque.Prque   // Priority queue mapping block numbers to tries to gc
 	gcproc time.Duration  // Accumulates canonical block processing for trie dumping
 
-	hc              *HeaderChain
-	rmLogsFeed      event.Feed
-	chainFeed       event.Feed
-	chainSideFeed   event.Feed
-	chainHeadFeed   event.Feed
-	logsFeed        event.Feed
-	blockProcFeed   event.Feed
-	ctxFeed         event.Feed
-	cwsFeed         event.Feed
-	rtxFeed         event.Feed
-	rtxsFeed        event.Feed
-	rtxsRemoveFeed  event.Feed
-	stampStatusFeed event.Feed
-	FinishsFeed     event.Feed
-	scope           event.SubscriptionScope
-	genesisBlock    *types.Block
+	hc             *HeaderChain
+	rmLogsFeed     event.Feed
+	chainFeed      event.Feed
+	chainSideFeed  event.Feed
+	chainHeadFeed  event.Feed
+	logsFeed       event.Feed
+	blockProcFeed  event.Feed
+	ctxFeed        event.Feed
+	cwsFeed        event.Feed
+	rtxFeed        event.Feed
+	rtxsFeed       event.Feed
+	rtxsRemoveFeed event.Feed
+	takerStampFeed event.Feed
+	FinishsFeed    event.Feed
+	scope          event.SubscriptionScope
+	genesisBlock   *types.Block
 
 	chainmu sync.RWMutex // blockchain insertion lock
 
@@ -2272,7 +2272,7 @@ func (bc *BlockChain) StoreContractLog(blockNumber uint64, hash common.Hash, log
 			}
 		}
 		if len(rtxs) > 0 {
-			go bc.stampStatusFeed.Send(NewStampStatusEvent{rtxs}) //标记该单已经被接
+			go bc.takerStampFeed.Send(NewTakerStampEvent{rtxs})
 		}
 	}
 	if len(blockLogs) > 0 {
@@ -2316,8 +2316,8 @@ func (bc *BlockChain) RtxsFeedSend(transaction NewRTxsEvent) int {
 	return bc.rtxFeed.Send(transaction)
 }
 
-func (bc *BlockChain) SubscribeNewStampStatusEvent(ch chan<- NewStampStatusEvent) event.Subscription {
-	return bc.scope.Track(bc.stampStatusFeed.Subscribe(ch))
+func (bc *BlockChain) SubscribeNewStampEvent(ch chan<- NewTakerStampEvent) event.Subscription {
+	return bc.scope.Track(bc.takerStampFeed.Subscribe(ch))
 }
 
 func (bc *BlockChain) SubscribeNewRTxssEvent(ch chan<- NewRTxsEvent) event.Subscription {
