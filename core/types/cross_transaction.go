@@ -265,7 +265,7 @@ func (cws *CrossTransactionWithSignatures) SignaturesLength() int {
 
 func (cws *CrossTransactionWithSignatures) Resolution() []*CrossTransaction {
 	l := cws.SignaturesLength()
-	ctxs := make([]*CrossTransaction, l)
+	var ctxs []*CrossTransaction
 	for i := 0; i < l; i++ {
 		ctxs = append(ctxs, &CrossTransaction{
 			Data: ctxdata{
