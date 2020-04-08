@@ -71,8 +71,6 @@ type MsgHandler struct {
 	makerFinishEventCh  chan core.TransationFinishEvent
 	makerFinishEventSub event.Subscription
 
-	rtxRemoveLogCh    chan core.NewRTxsRemoveEvent //通过该通道删除ctx_pool中的记录，TODO 普通节点无该功能
-	rtxRemoveLogSub   event.Subscription
 	rtxsinLogStampCh  chan core.NewStampStatusEvent
 	rtxsinLogStampSub event.Subscription
 
@@ -126,10 +124,6 @@ func (this *MsgHandler) Start() {
 	this.availableTakerSub = this.rtxStore.SubscribeNewRWssEvent(this.availableTakerCh)
 	this.makerFinishEventCh = make(chan core.TransationFinishEvent, txChanSize)
 	this.makerFinishEventSub = this.blockchain.SubscribeNewFinishsEvent(this.makerFinishEventCh)
-
-	//单子已接
-	this.rtxRemoveLogCh = make(chan core.NewRTxsRemoveEvent, txChanSize)
-	this.rtxRemoveLogSub = this.blockchain.SubscribeNewRTxssRemoveEvent(this.rtxRemoveLogCh)
 
 	//标记已接单
 	this.rtxsinLogStampCh = make(chan core.NewStampStatusEvent, txChanSize)
@@ -198,6 +192,8 @@ func (this *MsgHandler) loop() {
 				}
 				this.pm.BroadcastRtx(ev.Txs)
 			}
+			this.ctxStore.RemoveRemotes(ev.Txs) //删除已接单
+
 		case <-this.takerEventSub.Err():
 			return
 		case ev := <-this.takerSignedCh:
@@ -209,10 +205,6 @@ func (this *MsgHandler) loop() {
 		case ev := <-this.rtxsinLogStampCh:
 			this.ctxStore.StampStatus(ev.Txs)
 		case <-this.rtxsinLogStampSub.Err():
-			return
-		case ev := <-this.rtxRemoveLogCh:
-			this.ctxStore.RemoveRemotes(ev.Txs) //删除本地待接单
-		case <-this.rtxRemoveLogSub.Err():
 			return
 		case ev := <-this.makerFinishEventCh:
 			if err := this.clearStore(ev.Finish); err != nil {
@@ -231,7 +223,6 @@ func (this *MsgHandler) Stop() {
 	this.makerSignedSub.Unsubscribe()
 	this.takerEventSub.Unsubscribe()
 	this.takerSignedSub.Unsubscribe()
-	this.rtxRemoveLogSub.Unsubscribe()
 	this.rtxsinLogStampSub.Unsubscribe()
 	this.availableTakerSub.Unsubscribe()
 	this.makerFinishEventSub.Unsubscribe()

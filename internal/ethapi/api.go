@@ -1828,6 +1828,39 @@ func (s *PublicCtxPoolAPI) CtxContent() map[string]map[uint64][]*RPCCrossTransac
 	return content
 }
 
+func (s *PublicCtxPoolAPI) GetRemoteCtx(count uint64) map[uint64][]*RPCCrossTransaction {
+	content := make(map[uint64][]*RPCCrossTransaction)
+
+	remotes, _ := s.b.CtxPoolContent()
+	for k, txs := range remotes {
+		ctxCount := uint64(0)
+		for _, tx := range txs {
+			if tx.Status == types.RtxStatusWaiting && ctxCount < count {
+				content[k] = append(content[k], newRPCCrossTransaction(tx))
+				ctxCount++
+			}
+		}
+	}
+
+	return content
+}
+func (s *PublicCtxPoolAPI) GetLocalCtx(count uint64) map[uint64][]*RPCCrossTransaction {
+	content := make(map[uint64][]*RPCCrossTransaction)
+
+	_, locals := s.b.CtxPoolContent()
+	for k, txs := range locals {
+		ctxCount := uint64(0)
+		for _, tx := range txs {
+			if tx.Status == types.RtxStatusWaiting && ctxCount < count {
+				content[k] = append(content[k], newRPCCrossTransaction(tx))
+				ctxCount++
+			}
+		}
+	}
+
+	return content
+}
+
 func (s *PublicCtxPoolAPI) CtxStats() int {
 	return s.b.CtxStats()
 }

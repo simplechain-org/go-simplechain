@@ -2315,16 +2315,11 @@ func (bc *BlockChain) SubscribeNewRTxsEvent(ch chan<- NewRTxsEvent) event.Subscr
 func (bc *BlockChain) RtxsFeedSend(transaction NewRTxsEvent) int {
 	return bc.rtxFeed.Send(transaction)
 }
-func (bc *BlockChain) RtxsRemoveFeed(transaction NewRTxsRemoveEvent) int {
-	return bc.rtxsRemoveFeed.Send(transaction)
-}
 
 func (bc *BlockChain) SubscribeNewStampStatusEvent(ch chan<- NewStampStatusEvent) event.Subscription {
 	return bc.scope.Track(bc.stampStatusFeed.Subscribe(ch))
 }
-func (bc *BlockChain) SubscribeNewRTxssRemoveEvent(ch chan<- NewRTxsRemoveEvent) event.Subscription {
-	return bc.scope.Track(bc.rtxsRemoveFeed.Subscribe(ch))
-}
+
 func (bc *BlockChain) SubscribeNewRTxssEvent(ch chan<- NewRTxsEvent) event.Subscription {
 	return bc.scope.Track(bc.rtxsFeed.Subscribe(ch))
 }

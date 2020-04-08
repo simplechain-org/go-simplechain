@@ -474,25 +474,21 @@ func (store *CtxStore) StampStatus(rtxs []*types.RTxsInfo) error {
 	return nil
 }
 
-func (store *CtxStore) RemoveRemotes(rtxs []*types.RTxsInfo) error {
+func (store *CtxStore) RemoveRemotes(rtxs []*types.ReceptTransaction) error {
 	store.mu.Lock()
 	defer store.mu.Unlock()
-
-	//删除store 和 db的数据
 	for _, v := range rtxs {
-		if s, ok := store.remoteStore[v.DestinationId.Uint64()]; ok {
-			s.Remove(v.CtxId)
-			if err := store.ctxDb.Delete(v.CtxId); err != nil {
+		if s, ok := store.remoteStore[v.Data.DestinationId.Uint64()]; ok {
+			s.Remove(v.ID())
+			if err := store.ctxDb.Delete(v.ID()); err != nil {
 				log.Warn("RemoveRemotes", "err", err)
 				return err
 			}
 		}
 	}
-
-	//将db中的跨链交易放到store队列中 todo 优化重复遍历
-	if err := store.ctxDb.ListAll(store.addLocalTxs); err != nil {
-		log.Warn("Failed to load transaction journal", "err", err)
-	}
+	//if err := store.ctxDb.ListAll(store.addLocalTxs); err != nil {
+	//	log.Warn("Failed to load transaction journal", "err", err)
+	//}
 
 	return nil
 }

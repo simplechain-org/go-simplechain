@@ -17,7 +17,6 @@ type headerRetriever interface {
 	GetTransactionByTxHash(hash common.Hash) (*types.Transaction, common.Hash, uint64)
 	CtxsFeedSend(transaction NewCTxsEvent) int
 	RtxsFeedSend(transaction NewRTxsEvent) int
-	RtxsRemoveFeed(transaction NewRTxsRemoveEvent) int
 	TransactionFinishFeedSend(transaction TransationFinishEvent) int
 	IsCtxAddress(addr common.Address) bool
 }
@@ -89,7 +88,7 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 		case header.Hash() == next.hash:
 			if next.logs != nil {
 				var ctxs []*types.CrossTransaction
-				var rtxs []*types.RTxsInfo
+				var rtxs []*types.ReceptTransaction
 				var finishes []*types.FinishInfo
 				//todo add and del anchors
 				for _, v := range next.logs {
@@ -116,10 +115,20 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 						}
 
 						if v.Topics[0] == params.TakerTopic && len(v.Topics) >= 3 && len(v.Data) >= common.HashLength*6 {
-							rtxs = append(rtxs, &types.RTxsInfo{
-								DestinationId: common.BytesToHash(v.Data[:common.HashLength]).Big(),
-								CtxId:         v.Topics[1],
-							})
+							var to common.Address
+							copy(to[:], v.Topics[2][common.HashLength-common.AddressLength:])
+							ctxId := v.Topics[1]
+							count := common.BytesToHash(v.Data[common.HashLength*5 : common.HashLength*6]).Big().Int64()
+							rtxs = append(rtxs,
+								types.NewReceptTransaction(
+									ctxId,
+									v.TxHash,
+									v.BlockHash,
+									to,
+									common.BytesToHash(v.Data[:common.HashLength]).Big(),
+									v.BlockNumber,
+									v.TxIndex,
+									v.Data[common.HashLength*6:common.HashLength*6+count]))
 							continue
 						}
 
@@ -140,11 +149,10 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 					set.chain.CtxsFeedSend(NewCTxsEvent{ctxs})
 				}
 				if len(rtxs) > 0 {
-					set.chain.RtxsRemoveFeed(NewRTxsRemoveEvent{rtxs})
+					set.chain.RtxsFeedSend(NewRTxsEvent{rtxs})
 				}
 				if len(finishes) > 0 {
-					set.chain.TransactionFinishFeedSend(TransationFinishEvent{
-						finishes})
+					set.chain.TransactionFinishFeedSend(TransationFinishEvent{finishes})
 				}
 			}
 		default:
