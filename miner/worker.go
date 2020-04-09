@@ -796,7 +796,6 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 
 	var coalescedLogs []*types.Log
 	var txHashs []common.Hash
-	//var address	[]common.Address
 	//Loop:
 	for {
 		// In the following three cases, we will interrupt the execution of the transaction.
@@ -817,7 +816,6 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 					inc:   true,
 				}
 			}
-			//log.Info("atomic.LoadInt32(interrupt) == commitInterruptNewHead")
 			return atomic.LoadInt32(interrupt) == commitInterruptNewHead, nil
 		}
 		// If we don't have enough gas for any further transactions then we're done
@@ -828,7 +826,6 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		// Retrieve the next transaction and abort if all done
 		tx := txs.Peek()
 		if tx == nil {
-			//log.Info("tx == nil")
 			break
 		}
 		// Error may be ignored here. The error has already been checked
@@ -836,25 +833,10 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		//
 		// We use the eip155 signer regardless of the current hf.
 		from, _ := types.Sender(w.current.signer, tx)
-		//for _,add := range address {
-		//	if add == from { //TODO 解析交易应用
-		//		txHashs = append(txHashs,tx.Hash())
-		//		txs.Shift()
-		//		continue Loop
-		//	}
-		//}
 		if !w.current.storeCheck(tx, w.ctxStore.CrossDemoAddress) {
 			log.Info("ctxStore is busy!")
 			txs.Pop()
 		} else {
-			// Check whether the tx is replay protected. If we're not in the EIP155 hf
-			// phase, start ignoring the sender until we do.
-			//if tx.Protected() && !w.chainConfig.IsEIP155(w.current.header.Number) {
-			//	log.Trace("Ignoring reply protected transaction", "hash", tx.Hash(), "eip155", w.chainConfig.EIP155Block)
-			//
-			//	txs.Pop()
-			//	continue
-			//}
 			// Start executing the transaction
 			w.current.state.Prepare(tx.Hash(), common.Hash{}, w.current.tcount)
 
@@ -877,9 +859,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 
 			case core.ErrRepetitionCrossTransaction:
 				log.Trace("repetition", "sender", from, "hash", tx.Hash())
-				//address = append(address,from)
 				txHashs = append(txHashs, tx.Hash()) //record RepetitionCrossTransaction
-				//txs.Shift()
 				txs.Pop()
 
 			case nil:

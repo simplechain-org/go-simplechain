@@ -22,7 +22,6 @@ type CrossTransaction struct {
 }
 
 type ctxdata struct {
-	//OriginId      		*big.Int       `json:"originId" gencodec:"required"` 	//Message origin networkId
 	Value            *big.Int       `json:"value" gencodec:"required"` //Token for sell
 	CTxId            common.Hash    `json:"ctxId" gencodec:"required"` //cross_transaction ID
 	TxHash           common.Hash    `json:"txHash" gencodec:"required"`
@@ -38,22 +37,26 @@ type ctxdata struct {
 	S *big.Int `json:"s" gencodec:"required"`
 }
 
-func NewCrossTransaction(amount, charge, networkId *big.Int, id, txHash, bHash common.Hash, from common.Address, input []byte) *CrossTransaction {
-	d := ctxdata{
-		Value:            amount,
-		CTxId:            id,
-		TxHash:           txHash,
-		From:             from,
-		BlockHash:        bHash,
-		DestinationId:    networkId,
-		DestinationValue: charge,
-		Input:            input,
-		V:                new(big.Int),
-		R:                new(big.Int),
-		S:                new(big.Int),
-	}
+type FinishInfo struct {
+	TxId  common.Hash
+	Taker common.Address
+}
 
-	return &CrossTransaction{Data: d}
+func NewCrossTransaction(amount, charge, networkId *big.Int, id, txHash, bHash common.Hash, from common.Address, input []byte) *CrossTransaction {
+	return &CrossTransaction{
+		Data: ctxdata{
+			Value:            amount,
+			CTxId:            id,
+			TxHash:           txHash,
+			From:             from,
+			BlockHash:        bHash,
+			DestinationId:    networkId,
+			DestinationValue: charge,
+			Input:            input,
+			V:                new(big.Int),
+			R:                new(big.Int),
+			S:                new(big.Int),
+		}}
 }
 
 func (tx *CrossTransaction) WithSignature(signer CtxSigner, sig []byte) (*CrossTransaction, error) {
@@ -160,8 +163,19 @@ func (s *CTxByPrice) Pop() interface{} {
 	return x
 }
 
+const (
+	// RtxStatusWaiting is the status code of a rtx transaction if waiting for orders.
+	RtxStatusWaiting = uint64(0)
+	// RtxStatusImplementing is the status code of a rtx transaction if execution implementing.
+	RtxStatusImplementing = uint64(1)
+	// RtxStatusSuccessful is the status code of a rtx transaction if execution succeeded.
+	RtxStatusSuccessful = uint64(2)
+)
+
 type CrossTransactionWithSignatures struct {
-	Data ctxdatas
+	Data   ctxdatas
+	Status uint64 `json:"status" gencodec:"required"` // Status tx
+
 	// caches
 	hash atomic.Value
 	size atomic.Value
@@ -169,16 +183,15 @@ type CrossTransactionWithSignatures struct {
 }
 
 type ctxdatas struct {
-	//OriginId      		*big.Int       `json:"originId" gencodec:"required"` 	//Message origin networkId
-	Value     *big.Int       `json:"value" gencodec:"required"` //Token for sell
-	CTxId     common.Hash    `json:"ctxId" gencodec:"required"` //cross_transaction ID
-	TxHash    common.Hash    `json:"txHash" gencodec:"required"`
-	From      common.Address `json:"from" gencodec:"required"`      //Token owner
-	BlockHash common.Hash    `json:"blockHash" gencodec:"required"` //The Hash of block in which the message resides
-	//BlockNumber      uint64         `json:"blockNumber" gencodec:"required"`      //The Height of block in which the message resides
-	DestinationId    *big.Int `json:"destinationId" gencodec:"required"`    //Message destination networkId
-	DestinationValue *big.Int `json:"destinationValue" gencodec:"required"` //Token charge
-	Input            []byte   `json:"input"    gencodec:"required"`
+	Value            *big.Int       `json:"value" gencodec:"required"` //Token for sell
+	CTxId            common.Hash    `json:"ctxId" gencodec:"required"` //cross_transaction ID
+	TxHash           common.Hash    `json:"txHash" gencodec:"required"`
+	From             common.Address `json:"from" gencodec:"required"`             //Token owner
+	BlockHash        common.Hash    `json:"blockHash" gencodec:"required"`        //The Hash of block in which the message resides
+	DestinationId    *big.Int       `json:"destinationId" gencodec:"required"`    //Message destination networkId
+	DestinationValue *big.Int       `json:"destinationValue" gencodec:"required"` //Token charge
+	Input            []byte         `json:"input"    gencodec:"required"`
+
 	// Signature values
 	V []*big.Int `json:"v" gencodec:"required"` //chainId
 	R []*big.Int `json:"r" gencodec:"required"`
@@ -187,12 +200,11 @@ type ctxdatas struct {
 
 func NewCrossTransactionWithSignatures(ctx *CrossTransaction) *CrossTransactionWithSignatures {
 	d := ctxdatas{
-		Value:     ctx.Data.Value,
-		CTxId:     ctx.Data.CTxId,
-		TxHash:    ctx.Data.TxHash,
-		From:      ctx.Data.From,
-		BlockHash: ctx.Data.BlockHash,
-		//BlockNumber:      ctx.Data.BlockNumber,
+		Value:            ctx.Data.Value,
+		CTxId:            ctx.Data.CTxId,
+		TxHash:           ctx.Data.TxHash,
+		From:             ctx.Data.From,
+		BlockHash:        ctx.Data.BlockHash,
 		DestinationId:    ctx.Data.DestinationId,
 		DestinationValue: ctx.Data.DestinationValue,
 		Input:            ctx.Data.Input,
@@ -202,7 +214,10 @@ func NewCrossTransactionWithSignatures(ctx *CrossTransaction) *CrossTransactionW
 	d.R = append(d.R, ctx.Data.R)
 	d.S = append(d.S, ctx.Data.S)
 
-	return &CrossTransactionWithSignatures{Data: d}
+	return &CrossTransactionWithSignatures{
+		Data:   d,
+		Status: RtxStatusWaiting,
+	}
 }
 
 func (cws *CrossTransactionWithSignatures) ID() common.Hash {
@@ -249,42 +264,39 @@ func (cws *CrossTransactionWithSignatures) AddSignatures(ctx *CrossTransaction) 
 			cws.Data.R = append(cws.Data.R, ctx.Data.R)
 			cws.Data.S = append(cws.Data.S, ctx.Data.S)
 			return nil
-		} else {
-			return errors.New("already exist")
 		}
-	} else {
-		return errors.New("not same Ctx")
+		return errors.New("already exist")
 	}
+	return errors.New("not same Ctx")
 }
 
 func (cws *CrossTransactionWithSignatures) SignaturesLength() int {
 	l := len(cws.Data.V)
 	if l == len(cws.Data.R) && l == len(cws.Data.V) {
 		return l
-	} else {
-		return 0
 	}
+	return 0
 }
 
 func (cws *CrossTransactionWithSignatures) Resolution() []*CrossTransaction {
 	l := cws.SignaturesLength()
 	var ctxs []*CrossTransaction
 	for i := 0; i < l; i++ {
-		d := ctxdata{
-			Value:            cws.Data.Value,
-			CTxId:            cws.Data.CTxId,
-			TxHash:           cws.Data.TxHash,
-			From:             cws.Data.From,
-			BlockHash:        cws.Data.BlockHash,
-			DestinationId:    cws.Data.DestinationId,
-			DestinationValue: cws.Data.DestinationValue,
-			Input:            cws.Data.Input,
-			V:                cws.Data.V[i],
-			R:                cws.Data.R[i],
-			S:                cws.Data.S[i],
-		}
-
-		ctxs = append(ctxs, &CrossTransaction{Data: d})
+		ctxs = append(ctxs, &CrossTransaction{
+			Data: ctxdata{
+				Value:            cws.Data.Value,
+				CTxId:            cws.Data.CTxId,
+				TxHash:           cws.Data.TxHash,
+				From:             cws.Data.From,
+				BlockHash:        cws.Data.BlockHash,
+				DestinationId:    cws.Data.DestinationId,
+				DestinationValue: cws.Data.DestinationValue,
+				Input:            cws.Data.Input,
+				V:                cws.Data.V[i],
+				R:                cws.Data.R[i],
+				S:                cws.Data.S[i],
+			},
+		})
 	}
 	return ctxs
 }
@@ -313,9 +325,4 @@ func (cws *CrossTransactionWithSignatures) Size() common.StorageSize {
 	rlp.Encode(&c, &cws.Data)
 	cws.size.Store(common.StorageSize(c))
 	return common.StorageSize(c)
-}
-
-type FinishInfo struct {
-	TxId  common.Hash
-	Taker common.Address
 }

@@ -25,7 +25,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/simplechain-org/go-simplechain/accounts"
 	"github.com/simplechain-org/go-simplechain/accounts/keystore"
 	"github.com/simplechain-org/go-simplechain/accounts/scwallet"
@@ -44,6 +43,8 @@ import (
 	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/rlp"
 	"github.com/simplechain-org/go-simplechain/rpc"
+
+	"github.com/davecgh/go-spew/spew"
 	"github.com/tyler-smith/go-bip39"
 )
 
@@ -1814,15 +1815,49 @@ func (s *PublicCtxPoolAPI) CtxContent() map[string]map[uint64][]*RPCCrossTransac
 	remotes, locals := s.b.CtxPoolContent()
 	for k, txs := range remotes {
 		for _, tx := range txs {
-			content["remote"][k] = append(content["remote"][k], newRPCCrossTransaction(tx))
+			if tx.Status == types.RtxStatusWaiting {
+				content["remote"][k] = append(content["remote"][k], newRPCCrossTransaction(tx))
+			}
 		}
-
 	}
 	for s, txs := range locals {
 		for _, tx := range txs {
 			content["local"][s] = append(content["local"][s], newRPCCrossTransaction(tx))
 		}
 	}
+	return content
+}
+
+func (s *PublicCtxPoolAPI) GetRemoteCtx(count uint64) map[uint64][]*RPCCrossTransaction {
+	content := make(map[uint64][]*RPCCrossTransaction)
+
+	remotes, _ := s.b.CtxPoolContent()
+	for k, txs := range remotes {
+		ctxCount := uint64(0)
+		for _, tx := range txs {
+			if tx.Status == types.RtxStatusWaiting && ctxCount < count {
+				content[k] = append(content[k], newRPCCrossTransaction(tx))
+				ctxCount++
+			}
+		}
+	}
+
+	return content
+}
+func (s *PublicCtxPoolAPI) GetLocalCtx(count uint64) map[uint64][]*RPCCrossTransaction {
+	content := make(map[uint64][]*RPCCrossTransaction)
+
+	_, locals := s.b.CtxPoolContent()
+	for k, txs := range locals {
+		ctxCount := uint64(0)
+		for _, tx := range txs {
+			if tx.Status == types.RtxStatusWaiting && ctxCount < count {
+				content[k] = append(content[k], newRPCCrossTransaction(tx))
+				ctxCount++
+			}
+		}
+	}
+
 	return content
 }
 
@@ -1838,7 +1873,6 @@ func (s *PublicCtxPoolAPI) CtxQuery(ctx context.Context, hash common.Hash) *RPCC
 				return newRPCCrossTransaction(tx)
 			}
 		}
-
 	}
 	for _, txs := range locals {
 		for _, tx := range txs {

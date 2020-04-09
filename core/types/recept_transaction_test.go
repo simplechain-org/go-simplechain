@@ -67,9 +67,6 @@ func decodeRtx(data []byte) (*ReceptTransaction, error) {
 
 func TestRtxRecipientEmpty(t *testing.T) {
 	_, addr := defaultTestKey()
-	//cts,_ := SignRTx(emptyRtx,NewEIP155RtxSigner(big.NewInt(1024)),pr)
-	//b,_ := rlp.EncodeToBytes(&cts)
-	//t.Error(common.Bytes2Hex(b))
 	tx, err := decodeRtx(common.Hex2Bytes("f8c3f8c1a00b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbcaa00b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca94095e7baea6a6c7c4c2dfeb977efac326af552d87a00b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca01648080820823a038f68995db6b3c152d2f6bbe2fec7ed430d95f12a7c2cbce786f4fc939f93ca8a0704b92a1c85e32bc860ca6bc0f149f24d17a9692909ec6f04f2cc0691b4a3913"))
 	if err != nil {
 		t.Error(err)
@@ -88,12 +85,6 @@ func TestRtxRecipientEmpty(t *testing.T) {
 
 func TestRtxRecipientNormal(t *testing.T) {
 	_, addr := defaultTestKey()
-	//h := NewEIP155RtxSigner(big.NewInt(1)).Hash(rightvrsRtx)
-	//sig, _ := crypto.Sign(h[:], pr)
-	//t.Error(common.Bytes2Hex(sig))
-	//cts,_ := SignRTx(rightvrsRtx,NewEIP155RtxSigner(big.NewInt(1024)),pr)
-	//b,_ := rlp.EncodeToBytes(&cts)
-	//t.Error(common.Bytes2Hex(b))
 	tx, err := decodeRtx(common.Hex2Bytes("f8c5f8c3a00b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbcaa00b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca94095e7baea6a6c7c4c2dfeb977efac326af552d87a00b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca018227100180820823a056921033ed5ccd5ba6b2315b0b77b0f2ec98476a2e35047d2e8fc7e816550f7ba00204130e587022ca53ac3c3fcb4fb1f7960c16af816a49dba2f3037486b874a4"))
 	if err != nil {
 		t.Error(err)

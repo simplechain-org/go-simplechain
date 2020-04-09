@@ -17,46 +17,27 @@ type CtxStore interface {
 	AddRemote(*types.CrossTransaction) error
 	// AddRemotes should add the given transactions to the pool.
 	AddLocal(*types.CrossTransaction) error
-
 	AddCWss([]*types.CrossTransactionWithSignatures) []error
-
 	ValidateCtx(*types.CrossTransaction) error
-
 	RemoveRemotes([]*types.ReceptTransaction) error
-
+	StampStatus([]*types.RTxsInfo) error
 	RemoveLocals([]*types.FinishInfo) error
-
 	RemoveFromLocalsByTransaction(common.Hash) error
-
 	SubscribeCWssResultEvent(chan<- core.NewCWsEvent) event.Subscription
-
 	ReadFromLocals(common.Hash) *types.CrossTransactionWithSignatures
-
 	List(int, bool) []*types.CrossTransactionWithSignatures
-
 	VerifyLocalCwsSigner(cws *types.CrossTransactionWithSignatures) error
-
 	VerifyRemoteCwsSigner(cws *types.CrossTransactionWithSignatures) error
 }
 
 type rtxStore interface {
 	AddRemote(*types.ReceptTransaction) error
-	//AddRemotes([]*types.ReceptTransaction) []error
 	AddLocal(*types.ReceptTransaction) error
-	//AddLocals([]*types.ReceptTransaction) []error
-
 	ValidateRtx(rtx *types.ReceptTransaction) error
-
-	//SubscribeNewRtxEvent(chan<- core.NewRTxEvent) event.Subscription
 	SubscribeRWssResultEvent(chan<- core.NewRWsEvent) event.Subscription
-
 	SubscribeNewRWssEvent(chan<- core.NewRWssEvent) event.Subscription
-
 	AddLocals(...*types.ReceptTransactionWithSignatures) []error
 	RemoveLocals(finishes []*types.FinishInfo) error
-	//ReadFromLocals(ctxId common.Hash) *types.ReceptTransactionWithSignatures
-	//WriteToLocals(rtws *types.ReceptTransactionWithSignatures) error
-
 	ReadFromLocals(ctxId common.Hash) *types.ReceptTransactionWithSignatures
 }
 

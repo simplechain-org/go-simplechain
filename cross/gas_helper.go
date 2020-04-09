@@ -143,13 +143,6 @@ func (this *GasHelper) doCall(ctx context.Context, args CallArgs, blockNr rpc.Bl
 }
 
 func (this *GasHelper) CheckExec(ctx context.Context, args CallArgs) (bool, error) {
-	// Retrieve the current pending block to act as the gas ceiling
-	//block, err := this.chain.BlockByNumber(ctx, rpc.LatestBlockNumber)
-	//if err != nil {
-	//	return false, err
-	//}
-	//hi := block.GasLimit()
-	//args.Gas = hexutil.Uint64(hi)
 	_, _, failed, err := this.doCall(ctx, args, rpc.LatestBlockNumber, vm.Config{}, 0)
 	if err != nil || failed {
 		return false, err

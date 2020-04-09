@@ -139,20 +139,22 @@ type BlockChain struct {
 	triegc *prque.Prque   // Priority queue mapping block numbers to tries to gc
 	gcproc time.Duration  // Accumulates canonical block processing for trie dumping
 
-	hc            *HeaderChain
-	rmLogsFeed    event.Feed
-	chainFeed     event.Feed
-	chainSideFeed event.Feed
-	chainHeadFeed event.Feed
-	logsFeed      event.Feed
-	blockProcFeed event.Feed
-	ctxFeed       event.Feed
-	cwsFeed       event.Feed
-	rtxFeed       event.Feed
-	rtxsFeed      event.Feed
-	FinishsFeed   event.Feed
-	scope         event.SubscriptionScope
-	genesisBlock  *types.Block
+	hc             *HeaderChain
+	rmLogsFeed     event.Feed
+	chainFeed      event.Feed
+	chainSideFeed  event.Feed
+	chainHeadFeed  event.Feed
+	logsFeed       event.Feed
+	blockProcFeed  event.Feed
+	ctxFeed        event.Feed
+	cwsFeed        event.Feed
+	rtxFeed        event.Feed
+	rtxsFeed       event.Feed
+	rtxsRemoveFeed event.Feed
+	takerStampFeed event.Feed
+	FinishsFeed    event.Feed
+	scope          event.SubscriptionScope
+	genesisBlock   *types.Block
 
 	chainmu sync.RWMutex // blockchain insertion lock
 
@@ -2250,52 +2252,27 @@ func (bc *BlockChain) SubscribeBlockProcessingEvent(ch chan<- bool) event.Subscr
 func (bc *BlockChain) StoreContractLog(blockNumber uint64, hash common.Hash, logs []*types.Log) {
 	var blockLogs []*types.Log
 	if logs != nil {
-		var rtxs []*types.ReceptTransaction
+		var rtxs []*types.RTxsInfo
 		for _, v := range logs {
 			if len(v.Topics) > 0 && bc.IsCtxAddress(v.Address) {
-				isLaunch := v.Topics[0] == params.MakerTopic
-				if bc.IsCtxAddress(v.Address) && isLaunch {
-					blockLogs = append(blockLogs, v)
-					continue
-				}
-				isMatching := v.Topics[0] == params.TakerTopic
-				if isMatching {
-					var to common.Address
-					copy(to[:], v.Topics[2][common.HashLength-common.AddressLength:])
-					ctxId := v.Topics[1]
-					count := common.BytesToHash(v.Data[common.HashLength*5 : common.HashLength*6]).Big().Int64()
-					rtxs = append(rtxs,
-						types.NewReceptTransaction(
-							ctxId,
-							v.TxHash,
-							v.BlockHash,
-							to,
-							common.BytesToHash(v.Data[:common.HashLength]).Big(),
-							v.BlockNumber,
-							v.TxIndex,
-							v.Data[common.HashLength*6:common.HashLength*6+count])) //todo networkId read from contract
-					blockLogs = append(blockLogs, v)
-					continue
-				}
-				isMakerFinish := v.Topics[0] == params.MakerFinishTopic
-				if isMakerFinish {
-					blockLogs = append(blockLogs, v)
-					continue
-				}
-				isAddAnchors := v.Topics[0] == params.AddAnchorsTopic
-				if isAddAnchors {
+
+				if v.Topics[0] == params.MakerTopic || v.Topics[0] == params.MakerFinishTopic ||
+					v.Topics[0] == params.AddAnchorsTopic || v.Topics[0] == params.RemoveAnchorsTopic {
 					blockLogs = append(blockLogs, v)
 					continue
 				}
 
-				isRemoveAnchors := v.Topics[0] == params.AddAnchorsTopic
-				if isRemoveAnchors {
+				if v.Topics[0] == params.TakerTopic && len(v.Topics) >= 3 && len(v.Data) >= common.HashLength*6 {
+					rtxs = append(rtxs, &types.RTxsInfo{
+						DestinationId: common.BytesToHash(v.Data[:common.HashLength]).Big(),
+						CtxId:         v.Topics[1],
+					})
 					blockLogs = append(blockLogs, v)
 				}
 			}
 		}
 		if len(rtxs) > 0 {
-			go bc.rtxsFeed.Send(NewRTxsEvent{rtxs}) //删除本地待接单
+			go bc.takerStampFeed.Send(NewTakerStampEvent{rtxs})
 		}
 	}
 	if len(blockLogs) > 0 {
@@ -2339,18 +2316,14 @@ func (bc *BlockChain) RtxsFeedSend(transaction NewRTxsEvent) int {
 	return bc.rtxFeed.Send(transaction)
 }
 
+func (bc *BlockChain) SubscribeNewStampEvent(ch chan<- NewTakerStampEvent) event.Subscription {
+	return bc.scope.Track(bc.takerStampFeed.Subscribe(ch))
+}
+
 func (bc *BlockChain) SubscribeNewRTxssEvent(ch chan<- NewRTxsEvent) event.Subscription {
 	return bc.scope.Track(bc.rtxsFeed.Subscribe(ch))
 }
 
-//func (bc *BlockChain) SubscribeTransactionRemoveEvent(ch chan<- TransationRemoveEvent) event.Subscription {
-//	return bc.scope.Track(bc.transactionRemove.Subscribe(ch))
-//}
-//
-//func (bc *BlockChain) SubscribeTransactionFinishEvent(ch chan<- TransationFinishEvent) event.Subscription {
-//	return bc.scope.Track(bc.transactionFinishFeed.Subscribe(ch))
-//}
-//
 func (bc *BlockChain) TransactionFinishFeedSend(tx TransationFinishEvent) int {
 	return bc.FinishsFeed.Send(tx)
 }
@@ -2360,15 +2333,7 @@ func (bc *BlockChain) SubscribeNewFinishsEvent(ch chan<- TransationFinishEvent) 
 }
 
 func (bc *BlockChain) IsCtxAddress(addr common.Address) bool {
-	//if addr == params.SubChainCtxAddress {
-	//	return true
-	// } else
-	//log.Info("IsCtxAddress","addr",addr.String(),"bc.CrossDemoAddress",bc.CrossDemoAddress.String(),"bc",bc.chainConfig.ChainID.String())
-	if addr == bc.CrossDemoAddress {
-		return true
-	} else {
-		return false
-	}
+	return addr == bc.CrossDemoAddress
 }
 
 func (bc *BlockChain) GetBlockNumber(hash common.Hash) *uint64 {

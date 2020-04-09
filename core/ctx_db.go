@@ -56,26 +56,23 @@ func (this *CtxDb) ListAll(add func([]*types.CrossTransactionWithSignatures)) er
 	)
 	it := this.db.NewIteratorWithPrefix(makerPrefix)
 	var result []*types.CrossTransactionWithSignatures
-	for it.Next() {
+	for it.Next() && total < 512 { //todo 每次将db循环一下太傻了
 		state := new(types.CrossTransactionWithSignatures)
-		err := rlp.Decode(bytes.NewReader(it.Value()), state)
-		if err != nil {
+		if err := rlp.Decode(bytes.NewReader(it.Value()), state); err != nil {
 			failure = err
-			if len(result) > 0 {
-				add(result)
-			}
 			break
-		} else {
-			total++
-			if result = append(result, state); len(result) > 1024 {
-				add(result)
-				result = result[:0]
-			}
 		}
-		if len(result) > 0 {
+		total++
+		if result = append(result, state); len(result) > 1024 {
 			add(result)
+			result = result[:0]
 		}
 	}
+
+	if len(result) > 0 {
+		add(result)
+	}
+
 	log.Info("Loaded local signed cross transaction", "transactions", total)
 	return failure
 }
