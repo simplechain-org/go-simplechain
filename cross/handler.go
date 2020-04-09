@@ -249,7 +249,7 @@ func (this *MsgHandler) HandleMsg(msg p2p.Msg, p Peer) error {
 			p.MarkCrossTransaction(ctx.SignHash())
 			this.pm.BroadcastCtx([]*types.CrossTransaction{ctx})
 			if err := this.ctxStore.AddRemote(ctx); err != nil {
-				log.Error("Add remote ctx", "err", err)
+				log.Error("Add remote ctx", "err", err, "id", ctx.ID().String())
 			}
 		}
 	case msg.Code == CtxSignsMsg:
@@ -405,9 +405,10 @@ func (this *MsgHandler) WriteCrossMessage(v interface{}) {
 }
 
 func (this *MsgHandler) clearStore(finishes []*types.FinishInfo) error {
-	for _, finish := range finishes {
-		log.Info("cross transaction finish", "txId", finish.TxId.String())
-	}
+	log.Info("cross transaction finish", "clearStore count", len(finishes))
+	//for _, finish := range finishes {
+	//	log.Info("cross transaction finish", "txId", finish.TxId.String())
+	//}
 	if err := this.ctxStore.RemoveLocals(finishes); err != nil {
 		return errors.New("rm ctx error")
 	}

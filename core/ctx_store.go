@@ -142,7 +142,7 @@ func (store *CtxStore) loop() {
 			store.mu.Lock()
 			currentNum := store.chain.CurrentBlock().NumberU64()
 			if currentNum > expireNumber { //内存回收
-				log.Info("RemoveUnderNum Ctx")
+				//log.Info("RemoveUnderNum Ctx")
 				store.pending.RemoveUnderNum(currentNum - expireNumber)
 				store.queued.RemoveUnderNum(currentNum - expireNumber)
 			}

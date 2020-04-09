@@ -56,7 +56,7 @@ func (this *CtxDb) ListAll(add func([]*types.CrossTransactionWithSignatures)) er
 	)
 	it := this.db.NewIteratorWithPrefix(makerPrefix)
 	var result []*types.CrossTransactionWithSignatures
-	for it.Next() && total < 512 { //todo 每次将db循环一下太傻了
+	for it.Next() {
 		state := new(types.CrossTransactionWithSignatures)
 		if err := rlp.Decode(bytes.NewReader(it.Value()), state); err != nil {
 			failure = err

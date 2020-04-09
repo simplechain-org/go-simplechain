@@ -15,7 +15,8 @@ import (
 	"github.com/simplechain-org/go-simplechain/params"
 )
 
-func QueryAnchor(config *params.ChainConfig, bc ChainContext, statedb *state.StateDB, header *types.Header, address common.Address, remoteChainId uint64) ([]common.Address, int) {
+func QueryAnchor(config *params.ChainConfig, bc ChainContext, statedb *state.StateDB, header *types.Header,
+	address common.Address, remoteChainId uint64) ([]common.Address, int) {
 	cfg := vm.Config{}
 	var data []byte
 	getAnchor, _ := hexutil.Decode("0xe2ca8462")
@@ -23,9 +24,10 @@ func QueryAnchor(config *params.ChainConfig, bc ChainContext, statedb *state.Sta
 	data = append(data, getAnchor...)
 	data = append(data, common.LeftPadBytes(big.NewInt(int64(remoteChainId)).Bytes(), 32)...)
 
-	log.Info("QueryAnchor", "chainId", config.ChainID.String(), "contract", address.String(), "data", hexutil.Encode(data))
+	//log.Info("QueryAnchor", "chainId", config.ChainID.String(), "contract", address.String(), "data", hexutil.Encode(data))
 	//构造消息
-	checkMsg := types.NewMessage(common.Address{}, &address, 0, big.NewInt(0), math.MaxUint64/2, big.NewInt(params.GWei), data, false)
+	checkMsg := types.NewMessage(common.Address{}, &address, 0, big.NewInt(0), math.MaxUint64/2,
+		big.NewInt(params.GWei), data, false)
 	var cancel context.CancelFunc
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 
@@ -51,14 +53,14 @@ func QueryAnchor(config *params.ChainConfig, bc ChainContext, statedb *state.Sta
 	// Setup the gas pool (also for unmetered requests)
 	// and apply the messages
 	testgp := new(GasPool).AddGas(math.MaxUint64)
-	res, gas, suc, err := ApplyMessage(vmenv1, checkMsg, testgp)
+	res, _, _, err := ApplyMessage(vmenv1, checkMsg, testgp)
 	if err != nil {
 		log.Info("QueryAnchor ApplyTransaction", "err", err)
 	}
 
 	var anchors []common.Address
 	if len(res) > 64 {
-		log.Info("anchor query", "result", hexutil.Encode(res), "gas", gas, "suc", suc)
+		//log.Info("anchor query", "result", hexutil.Encode(res), "gas", gas, "suc", suc)
 		signConfirmCount := new(big.Int).SetBytes(res[common.HashLength : common.HashLength*2]).Uint64()
 		anchorLen := new(big.Int).SetBytes(res[common.HashLength*2 : common.HashLength*3]).Uint64()
 
