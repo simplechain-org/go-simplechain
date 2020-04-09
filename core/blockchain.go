@@ -150,7 +150,6 @@ type BlockChain struct {
 	cwsFeed        event.Feed
 	rtxFeed        event.Feed
 	rtxsFeed       event.Feed
-	rtxsRemoveFeed event.Feed
 	takerStampFeed event.Feed
 	FinishsFeed    event.Feed
 	scope          event.SubscriptionScope

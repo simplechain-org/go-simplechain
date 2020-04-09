@@ -461,13 +461,13 @@ func (store *CtxStore) Query() (map[uint64][]*types.CrossTransactionWithSignatur
 	return remotes, locals
 }
 
-func (store *CtxStore) StampStatus(rtxs []*types.RTxsInfo) error {
+func (store *CtxStore) StampStatus(rtxs []*types.RTxsInfo, status uint64) error {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 
 	for _, v := range rtxs {
 		if s, ok := store.remoteStore[v.DestinationId.Uint64()]; ok {
-			s.StampTx(v.CtxId)
+			s.StampTx(v.CtxId, status)
 		}
 	}
 
@@ -486,9 +486,9 @@ func (store *CtxStore) RemoveRemotes(rtxs []*types.ReceptTransaction) error {
 			}
 		}
 	}
-	//if err := store.ctxDb.ListAll(store.addLocalTxs); err != nil {
-	//	log.Warn("Failed to load transaction journal", "err", err)
-	//}
+	if err := store.ctxDb.ListAll(store.addLocalTxs); err != nil {
+		log.Warn("Failed to load transaction journal", "err", err)
+	}
 
 	return nil
 }

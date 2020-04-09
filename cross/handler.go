@@ -13,9 +13,13 @@ import (
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/p2p"
+	"github.com/simplechain-org/go-simplechain/params"
 )
 
-const txChanSize = 4096
+const (
+	txChanSize     = 4096
+	rmLogsChanSize = 10
+)
 
 type errCode int
 
@@ -74,6 +78,9 @@ type MsgHandler struct {
 	takerStampCh  chan core.NewTakerStampEvent
 	takerStampSub event.Subscription
 
+	rmLogsCh  chan core.RemovedLogsEvent // Channel to receive removed log event
+	rmLogsSub event.Subscription         // Subscription for removed log event
+
 	chain               simplechain
 	gpo                 GasPriceOracle
 	gasHelper           *GasHelper
@@ -128,6 +135,9 @@ func (this *MsgHandler) Start() {
 	//标记已接单
 	this.takerStampCh = make(chan core.NewTakerStampEvent, txChanSize)
 	this.takerStampSub = this.blockchain.SubscribeNewStampEvent(this.takerStampCh)
+
+	this.rmLogsCh = make(chan core.RemovedLogsEvent, rmLogsChanSize)
+	this.rmLogsSub = this.blockchain.SubscribeRemovedLogsEvent(this.rmLogsCh)
 
 	go this.loop()
 	go this.ReadCrossMessage()
@@ -206,8 +216,13 @@ func (this *MsgHandler) loop() {
 			return
 
 		case ev := <-this.takerStampCh:
-			this.ctxStore.StampStatus(ev.Txs)
+			this.ctxStore.StampStatus(ev.Txs, types.RtxStatusImplementing)
 		case <-this.takerStampSub.Err():
+			return
+
+		case ev := <-this.rmLogsCh:
+			this.reorgLogs(ev.Logs)
+		case <-this.rmLogsSub.Err():
 			return
 
 		case ev := <-this.makerFinishEventCh:
@@ -230,6 +245,8 @@ func (this *MsgHandler) Stop() {
 	this.takerStampSub.Unsubscribe()
 	this.availableTakerSub.Unsubscribe()
 	this.makerFinishEventSub.Unsubscribe()
+	this.rmLogsSub.Unsubscribe()
+
 	close(this.quitSync)
 
 	log.Info("Simplechain MsgHandler stopped")
@@ -468,4 +485,22 @@ func (this *MsgHandler) CheckTransaction(address, tokenAddress common.Address, r
 
 func (this *MsgHandler) GetCtxstore() CtxStore {
 	return this.ctxStore
+}
+
+func (this *MsgHandler) reorgLogs(logs []*types.Log) {
+	var takerLogs []*types.RTxsInfo
+	for _, log := range logs {
+		if this.blockchain.IsCtxAddress(log.Address) {
+			if log.Topics[0] == params.TakerTopic && len(log.Topics) >= 3 && len(log.Data) >= common.HashLength*6 {
+				takerLogs = append(takerLogs, &types.RTxsInfo{
+					DestinationId: common.BytesToHash(log.Data[:common.HashLength]).Big(),
+					CtxId:         log.Topics[1],
+				})
+			}
+		}
+	}
+
+	if len(takerLogs) > 0 {
+		this.ctxStore.StampStatus(takerLogs, types.RtxStatusWaiting)
+	}
 }
