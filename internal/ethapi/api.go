@@ -1815,9 +1815,7 @@ func (s *PublicCtxPoolAPI) CtxContent() map[string]map[uint64][]*RPCCrossTransac
 	remotes, locals := s.b.CtxPoolContent()
 	for k, txs := range remotes {
 		for _, tx := range txs {
-			if tx.Status == types.RtxStatusWaiting {
-				content["remote"][k] = append(content["remote"][k], newRPCCrossTransaction(tx))
-			}
+			content["remote"][k] = append(content["remote"][k], newRPCCrossTransaction(tx))
 		}
 	}
 	for s, txs := range locals {

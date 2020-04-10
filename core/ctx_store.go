@@ -448,16 +448,21 @@ func (store *CtxStore) Query() (map[uint64][]*types.CrossTransactionWithSignatur
 	defer store.mu.Unlock()
 	remotes := make(map[uint64][]*types.CrossTransactionWithSignatures)
 	locals := make(map[uint64][]*types.CrossTransactionWithSignatures)
-	var re, lo int
+	var re, lo, allRe int
 	for k, v := range store.remoteStore {
-		remotes[k] = v.GetList()
+		for _, tx := range v.GetList() {
+			if tx.Status == types.RtxStatusWaiting {
+				remotes[k] = append(remotes[k], tx)
+			}
+		}
 		re += len(remotes[k])
+		allRe += len(v.GetList())
 	}
 	for k, v := range store.localStore {
 		locals[k] = v.GetList()
 		lo += len(locals[k])
 	}
-	log.Info("Query", "remote", re, "local", lo)
+	log.Info("CtxStore Query", "allRemote", allRe, "waitingRemote", re, "local", lo)
 	return remotes, locals
 }
 
@@ -468,6 +473,17 @@ func (store *CtxStore) StampStatus(rtxs []*types.RTxsInfo, status uint64) error 
 	for _, v := range rtxs {
 		if s, ok := store.remoteStore[v.DestinationId.Uint64()]; ok {
 			s.StampTx(v.CtxId, status)
+
+			cws, err := store.ctxDb.Read(v.CtxId)
+			if err != nil {
+				log.Error("read remotes from db ", "err", err)
+				return err
+			}
+			cws.Status = status
+			if err := store.ctxDb.Write(cws); err != nil {
+				log.Error("rewrite ctx", "err", err)
+				return err
+			}
 		}
 	}
 
@@ -634,7 +650,6 @@ func (store *CtxStore) verifyCtx(ctx *types.CrossTransactionWithSignatures) erro
 	// about the transaction and calling mechanisms.
 	stateDb, err := store.chain.StateAt(store.chain.CurrentBlock().Root())
 	if err != nil {
-		//log.Info("verifyCtx1","err",err)
 		return err
 	}
 	testStateDb := stateDb.Copy()
