@@ -867,7 +867,7 @@ func (store *CtxStore) validateRemoteCtx(ctx *types.CrossTransaction) error {
 	return nil
 }
 
-func (store *CtxStore) CtxOwner (from common.Address) (map[uint64][]*types.CrossTransactionWithSignatures, map[uint64][]*types.CrossTransactionWithSignatures) {
+func (store *CtxStore) CtxOwner(from common.Address) (map[uint64][]*types.CrossTransactionWithSignatures, map[uint64][]*types.CrossTransactionWithSignatures) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	cwss := store.ctxDb.Query(from)
@@ -876,10 +876,10 @@ func (store *CtxStore) CtxOwner (from common.Address) (map[uint64][]*types.Cross
 	for _, cws := range cwss {
 		if cws.Data.DestinationId.Cmp(store.config.ChainId) == 0 {
 			keyId := cws.ChainId().Uint64()
-			remotes[keyId] = append(remotes[keyId],cws)
+			remotes[keyId] = append(remotes[keyId], cws)
 		} else {
 			keyId := cws.Data.DestinationId.Uint64()
-			locals[keyId] = append(locals[keyId],cws)
+			locals[keyId] = append(locals[keyId], cws)
 		}
 	}
 	return remotes, locals
