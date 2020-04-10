@@ -612,26 +612,17 @@ func (store *CtxStore) verifyCtx(ctx *types.CrossTransactionWithSignatures) erro
 		Scrypt:  new(params.ScryptConfig),
 	}
 
-	if store.config.ChainId.Cmp(big.NewInt(1)) == 0 {
-		if ctx.Data.DestinationId.Cmp(big.NewInt(1)) == 0 {
-			data = append(data, getTakerTx...)
-			data = append(data, paddedCtxId...)
-			data = append(data, common.LeftPadBytes(store.config.ChainId.Bytes(), 32)...)
-		} else {
-			data = append(data, getMakerTx...)
-			data = append(data, paddedCtxId...)
-			data = append(data, common.LeftPadBytes(ctx.Data.DestinationId.Bytes(), 32)...)
-		}
-	} else {
-		if ctx.Data.DestinationId.Cmp(big.NewInt(1)) == 0 {
-			data = append(data, getMakerTx...)
-			data = append(data, paddedCtxId...)
-			data = append(data, common.LeftPadBytes(ctx.Data.DestinationId.Bytes(), 32)...)
-		} else {
-			data = append(data, getTakerTx...)
-			data = append(data, paddedCtxId...)
-			data = append(data, common.LeftPadBytes(store.config.ChainId.Bytes(), 32)...)
-		}
+	contractAddress = store.CrossDemoAddress
+	if store.config.ChainId.Cmp(ctx.ChainId()) == 0 {
+		data = append(data, getMakerTx...)
+		data = append(data, paddedCtxId...)
+		data = append(data, common.LeftPadBytes(ctx.Data.DestinationId.Bytes(), 32)...)
+	}
+
+	if store.config.ChainId.Cmp(ctx.Data.DestinationId) == 0 {
+		data = append(data, getTakerTx...)
+		data = append(data, paddedCtxId...)
+		data = append(data, common.LeftPadBytes(store.config.ChainId.Bytes(), 32)...)
 	}
 
 	//构造消息
@@ -874,4 +865,22 @@ func (store *CtxStore) validateRemoteCtx(ctx *types.CrossTransaction) error {
 	}
 
 	return nil
+}
+
+func (store *CtxStore) CtxOwner (from common.Address) (map[uint64][]*types.CrossTransactionWithSignatures, map[uint64][]*types.CrossTransactionWithSignatures) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	cwss := store.ctxDb.Query(from)
+	remotes := make(map[uint64][]*types.CrossTransactionWithSignatures)
+	locals := make(map[uint64][]*types.CrossTransactionWithSignatures)
+	for _, cws := range cwss {
+		if cws.Data.DestinationId.Cmp(store.config.ChainId) == 0 {
+			keyId := cws.ChainId().Uint64()
+			remotes[keyId] = append(remotes[keyId],cws)
+		} else {
+			keyId := cws.Data.DestinationId.Uint64()
+			locals[keyId] = append(locals[keyId],cws)
+		}
+	}
+	return remotes, locals
 }
