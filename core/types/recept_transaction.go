@@ -19,7 +19,11 @@ import (
 	"github.com/simplechain-org/go-simplechain/params"
 )
 
-var ErrOutOfGas = errors.New("out of gas")
+type RTxsInfo struct {
+	DestinationId *big.Int
+	CtxId         common.Hash
+}
+
 var receptTxLastPrice = struct {
 	sync.RWMutex
 	mPrice  map[uint64]*big.Int
@@ -32,7 +36,7 @@ var receptTxLastPrice = struct {
 var maxPrice = big.NewInt(500 * params.GWei)
 
 type ReceptTransaction struct {
-	Data receptdata
+	Data receptData
 	// caches
 	hash     atomic.Value
 	signHash atomic.Value
@@ -40,7 +44,7 @@ type ReceptTransaction struct {
 	from     atomic.Value
 }
 
-type receptdata struct {
+type receptData struct {
 	CTxId         common.Hash    `json:"ctxId" gencodec:"required"` //cross_transaction ID
 	TxHash        common.Hash    `json:"txHash" gencodec:"required"`
 	To            common.Address `json:"to" gencodec:"required"`            //Token buyer
@@ -57,21 +61,20 @@ type receptdata struct {
 }
 
 func NewReceptTransaction(id, txHash, bHash common.Hash, to common.Address, networkId *big.Int, blockNumber uint64, index uint, input []byte) *ReceptTransaction {
-	d := receptdata{
-		CTxId:         id,
-		TxHash:        txHash,
-		To:            to,
-		BlockHash:     bHash,
-		DestinationId: networkId,
-		BlockNumber:   blockNumber,
-		Index:         index,
-		Input:         input,
-		V:             new(big.Int),
-		R:             new(big.Int),
-		S:             new(big.Int),
-	}
-
-	return &ReceptTransaction{Data: d}
+	return &ReceptTransaction{
+		Data: receptData{
+			CTxId:         id,
+			TxHash:        txHash,
+			To:            to,
+			BlockHash:     bHash,
+			DestinationId: networkId,
+			BlockNumber:   blockNumber,
+			Index:         index,
+			Input:         input,
+			V:             new(big.Int),
+			R:             new(big.Int),
+			S:             new(big.Int),
+		}}
 }
 
 func (tx *ReceptTransaction) ID() common.Hash {
@@ -141,14 +144,14 @@ func (tx *ReceptTransaction) Key() []byte {
 }
 
 type ReceptTransactionWithSignatures struct {
-	Data receptdatas
+	Data receptDatas
 	// caches
 	hash atomic.Value
 	size atomic.Value
 	from atomic.Value
 }
 
-type receptdatas struct {
+type receptDatas struct {
 	CTxId         common.Hash    `json:"ctxId" gencodec:"required"` //cross_transaction ID
 	TxHash        common.Hash    `json:"txHash" gencodec:"required"`
 	To            common.Address `json:"to" gencodec:"required"`            //Token buyer
@@ -165,7 +168,7 @@ type receptdatas struct {
 }
 
 func NewReceptTransactionWithSignatures(rtx *ReceptTransaction) *ReceptTransactionWithSignatures {
-	d := receptdatas{
+	d := receptDatas{
 		CTxId:         rtx.Data.CTxId,
 		TxHash:        rtx.Data.TxHash,
 		To:            rtx.Data.To,
@@ -248,7 +251,7 @@ func (rws *ReceptTransactionWithSignatures) Resolve() []*ReceptTransaction {
 	l := rws.SignaturesLength()
 	var rtxs []*ReceptTransaction
 	for i := 0; i < l; i++ {
-		d := receptdata{
+		d := receptData{
 			CTxId:         rws.Data.CTxId,
 			TxHash:        rws.Data.TxHash,
 			To:            rws.Data.To,
@@ -275,13 +278,10 @@ func (rws *ReceptTransactionWithSignatures) Transaction(
 	nonce uint64, to common.Address, anchorAddr common.Address, data []byte,
 	networkId uint64, block *Block, key *ecdsa.PrivateKey, gasLimit uint64) (*Transaction, error) {
 
-	//log.Warn("rtw change to transaction", "networkId", networkId)
-
 	gasPrice, err := suggestPrice(networkId, block)
 	if err != nil {
 		return nil, err
 	}
-	//log.Warn("args ok!", "nonce", nonce, "to", to, "gasLimit", gasLimit, "gasPrice", gasPrice, "data", len(data))
 	tx := NewTransaction(nonce, to, big.NewInt(0), gasLimit, gasPrice, data)
 
 	signer := NewEIP155Signer(big.NewInt(int64(networkId)))
@@ -299,66 +299,7 @@ func (rws *ReceptTransactionWithSignatures) Transaction(
 	return signedTx, nil
 }
 
-func (rws *ReceptTransactionWithSignatures) ConstructData(gasUsed *big.Int) ([]byte, error) {
-	//paddedCtxId := common.LeftPadBytes(rws.Data.CTxId.Bytes(), 32)
-	//paddedTxHash := common.LeftPadBytes(rws.Data.TxHash.Bytes(), 32)
-	//paddedAddress := common.LeftPadBytes(rws.Data.To.Bytes(), 32)
-	//paddedBlockHash := common.LeftPadBytes(rws.Data.BlockHash.Bytes(), 32)
-	////BlockNumber := new(big.Int).SetUint64(rtx.Data.BlockNumber)
-	////paddedBlockNumber := common.LeftPadBytes(BlockNumber.Bytes(), 32)
-	////paddedDestinationId := common.LeftPadBytes(rws.Data.DestinationId.Bytes(), 32)
-	//paddedBlockNumber := common.LeftPadBytes(Uint64ToBytes(rws.Data.BlockNumber), 32)
-	//paddedIndex := common.LeftPadBytes(Uint32ToBytes(rws.Data.Index), 32)
-	//paddedRemoteChainId := common.LeftPadBytes(rws.ChainId().Bytes(), 32)
-	//paddedGasUsed := common.LeftPadBytes(gasUsed.Bytes(), 32)
-	//
-	//var data []byte
-	//data = append(data, methodID...)
-	//data = append(data, paddedCtxId...)
-	//data = append(data, paddedTxHash...)
-	//data = append(data, paddedAddress...)
-	//data = append(data, paddedBlockHash...)
-	//data = append(data, paddedBlockNumber...)
-	//data = append(data, paddedIndex...)
-	//data = append(data, paddedRemoteChainId...)
-	//data = append(data, paddedGasUsed...)
-	//
-	//sLength := len(rws.Data.S)
-	//rLength := len(rws.Data.R)
-	//vLength := len(rws.Data.V)
-	//if sLength != rLength || sLength != vLength {
-	//	return nil, errors.New("signature error")
-	//}
-	//
-	//// 11开头
-	//bv := common.LeftPadBytes(new(big.Int).SetUint64(32*11).Bytes(), 32)
-	//br := common.LeftPadBytes(new(big.Int).SetUint64(uint64(32*(9+sLength+1))).Bytes(), 32)
-	//bs := common.LeftPadBytes(new(big.Int).SetUint64(uint64(32*(9+(sLength+1)*2))).Bytes(), 32)
-	//bl := common.LeftPadBytes(new(big.Int).SetUint64(uint64(sLength)).Bytes(), 32)
-	//data = append(data, bv...)
-	//data = append(data, br...)
-	//data = append(data, bs...)
-	//data = append(data, bl...)
-	//
-	//for i := 0; i < sLength; i++ {
-	//	data = append(data, common.LeftPadBytes(rws.Data.V[i].Bytes(), 32)...)
-	//}
-	//data = append(data, bl...)
-	//for i := 0; i < sLength; i++ {
-	//	data = append(data, common.LeftPadBytes(rws.Data.R[i].Bytes(), 32)...)
-	//}
-	//data = append(data, bl...)
-	//for i := 0; i < sLength; i++ {
-	//	data = append(data, common.LeftPadBytes(rws.Data.S[i].Bytes(), 32)...)
-	//}
-	//data = append(data, rws.Data.Input...) //makeFinish input字段
-	//const dataFile = "../contracts/crossdemo/crossdemo.abi"
-	//_, filename, _, _ := runtime.Caller(1)
-	//datapath := path.Join(path.Dir(filename), dataFile)
-	//data, err := ioutil.ReadFile(datapath)
-	//if err != nil {
-	//	return nil, err
-	//}
+func (rws *ReceptTransactionWithSignatures) ConstructData() ([]byte, error) {
 	data, err := hexutil.Decode(params.CrossDemoAbi)
 	if err != nil {
 		return nil, err
@@ -383,7 +324,6 @@ func (rws *ReceptTransactionWithSignatures) ConstructData(gasUsed *big.Int) ([]b
 
 	r := make([][32]byte, 0, len(rws.Data.R))
 	s := make([][32]byte, 0, len(rws.Data.S))
-	//vv := make([]*big.Int, 0, len(v.V))
 
 	for i := 0; i < len(rws.Data.R); i++ {
 		rone := common.LeftPadBytes(rws.Data.R[i].Bytes(), 32)
@@ -406,15 +346,13 @@ func (rws *ReceptTransactionWithSignatures) ConstructData(gasUsed *big.Int) ([]b
 	rep.V = rws.Data.V
 	rep.R = r
 	rep.S = s
-	//log.Info("ConstructData","input",hexutil.Encode(rep.Input),"rws.hash",rws.Hash().String(),"remoteChainId",rws.ChainId().String())
-	out, err := abi.Pack("makerFinish", rep, rws.ChainId(), gasUsed)
+	out, err := abi.Pack("makerFinish", rep, rws.ChainId())
 
 	if err != nil {
 		return nil, err
 	}
 
 	input := hexutil.Bytes(out)
-	//log.Info("ConstructData","out",hexutil.Encode(input))
 	return input, nil
 }
 
@@ -468,34 +406,6 @@ func suggestPrice(networkId uint64, block *Block) (*big.Int, error) {
 	receptTxLastPrice.Unlock()
 	return gasPrice, nil
 }
-
-// intrinsicGas computes the 'intrinsic gas' for a message with the given data.
-//func intrinsicGas(data []byte) (uint64, error) {
-//	gas := params.TxGas
-//
-//	// Bump the required gas by the amount of transactional data
-//	if len(data) > 0 {
-//		// Zero and non-zero bytes are priced differently
-//		var nz uint64
-//		for _, byt := range data {
-//			if byt != 0 {
-//				nz++
-//			}
-//		}
-//		// Make sure we don't exceed uint64 for all data combinations
-//		if (math.MaxUint64-gas)/params.TxDataNonZeroGas < nz {
-//			return 0, ErrOutOfGas
-//		}
-//		gas += nz * params.TxDataNonZeroGas
-//
-//		z := uint64(len(data)) - nz
-//		if (math.MaxUint64-gas)/params.TxDataZeroGas < z {
-//			return 0, ErrOutOfGas
-//		}
-//		gas += z * params.TxDataZeroGas
-//	}
-//	return gas, nil
-//}
 
 func Uint64ToBytes(i uint64) []byte {
 	var buf = make([]byte, 8)

@@ -22,7 +22,9 @@ import (
 )
 
 // NewTxsEvent is posted when a batch of transactions enter the transaction pool.
-type NewTxsEvent struct{ Txs []*types.Transaction }
+type NewTxsEvent struct {
+	Txs []*types.Transaction
+}
 
 // PendingLogsEvent is posted pre mining and notifies of pending logs.
 type PendingLogsEvent struct {
@@ -30,10 +32,14 @@ type PendingLogsEvent struct {
 }
 
 // NewMinedBlockEvent is posted when a block has been imported.
-type NewMinedBlockEvent struct{ Block *types.Block }
+type NewMinedBlockEvent struct {
+	Block *types.Block
+}
 
 // RemovedLogsEvent is posted when a reorg happens
-type RemovedLogsEvent struct{ Logs []*types.Log }
+type RemovedLogsEvent struct {
+	Logs []*types.Log
+}
 
 type ChainEvent struct {
 	Block *types.Block
@@ -45,18 +51,32 @@ type ChainSideEvent struct {
 	Block *types.Block
 }
 
-type ChainHeadEvent struct{ Block *types.Block }
+type ChainHeadEvent struct {
+	Block *types.Block
+}
 
-type NewCTxsEvent struct{ Txs []*types.CrossTransaction }
+type NewCTxsEvent struct {
+	Txs []*types.CrossTransaction
+}
 
-type NewCTxEvent struct{ Txs *types.CrossTransaction }
+type NewCTxEvent struct {
+	Txs *types.CrossTransaction
+}
 
 type NewRTxEvent struct {
 	Txs *types.ReceptTransaction
-	//Record *types.CrossRecord
 }
 
-type NewRTxsEvent struct{ Txs []*types.ReceptTransaction }
+type NewRTxsEvent struct {
+	Txs []*types.ReceptTransaction
+}
+type NewRTxsRemoveEvent struct {
+	Txs []*types.RTxsInfo
+}
+
+type NewTakerStampEvent struct {
+	Txs []*types.RTxsInfo
+}
 
 type NewCWssEvent struct {
 	Txs []*types.CrossTransactionWithSignatures

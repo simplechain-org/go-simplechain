@@ -118,7 +118,6 @@ func (journal *RtxJournal) rotate(all map[common.Hash]*types.ReceptTransactionWi
 	}
 	journaled := 0
 	for _, rtx := range all {
-		//for _, tx := range cws {
 		if err = rlp.Encode(replacement, rtx); err != nil {
 			replacement.Close()
 			return err

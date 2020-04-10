@@ -137,7 +137,10 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 							if len(v.Topics) >= 2 {
 								ctxId := v.Topics[1]
 								to := v.Topics[2]
-								finishes = append(finishes, &types.FinishInfo{TxId: ctxId, Taker: common.BytesToAddress(to[:])})
+								finishes = append(finishes, &types.FinishInfo{
+									TxId:  ctxId,
+									Taker: common.BytesToAddress(to[:]),
+								})
 							}
 						}
 					}
@@ -149,8 +152,7 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 					set.chain.RtxsFeedSend(NewRTxsEvent{rtxs})
 				}
 				if len(finishes) > 0 {
-					set.chain.TransactionFinishFeedSend(TransationFinishEvent{
-						finishes})
+					set.chain.TransactionFinishFeedSend(TransationFinishEvent{finishes})
 				}
 			}
 		default:

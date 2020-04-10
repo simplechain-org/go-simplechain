@@ -13,9 +13,13 @@ import (
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/p2p"
+	"github.com/simplechain-org/go-simplechain/params"
 )
 
-const txChanSize = 4096
+const (
+	txChanSize     = 4096
+	rmLogsChanSize = 10
+)
 
 type errCode int
 
@@ -71,8 +75,12 @@ type MsgHandler struct {
 	makerFinishEventCh  chan core.TransationFinishEvent
 	makerFinishEventSub event.Subscription
 
-	rtxsinLogCh         chan core.NewRTxsEvent //通过该通道删除ctx_pool中的记录，TODO 普通节点无该功能
-	rtxsinLogSub        event.Subscription
+	takerStampCh  chan core.NewTakerStampEvent
+	takerStampSub event.Subscription
+
+	rmLogsCh  chan core.RemovedLogsEvent // Channel to receive removed log event
+	rmLogsSub event.Subscription         // Subscription for removed log event
+
 	chain               simplechain
 	gpo                 GasPriceOracle
 	gasHelper           *GasHelper
@@ -124,9 +132,12 @@ func (this *MsgHandler) Start() {
 	this.makerFinishEventCh = make(chan core.TransationFinishEvent, txChanSize)
 	this.makerFinishEventSub = this.blockchain.SubscribeNewFinishsEvent(this.makerFinishEventCh)
 
-	//单子已接
-	this.rtxsinLogCh = make(chan core.NewRTxsEvent, txChanSize)
-	this.rtxsinLogSub = this.blockchain.SubscribeNewRTxssEvent(this.rtxsinLogCh)
+	//标记已接单
+	this.takerStampCh = make(chan core.NewTakerStampEvent, txChanSize)
+	this.takerStampSub = this.blockchain.SubscribeNewStampEvent(this.takerStampCh)
+
+	this.rmLogsCh = make(chan core.RemovedLogsEvent, rmLogsChanSize)
+	this.rmLogsSub = this.blockchain.SubscribeRemovedLogsEvent(this.rmLogsCh)
 
 	go this.loop()
 	go this.ReadCrossMessage()
@@ -150,6 +161,7 @@ func (this *MsgHandler) loop() {
 			}
 		case <-this.makerStartEventSub.Err():
 			return
+
 		case ev := <-this.makerSignedCh:
 			this.pm.BroadcastInternalCrossTransactionWithSignature([]*types.CrossTransactionWithSignatures{ev.Txs}) //主网广播
 			if this.role.IsAnchor() {
@@ -167,8 +179,8 @@ func (this *MsgHandler) loop() {
 					break
 				}
 				if pending, err := this.pm.GetAnchorTxs(this.anchorSigner); err == nil && len(pending) < 10 {
-					gasUsed, _ := new(big.Int).SetString("80000000000000", 10) //todo gasUsed
-					txs, err := this.GetTxForLockOut(ev.Tws, gasUsed)
+					//gasUsed, _ := new(big.Int).SetString("80000000000000", 10) //todo gasUsed
+					txs, err := this.GetTxForLockOut(ev.Tws)
 					if err != nil {
 						log.Error("GetTxForLockOut", "err", err)
 					}
@@ -179,6 +191,7 @@ func (this *MsgHandler) loop() {
 			}
 		case <-this.availableTakerSub.Err():
 			return
+
 		case ev := <-this.takerEventCh:
 			if !this.pm.CanAcceptTxs() {
 				break
@@ -191,18 +204,27 @@ func (this *MsgHandler) loop() {
 				}
 				this.pm.BroadcastRtx(ev.Txs)
 			}
+			this.ctxStore.RemoveRemotes(ev.Txs)
 		case <-this.takerEventSub.Err():
 			return
+
 		case ev := <-this.takerSignedCh:
 			if this.role.IsAnchor() {
 				this.WriteCrossMessage(ev.Tws)
 			}
 		case <-this.takerSignedSub.Err():
 			return
-		case ev := <-this.rtxsinLogCh:
-			this.ctxStore.RemoveRemotes(ev.Txs) //删除本地待接单
-		case <-this.rtxsinLogSub.Err():
+
+		case ev := <-this.takerStampCh:
+			this.ctxStore.StampStatus(ev.Txs, types.RtxStatusImplementing)
+		case <-this.takerStampSub.Err():
 			return
+
+		case ev := <-this.rmLogsCh:
+			this.reorgLogs(ev.Logs)
+		case <-this.rmLogsSub.Err():
+			return
+
 		case ev := <-this.makerFinishEventCh:
 			if err := this.clearStore(ev.Finish); err != nil {
 				log.Info("clearStore", "err", err)
@@ -220,8 +242,11 @@ func (this *MsgHandler) Stop() {
 	this.makerSignedSub.Unsubscribe()
 	this.takerEventSub.Unsubscribe()
 	this.takerSignedSub.Unsubscribe()
-	this.rtxsinLogSub.Unsubscribe()
+	this.takerStampSub.Unsubscribe()
 	this.availableTakerSub.Unsubscribe()
+	this.makerFinishEventSub.Unsubscribe()
+	this.rmLogsSub.Unsubscribe()
+
 	close(this.quitSync)
 
 	log.Info("Simplechain MsgHandler stopped")
@@ -241,7 +266,7 @@ func (this *MsgHandler) HandleMsg(msg p2p.Msg, p Peer) error {
 			p.MarkCrossTransaction(ctx.SignHash())
 			this.pm.BroadcastCtx([]*types.CrossTransaction{ctx})
 			if err := this.ctxStore.AddRemote(ctx); err != nil {
-				log.Error("Add remote ctx", "err", err)
+				log.Error("Add remote ctx", "err", err, "id", ctx.ID().String())
 			}
 		}
 	case msg.Code == CtxSignsMsg:
@@ -337,7 +362,7 @@ func (this *MsgHandler) ReadCrossMessage() {
 	}
 }
 
-func (this *MsgHandler) GetTxForLockOut(rwss []*types.ReceptTransactionWithSignatures, gasUsed *big.Int) ([]*types.Transaction, error) {
+func (this *MsgHandler) GetTxForLockOut(rwss []*types.ReceptTransactionWithSignatures) ([]*types.Transaction, error) {
 	nonce := this.pm.GetNonce(this.anchorSigner)
 
 	var txs []*types.Transaction
@@ -352,7 +377,7 @@ func (this *MsgHandler) GetTxForLockOut(rwss []*types.ReceptTransactionWithSigna
 	for _, rws := range rwss {
 		//TODO EstimateGas不仅测试GasLimit，同时能判断该交易是否执行成功
 		if _, ok := this.knownRwssTx[rws.ID()]; !ok {
-			param, err = this.CreateTransaction(this.anchorSigner, rws, gasUsed)
+			param, err = this.CreateTransaction(this.anchorSigner, rws)
 			if err != nil {
 				errorRws = append(errorRws, rws)
 				errTx1++
@@ -361,7 +386,7 @@ func (this *MsgHandler) GetTxForLockOut(rwss []*types.ReceptTransactionWithSigna
 			this.knownRwssTx[rws.ID()] = param
 		} else { //TODO delete
 			param = this.knownRwssTx[rws.ID()]
-			if ok, _ := this.CheckTransaction(this.anchorSigner, tokenAddress, rws, gasUsed, nonce+count, param.gasLimit, param.gasPrice, param.data); !ok {
+			if ok, _ := this.CheckTransaction(this.anchorSigner, tokenAddress, rws, nonce+count, param.gasLimit, param.gasPrice, param.data); !ok {
 				errorRws = append(errorRws, rws)
 				exec++
 				continue
@@ -397,9 +422,10 @@ func (this *MsgHandler) WriteCrossMessage(v interface{}) {
 }
 
 func (this *MsgHandler) clearStore(finishes []*types.FinishInfo) error {
-	for _, finish := range finishes {
-		log.Info("cross transaction finish", "txId", finish.TxId.String())
-	}
+	log.Info("cross transaction finish", "clearStore count", len(finishes))
+	//for _, finish := range finishes {
+	//	log.Info("cross transaction finish", "txId", finish.TxId.String())
+	//}
 	if err := this.ctxStore.RemoveLocals(finishes); err != nil {
 		return errors.New("rm ctx error")
 	}
@@ -422,13 +448,13 @@ func (this *MsgHandler) GetContractAddress() common.Address {
 func (this *MsgHandler) SetGasPriceOracle(gpo GasPriceOracle) {
 	this.gpo = gpo
 }
-func (this *MsgHandler) CreateTransaction(address common.Address, rws *types.ReceptTransactionWithSignatures, gasUsed *big.Int) (*TranParam, error) {
+func (this *MsgHandler) CreateTransaction(address common.Address, rws *types.ReceptTransactionWithSignatures) (*TranParam, error) {
 	tokenAddress := this.GetContractAddress()
 	gasPrice, err := this.gpo.SuggestPrice(context.Background())
 	if err != nil {
 		return nil, err
 	}
-	data, err := rws.ConstructData(gasUsed)
+	data, err := rws.ConstructData()
 	if err != nil {
 		log.Error("ConstructData", "err", err)
 		return nil, err
@@ -447,7 +473,7 @@ func (this *MsgHandler) CreateTransaction(address common.Address, rws *types.Rec
 	return &TranParam{gasLimit: gasLimit, gasPrice: gasPrice, data: data}, nil
 }
 
-func (this *MsgHandler) CheckTransaction(address, tokenAddress common.Address, rws *types.ReceptTransactionWithSignatures, gasUsed *big.Int, nonce, gasLimit uint64, gasPrice *big.Int, data []byte) (bool, error) {
+func (this *MsgHandler) CheckTransaction(address, tokenAddress common.Address, rws *types.ReceptTransactionWithSignatures, nonce, gasLimit uint64, gasPrice *big.Int, data []byte) (bool, error) {
 	return this.gasHelper.CheckExec(context.Background(), CallArgs{
 		From:     address,
 		To:       &tokenAddress,
@@ -459,4 +485,22 @@ func (this *MsgHandler) CheckTransaction(address, tokenAddress common.Address, r
 
 func (this *MsgHandler) GetCtxstore() CtxStore {
 	return this.ctxStore
+}
+
+func (this *MsgHandler) reorgLogs(logs []*types.Log) {
+	var takerLogs []*types.RTxsInfo
+	for _, log := range logs {
+		if this.blockchain.IsCtxAddress(log.Address) {
+			if log.Topics[0] == params.TakerTopic && len(log.Topics) >= 3 && len(log.Data) >= common.HashLength*6 {
+				takerLogs = append(takerLogs, &types.RTxsInfo{
+					DestinationId: common.BytesToHash(log.Data[:common.HashLength]).Big(),
+					CtxId:         log.Topics[1],
+				})
+			}
+		}
+	}
+
+	if len(takerLogs) > 0 {
+		this.ctxStore.StampStatus(takerLogs, types.RtxStatusWaiting)
+	}
 }

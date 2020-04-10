@@ -16,6 +16,8 @@ contract crossDemo{
         mapping(address=>Anchor) anchors;   //锚定矿工列表 address => miners
         mapping(bytes32=>uint256) makerTxs; //挂单 交易完成后删除交易，通过发送日志方式来呈现交易历史。
         mapping(bytes32=>uint256) takerTxs; //跨链交易列表 吃单 hash => Transaction[]
+        uint reward;
+        uint totalReward;
     }
 
     struct Anchor {
@@ -34,6 +36,8 @@ contract crossDemo{
 
     event RemoveAnchors(uint remoteChainId);
 
+    event AccumulateRewards(uint remoteChainId, address indexed anchor, uint reward);
+
     modifier onlyAnchor(uint remoteChainId) {
         require(crossChains[remoteChainId].remoteChainId > 0,"remoteChainId not exist");
         require(crossChains[remoteChainId].anchors[msg.sender].remoteChainId == remoteChainId,"not anchors");
@@ -49,6 +53,19 @@ contract crossDemo{
         owner = msg.sender;
     }
 
+    //更改跨链交易奖励 管理员操作
+    function setReward(uint remoteChainId, uint _reward) public onlyOwner { crossChains[remoteChainId].reward = _reward; }
+
+    function getTotalReward(uint remoteChainId) public view returns(uint) { return crossChains[remoteChainId].totalReward; }
+
+    function accumulateRewards(uint remoteChainId, address payable anchor, uint reward) public onlyOwner {
+        require(reward <= crossChains[remoteChainId].totalReward, "must less then totalReward");
+        require(crossChains[remoteChainId].anchors[anchor].remoteChainId == remoteChainId, "illegal anchor");
+        crossChains[remoteChainId].totalReward -=  reward;
+        anchor.transfer(reward);
+        emit AccumulateRewards(remoteChainId, anchor, reward);
+    }
+
     //登记链信息 管理员操作
     function chainRegister(uint remoteChainId, uint8 signConfirmCount, address[] memory _anchors) public onlyOwner returns(bool) {
         require (crossChains[remoteChainId].remoteChainId == 0,"remoteChainId already exist");
@@ -60,7 +77,9 @@ contract crossDemo{
             remoteChainId: remoteChainId,
             signConfirmCount: signConfirmCount,
             anchorsPositionBit: (temp - 1) >> (64 - _anchors.length),
-            anchorAddress:newAnchors
+            anchorAddress:newAnchors,
+            reward:0,
+            totalReward:0
             });
 
         //加入锚定矿工
@@ -167,16 +186,18 @@ contract crossDemo{
         bytes32[] s;
     }
     //锚定节点执行
-    function makerFinish(Recept memory rtx,uint remoteChainId,uint gasUsed) public onlyAnchor(remoteChainId) payable {
+    function makerFinish(Recept memory rtx,uint remoteChainId) public onlyAnchor(remoteChainId) payable {
         require(rtx.v.length == rtx.r.length,"length error");
         require(rtx.v.length == rtx.s.length,"length error");
         require(rtx.to != address(0x0),"to is zero");
         uint256 value = crossChains[remoteChainId].makerTxs[rtx.txId];
-        require(value > gasUsed,"not enough coin");
+        require(value > crossChains[remoteChainId].reward,"not enough coin");
         require(verifySignAndCount(keccak256(abi.encodePacked(rtx.txId, rtx.txHash, rtx.to, rtx.blockHash, chainId() ,rtx.blockNumber,rtx.index,rtx.input)), remoteChainId, rtx.v, rtx.r, rtx.s) >= crossChains[remoteChainId].signConfirmCount,"sign error"); //签名数量
         delete crossChains[remoteChainId].makerTxs[rtx.txId];
-        msg.sender.transfer(gasUsed);
-        rtx.to.transfer(value - gasUsed);
+        rtx.to.transfer(value - crossChains[remoteChainId].reward);
+        uint total = crossChains[remoteChainId].totalReward + crossChains[remoteChainId].reward;
+        assert(total >= crossChains[remoteChainId].totalReward);
+        crossChains[remoteChainId].totalReward = total;
         emit MakerFinish(rtx.txId,rtx.to);
     }
 

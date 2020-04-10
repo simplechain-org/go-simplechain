@@ -58,21 +58,17 @@ func (this *CtxDb) ListAll(add func([]*types.CrossTransactionWithSignatures)) er
 	var result []*types.CrossTransactionWithSignatures
 	for it.Next() {
 		state := new(types.CrossTransactionWithSignatures)
-		err := rlp.Decode(bytes.NewReader(it.Value()), state)
-		if err != nil {
+		if err := rlp.Decode(bytes.NewReader(it.Value()), state); err != nil {
 			failure = err
-			if len(result) > 0 {
-				add(result)
-			}
 			break
-		} else {
-			total++
-			if result = append(result, state); len(result) > 1024 {
-				add(result)
-				result = result[:0]
-			}
+		}
+		total++
+		if result = append(result, state); len(result) > 1024 {
+			add(result)
+			result = result[:0]
 		}
 	}
+
 	if len(result) > 0 {
 		add(result)
 	}

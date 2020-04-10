@@ -20,13 +20,12 @@ func (h rwsHeap) Less(i, j int) bool {
 		return true
 	} else if h[i].Data.BlockNumber > h[j].Data.BlockNumber {
 		return false
-	} else {
-		if h[i].Data.Index < h[j].Data.Index {
-			return true
-		} else { //不会出现相等的情况
-			return false
-		}
 	}
+	if h[i].Data.Index < h[j].Data.Index {
+		return true
+	}
+	//不会出现相等的情况
+	return false
 }
 
 func (h *rwsHeap) Push(x interface{}) {

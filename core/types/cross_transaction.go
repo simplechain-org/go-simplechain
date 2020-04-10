@@ -43,19 +43,20 @@ type FinishInfo struct {
 }
 
 func NewCrossTransaction(amount, charge, networkId *big.Int, id, txHash, bHash common.Hash, from common.Address, input []byte) *CrossTransaction {
-	return &CrossTransaction{Data: ctxdata{
-		Value:            amount,
-		CTxId:            id,
-		TxHash:           txHash,
-		From:             from,
-		BlockHash:        bHash,
-		DestinationId:    networkId,
-		DestinationValue: charge,
-		Input:            input,
-		V:                new(big.Int),
-		R:                new(big.Int),
-		S:                new(big.Int),
-	}}
+	return &CrossTransaction{
+		Data: ctxdata{
+			Value:            amount,
+			CTxId:            id,
+			TxHash:           txHash,
+			From:             from,
+			BlockHash:        bHash,
+			DestinationId:    networkId,
+			DestinationValue: charge,
+			Input:            input,
+			V:                new(big.Int),
+			R:                new(big.Int),
+			S:                new(big.Int),
+		}}
 }
 
 func (tx *CrossTransaction) WithSignature(signer CtxSigner, sig []byte) (*CrossTransaction, error) {
@@ -162,8 +163,19 @@ func (s *CTxByPrice) Pop() interface{} {
 	return x
 }
 
+const (
+	// RtxStatusWaiting is the status code of a rtx transaction if waiting for orders.
+	RtxStatusWaiting = uint64(0)
+	// RtxStatusImplementing is the status code of a rtx transaction if execution implementing.
+	RtxStatusImplementing = uint64(1)
+	// RtxStatusSuccessful is the status code of a rtx transaction if execution succeeded.
+	RtxStatusSuccessful = uint64(2)
+)
+
 type CrossTransactionWithSignatures struct {
-	Data ctxdatas
+	Data   ctxdatas
+	Status uint64 `json:"status" gencodec:"required"` // Status tx
+
 	// caches
 	hash atomic.Value
 	size atomic.Value
@@ -202,7 +214,10 @@ func NewCrossTransactionWithSignatures(ctx *CrossTransaction) *CrossTransactionW
 	d.R = append(d.R, ctx.Data.R)
 	d.S = append(d.S, ctx.Data.S)
 
-	return &CrossTransactionWithSignatures{Data: d}
+	return &CrossTransactionWithSignatures{
+		Data:   d,
+		Status: RtxStatusWaiting,
+	}
 }
 
 func (cws *CrossTransactionWithSignatures) ID() common.Hash {
