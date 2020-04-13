@@ -176,11 +176,11 @@ func (t *CWssList) Remove(hash common.Hash) {
 }
 
 // Remove removes a transaction from the all.
-func (t *CWssList) StampTx(hash common.Hash) {
+func (t *CWssList) StampTx(hash common.Hash, status uint64) {
 	if _, ok := t.all[hash]; ok {
 		for _, v := range t.list {
 			if v.ID() == hash {
-				v.Status = types.RtxStatusImplementing
+				v.Status = status
 				t.all[hash] = v
 			}
 		}

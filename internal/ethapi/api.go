@@ -1815,9 +1815,7 @@ func (s *PublicCtxPoolAPI) CtxContent() map[string]map[uint64][]*RPCCrossTransac
 	remotes, locals := s.b.CtxPoolContent()
 	for k, txs := range remotes {
 		for _, tx := range txs {
-			if tx.Status == types.RtxStatusWaiting {
-				content["remote"][k] = append(content["remote"][k], newRPCCrossTransaction(tx))
-			}
+			content["remote"][k] = append(content["remote"][k], newRPCCrossTransaction(tx))
 		}
 	}
 	for s, txs := range locals {
@@ -1835,7 +1833,7 @@ func (s *PublicCtxPoolAPI) GetRemoteCtx(count uint64) map[uint64][]*RPCCrossTran
 	for k, txs := range remotes {
 		ctxCount := uint64(0)
 		for _, tx := range txs {
-			if tx.Status == types.RtxStatusWaiting && ctxCount < count {
+			if ctxCount < count {
 				content[k] = append(content[k], newRPCCrossTransaction(tx))
 				ctxCount++
 			}
@@ -1851,7 +1849,7 @@ func (s *PublicCtxPoolAPI) GetLocalCtx(count uint64) map[uint64][]*RPCCrossTrans
 	for k, txs := range locals {
 		ctxCount := uint64(0)
 		for _, tx := range txs {
-			if tx.Status == types.RtxStatusWaiting && ctxCount < count {
+			if ctxCount < count {
 				content[k] = append(content[k], newRPCCrossTransaction(tx))
 				ctxCount++
 			}
@@ -1923,4 +1921,24 @@ func newRPCCrossTransaction(tx *types.CrossTransactionWithSignatures) *RPCCrossT
 	}
 
 	return result
+}
+
+func (s *PublicCtxPoolAPI) CtxOwner(ctx context.Context, from common.Address) map[string]map[uint64][]*RPCCrossTransaction {
+	remotes, locals := s.b.GetSelfCtx(from)
+	content := map[string]map[uint64][]*RPCCrossTransaction{
+		"remote": make(map[uint64][]*RPCCrossTransaction),
+		"local":  make(map[uint64][]*RPCCrossTransaction),
+	}
+	for k, txs := range remotes {
+		for _, tx := range txs {
+			content["remote"][k] = append(content["remote"][k], newRPCCrossTransaction(tx))
+		}
+
+	}
+	for s, txs := range locals {
+		for _, tx := range txs {
+			content["local"][s] = append(content["local"][s], newRPCCrossTransaction(tx))
+		}
+	}
+	return content
 }

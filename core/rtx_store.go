@@ -212,7 +212,7 @@ func (store *RtxStore) loop() {
 			store.mu.Lock()
 			currentNum := store.chain.CurrentBlock().NumberU64()
 			if currentNum > expireNumber {
-				log.Info("RemoveUnderNum Rtx")
+				//log.Info("RemoveUnderNum Rtx")
 				store.pending.RemoveUnderNum(currentNum - expireNumber)
 				store.queued.RemoveUnderNum(currentNum - expireNumber)
 			}
@@ -350,24 +350,25 @@ func (store *RtxStore) validateRtx(rtx *types.ReceptTransaction) error {
 		return fmt.Errorf("rtx is already expired, id: %s", id.String())
 	}
 
-	if v, ok := store.anchors[rtx.Data.DestinationId.Uint64()]; ok {
+	v, ok := store.anchors[rtx.Data.DestinationId.Uint64()]
+	if ok {
 		if !v.isAnchorTx(rtx) {
 			return fmt.Errorf("invalid signature of rtx:%s", id.String())
 		}
-	}
-
-	newHead := store.chain.CurrentBlock().Header() // Special case during testing
-	statedb, err := store.chain.StateAt(newHead.Root)
-	if err != nil {
-		log.Error("Failed to reset txpool state", "err", err)
-		return fmt.Errorf("stateAt err:%s", err.Error())
-	}
-	anchors, signedCount := QueryAnchor(store.chainConfig, store.chain, statedb, newHead, store.CrossDemoAddress, rtx.Data.DestinationId.Uint64())
-	store.config.Anchors = anchors
-	requireSignatureCount = signedCount
-	store.anchors[rtx.Data.DestinationId.Uint64()] = newAnchorAccountSet(store.config.Anchors, store.signer)
-	if !store.anchors[rtx.Data.DestinationId.Uint64()].isAnchorTx(rtx) {
-		return fmt.Errorf("invalid signature of ctx:%s", id.String())
+	} else {
+		newHead := store.chain.CurrentBlock().Header() // Special case during testing
+		statedb, err := store.chain.StateAt(newHead.Root)
+		if err != nil {
+			log.Error("Failed to reset txpool state", "err", err)
+			return fmt.Errorf("stateAt err:%s", err.Error())
+		}
+		anchors, signedCount := QueryAnchor(store.chainConfig, store.chain, statedb, newHead, store.CrossDemoAddress, rtx.Data.DestinationId.Uint64())
+		store.config.Anchors = anchors
+		requireSignatureCount = signedCount
+		store.anchors[rtx.Data.DestinationId.Uint64()] = newAnchorAccountSet(store.config.Anchors, store.signer)
+		if !store.anchors[rtx.Data.DestinationId.Uint64()].isAnchorTx(rtx) {
+			return fmt.Errorf("invalid signature of ctx:%s", id.String())
+		}
 	}
 
 	return nil

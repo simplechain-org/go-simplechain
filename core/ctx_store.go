@@ -142,7 +142,7 @@ func (store *CtxStore) loop() {
 			store.mu.Lock()
 			currentNum := store.chain.CurrentBlock().NumberU64()
 			if currentNum > expireNumber { //内存回收
-				log.Info("RemoveUnderNum Ctx")
+				//log.Info("RemoveUnderNum Ctx")
 				store.pending.RemoveUnderNum(currentNum - expireNumber)
 				store.queued.RemoveUnderNum(currentNum - expireNumber)
 			}
@@ -448,26 +448,42 @@ func (store *CtxStore) Query() (map[uint64][]*types.CrossTransactionWithSignatur
 	defer store.mu.Unlock()
 	remotes := make(map[uint64][]*types.CrossTransactionWithSignatures)
 	locals := make(map[uint64][]*types.CrossTransactionWithSignatures)
-	var re, lo int
+	var re, lo, allRe int
 	for k, v := range store.remoteStore {
-		remotes[k] = v.GetList()
+		for _, tx := range v.GetList() {
+			if tx.Status == types.RtxStatusWaiting {
+				remotes[k] = append(remotes[k], tx)
+			}
+		}
 		re += len(remotes[k])
+		allRe += len(v.GetList())
 	}
 	for k, v := range store.localStore {
 		locals[k] = v.GetList()
 		lo += len(locals[k])
 	}
-	log.Info("Query", "remote", re, "local", lo)
+	log.Info("CtxStore Query", "allRemote", allRe, "waitingRemote", re, "local", lo)
 	return remotes, locals
 }
 
-func (store *CtxStore) StampStatus(rtxs []*types.RTxsInfo) error {
+func (store *CtxStore) StampStatus(rtxs []*types.RTxsInfo, status uint64) error {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 
 	for _, v := range rtxs {
 		if s, ok := store.remoteStore[v.DestinationId.Uint64()]; ok {
-			s.StampTx(v.CtxId)
+			s.StampTx(v.CtxId, status)
+
+			cws, err := store.ctxDb.Read(v.CtxId)
+			if err != nil {
+				log.Error("read remotes from db ", "err", err)
+				return err
+			}
+			cws.Status = status
+			if err := store.ctxDb.Write(cws); err != nil {
+				log.Error("rewrite ctx", "err", err)
+				return err
+			}
 		}
 	}
 
@@ -486,9 +502,9 @@ func (store *CtxStore) RemoveRemotes(rtxs []*types.ReceptTransaction) error {
 			}
 		}
 	}
-	//if err := store.ctxDb.ListAll(store.addLocalTxs); err != nil {
-	//	log.Warn("Failed to load transaction journal", "err", err)
-	//}
+	if err := store.ctxDb.ListAll(store.addLocalTxs); err != nil {
+		log.Warn("Failed to load transaction journal", "err", err)
+	}
 
 	return nil
 }
@@ -596,26 +612,17 @@ func (store *CtxStore) verifyCtx(ctx *types.CrossTransactionWithSignatures) erro
 		Scrypt:  new(params.ScryptConfig),
 	}
 
-	if store.config.ChainId.Cmp(big.NewInt(1)) == 0 {
-		if ctx.Data.DestinationId.Cmp(big.NewInt(1)) == 0 {
-			data = append(data, getTakerTx...)
-			data = append(data, paddedCtxId...)
-			data = append(data, common.LeftPadBytes(store.config.ChainId.Bytes(), 32)...)
-		} else {
-			data = append(data, getMakerTx...)
-			data = append(data, paddedCtxId...)
-			data = append(data, common.LeftPadBytes(ctx.Data.DestinationId.Bytes(), 32)...)
-		}
-	} else {
-		if ctx.Data.DestinationId.Cmp(big.NewInt(1)) == 0 {
-			data = append(data, getMakerTx...)
-			data = append(data, paddedCtxId...)
-			data = append(data, common.LeftPadBytes(ctx.Data.DestinationId.Bytes(), 32)...)
-		} else {
-			data = append(data, getTakerTx...)
-			data = append(data, paddedCtxId...)
-			data = append(data, common.LeftPadBytes(store.config.ChainId.Bytes(), 32)...)
-		}
+	contractAddress = store.CrossDemoAddress
+	if store.config.ChainId.Cmp(ctx.ChainId()) == 0 {
+		data = append(data, getMakerTx...)
+		data = append(data, paddedCtxId...)
+		data = append(data, common.LeftPadBytes(ctx.Data.DestinationId.Bytes(), 32)...)
+	}
+
+	if store.config.ChainId.Cmp(ctx.Data.DestinationId) == 0 {
+		data = append(data, getTakerTx...)
+		data = append(data, paddedCtxId...)
+		data = append(data, common.LeftPadBytes(store.config.ChainId.Bytes(), 32)...)
 	}
 
 	//构造消息
@@ -634,7 +641,6 @@ func (store *CtxStore) verifyCtx(ctx *types.CrossTransactionWithSignatures) erro
 	// about the transaction and calling mechanisms.
 	stateDb, err := store.chain.StateAt(store.chain.CurrentBlock().Root())
 	if err != nil {
-		//log.Info("verifyCtx1","err",err)
 		return err
 	}
 	testStateDb := stateDb.Copy()
@@ -859,4 +865,22 @@ func (store *CtxStore) validateRemoteCtx(ctx *types.CrossTransaction) error {
 	}
 
 	return nil
+}
+
+func (store *CtxStore) CtxOwner(from common.Address) (map[uint64][]*types.CrossTransactionWithSignatures, map[uint64][]*types.CrossTransactionWithSignatures) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	cwss := store.ctxDb.Query(from)
+	remotes := make(map[uint64][]*types.CrossTransactionWithSignatures)
+	locals := make(map[uint64][]*types.CrossTransactionWithSignatures)
+	for _, cws := range cwss {
+		if cws.Data.DestinationId.Cmp(store.config.ChainId) == 0 {
+			keyId := cws.ChainId().Uint64()
+			remotes[keyId] = append(remotes[keyId], cws)
+		} else {
+			keyId := cws.Data.DestinationId.Uint64()
+			locals[keyId] = append(locals[keyId], cws)
+		}
+	}
+	return remotes, locals
 }

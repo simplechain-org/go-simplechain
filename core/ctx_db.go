@@ -104,3 +104,21 @@ func (this *CtxDb) List() []*types.CrossTransactionWithSignatures {
 	}
 	return result
 }
+
+func (this *CtxDb) Query(from common.Address) []*types.CrossTransactionWithSignatures {
+	it := this.db.NewIteratorWithPrefix(makerPrefix)
+	var result []*types.CrossTransactionWithSignatures
+	for it.Next() {
+		state := new(types.CrossTransactionWithSignatures)
+		err := rlp.Decode(bytes.NewReader(it.Value()), state)
+		if err != nil {
+			log.Info("List", "err", err)
+			break
+		} else {
+			if state.Data.From == from {
+				result = append(result, state)
+			}
+		}
+	}
+	return result
+}

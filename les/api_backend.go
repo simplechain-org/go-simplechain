@@ -279,6 +279,9 @@ func (b *LesApiBackend) CtxStats() (pending int) {
 }
 
 func (b *LesApiBackend) CtxPoolContent() (map[uint64][]*types.CrossTransactionWithSignatures, map[uint64][]*types.CrossTransactionWithSignatures) {
-	//pending, _ := b.eth.ctxPool.Pending()
+	return nil, nil
+}
+
+func (b *LesApiBackend) GetSelfCtx(from common.Address) (map[uint64][]*types.CrossTransactionWithSignatures, map[uint64][]*types.CrossTransactionWithSignatures) {
 	return nil, nil
 }
