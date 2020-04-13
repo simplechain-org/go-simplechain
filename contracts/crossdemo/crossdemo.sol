@@ -18,6 +18,7 @@ contract crossDemo{
         mapping(bytes32=>uint256) takerTxs; //跨链交易列表 吃单 hash => Transaction[]
         uint reward;
         uint totalReward;
+        mapping(address=>uint256) signCount; //地址参与多签统计
     }
 
     struct Anchor {
@@ -56,7 +57,11 @@ contract crossDemo{
     //更改跨链交易奖励 管理员操作
     function setReward(uint remoteChainId, uint _reward) public onlyOwner { crossChains[remoteChainId].reward = _reward; }
 
+    function getReward(uint remoteChainId) public view returns(uint) { return crossChains[remoteChainId].reward; }
+
     function getTotalReward(uint remoteChainId) public view returns(uint) { return crossChains[remoteChainId].totalReward; }
+
+    function getSignCount(uint remoteChainId, address signer) public view returns(uint256) { return crossChains[remoteChainId].signCount[signer]; }
 
     function accumulateRewards(uint remoteChainId, address payable anchor, uint reward) public onlyOwner {
         require(reward <= crossChains[remoteChainId].totalReward, "must less then totalReward");
@@ -192,7 +197,7 @@ contract crossDemo{
         require(rtx.to != address(0x0),"to is zero");
         uint256 value = crossChains[remoteChainId].makerTxs[rtx.txId];
         require(value > crossChains[remoteChainId].reward,"not enough coin");
-        require(verifySignAndCount(keccak256(abi.encodePacked(rtx.txId, rtx.txHash, rtx.to, rtx.blockHash, chainId() ,rtx.blockNumber,rtx.index,rtx.input)), remoteChainId, rtx.v, rtx.r, rtx.s) >= crossChains[remoteChainId].signConfirmCount,"sign error"); //签名数量
+        require(verifySignAndCount(keccak256(abi.encodePacked(rtx.txId, rtx.txHash, rtx.to, rtx.blockHash, chainId() ,rtx.blockNumber,rtx.index,rtx.input)), remoteChainId, rtx.v, rtx.r, rtx.s, true) >= crossChains[remoteChainId].signConfirmCount,"sign error"); //签名数量
         delete crossChains[remoteChainId].makerTxs[rtx.txId];
         rtx.to.transfer(value - crossChains[remoteChainId].reward);
         uint total = crossChains[remoteChainId].totalReward + crossChains[remoteChainId].reward;
@@ -201,15 +206,19 @@ contract crossDemo{
         emit MakerFinish(rtx.txId,rtx.to);
     }
 
-    function verifySignAndCount(bytes32 hash, uint remoteChainId, uint[] memory v, bytes32[] memory r, bytes32[] memory s) private view returns (uint8) {
+    function verifySignAndCount(bytes32 hash, uint remoteChainId, uint[] memory v, bytes32[] memory r, bytes32[] memory s, bool countSigner) private returns (uint8) {
         uint64 ret = 0;
         uint64 base = 1;
         for (uint i = 0; i < v.length; i++){
             v[i] -= remoteChainId*2;
             v[i] -= 8;
-            address temp = ecrecover(hash, uint8(v[i]), r[i], s[i]);
-            if (crossChains[remoteChainId].anchors[temp].remoteChainId == remoteChainId){
-                ret = ret | (base << crossChains[remoteChainId].anchors[temp].position);
+            address signer = ecrecover(hash, uint8(v[i]), r[i], s[i]);
+            if (crossChains[remoteChainId].anchors[signer].remoteChainId == remoteChainId){
+                uint64 newRet = ret | (base << crossChains[remoteChainId].anchors[signer].position);
+                if (countSigner && bitCount(newRet) > bitCount(ret)){
+                    crossChains[remoteChainId].signCount[signer] ++;
+                }
+                ret = newRet;
             }
         }
         return uint8(bitCount(ret));
@@ -238,7 +247,7 @@ contract crossDemo{
         require(ctx.v.length == ctx.s.length,"length error");
         require(msg.sender == ctx.from || msg.value >= ctx.destinationValue,"price wrong");
         require(crossChains[remoteChainId].takerTxs[ctx.txId] == 0,"txId exist");
-        require(verifySignAndCount(keccak256(abi.encodePacked(ctx.value, ctx.txId, ctx.txHash, ctx.from, ctx.blockHash, chainId(), ctx.destinationValue,ctx.data)), remoteChainId,ctx.v,ctx.r,ctx.s) >= crossChains[remoteChainId].signConfirmCount,"sign error");
+        require(verifySignAndCount(keccak256(abi.encodePacked(ctx.value, ctx.txId, ctx.txHash, ctx.from, ctx.blockHash, chainId(), ctx.destinationValue,ctx.data)), remoteChainId,ctx.v,ctx.r,ctx.s,false) >= crossChains[remoteChainId].signConfirmCount,"sign error");
         crossChains[remoteChainId].takerTxs[ctx.txId] = ctx.value;
         ctx.from.transfer(msg.value);
         emit TakerTx(ctx.txId,msg.sender,remoteChainId,ctx.from,ctx.value,ctx.destinationValue,input);
