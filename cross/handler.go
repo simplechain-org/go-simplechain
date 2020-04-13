@@ -136,6 +136,7 @@ func (this *MsgHandler) loop() {
 	for {
 		select {
 		case ev := <-this.makerStartEventCh:
+			log.Info("get cross transaction from the log")
 			//get cross transaction from the log
 			if !this.pm.CanAcceptTxs() {
 				break
@@ -146,11 +147,13 @@ func (this *MsgHandler) loop() {
 						log.Warn("Add local rtx", "err", err)
 					}
 				}
+				log.Info("MsgHandler loop add Local","items",len(ev.Txs))
 				this.pm.BroadcastCtx(ev.Txs)
 			}
 		case <-this.makerStartEventSub.Err():
 			return
 		case ev := <-this.makerSignedCh:
+			log.Info("MsgHandler loop makerSignedCh")
 			this.pm.BroadcastInternalCrossTransactionWithSignature([]*types.CrossTransactionWithSignatures{ev.Txs}) //主网广播
 			if this.role.IsAnchor() {
 				this.WriteCrossMessage(ev.Txs)
