@@ -979,25 +979,6 @@ func (pm *ProtocolManager) BroadcastRtx(rtxs []*types.ReceptTransaction) {
 
 }
 
-//ctxStore触发
-func (pm *ProtocolManager) BroadcastInternalCrossTransactionWithSignature(cwss []*types.CrossTransactionWithSignatures) {
-
-	var txset = make(map[*peer][]*types.CrossTransactionWithSignatures)
-
-	// Broadcast CrossTransaction to a batch of peers not knowing about it
-	for _, cws := range cwss {
-		peers := pm.peers.PeersWithoutInternalCrossTransactionWithSignatures(cws.ID())
-		for _, peer := range peers {
-			txset[peer] = append(txset[peer], cws)
-		}
-		log.Trace("Broadcast CrossTransaction", "hash", cws.ID(), "recipients", len(peers))
-	}
-	for peer, css := range txset {
-		peer.AsyncSendInternalCrossTransactionWithSignatures(css)
-		log.Trace("Broadcast internal CrossTransactionWithSignature", "peer", peer.id, "len", len(cwss))
-	}
-}
-
 func (pm *ProtocolManager) SetMsgHandler(msgHandler *cross.MsgHandler) {
 	pm.msgHandler = msgHandler
 }
@@ -1006,7 +987,6 @@ func (pm *ProtocolManager) AddRemotes(txs []*types.Transaction) {
 	for _, v := range txs {
 		pm.txpool.AddRemote(v)
 	}
-	//return pm.txpool.AddRemotes(txs)
 }
 
 func (pm *ProtocolManager) CanAcceptTxs() bool {
@@ -1019,10 +999,6 @@ func (pm *ProtocolManager) NetworkId() uint64 {
 func (pm *ProtocolManager) GetNonce(address common.Address) uint64 {
 	return pm.txpool.GetCurrentNonce(address)
 }
-
-//func (pm *ProtocolManager) Pending() (map[common.Address]types.Transactions, error) {
-//	return pm.txpool.Pending()
-//}
 
 func (pm *ProtocolManager) GetAnchorTxs(address common.Address) (map[common.Address]types.Transactions, error) {
 	return pm.txpool.GetAnchorTxs(address)

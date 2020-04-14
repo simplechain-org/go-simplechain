@@ -168,12 +168,6 @@ func (p *peer) broadcast() {
 				return
 			}
 			p.Log().Trace("Broadcast rtxSign", "hash", rtx.Hash())
-		case ctxs := <-p.internalCrossTransactionWithSignaturesCh:
-			if err := p.SendInternalCrossTransactionWithSignatures(ctxs); err != nil {
-				log.Info("SendInternalCrossTransactionWithSignatures", "err", err)
-				return
-			}
-			p.Log().Trace("Broadcast InternalCrossTransactionWithSignatures", "count", len(ctxs))
 		}
 	}
 }
@@ -770,10 +764,10 @@ func (ps *peerSet) PeersWithoutInternalCrossTransactionWithSignatures(hash commo
 	return list
 }
 
-func (p *peer) SendInternalCrossTransactionWithSignatures(txs []*types.CrossTransactionWithSignatures) error {
-	//log.Info("SendLocalCrossTransactionWithSignatures", "len", len(txs), "peer", p.id)
-	return p2p.Send(p.rw, CtxSignsInternalMsg, txs)
-}
+//func (p *peer) SendInternalCrossTransactionWithSignatures(txs []*types.CrossTransactionWithSignatures) error {
+//	//log.Info("SendLocalCrossTransactionWithSignatures", "len", len(txs), "peer", p.id)
+//	return p2p.Send(p.rw, CtxSignsInternalMsg, txs)
+//}
 
 func (p *peer) AsyncSendInternalCrossTransactionWithSignatures(cwss []*types.CrossTransactionWithSignatures) {
 	select {

@@ -157,13 +157,15 @@ func (this *MsgHandler) loop() {
 						log.Warn("Add local rtx", "err", err)
 					}
 				}
-				this.pm.BroadcastCtx(ev.Txs)
+				this.pm.BroadcastCtx(ev.Txs) //CtxSignMsg
+				//TODO addlocal 已经发了多签结束的交易(CtxSignsInternalMsg)
 			}
 		case <-this.makerStartEventSub.Err():
 			return
 
 		case ev := <-this.makerSignedCh:
-			this.pm.BroadcastInternalCrossTransactionWithSignature([]*types.CrossTransactionWithSignatures{ev.Txs}) //主网广播
+			log.Warn("makerSignedCh", "finish maker tx signs", ev.Txs.Hash())
+
 			if this.role.IsAnchor() {
 				this.WriteCrossMessage(ev.Txs)
 			}
@@ -307,25 +309,6 @@ func (this *MsgHandler) HandleMsg(msg p2p.Msg, p Peer) error {
 			//log.Warn("Add remote rtx", "err", err)
 			break
 		}
-
-	case msg.Code == CtxSignsInternalMsg:
-		if !this.pm.CanAcceptTxs() {
-			break
-		}
-		var cwss []*types.CrossTransactionWithSignatures
-		var verifyCwss []*types.CrossTransactionWithSignatures
-		if err := msg.Decode(&cwss); err != nil {
-			return errResp(ErrDecode, "msg %v: %v", msg, err)
-		}
-		//Receive and broadcast
-		for _, cws := range cwss {
-			if this.ctxStore.VerifyLocalCwsSigner(cws) == nil {
-				p.MarkInternalCrossTransactionWithSignatures(cws.ID())
-				verifyCwss = append(verifyCwss, cws)
-			}
-		}
-		this.ctxStore.AddCWss(verifyCwss)
-		this.pm.BroadcastInternalCrossTransactionWithSignature(verifyCwss)
 
 	default:
 		return errResp(ErrInvalidMsgCode, "%v", msg.Code)

@@ -981,23 +981,6 @@ func (pm *ProtocolManager) BroadcastRtx(rtxs []*types.ReceptTransaction) {
 	}
 }
 
-//inside the chain
-func (pm *ProtocolManager) BroadcastInternalCrossTransactionWithSignature(cwss []*types.CrossTransactionWithSignatures) {
-	var txset = make(map[*peer][]*types.CrossTransactionWithSignatures)
-
-	// Broadcast CrossTransaction to a batch of peers not knowing about it
-	for _, cws := range cwss {
-		peers := pm.peers.PeersWithoutInternalCrossTransactionWithSignatures(cws.ID())
-		for _, peer := range peers {
-			txset[peer] = append(txset[peer], cws)
-		}
-		log.Trace("Broadcast CrossTransaction", "hash", cws.ID(), "recipients", len(peers))
-	}
-	for peer, css := range txset {
-		peer.AsyncSendInternalCrossTransactionWithSignatures(css)
-		log.Trace("Broadcast internal CrossTransactionWithSignature", "peer", peer.id, "len", len(cwss))
-	}
-}
 func (pm *ProtocolManager) SetMsgHandler(msgHandler *cross.MsgHandler) {
 	pm.msgHandler = msgHandler
 }

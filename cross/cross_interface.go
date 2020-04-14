@@ -18,12 +18,10 @@ type Peer interface {
 	MarkCrossTransactionWithSignatures(hash common.Hash)
 	SendCrossTransactionWithSignatures(txs []*types.CrossTransactionWithSignatures) error
 	MarkInternalCrossTransactionWithSignatures(hash common.Hash)
-	SendInternalCrossTransactionWithSignatures(txs []*types.CrossTransactionWithSignatures) error
 	AsyncSendInternalCrossTransactionWithSignatures(cwss []*types.CrossTransactionWithSignatures)
 }
 
 type ProtocolManager interface {
-	BroadcastInternalCrossTransactionWithSignature(cwss []*types.CrossTransactionWithSignatures)
 	BroadcastCtx(ctx []*types.CrossTransaction)
 	CanAcceptTxs() bool
 	BroadcastRtx(rtx []*types.ReceptTransaction)
