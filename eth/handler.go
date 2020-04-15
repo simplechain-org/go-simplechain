@@ -930,25 +930,6 @@ func (pm *ProtocolManager) getConsensusAlgorithm() string {
 	return consensusAlgo
 }
 
-//广播多签完成的Ctx
-func (pm *ProtocolManager) BroadcastCWss(cwss []*types.CrossTransactionWithSignatures) {
-	var txset = make(map[*peer][]*types.CrossTransactionWithSignatures)
-
-	// Broadcast transactions to a batch of peers not knowing about it
-	for _, cws := range cwss {
-		peers := pm.peers.PeersWithoutCWss(cws.ID())
-		for _, peer := range peers {
-			txset[peer] = append(txset[peer], cws)
-		}
-		log.Trace("Broadcast transaction", "hash", cws.ID(), "recipients", len(peers))
-	}
-	// FIXME include this again: peers = peers[:int(math.Sqrt(float64(len(peers))))]
-	for peer, css := range txset {
-		peer.AsyncSendCrossTransactionWithSignatures(css)
-		log.Debug("BroadcastCWss", "peer", peer.id, "len", len(cwss))
-	}
-}
-
 //锚定节点广播签名Ctx
 func (pm *ProtocolManager) BroadcastCtx(ctxs []*types.CrossTransaction) {
 	for _, ctx := range ctxs {
