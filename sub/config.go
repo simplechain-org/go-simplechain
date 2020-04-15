@@ -63,7 +63,7 @@ var DefaultConfig = eth.Config{
 		Percentile: 60,
 	},
 	CtxStore: core.DefaultCtxStoreConfig,
-	RtxStore: core.DefaultRtxStoreConfig,
+	//RtxStore: core.DefaultRtxStoreConfig,
 	Role:     common.RoleSubChain,
 }
 

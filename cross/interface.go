@@ -28,18 +28,20 @@ type CtxStore interface {
 	List(int, bool) []*types.CrossTransactionWithSignatures
 	VerifyLocalCwsSigner(cws *types.CrossTransactionWithSignatures) error
 	VerifyRemoteCwsSigner(cws *types.CrossTransactionWithSignatures) error
+	UpdateAnchors(info *types.RemoteChainInfo) error
 }
 
-type rtxStore interface {
-	AddRemote(*types.ReceptTransaction) error
-	AddLocal(*types.ReceptTransaction) error
-	ValidateRtx(rtx *types.ReceptTransaction) error
-	SubscribeRWssResultEvent(chan<- core.NewRWsEvent) event.Subscription
-	SubscribeNewRWssEvent(chan<- core.NewRWssEvent) event.Subscription
-	AddLocals(...*types.ReceptTransactionWithSignatures) []error
-	RemoveLocals(finishes []*types.FinishInfo) error
-	ReadFromLocals(ctxId common.Hash) *types.ReceptTransactionWithSignatures
-}
+//type rtxStore interface {
+//	AddRemote(*types.ReceptTransaction) error
+//	AddLocal(*types.ReceptTransaction) error
+//	ValidateRtx(rtx *types.ReceptTransaction) error
+//	SubscribeRWssResultEvent(chan<- core.NewRWsEvent) event.Subscription
+//	SubscribeNewRWssEvent(chan<- core.NewRWssEvent) event.Subscription
+//	AddLocals(...*types.ReceptTransactionWithSignatures) []error
+//	RemoveLocals(finishes []*types.FinishInfo) error
+//	ReadFromLocals(ctxId common.Hash) *types.ReceptTransactionWithSignatures
+//	UpdateAnchors(info *types.RemoteChainInfo) error
+//}
 
 type simplechain interface {
 	GetEVM(ctx context.Context, msg core.Message, state *state.StateDB, header *types.Header, vmCfg vm.Config) (*vm.EVM, func() error, error)

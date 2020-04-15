@@ -63,7 +63,7 @@ var DefaultConfig = Config{
 		Percentile: 60,
 	},
 	CtxStore: core.DefaultCtxStoreConfig,
-	RtxStore: core.DefaultRtxStoreConfig,
+	//RtxStore: core.DefaultRtxStoreConfig,
 	Role:     common.RoleMainChain,
 	Istanbul: *istanbul.DefaultConfig,
 }
@@ -170,7 +170,7 @@ type Config struct {
 
 	CtxStore core.CtxStoreConfig
 
-	RtxStore core.RtxStoreConfig
+	//RtxStore core.RtxStoreConfig
 
 	MainChainCtxAddress common.Address
 

@@ -63,7 +63,7 @@ const (
 	//for eth64
 	CtxSignMsg          = 0x31
 	CtxSignsMsg         = 0x32
-	RtxSignMsg          = 0x33
+	//RtxSignMsg          = 0x33
 	CtxSignsInternalMsg = 0x34
 )
 
@@ -100,18 +100,20 @@ var errorToString = map[int]string{
 
 type txPool interface {
 	// AddRemotes should add the given transactions to the pool.
+	AddLocal(*types.Transaction) error
 	AddRemote(*types.Transaction) error
 
 	// Pending should return pending transactions.
 	// The slice should be modifiable by the caller.
 	Pending() (map[common.Address]types.Transactions, error)
-	GetAnchorTxs(common.Address) (map[common.Address]types.Transactions, error)
+	//GetAnchorTxs(common.Address) (map[common.Address]types.Transactions, error)
 	// SubscribeNewTxsEvent should return an event subscription of
 	// NewTxsEvent and send events to the given channel.
 	SubscribeNewTxsEvent(chan<- core.NewTxsEvent) event.Subscription
 
 	// GetLatestNonceFromQueueAndPending.
-	GetCurrentNonce(address common.Address) uint64
+	//GetCurrentNonce(address common.Address) uint64
+	Nonce(addr common.Address) uint64
 }
 
 // statusData63 is the network packet for the status message for eth/63.
