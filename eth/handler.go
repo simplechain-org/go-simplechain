@@ -792,10 +792,10 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 
 	default:
 		if pm.msgHandler != nil {
-			return pm.msgHandler.HandleMsg(msg, p)
-		} else {
-			return errResp(ErrInvalidMsgCode, "%v", msg.Code)
+			return pm.msgHandler.CrossChainMsg(msg, p)
 		}
+		return errResp(ErrInvalidMsgCode, "%v", msg.Code)
+
 	}
 	return nil
 }
@@ -982,10 +982,6 @@ func (pm *ProtocolManager) NetworkId() uint64 {
 func (pm *ProtocolManager) GetNonce(address common.Address) uint64 {
 	return pm.txpool.GetCurrentNonce(address)
 }
-
-//func (pm *ProtocolManager) Pending() (map[common.Address]types.Transactions, error) {
-//	return pm.txpool.Pending()
-//}
 
 func (pm *ProtocolManager) GetAnchorTxs(address common.Address) (map[common.Address]types.Transactions, error) {
 	return pm.txpool.GetAnchorTxs(address)

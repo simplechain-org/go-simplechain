@@ -282,7 +282,7 @@ func (store *RtxStore) addTxLocked(rtx *types.ReceptTransaction, local bool) err
 	checkAndCommit := func(rws *types.ReceptTransactionWithSignatures) error {
 		if rws != nil && len(rws.Data.V) >= requireSignatureCount {
 			//TODO signatures combine or multi-sign msg?
-			log.Debug("checkAndCommit", "ctxId", rws.ID().String())
+			log.Debug("taker checkAndCommit", "ctxId", rws.ID().String())
 			store.pending.RemoveByHash(id)
 			store.finishedCache.Add(id, struct{}{}) //finished需要用db存,db信息需和链上信息一一对应
 			if err := store.db.Put(rws.Key(), []byte{}); err != nil {

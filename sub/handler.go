@@ -805,10 +805,10 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 
 	default:
 		if pm.msgHandler != nil {
-			return pm.msgHandler.HandleMsg(msg, p)
-		} else {
-			return errResp(ErrInvalidMsgCode, "%v", msg.Code)
+			return pm.msgHandler.CrossChainMsg(msg, p)
 		}
+		return errResp(ErrInvalidMsgCode, "%v", msg.Code)
+
 	}
 	return nil
 }

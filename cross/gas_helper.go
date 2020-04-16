@@ -31,17 +31,17 @@ type CallArgs struct {
 }
 
 type GasHelper struct {
-	blockchain *core.BlockChain
+	blockChain *core.BlockChain
 	chain      simplechain
 }
 
-func NewGasHelper(blockchain *core.BlockChain, chain simplechain) *GasHelper {
-	return &GasHelper{blockchain: blockchain, chain: chain}
+func NewGasHelper(blockChain *core.BlockChain, chain simplechain) *GasHelper {
+	return &GasHelper{blockChain: blockChain, chain: chain}
 }
 
 // EstimateGas returns an estimate of the amount of gas needed to execute the
 // given transaction against the current pending block.
-func (this *GasHelper) EstimateGas(ctx context.Context, args CallArgs) (uint64, error) {
+func (this *GasHelper) estimateGas(ctx context.Context, args CallArgs) (uint64, error) {
 	// Binary search the gas requirement, as it may be higher than the amount used
 	var (
 		lo  uint64 = params.TxGas - 1
@@ -142,7 +142,7 @@ func (this *GasHelper) doCall(ctx context.Context, args CallArgs, blockNr rpc.Bl
 	return res, gas, failed, err
 }
 
-func (this *GasHelper) CheckExec(ctx context.Context, args CallArgs) (bool, error) {
+func (this *GasHelper) checkExec(ctx context.Context, args CallArgs) (bool, error) {
 	_, _, failed, err := this.doCall(ctx, args, rpc.LatestBlockNumber, vm.Config{}, 0)
 	if err != nil || failed {
 		return false, err
