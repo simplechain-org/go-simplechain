@@ -61,10 +61,8 @@ const (
 	ReceiptsMsg        = 0x10
 
 	//for eth64
-	CtxSignMsg          = 0x31
-	CtxSignsMsg         = 0x32
-	RtxSignMsg          = 0x33
-	CtxSignsInternalMsg = 0x34
+	CtxSignMsg = 0x31
+	RtxSignMsg = 0x33
 )
 
 type errCode int

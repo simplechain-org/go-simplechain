@@ -27,7 +27,6 @@ import (
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/forkid"
 	"github.com/simplechain-org/go-simplechain/core/types"
-	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/p2p"
 	"github.com/simplechain-org/go-simplechain/rlp"
 )
@@ -153,11 +152,6 @@ func (p *peer) broadcast() {
 
 		case <-p.term:
 			return
-		case ctxs := <-p.queuedCWss:
-			if err := p.SendCrossTransactionWithSignatures(ctxs); err != nil {
-				return
-			}
-			p.Log().Trace("Broadcast transactions", "count", len(ctxs))
 		case ctx := <-p.queuedCtxSign:
 			if err := p.SendCrossTransaction(ctx); err != nil {
 				p.Log().Trace("SendCrossTransaction", "err", err)
@@ -168,12 +162,6 @@ func (p *peer) broadcast() {
 				return
 			}
 			p.Log().Trace("Broadcast rtxSign", "hash", rtx.Hash())
-		case ctxs := <-p.internalCrossTransactionWithSignaturesCh:
-			if err := p.SendInternalCrossTransactionWithSignatures(ctxs); err != nil {
-				log.Info("SendInternalCrossTransactionWithSignatures", "err", err)
-				return
-			}
-			p.Log().Trace("Broadcast InternalCrossTransactionWithSignatures", "count", len(ctxs))
 		}
 	}
 }
@@ -736,11 +724,6 @@ func (ps *peerSet) PeersWithoutCWss(hash common.Hash) []*peer {
 	return list
 }
 
-func (p *peer) SendCrossTransactionWithSignatures(txs []*types.CrossTransactionWithSignatures) error {
-	log.Debug("SendCrossTransactionWithSignatures", "len", len(txs), "peer", p.id)
-	return p2p.Send(p.rw, CtxSignsMsg, txs)
-}
-
 func (p *peer) AsyncSendCrossTransactionWithSignatures(cwss []*types.CrossTransactionWithSignatures) {
 	select {
 	case p.queuedCWss <- cwss:
@@ -770,10 +753,10 @@ func (ps *peerSet) PeersWithoutInternalCrossTransactionWithSignatures(hash commo
 	return list
 }
 
-func (p *peer) SendInternalCrossTransactionWithSignatures(txs []*types.CrossTransactionWithSignatures) error {
-	//log.Info("SendLocalCrossTransactionWithSignatures", "len", len(txs), "peer", p.id)
-	return p2p.Send(p.rw, CtxSignsInternalMsg, txs)
-}
+//func (p *peer) SendInternalCrossTransactionWithSignatures(txs []*types.CrossTransactionWithSignatures) error {
+//	//log.Info("SendLocalCrossTransactionWithSignatures", "len", len(txs), "peer", p.id)
+//	return p2p.Send(p.rw, CtxSignsInternalMsg, txs)
+//}
 
 func (p *peer) AsyncSendInternalCrossTransactionWithSignatures(cwss []*types.CrossTransactionWithSignatures) {
 	select {

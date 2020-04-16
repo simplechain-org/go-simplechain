@@ -268,7 +268,7 @@ func (pm *ProtocolManager) ctxsyncLoop() {
 		// Send the pack in the background.
 		s.p.Log().Info("Sending batch of CrossTransactionWithSignatures", "count", len(pack.txs), "bytes", size)
 		sending = true
-		go func() { done <- pack.p.SendCrossTransactionWithSignatures(pack.txs) }()
+		//go func() { done <- pack.p.SendCrossTransactionWithSignatures(pack.txs) }()
 	}
 
 	// pick chooses the next pending sync.

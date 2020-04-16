@@ -792,10 +792,10 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 
 	default:
 		if pm.msgHandler != nil {
-			return pm.msgHandler.HandleMsg(msg, p)
-		} else {
-			return errResp(ErrInvalidMsgCode, "%v", msg.Code)
+			return pm.msgHandler.CrossChainMsg(msg, p)
 		}
+		return errResp(ErrInvalidMsgCode, "%v", msg.Code)
+
 	}
 	return nil
 }
@@ -930,25 +930,6 @@ func (pm *ProtocolManager) getConsensusAlgorithm() string {
 	return consensusAlgo
 }
 
-//广播多签完成的Ctx
-func (pm *ProtocolManager) BroadcastCWss(cwss []*types.CrossTransactionWithSignatures) {
-	var txset = make(map[*peer][]*types.CrossTransactionWithSignatures)
-
-	// Broadcast transactions to a batch of peers not knowing about it
-	for _, cws := range cwss {
-		peers := pm.peers.PeersWithoutCWss(cws.ID())
-		for _, peer := range peers {
-			txset[peer] = append(txset[peer], cws)
-		}
-		log.Trace("Broadcast transaction", "hash", cws.ID(), "recipients", len(peers))
-	}
-	// FIXME include this again: peers = peers[:int(math.Sqrt(float64(len(peers))))]
-	for peer, css := range txset {
-		peer.AsyncSendCrossTransactionWithSignatures(css)
-		log.Debug("BroadcastCWss", "peer", peer.id, "len", len(cwss))
-	}
-}
-
 //锚定节点广播签名Ctx
 func (pm *ProtocolManager) BroadcastCtx(ctxs []*types.CrossTransaction) {
 	for _, ctx := range ctxs {
@@ -981,23 +962,6 @@ func (pm *ProtocolManager) BroadcastRtx(rtxs []*types.ReceptTransaction) {
 	}
 }
 
-//inside the chain
-func (pm *ProtocolManager) BroadcastInternalCrossTransactionWithSignature(cwss []*types.CrossTransactionWithSignatures) {
-	var txset = make(map[*peer][]*types.CrossTransactionWithSignatures)
-
-	// Broadcast CrossTransaction to a batch of peers not knowing about it
-	for _, cws := range cwss {
-		peers := pm.peers.PeersWithoutInternalCrossTransactionWithSignatures(cws.ID())
-		for _, peer := range peers {
-			txset[peer] = append(txset[peer], cws)
-		}
-		log.Trace("Broadcast CrossTransaction", "hash", cws.ID(), "recipients", len(peers))
-	}
-	for peer, css := range txset {
-		peer.AsyncSendInternalCrossTransactionWithSignatures(css)
-		log.Trace("Broadcast internal CrossTransactionWithSignature", "peer", peer.id, "len", len(cwss))
-	}
-}
 func (pm *ProtocolManager) SetMsgHandler(msgHandler *cross.MsgHandler) {
 	pm.msgHandler = msgHandler
 }
@@ -1018,10 +982,6 @@ func (pm *ProtocolManager) NetworkId() uint64 {
 func (pm *ProtocolManager) GetNonce(address common.Address) uint64 {
 	return pm.txpool.GetCurrentNonce(address)
 }
-
-//func (pm *ProtocolManager) Pending() (map[common.Address]types.Transactions, error) {
-//	return pm.txpool.Pending()
-//}
 
 func (pm *ProtocolManager) GetAnchorTxs(address common.Address) (map[common.Address]types.Transactions, error) {
 	return pm.txpool.GetAnchorTxs(address)

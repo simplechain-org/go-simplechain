@@ -16,20 +16,16 @@ type Peer interface {
 	SendReceptTransaction(rtx *types.ReceptTransaction) error
 	AsyncSendReceptTransaction(rtx *types.ReceptTransaction)
 	MarkCrossTransactionWithSignatures(hash common.Hash)
-	SendCrossTransactionWithSignatures(txs []*types.CrossTransactionWithSignatures) error
 	MarkInternalCrossTransactionWithSignatures(hash common.Hash)
-	SendInternalCrossTransactionWithSignatures(txs []*types.CrossTransactionWithSignatures) error
 	AsyncSendInternalCrossTransactionWithSignatures(cwss []*types.CrossTransactionWithSignatures)
 }
 
 type ProtocolManager interface {
-	BroadcastInternalCrossTransactionWithSignature(cwss []*types.CrossTransactionWithSignatures)
 	BroadcastCtx(ctx []*types.CrossTransaction)
 	CanAcceptTxs() bool
 	BroadcastRtx(rtx []*types.ReceptTransaction)
 	NetworkId() uint64
 	GetNonce(address common.Address) uint64
-	BroadcastCWss(cwss []*types.CrossTransactionWithSignatures)
 	AddRemotes([]*types.Transaction)
 	SetMsgHandler(msgHandler *MsgHandler)
 	GetAnchorTxs(address common.Address) (map[common.Address]types.Transactions, error)
