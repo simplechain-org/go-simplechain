@@ -27,7 +27,6 @@ import (
 
 	"github.com/eapache/channels"
 	"github.com/simplechain-org/go-simplechain/common"
-	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"github.com/simplechain-org/go-simplechain/consensus"
 	"github.com/simplechain-org/go-simplechain/consensus/dpos"
 	"github.com/simplechain-org/go-simplechain/consensus/raft"
@@ -1102,9 +1101,7 @@ func (w *worker) seal(work *types.Block) {
 
 func (env *environment) storeCheck(tx *types.Transaction, address common.Address) bool {
 	if tx.To() != nil && (*tx.To() == address) {
-		startID, _ := hexutil.Decode("0xf56339a8")
-
-		if len(tx.Data()) >= 2*common.HashLength+4 && bytes.Equal(tx.Data()[:4], startID) {
+		if len(tx.Data()) >= 2*common.HashLength+4 && bytes.Equal(tx.Data()[:4], params.StartFn) {
 			networkId := common.BytesToHash(tx.Data()[4 : common.HashLength+4]).Big().Uint64()
 			if v, ok := env.status[networkId]; ok {
 				if v.Top {

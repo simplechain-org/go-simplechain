@@ -27,7 +27,6 @@ import (
 	"time"
 
 	"github.com/simplechain-org/go-simplechain/common"
-	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"github.com/simplechain-org/go-simplechain/common/prque"
 	"github.com/simplechain-org/go-simplechain/consensus"
 	"github.com/simplechain-org/go-simplechain/core/state"
@@ -135,11 +134,6 @@ type blockChain interface {
 
 	Engine() consensus.Engine
 }
-
-var (
-	finishID, _ = hexutil.Decode("0xaff64dae")
-	takerID, _  = hexutil.Decode("0x48741a9d")
-)
 
 // TxPoolConfig are the configuration parameters of the transaction pool.
 type TxPoolConfig struct {
@@ -1407,10 +1401,10 @@ func (pool *TxPool) demoteUnexecutables() {
 			hash := tx.Hash()
 			pool.all.Remove(hash)
 			if len(tx.Data()) > 68 && tx.To() != nil && (*tx.To() == pool.crossDemoAddress) {
-				if bytes.Equal(tx.Data()[:4], finishID) {
-					pool.removeTxByCtxId(common.BytesToHash(common.LeftPadBytes(tx.Data()[4:36], 32)), finishID, true)
-				} else if bytes.Equal(tx.Data()[:4], takerID) {
-					pool.removeTxByCtxId(common.BytesToHash(common.LeftPadBytes(tx.Data()[36:68], 32)), takerID, true)
+				if bytes.Equal(tx.Data()[:4], params.FinishFn) {
+					pool.removeTxByCtxId(common.BytesToHash(common.LeftPadBytes(tx.Data()[4:36], 32)), params.FinishFn, true)
+				} else if bytes.Equal(tx.Data()[:4], params.TakerFn) {
+					pool.removeTxByCtxId(common.BytesToHash(common.LeftPadBytes(tx.Data()[36:68], 32)), params.TakerFn, true)
 				}
 			}
 			log.Trace("Removed old pending transaction", "hash", hash)
@@ -1608,11 +1602,11 @@ func (t *txLookup) GetCtxId(CtxId common.Hash, method []byte) []common.Hash {
 
 	for k, v := range t.all {
 		if len(v.Data()) > 68 && v.To() != nil && (*v.To() == t.crossDemoAddress) {
-			if bytes.Equal(finishID, method) {
+			if bytes.Equal(params.FinishFn, method) {
 				if bytes.Equal(v.Data()[:4], method) && bytes.Equal(CtxId.Bytes(), common.LeftPadBytes(v.Data()[4:36], 32)) {
 					hashes = append(hashes, k)
 				}
-			} else if bytes.Equal(takerID, method) {
+			} else if bytes.Equal(params.TakerFn, method) {
 				if bytes.Equal(v.Data()[:4], method) && bytes.Equal(CtxId.Bytes(), common.LeftPadBytes(v.Data()[36:68], 32)) {
 					hashes = append(hashes, k)
 				}
@@ -1644,7 +1638,7 @@ func (pool *TxPool) GetAnchorTxs(anchor common.Address) (map[common.Address]type
 
 func (pool *TxPool) IsAnchor(tx *types.Transaction) bool {
 	if tx.To() != nil && *tx.To() == pool.crossDemoAddress {
-		if len(tx.Data()) > 160 && bytes.Equal(tx.Data()[:4], finishID) {
+		if len(tx.Data()) > 160 && bytes.Equal(tx.Data()[:4], params.FinishFn) {
 			//startTxHash := common.BytesToHash(tx.Data()[4+common.HashLength:4+common.HashLength*2])
 			remoteChainId := new(big.Int).SetBytes(tx.Data()[4+common.HashLength : 4+common.HashLength*2]).Uint64()
 			from, _ := types.Sender(pool.signer, tx)

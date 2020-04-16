@@ -52,11 +52,11 @@ type RtxStore struct {
 	chain       blockChain
 	chainConfig *params.ChainConfig
 
-	pending       *rwsSortedMap
-	queued        *rwsSortedMap
+	pending       *CtxSortedMap
+	queued        *CtxSortedMap
 	finishedCache *lru.Cache
 
-	anchors     map[uint64]*anchorAccountSet
+	anchors     map[uint64]*AnchorSet
 	signer      types.RtxSigner
 	resultFeed  event.Feed
 	resultScope event.SubscriptionScope
@@ -88,8 +88,8 @@ func NewRtxStore(config RtxStoreConfig, chainconfig *params.ChainConfig, chain b
 		config:        config,
 		chain:         chain,
 		chainConfig:   chainconfig,
-		pending:       newRwsSortedMap(),
-		queued:        newRwsSortedMap(),
+		pending:       NewCtxSortedMap(),
+		queued:        NewCtxSortedMap(),
 		signer:        signer,
 		stopCh:        make(chan struct{}),
 		finishedCache: finishedCache,
@@ -97,7 +97,7 @@ func NewRtxStore(config RtxStoreConfig, chainconfig *params.ChainConfig, chain b
 
 		all:              newRwsLookup(),
 		CrossDemoAddress: address,
-		anchors:          make(map[uint64]*anchorAccountSet),
+		anchors:          make(map[uint64]*AnchorSet),
 		signHash:         signHash,
 	}
 
@@ -105,7 +105,7 @@ func NewRtxStore(config RtxStoreConfig, chainconfig *params.ChainConfig, chain b
 	// If local transactions and journaling is enabled, load from disk
 	if config.Journal != "" {
 		store.journal = newRtxJournal(config.Journal)
-		if err := store.journal.load(store.AddLocals); err != nil {
+		if err := store.journal.load(store.AddWithSignatures); err != nil {
 			log.Warn("Failed to load transaction journal", "err", err)
 		}
 		if err := store.journal.rotate(store.all.GetAll()); err != nil {
@@ -146,7 +146,7 @@ func (store *RtxStore) AddLocal(rtx *types.ReceptTransaction) error {
 	return store.addTxLocked(rtx, true)
 }
 
-func (store *RtxStore) AddLocals(rwss ...*types.ReceptTransactionWithSignatures) []error {
+func (store *RtxStore) AddWithSignatures(rwss ...*types.ReceptTransactionWithSignatures) []error {
 	return store.addTxs(rwss, true)
 }
 
@@ -177,7 +177,7 @@ func (store *RtxStore) ReadFromLocals(ctxId common.Hash) *types.ReceptTransactio
 	return store.all.Get(ctxId)
 }
 
-func (store *RtxStore) ValidateRtx(rtx *types.ReceptTransaction) error {
+func (store *RtxStore) VerifyRtx(rtx *types.ReceptTransaction) error {
 	return store.validateRtx(rtx)
 }
 
@@ -245,7 +245,7 @@ func (store *RtxStore) addTxs(rwss []*types.ReceptTransactionWithSignatures, loc
 			store.all.Add(rws)
 			errs[i] = store.journalTx(rws)
 			store.task.Put(rws)
-			log.Debug("RtxStore addTxs", "ctxId", rws.ID().String())
+			log.Debug("RtxStore addTxs", "txId", rws.ID().String())
 		}
 	}
 	return errs
@@ -255,13 +255,9 @@ func (store *RtxStore) synced() []*types.ReceptTransaction {
 	pending := store.pending
 	txs := make([]*types.ReceptTransaction, len(pending.items))
 	for _, rws := range pending.items {
-		txs = append(txs, rws.Resolve()...)
+		txs = append(txs, rws.(*types.ReceptTransactionWithSignatures).Resolve()...)
 	}
 	return txs
-}
-
-func (store *RtxStore) txExpired(rtx *types.ReceptTransaction) bool {
-	return store.chain.CurrentBlock().NumberU64()-store.getNumber(rtx.Data.BlockHash) > expireNumber
 }
 
 func (store *RtxStore) journalTx(rws *types.ReceptTransactionWithSignatures) error {
@@ -277,12 +273,11 @@ func (store *RtxStore) journalTx(rws *types.ReceptTransactionWithSignatures) err
 
 func (store *RtxStore) addTxLocked(rtx *types.ReceptTransaction, local bool) error {
 	id := rtx.ID()
-	bh := rtx.Data.BlockHash
-
+	chainInvoke := NewChainInvoke(store.chain)
 	checkAndCommit := func(rws *types.ReceptTransactionWithSignatures) error {
 		if rws != nil && len(rws.Data.V) >= requireSignatureCount {
 			//TODO signatures combine or multi-sign msg?
-			log.Debug("checkAndCommit", "ctxId", rws.ID().String())
+			log.Debug("checkAndCommit", "txId", rws.ID().String())
 			store.pending.RemoveByHash(id)
 			store.finishedCache.Add(id, struct{}{}) //finished需要用db存,db信息需和链上信息一一对应
 			if err := store.db.Put(rws.Key(), []byte{}); err != nil {
@@ -295,7 +290,7 @@ func (store *RtxStore) addTxLocked(rtx *types.ReceptTransaction, local bool) err
 	}
 
 	// if this pending rtx exist, add signature to pending directly
-	if rws := store.pending.Get(id); rws != nil {
+	if rws, _ := store.pending.Get(id).(*types.ReceptTransactionWithSignatures); rws != nil {
 		if err := rws.AddSignatures(rtx); err != nil {
 			return err
 		}
@@ -306,25 +301,25 @@ func (store *RtxStore) addTxLocked(rtx *types.ReceptTransaction, local bool) err
 	if local {
 		pendingRws := types.NewReceptTransactionWithSignatures(rtx)
 		// move rws from queued to pending
-		if queuedRws := store.queued.Get(id); queuedRws != nil {
+		if queuedRws, _ := store.queued.Get(id).(*types.ReceptTransactionWithSignatures); queuedRws != nil {
 			if err := queuedRws.AddSignatures(rtx); err != nil {
 				return err
 			}
 			pendingRws = queuedRws
 		}
-		store.pending.Put(pendingRws, store.getNumber(bh))
+		store.pending.Put(pendingRws, chainInvoke.GetTransactionNumberOnChain(rtx))
 		store.queued.RemoveByHash(id)
 
 		return checkAndCommit(pendingRws)
 	}
 
 	// add new remote rtx, only add to pending pool
-	if rws := store.queued.Get(id); rws != nil {
+	if rws, _ := store.queued.Get(id).(*types.ReceptTransactionWithSignatures); rws != nil {
 		if err := rws.AddSignatures(rtx); err != nil {
 			return err
 		}
 	}
-	store.queued.Put(types.NewReceptTransactionWithSignatures(rtx), store.getNumber(bh))
+	store.queued.Put(types.NewReceptTransactionWithSignatures(rtx), chainInvoke.GetTransactionNumberOnChain(rtx))
 	return nil
 }
 
@@ -346,13 +341,13 @@ func (store *RtxStore) validateRtx(rtx *types.ReceptTransaction) error {
 	}
 
 	// discard if expired
-	if store.txExpired(rtx) {
+	if NewChainInvoke(store.chain).IsTransactionInExpiredBlock(rtx, expireNumber) {
 		return fmt.Errorf("rtx is already expired, id: %s", id.String())
 	}
 
-	v, ok := store.anchors[rtx.Data.DestinationId.Uint64()]
+	as, ok := store.anchors[rtx.Data.DestinationId.Uint64()]
 	if ok {
-		if !v.isAnchorTx(rtx) {
+		if !as.IsAnchorSignedRtx(rtx, store.signer) {
 			return fmt.Errorf("invalid signature of rtx:%s", id.String())
 		}
 	} else {
@@ -365,8 +360,8 @@ func (store *RtxStore) validateRtx(rtx *types.ReceptTransaction) error {
 		anchors, signedCount := QueryAnchor(store.chainConfig, store.chain, statedb, newHead, store.CrossDemoAddress, rtx.Data.DestinationId.Uint64())
 		store.config.Anchors = anchors
 		requireSignatureCount = signedCount
-		store.anchors[rtx.Data.DestinationId.Uint64()] = newAnchorAccountSet(store.config.Anchors, store.signer)
-		if !store.anchors[rtx.Data.DestinationId.Uint64()].isAnchorTx(rtx) {
+		store.anchors[rtx.Data.DestinationId.Uint64()] = NewAnchorSet(store.config.Anchors)
+		if !store.anchors[rtx.Data.DestinationId.Uint64()].IsAnchorSignedRtx(rtx, store.signer) {
 			return fmt.Errorf("invalid signature of ctx:%s", id.String())
 		}
 	}
@@ -374,17 +369,8 @@ func (store *RtxStore) validateRtx(rtx *types.ReceptTransaction) error {
 	return nil
 }
 
-func (store *RtxStore) getNumber(hash common.Hash) uint64 {
-	if num := store.chain.GetBlockNumber(hash); num != nil {
-		return *num
-	}
-
-	//TODO return current for invisible block?
-	return store.chain.CurrentBlock().NumberU64()
-}
-
 type byBlockNum struct {
-	ctxId    common.Hash
+	txId     common.Hash
 	blockNum uint64
 }
 
@@ -406,23 +392,24 @@ func (h *byBlockNumHeap) Pop() interface{} {
 	return x
 }
 
-type rwsSortedMap struct {
-	items map[common.Hash]*types.ReceptTransactionWithSignatures
+type CtxSortedMap struct {
+	//items map[common.Hash]*types.ReceptTransactionWithSignatures
+	items map[common.Hash]CrossTransactionInvoke
 	index *byBlockNumHeap
 }
 
-func newRwsSortedMap() *rwsSortedMap {
-	return &rwsSortedMap{
-		items: make(map[common.Hash]*types.ReceptTransactionWithSignatures),
+func NewCtxSortedMap() *CtxSortedMap {
+	return &CtxSortedMap{
+		items: make(map[common.Hash]CrossTransactionInvoke),
 		index: new(byBlockNumHeap),
 	}
 }
 
-func (m *rwsSortedMap) Get(ctxId common.Hash) *types.ReceptTransactionWithSignatures {
-	return m.items[ctxId]
+func (m *CtxSortedMap) Get(txId common.Hash) CrossTransactionInvoke {
+	return m.items[txId]
 }
 
-func (m *rwsSortedMap) Put(rws *types.ReceptTransactionWithSignatures, number uint64) {
+func (m *CtxSortedMap) Put(rws CrossTransactionInvoke, number uint64) {
 	id := rws.ID()
 	if m.items[id] != nil {
 		return
@@ -432,50 +419,22 @@ func (m *rwsSortedMap) Put(rws *types.ReceptTransactionWithSignatures, number ui
 	m.index.Push(byBlockNum{id, number})
 }
 
-func (m *rwsSortedMap) Len() int {
+func (m *CtxSortedMap) Len() int {
 	return len(m.items)
 }
 
-func (m *rwsSortedMap) RemoveByHash(hash common.Hash) {
+func (m *CtxSortedMap) RemoveByHash(hash common.Hash) {
 	delete(m.items, hash)
 }
 
-func (m *rwsSortedMap) RemoveUnderNum(num uint64) []common.Hash {
-	var deletedIds []common.Hash
+func (m *CtxSortedMap) RemoveUnderNum(num uint64) {
 	for i := 0; i < m.index.Len(); i++ {
 		if (*m.index)[i].blockNum <= num {
-			deleteId := (*m.index)[i].ctxId
+			deleteId := (*m.index)[i].txId
 			delete(m.items, deleteId)
-			deletedIds = append(deletedIds, deleteId)
 			heap.Remove(m.index, i)
 			continue
 		}
 		break
 	}
-	return deletedIds
-}
-
-type anchorAccountSet struct {
-	accounts map[common.Address]struct{}
-	signer   types.RtxSigner
-}
-
-func newAnchorAccountSet(anchors []common.Address, signer types.RtxSigner) *anchorAccountSet {
-	as := &anchorAccountSet{accounts: make(map[common.Address]struct{}, len(anchors)), signer: signer}
-	for _, a := range anchors {
-		as.accounts[a] = struct{}{}
-	}
-	return as
-}
-
-func (as *anchorAccountSet) isAnchor(addr common.Address) bool {
-	_, exist := as.accounts[addr]
-	return exist
-}
-
-func (as anchorAccountSet) isAnchorTx(tx *types.ReceptTransaction) bool {
-	if addr, err := as.signer.Sender(tx); err == nil {
-		return as.isAnchor(addr)
-	}
-	return false
 }

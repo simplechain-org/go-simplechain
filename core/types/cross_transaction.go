@@ -77,6 +77,10 @@ func (tx *CrossTransaction) ChainId() *big.Int {
 	return deriveChainId(tx.Data.V)
 }
 
+func (tx CrossTransaction) DestinationId() *big.Int {
+	return tx.Data.DestinationId
+}
+
 func (tx *CrossTransaction) Hash() (h common.Hash) {
 	if hash := tx.hash.Load(); hash != nil {
 		return hash.(common.Hash)
@@ -95,6 +99,10 @@ func (tx *CrossTransaction) Hash() (h common.Hash) {
 	hash.Sum(h[:0])
 	tx.hash.Store(h)
 	return h
+}
+
+func (tx *CrossTransaction) BlockHash() common.Hash {
+	return tx.Data.BlockHash
 }
 
 func (tx *CrossTransaction) SignHash() (h common.Hash) {
@@ -163,18 +171,20 @@ func (s *CTxByPrice) Pop() interface{} {
 	return x
 }
 
+type RtxStatus = uint64
+
 const (
 	// RtxStatusWaiting is the status code of a rtx transaction if waiting for orders.
-	RtxStatusWaiting = uint64(0)
+	RtxStatusWaiting = RtxStatus(0)
 	// RtxStatusImplementing is the status code of a rtx transaction if execution implementing.
-	RtxStatusImplementing = uint64(1)
+	RtxStatusImplementing = RtxStatus(1)
 	// RtxStatusSuccessful is the status code of a rtx transaction if execution succeeded.
-	RtxStatusSuccessful = uint64(2)
+	RtxStatusSuccessful = RtxStatus(2)
 )
 
 type CrossTransactionWithSignatures struct {
 	Data   ctxdatas
-	Status uint64 `json:"status" gencodec:"required"` // Status tx
+	Status RtxStatus `json:"status" gencodec:"required"` // Status tx
 
 	// caches
 	hash atomic.Value
@@ -230,6 +240,9 @@ func (cws *CrossTransactionWithSignatures) ChainId() *big.Int {
 	}
 	return nil
 }
+func (cws *CrossTransactionWithSignatures) DestinationId() *big.Int {
+	return cws.Data.DestinationId
+}
 
 func (cws *CrossTransactionWithSignatures) Hash() (h common.Hash) {
 	if hash := cws.hash.Load(); hash != nil {
@@ -249,6 +262,10 @@ func (cws *CrossTransactionWithSignatures) Hash() (h common.Hash) {
 	hash.Sum(h[:0])
 	cws.hash.Store(h)
 	return h
+}
+
+func (cws *CrossTransactionWithSignatures) BlockHash() common.Hash {
+	return cws.Data.BlockHash
 }
 
 func (cws *CrossTransactionWithSignatures) AddSignatures(ctx *CrossTransaction) error {

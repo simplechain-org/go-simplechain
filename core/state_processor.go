@@ -18,13 +18,7 @@ package core
 
 import (
 	"bytes"
-	"context"
-	"math/big"
-	"time"
-
 	"github.com/simplechain-org/go-simplechain/common"
-	"github.com/simplechain-org/go-simplechain/common/hexutil"
-	"github.com/simplechain-org/go-simplechain/common/math"
 	"github.com/simplechain-org/go-simplechain/consensus"
 	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"
@@ -32,6 +26,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/params"
+	"math/big"
 )
 
 // StateProcessor is a basic Processor, which takes care of transitioning
@@ -93,121 +88,39 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 		return nil, err
 	}
 
-	//log.Info("ApplyTransaction","address",address.String())
 	if len(tx.Data()) > 68 && tx.To() != nil && (*tx.To() == address) {
-		var data []byte
-		finishID, _ := hexutil.Decode("0xaff64dae")
-		takerID, _ := hexutil.Decode("0x48741a9d")
-		if bytes.Equal(tx.Data()[:4], finishID) {
-			getMakerTx, _ := hexutil.Decode("0x9624005b")
+		evmInvoke := NewEvmInvoke(bc, header, statedb, config, cfg)
+		if bytes.Equal(tx.Data()[:4], params.FinishFn) {
+			// call -> function getMakerTx(bytes32 txId, uint remoteChainId) public view returns(uint)
 			paddedCtxId := common.LeftPadBytes(tx.Data()[4+32*3:4+32*4], 32) //CtxId
-			data = append(data, getMakerTx...)
-			data = append(data, paddedCtxId...)
-			data = append(data, tx.Data()[4+32:4+32*2]...)
-
-			//构造消息
-			checkMsg := types.NewMessage(common.Address{}, tx.To(), 0, big.NewInt(0), math.MaxUint64/2, big.NewInt(params.GWei), data, false)
-			var cancel context.CancelFunc
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
-
-			// Make sure the context is cancelled when the call has completed
-			// this makes sure resources are cleaned up.
-			defer cancel()
-
-			// Get a new instance of the EVM.
-			// Create a new context to be used in the EVM environment
-			context1 := NewEVMContext(checkMsg, header, bc, nil)
-			// Create a new environment which holds all relevant information
-			// about the transaction and calling mechanisms.
-			testStateDb := statedb.Copy()
-			testStateDb.SetBalance(checkMsg.From(), math.MaxBig256)
-			vmenv1 := vm.NewEVM(context1, testStateDb, config, cfg)
-			// Wait for the context to be done and cancel the evm. Even if the
-			// EVM has finished, cancelling may be done (repeatedly)
-			go func() {
-				<-ctx.Done()
-				vmenv1.Cancel()
-			}()
-
-			// Setup the gas pool (also for unmetered requests)
-			// and apply the messages
-			testgp := new(GasPool).AddGas(math.MaxUint64)
-			res, _, _, err := ApplyMessage(vmenv1, checkMsg, testgp)
+			remoteChainId := tx.Data()[4+32 : 4+32*2]
+			res, err := evmInvoke.CallContract(common.Address{}, tx.To(), params.GetMakerTxFn, paddedCtxId, remoteChainId)
 			if err != nil {
-				log.Info("ApplyTransaction", "err", err)
+				log.Info("Apply makerFinish Transaction failed", "err", err)
 				return nil, err
 			}
-
-			//var buyer common.Address
-			//nonBuyer := common.Address{}
-			//copy(buyer[:], res[common.HashLength*2-common.AddressLength:common.HashLength*2])
-			//
-			//if buyer == nonBuyer {
-			//	log.Info("pay ok!","tx",tx.Hash().String())
-			//} else {
-			//	log.Info("already pay!","tx",tx.Hash().String())
-			//	return nil,0,ErrRepetitionCrossTransaction
-			//}
-			result := new(big.Int).SetBytes(res)
-			//log.Info("applyTx","data",hexutil.Encode(data))
-			if result.Cmp(big.NewInt(0)) == 0 {
+			if new(big.Int).SetBytes(res).Cmp(big.NewInt(0)) == 0 {
 				//log.Info("already finish!", "res", new(big.Int).SetBytes(res).Uint64(), "tx", tx.Hash().String())
 				return nil, ErrRepetitionCrossTransaction
 			} else { //TODO 交易失败一直finish ok
 				//log.Info("finish ok!", "res", new(big.Int).SetBytes(res).Uint64(), "tx", tx.Hash().String())
 			}
-		} else if bytes.Equal(tx.Data()[:4], takerID) {
-			getTakerTx, _ := hexutil.Decode("0x356139f2")
+
+		} else if bytes.Equal(tx.Data()[:4], params.TakerFn) {
+			log.Error("[debug] taker Tx", "id", tx.Hash().String())
+			// call -> function getTakerTx(bytes32 txId, uint remoteChainId) public view returns(uint)
 			paddedCtxId := common.LeftPadBytes(tx.Data()[4+32*4:4+32*5], 32) //CtxId
-			data = append(data, getTakerTx...)
-			data = append(data, paddedCtxId...)
-			data = append(data, tx.Data()[4+32:4+32*2]...)
-			//构造消息
-			//log.Info("ApplyTransaction","data",hexutil.Encode(data))
-			checkMsg := types.NewMessage(common.Address{}, tx.To(), 0, big.NewInt(0), math.MaxUint64/2, big.NewInt(params.GWei), data, false)
-			var cancel context.CancelFunc
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
-
-			// Make sure the context is cancelled when the call has completed
-			// this makes sure resources are cleaned up.
-			defer cancel()
-
-			// Get a new instance of the EVM.
-			// Create a new context to be used in the EVM environment
-			context1 := NewEVMContext(checkMsg, header, bc, nil)
-			// Create a new environment which holds all relevant information
-			// about the transaction and calling mechanisms.
-			testStateDb := statedb.Copy() //must be a copy,otherwise the message will change from's balance
-			testStateDb.SetBalance(checkMsg.From(), math.MaxBig256)
-			vmenv1 := vm.NewEVM(context1, testStateDb, config, cfg)
-			// Wait for the context to be done and cancel the evm. Even if the
-			// EVM has finished, cancelling may be done (repeatedly)
-			go func() {
-				<-ctx.Done()
-				vmenv1.Cancel()
-			}()
-
-			// Setup the gas pool (also for unmetered requests)
-			// and apply the messages
-			testgp := new(GasPool).AddGas(math.MaxUint64)
-			res, _, _, err := ApplyMessage(vmenv1, checkMsg, testgp)
+			remoteChainId := tx.Data()[4+32 : 4+32*2]
+			res, err := evmInvoke.CallContract(common.Address{}, tx.To(), params.GetTakerTxFn, paddedCtxId, remoteChainId)
 			if err != nil {
-				log.Info("ApplyTransaction", "err", err)
+				log.Info("Apply taker Transaction failed", "err", err)
 				return nil, err
 			}
-			//var buyer common.Address
-			//nonBuyer := common.Address{}
-			//copy(buyer[:], res[common.HashLength*2-common.AddressLength:common.HashLength*2])
-			//
-			//if buyer == nonBuyer {
-			//	log.Info("take ok!","tx",tx.Hash().String())
-			//} else {
-			//	log.Info("already take!","tx",tx.Hash().String())
-			//	return nil,0,ErrRepetitionCrossTransaction
-			//}
 			if new(big.Int).SetBytes(res).Cmp(big.NewInt(0)) == 0 {
+				log.Error("[debug] taker Tx check ok", "id", tx.Hash().String())
 				//log.Info("take ok!", "res", new(big.Int).SetBytes(res).Uint64(), "tx", tx.Hash().String())
 			} else {
+				log.Error("[debug] taker Tx ErrRepetitionCrossTransaction", "id", tx.Hash().String())
 				//log.Info("already take!", "res", new(big.Int).SetBytes(res).Uint64(), "tx", tx.Hash().String())
 				return nil, ErrRepetitionCrossTransaction
 			}

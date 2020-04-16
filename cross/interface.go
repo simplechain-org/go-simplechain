@@ -13,32 +13,39 @@ import (
 )
 
 type CtxStore interface {
-	// AddRemotes should add the given transactions to the pool.
-	AddRemote(*types.CrossTransaction) error
-	// AddRemotes should add the given transactions to the pool.
 	AddLocal(*types.CrossTransaction) error
-	AddCWss([]*types.CrossTransactionWithSignatures) []error
-	ValidateCtx(*types.CrossTransaction) error
-	RemoveRemotes([]*types.ReceptTransaction) error
-	StampStatus([]*types.RTxsInfo, uint64) error
+	AddRemote(*types.CrossTransaction) error
+	AddWithSignatures([]*types.CrossTransactionWithSignatures) []error
+
 	RemoveLocals([]*types.FinishInfo) error
-	RemoveFromLocalsByTransaction(common.Hash) error
-	SubscribeCWssResultEvent(chan<- core.NewCWsEvent) event.Subscription
-	ReadFromLocals(common.Hash) *types.CrossTransactionWithSignatures
+	RemoveRemotes([]*types.ReceptTransaction) error
+
+	VerifyCtx(*types.CrossTransaction) error
+	VerifyLocalCws(cws *types.CrossTransactionWithSignatures) ([]error, []int)
+	VerifyRemoteCws(cws *types.CrossTransactionWithSignatures) ([]error, []int)
+
+	//TODO-D
+	//ReadFromLocals(common.Hash) *types.CrossTransactionWithSignatures
+	//RemoveFromLocalsByTransaction(common.Hash) error
+
+	StampStatus([]*types.RTxsInfo, uint64) error
 	List(int, bool) []*types.CrossTransactionWithSignatures
-	VerifyLocalCwsSigner(cws *types.CrossTransactionWithSignatures) error
-	VerifyRemoteCwsSigner(cws *types.CrossTransactionWithSignatures) error
+
+	SubscribeCWssResultEvent(chan<- core.NewCWsEvent) event.Subscription
 }
 
 type rtxStore interface {
-	AddRemote(*types.ReceptTransaction) error
 	AddLocal(*types.ReceptTransaction) error
-	ValidateRtx(rtx *types.ReceptTransaction) error
-	SubscribeRWssResultEvent(chan<- core.NewRWsEvent) event.Subscription
-	SubscribeNewRWssEvent(chan<- core.NewRWssEvent) event.Subscription
-	AddLocals(...*types.ReceptTransactionWithSignatures) []error
+	AddRemote(*types.ReceptTransaction) error
+	AddWithSignatures(...*types.ReceptTransactionWithSignatures) []error
+
 	RemoveLocals(finishes []*types.FinishInfo) error
 	ReadFromLocals(ctxId common.Hash) *types.ReceptTransactionWithSignatures
+
+	VerifyRtx(rtx *types.ReceptTransaction) error
+
+	SubscribeRWssResultEvent(chan<- core.NewRWsEvent) event.Subscription
+	SubscribeNewRWssEvent(chan<- core.NewRWssEvent) event.Subscription
 }
 
 type simplechain interface {

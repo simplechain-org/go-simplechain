@@ -147,6 +147,7 @@ func (this *MsgHandler) loop() {
 	for {
 		select {
 		case ev := <-this.makerStartEventCh:
+			log.Error("[debug] makerStartEventCh", "txs", len(ev.Txs))
 			//get cross transaction from the log
 			if !this.pm.CanAcceptTxs() {
 				break
@@ -262,7 +263,7 @@ func (this *MsgHandler) HandleMsg(msg p2p.Msg, p Peer) error {
 		if err := msg.Decode(&ctx); err != nil {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
-		if err := this.ctxStore.ValidateCtx(ctx); err == nil {
+		if err := this.ctxStore.VerifyCtx(ctx); err == nil {
 			p.MarkCrossTransaction(ctx.SignHash())
 			this.pm.BroadcastCtx([]*types.CrossTransaction{ctx})
 			if err := this.ctxStore.AddRemote(ctx); err != nil {
@@ -270,6 +271,7 @@ func (this *MsgHandler) HandleMsg(msg p2p.Msg, p Peer) error {
 			}
 		}
 	case msg.Code == CtxSignsMsg:
+		log.Error("[debug] handle CtxSignsMsg @@@@")
 		if !this.pm.CanAcceptTxs() {
 			break
 		}
@@ -280,13 +282,16 @@ func (this *MsgHandler) HandleMsg(msg p2p.Msg, p Peer) error {
 		}
 
 		for _, cws := range cwss {
-			if this.ctxStore.VerifyRemoteCwsSigner(cws) == nil {
-				p.MarkCrossTransactionWithSignatures(cws.ID())
+			errs, errIdx := this.ctxStore.VerifyRemoteCws(cws)
+			if errs == nil {
+				p.MarkInternalCrossTransactionWithSignatures(cws.ID())
 				verifyCwss = append(verifyCwss, cws)
+			} else {
+				log.Warn("verify remote cws failed", "index", errIdx, "errors", errs)
 			}
 		}
 
-		this.ctxStore.AddCWss(verifyCwss)
+		this.ctxStore.AddWithSignatures(verifyCwss)
 		this.pm.BroadcastCWss(verifyCwss)
 
 	case msg.Code == RtxSignMsg:
@@ -297,7 +302,7 @@ func (this *MsgHandler) HandleMsg(msg p2p.Msg, p Peer) error {
 		if err := msg.Decode(&rtx); err != nil {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
-		if err := this.rtxStore.ValidateRtx(rtx); err == nil {
+		if err := this.rtxStore.VerifyRtx(rtx); err == nil {
 			p.MarkReceptTransaction(rtx.SignHash())
 			this.pm.BroadcastRtx([]*types.ReceptTransaction{rtx})
 			if err := this.rtxStore.AddRemote(rtx); err != nil {
@@ -319,12 +324,15 @@ func (this *MsgHandler) HandleMsg(msg p2p.Msg, p Peer) error {
 		}
 		//Receive and broadcast
 		for _, cws := range cwss {
-			if this.ctxStore.VerifyLocalCwsSigner(cws) == nil {
+			errs, errIdx := this.ctxStore.VerifyLocalCws(cws)
+			if errs == nil {
 				p.MarkInternalCrossTransactionWithSignatures(cws.ID())
 				verifyCwss = append(verifyCwss, cws)
+			} else {
+				log.Warn("verify local cws failed", "index", errIdx)
 			}
 		}
-		this.ctxStore.AddCWss(verifyCwss)
+		this.ctxStore.AddWithSignatures(verifyCwss)
 		this.pm.BroadcastInternalCrossTransactionWithSignature(verifyCwss)
 
 	default:
@@ -339,7 +347,7 @@ func (this *MsgHandler) ReadCrossMessage() {
 		case v := <-this.crossMsgReader:
 			cws, ok := v.(*types.CrossTransactionWithSignatures)
 			if ok && cws.Data.DestinationId.Uint64() == this.pm.NetworkId() {
-				this.ctxStore.AddCWss([]*types.CrossTransactionWithSignatures{cws})
+				this.ctxStore.AddWithSignatures([]*types.CrossTransactionWithSignatures{cws})
 				this.pm.BroadcastCWss([]*types.CrossTransactionWithSignatures{cws})
 				break
 			}
@@ -347,11 +355,10 @@ func (this *MsgHandler) ReadCrossMessage() {
 			rws, ok := v.(*types.ReceptTransactionWithSignatures)
 			if ok && rws.Data.DestinationId.Uint64() == this.pm.NetworkId() {
 				if v := this.rtxStore.ReadFromLocals(rws.Data.CTxId); v == nil {
-					errs := this.rtxStore.AddLocals(rws)
+					errs := this.rtxStore.AddWithSignatures(rws)
 					for _, err := range errs {
 						if err != nil {
-							log.Error("MsgHandler signed rtx save error")
-							break
+							log.Error("MsgHandler signed rtx save failed", "error", err.Error())
 						}
 					}
 				}

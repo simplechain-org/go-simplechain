@@ -82,7 +82,7 @@ func (tx *ReceptTransaction) ID() common.Hash {
 }
 
 func (tx *ReceptTransaction) WithSignature(signer RtxSigner, sig []byte) (*ReceptTransaction, error) {
-	r, s, v, err := signer.SignatureValues(tx, sig)
+	r, s, v, err := signer.SignatureValues(sig)
 	if err != nil {
 		return nil, err
 	}
@@ -93,6 +93,10 @@ func (tx *ReceptTransaction) WithSignature(signer RtxSigner, sig []byte) (*Recep
 
 func (tx *ReceptTransaction) ChainId() *big.Int {
 	return deriveChainId(tx.Data.V)
+}
+
+func (tx ReceptTransaction) DestinationId() *big.Int {
+	return tx.Data.DestinationId
 }
 
 func (tx *ReceptTransaction) Hash() (h common.Hash) {
@@ -114,6 +118,10 @@ func (tx *ReceptTransaction) Hash() (h common.Hash) {
 	hash.Sum(h[:0])
 	tx.hash.Store(h)
 	return h
+}
+
+func (tx *ReceptTransaction) BlockHash() common.Hash {
+	return tx.Data.BlockHash
 }
 
 func (tx *ReceptTransaction) SignHash() (h common.Hash) {
@@ -197,6 +205,10 @@ func (rws *ReceptTransactionWithSignatures) ChainId() *big.Int {
 	return nil
 }
 
+func (rws ReceptTransactionWithSignatures) DestinationId() *big.Int {
+	return rws.Data.DestinationId
+}
+
 func (rws *ReceptTransactionWithSignatures) Hash() (h common.Hash) {
 	if hash := rws.hash.Load(); hash != nil {
 		return hash.(common.Hash)
@@ -215,6 +227,10 @@ func (rws *ReceptTransactionWithSignatures) Hash() (h common.Hash) {
 	hash.Sum(h[:0])
 	rws.hash.Store(h)
 	return h
+}
+
+func (rws ReceptTransactionWithSignatures) BlockHash() common.Hash {
+	return rws.Data.BlockHash
 }
 
 func (rws *ReceptTransactionWithSignatures) AddSignatures(rtx *ReceptTransaction) error {

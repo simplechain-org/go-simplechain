@@ -64,11 +64,11 @@ type RtxSigner interface {
 	Sender(tx *ReceptTransaction) (common.Address, error)
 	// SignatureValues returns the raw R, S, V values corresponding to the
 	// given signature.
-	SignatureValues(tx *ReceptTransaction, sig []byte) (r, s, v *big.Int, err error)
+	SignatureValues(sig []byte) (r, s, v *big.Int, err error)
 	// Hash returns the hash to be signed.
-	Hash(tx *ReceptTransaction) common.Hash
 	// Equal returns true if the given signer is the same as the receiver.
 	Equal(RtxSigner) bool
+	Hash(tx *ReceptTransaction) common.Hash
 }
 
 // EIP155Transaction implements Signer using the EIP155 rules.
@@ -102,7 +102,7 @@ func (s EIP155RtxSigner) Sender(tx *ReceptTransaction) (common.Address, error) {
 
 // WithSignature returns a new transaction with the given signature. This signature
 // needs to be in the [R || S || V] format where V is 0 or 1.
-func (s EIP155RtxSigner) SignatureValues(tx *ReceptTransaction, sig []byte) (R, S, V *big.Int, err error) {
+func (s EIP155RtxSigner) SignatureValues(sig []byte) (R, S, V *big.Int, err error) {
 	if len(sig) != 65 {
 		panic(fmt.Sprintf("wrong size for signature: got %d, want 65", len(sig)))
 	}

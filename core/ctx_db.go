@@ -49,7 +49,10 @@ func (this *CtxDb) Read(ctxId common.Hash) (*types.CrossTransactionWithSignature
 	return maker, nil
 }
 
-func (this *CtxDb) ListAll(add func([]*types.CrossTransactionWithSignatures)) error {
+func (this *CtxDb) ListAll(add func(
+	cwsList []*types.CrossTransactionWithSignatures,
+	validator func(*types.CrossTransactionWithSignatures) error,
+	persist bool) []error) error {
 	var (
 		failure error
 		total   int
@@ -64,13 +67,13 @@ func (this *CtxDb) ListAll(add func([]*types.CrossTransactionWithSignatures)) er
 		}
 		total++
 		if result = append(result, state); len(result) > 1024 {
-			add(result)
+			add(result, nil, true)
 			result = result[:0]
 		}
 	}
 
 	if len(result) > 0 {
-		add(result)
+		add(result, nil, false)
 	}
 
 	log.Info("Loaded local signed cross transaction", "transactions", total)
