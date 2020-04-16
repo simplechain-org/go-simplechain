@@ -3,13 +3,13 @@ package core
 import (
 	"errors"
 	"fmt"
-	"github.com/simplechain-org/go-simplechain/core/vm"
 	"math/big"
 	"sync"
 	"time"
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/types"
+	"github.com/simplechain-org/go-simplechain/core/vm"
 	"github.com/simplechain-org/go-simplechain/ethdb"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/log"
@@ -189,7 +189,6 @@ func (store *CtxStore) storeCtx(cws *types.CrossTransactionWithSignatures) error
 }
 
 func (store *CtxStore) AddLocal(ctx *types.CrossTransaction) error {
-	log.Error("[debug] ctxStore.addLocal", "ctx", ctx.Hash().String())
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	ok, err := store.db.Has(ctx.Key())
@@ -245,7 +244,6 @@ func (store *CtxStore) addTxLocked(ctx *types.CrossTransaction, local bool) erro
 
 	checkAndCommit := func(id common.Hash) error {
 		if cws, _ := store.pending.Get(id).(*types.CrossTransactionWithSignatures); cws != nil && len(cws.Data.V) >= requireSignatureCount {
-			log.Error("[debug] checkAndCommit", "txId", id.String())
 			go store.resultFeed.Send(NewCWsEvent{cws})
 
 			keyId := cws.Data.DestinationId.Uint64()
@@ -461,7 +459,7 @@ func (store *CtxStore) verifyCwsInvoking(cws *types.CrossTransactionWithSignatur
 		}
 
 	} else if store.config.ChainId.Cmp(cws.Data.DestinationId) == 0 {
-		res, err = evmInvoke.CallContract(common.Address{}, &store.CrossDemoAddress,  params.GetTakerTxFn, paddedCtxId, common.LeftPadBytes(store.config.ChainId.Bytes(), 32))
+		res, err = evmInvoke.CallContract(common.Address{}, &store.CrossDemoAddress, params.GetTakerTxFn, paddedCtxId, common.LeftPadBytes(store.config.ChainId.Bytes(), 32))
 		if err != nil {
 			log.Info("apply getTakerTx transaction failed", "err", err)
 			return err

@@ -18,6 +18,8 @@ package core
 
 import (
 	"bytes"
+	"math/big"
+
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/consensus"
 	"github.com/simplechain-org/go-simplechain/core/state"
@@ -26,7 +28,6 @@ import (
 	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/params"
-	"math/big"
 )
 
 // StateProcessor is a basic Processor, which takes care of transitioning
@@ -107,7 +108,6 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 			}
 
 		} else if bytes.Equal(tx.Data()[:4], params.TakerFn) {
-			log.Error("[debug] taker Tx", "id", tx.Hash().String())
 			// call -> function getTakerTx(bytes32 txId, uint remoteChainId) public view returns(uint)
 			paddedCtxId := common.LeftPadBytes(tx.Data()[4+32*4:4+32*5], 32) //CtxId
 			remoteChainId := tx.Data()[4+32 : 4+32*2]
@@ -117,10 +117,8 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 				return nil, err
 			}
 			if new(big.Int).SetBytes(res).Cmp(big.NewInt(0)) == 0 {
-				log.Error("[debug] taker Tx check ok", "id", tx.Hash().String())
 				//log.Info("take ok!", "res", new(big.Int).SetBytes(res).Uint64(), "tx", tx.Hash().String())
 			} else {
-				log.Error("[debug] taker Tx ErrRepetitionCrossTransaction", "id", tx.Hash().String())
 				//log.Info("already take!", "res", new(big.Int).SetBytes(res).Uint64(), "tx", tx.Hash().String())
 				return nil, ErrRepetitionCrossTransaction
 			}

@@ -160,13 +160,12 @@ func (this *MsgHandler) loop() {
 						log.Warn("Add local rtx", "err", err)
 					}
 				}
-				this.pm.BroadcastCtx(ev.Txs) //CtxSignMsg
+				this.pm.BroadcastCtx(ev.Txs)
 			}
 		case <-this.makerStartEventSub.Err():
 			return
 
 		case ev := <-this.makerSignedCh:
-			log.Warn("makerSignedCh", "finish maker", ev.Txs.ID().String())
 			if this.role.IsAnchor() {
 				this.writeCrossMessage(ev.Txs)
 			}
@@ -371,7 +370,7 @@ func (this *MsgHandler) getTxForLockOut(rwss []*types.ReceptTransactionWithSigna
 		}
 	}
 
-	log.Info("GetTxForLockOut", "errorRws", len(errorRws), "exec", exec, "errtx1", errTx1, "errtx2", errTx2,
+	log.Info("GetTxForLockOut", "errorRws", len(errorRws), "exec", exec, "errTx1", errTx1, "errTx2", errTx2,
 		"tx", len(txs), "sent", send, "role", this.role.String())
 	return txs, nil
 }
