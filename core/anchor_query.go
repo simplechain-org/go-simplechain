@@ -60,7 +60,7 @@ func QueryAnchor(config *params.ChainConfig, bc ChainContext, statedb *state.Sta
 
 	var anchors []common.Address
 	if len(res) > 64 {
-		//log.Info("anchor query", "result", hexutil.Encode(res), "gas", gas, "suc", suc)
+		log.Info("anchor query", "result", hexutil.Encode(res))
 		signConfirmCount := new(big.Int).SetBytes(res[common.HashLength : common.HashLength*2]).Uint64()
 		anchorLen := new(big.Int).SetBytes(res[common.HashLength*2 : common.HashLength*3]).Uint64()
 

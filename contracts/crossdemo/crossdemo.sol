@@ -118,6 +118,10 @@ contract crossDemo{
             if (crossChains[remoteChainId].anchors[_anchors[i]].remoteChainId != 0) {
                 revert();
             }
+            // 添加的不能是已经删除的
+            if (crossChains[remoteChainId].delAnchors[_anchors[i]].remoteChainId != 0){
+                revert();
+            }
 
             crossChains[remoteChainId].anchorAddress.push(_anchors[i]);
             crossChains[remoteChainId].anchors[_anchors[i]] = Anchor({remoteChainId:remoteChainId, position:i+bitLen});
@@ -134,7 +138,8 @@ contract crossDemo{
         require(bitLen - crossChains[remoteChainId].signConfirmCount >= _anchors.length,"_anchors too many");
         uint64 temp = 0;
         crossChains[remoteChainId].anchorsPositionBit = (temp - 1) >> (64 - bitLen + _anchors.length);
-
+        //测试用重复删除
+        crossChains[remoteChainId].delsPositionBit = 0;
         for (uint8 i=0; i<_anchors.length; i++) {
             if (crossChains[remoteChainId].anchors[_anchors[i]].remoteChainId == 0) {
                 revert();
@@ -159,8 +164,9 @@ contract crossDemo{
     function deleteAnchor(uint remoteChainId,address del) private {
         uint8 bitLen = uint8(bitCount(crossChains[remoteChainId].delsPositionBit));
         uint64 temp = 0;
-        crossChains[remoteChainId].delsPositionBit = (temp - 1) >> (64 - bitLen + 1);
+        crossChains[remoteChainId].delsPositionBit = (temp - 1) >> (64 - bitLen - 1);
         delete crossChains[remoteChainId].anchors[del];
+        // 不能重复删除
         if (crossChains[remoteChainId].delAnchors[del].remoteChainId != 0){
             revert();
         }
@@ -188,7 +194,7 @@ contract crossDemo{
 
     //增加跨链交易
     function makerStart(uint remoteChainId, uint destValue, bytes memory data) public payable {
-        require(msg.value > 0,"value too low");
+        require(msg.value > crossChains[remoteChainId].reward,"value too low");
         require(crossChains[remoteChainId].remoteChainId > 0,"chainId not exist"); //是否支持的跨链
         bytes32 txId = keccak256(abi.encodePacked(msg.sender, list(), remoteChainId));
         assert(crossChains[remoteChainId].makerTxs[txId].value == 0);
@@ -206,8 +212,8 @@ contract crossDemo{
     //锚定节点执行
     function makerFinish(Recept memory rtx,uint remoteChainId) public onlyAnchor(remoteChainId) payable {
         require(rtx.to != address(0x0),"to is zero");
-        uint256 value = crossChains[remoteChainId].makerTxs[rtx.txId].value;
-        require(value > crossChains[remoteChainId].reward,"not enough coin");
+        //uint256 value = crossChains[remoteChainId].makerTxs[rtx.txId].value;
+        require(crossChains[remoteChainId].makerTxs[rtx.txId].value > crossChains[remoteChainId].reward,"not enough coin");
         require(crossChains[remoteChainId].makerTxs[rtx.txId].signatures[msg.sender] != 1);
         require(crossChains[remoteChainId].makerTxs[rtx.txId].to == address(0x0) || crossChains[remoteChainId].makerTxs[rtx.txId].to == rtx.to,"to is error");
         crossChains[remoteChainId].makerTxs[rtx.txId].signatures[msg.sender] = 1;
@@ -215,7 +221,7 @@ contract crossDemo{
         crossChains[remoteChainId].makerTxs[rtx.txId].to = rtx.to;
         if(crossChains[remoteChainId].makerTxs[rtx.txId].signatureCount >= crossChains[remoteChainId].signConfirmCount){
             delete crossChains[remoteChainId].makerTxs[rtx.txId];
-            rtx.to.transfer(value - crossChains[remoteChainId].reward);
+            rtx.to.transfer(crossChains[remoteChainId].makerTxs[rtx.txId].value - crossChains[remoteChainId].reward);
             uint total = crossChains[remoteChainId].totalReward + crossChains[remoteChainId].reward;
             assert(total >= crossChains[remoteChainId].totalReward);
             crossChains[remoteChainId].totalReward = total;
@@ -250,7 +256,7 @@ contract crossDemo{
                 ret = ret | (base << crossChains[remoteChainId].anchors[temp].position);
             }
             if (crossChains[remoteChainId].delAnchors[temp].remoteChainId == remoteChainId){
-                delRet = delRet | (delBase << crossChains[remoteChainId].anchors[temp].position);
+                delRet = delRet | (delBase << crossChains[remoteChainId].delAnchors[temp].position);
             }
         }
         return uint8(bitCount(ret)+bitCount(delRet));

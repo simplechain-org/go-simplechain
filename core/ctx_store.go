@@ -142,6 +142,9 @@ func (store *CtxStore) loop() {
 	journal := time.NewTicker(store.config.Rejournal)
 	defer journal.Stop()
 
+	update := time.NewTicker(time.Minute*5)
+	defer update.Stop()
+
 	//TODO signal case
 	for {
 		select {
@@ -789,6 +792,8 @@ type Statistics struct {
 }
 
 func (store *CtxStore) VerifyLocalCwsSigner(cws *types.CrossTransactionWithSignatures) error {
+	store.mu.Lock()
+	defer store.mu.Unlock()
 	for _, v := range cws.Resolution() {
 		if err := store.validateLocalCtx(v); err != nil {
 			return err
@@ -798,6 +803,8 @@ func (store *CtxStore) VerifyLocalCwsSigner(cws *types.CrossTransactionWithSigna
 }
 
 func (store *CtxStore) VerifyRemoteCwsSigner(cws *types.CrossTransactionWithSignatures) error {
+	store.mu.Lock()
+	defer store.mu.Unlock()
 	for _, v := range cws.Resolution() {
 		if err := store.validateRemoteCtx(v); err != nil {
 			return err
