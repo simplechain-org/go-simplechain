@@ -18,6 +18,8 @@ contract crossDemo{
         mapping(bytes32=>uint256) takerTxs; //跨链交易列表 吃单 hash => Transaction[]
         mapping(address=>Anchor) delAnchors; //删除锚定矿工列表 address => Anchor
         uint64 delsPositionBit;
+        address[] delsAddress;
+        uint8 delId;
         uint reward;
         uint totalReward;
     }
@@ -78,8 +80,10 @@ contract crossDemo{
     //登记链信息 管理员操作
     function chainRegister(uint remoteChainId, uint8 signConfirmCount, address[] memory _anchors) public onlyOwner returns(bool) {
         require (crossChains[remoteChainId].remoteChainId == 0,"remoteChainId already exist");
+        require (_anchors.length <= 64,"bigger then 64");
         uint64 temp = 0;
         address[] memory newAnchors;
+        address[] memory delAnchors;
 
         //初始化信息
         crossChains[remoteChainId] = Chain({
@@ -89,7 +93,9 @@ contract crossDemo{
             anchorAddress:newAnchors,
             reward:0,
             totalReward:0,
-            delsPositionBit: (temp - 1) >> 64
+            delsPositionBit: (temp - 1) >> 64,
+            delsAddress:delAnchors,
+            delId:0
             });
 
         //加入锚定矿工
@@ -105,14 +111,14 @@ contract crossDemo{
     }
 
     //增加锚定矿工，管理员操作
-    // position [0, 255]
+    // position [0, 63]
     function addAnchors(uint remoteChainId, address[] memory _anchors) public onlyOwner {
         require (crossChains[remoteChainId].remoteChainId > 0,"remoteChainId not exist");
-        require (_anchors.length > 0,"need _anchors");
+        require (_anchors.length > 0 && _anchors.length < 64,"need _anchors");
+        //uint8 bitLen = uint8(bitCount(crossChains[remoteChainId].anchorsPositionBit));
+        require ((crossChains[remoteChainId].anchorAddress.length + _anchors.length) <= 64,"bigger then 64");
         uint64 temp = 0;
-        uint8 bitLen = uint8(bitCount(crossChains[remoteChainId].anchorsPositionBit));
-        crossChains[remoteChainId].anchorsPositionBit = (temp - 1) >> (64 - bitLen - _anchors.length);
-
+        crossChains[remoteChainId].anchorsPositionBit = (temp - 1) >> (64 - crossChains[remoteChainId].anchorAddress.length - _anchors.length);
         //加入锚定矿工
         for (uint8 i=0; i<_anchors.length; i++) {
             if (crossChains[remoteChainId].anchors[_anchors[i]].remoteChainId != 0) {
@@ -123,8 +129,8 @@ contract crossDemo{
                 revert();
             }
 
+            crossChains[remoteChainId].anchors[_anchors[i]] = Anchor({remoteChainId:remoteChainId, position:uint8(crossChains[remoteChainId].anchorAddress.length)});
             crossChains[remoteChainId].anchorAddress.push(_anchors[i]);
-            crossChains[remoteChainId].anchors[_anchors[i]] = Anchor({remoteChainId:remoteChainId, position:i+bitLen});
         }
 
         emit AddAnchors(remoteChainId);
@@ -134,12 +140,12 @@ contract crossDemo{
     function removeAnchors(uint remoteChainId, address[] memory _anchors) public onlyOwner {
         require (crossChains[remoteChainId].remoteChainId > 0,"remoteChainId not exist");
         require (_anchors.length > 0,"need _anchors");
-        uint8 bitLen = uint8(bitCount(crossChains[remoteChainId].anchorsPositionBit));
-        require(bitLen - crossChains[remoteChainId].signConfirmCount >= _anchors.length,"_anchors too many");
+        //uint8 bitLen = uint8(bitCount(crossChains[remoteChainId].anchorsPositionBit));
+        require((crossChains[remoteChainId].anchorAddress.length - crossChains[remoteChainId].signConfirmCount) >= _anchors.length,"_anchors too many");
         uint64 temp = 0;
-        crossChains[remoteChainId].anchorsPositionBit = (temp - 1) >> (64 - bitLen + _anchors.length);
+        crossChains[remoteChainId].anchorsPositionBit = (temp - 1) >> (64 - crossChains[remoteChainId].anchorAddress.length + _anchors.length);
         //测试用重复删除
-        crossChains[remoteChainId].delsPositionBit = 0;
+        //crossChains[remoteChainId].delsPositionBit = 0;
         for (uint8 i=0; i<_anchors.length; i++) {
             if (crossChains[remoteChainId].anchors[_anchors[i]].remoteChainId == 0) {
                 revert();
@@ -162,15 +168,27 @@ contract crossDemo{
     }
 
     function deleteAnchor(uint remoteChainId,address del) private {
-        uint8 bitLen = uint8(bitCount(crossChains[remoteChainId].delsPositionBit));
-        uint64 temp = 0;
-        crossChains[remoteChainId].delsPositionBit = (temp - 1) >> (64 - bitLen - 1);
+        //uint8 bitLen = uint8(bitCount(crossChains[remoteChainId].delsPositionBit));
         delete crossChains[remoteChainId].anchors[del];
         // 不能重复删除
         if (crossChains[remoteChainId].delAnchors[del].remoteChainId != 0){
             revert();
         }
-        crossChains[remoteChainId].delAnchors[del] = Anchor({remoteChainId:remoteChainId, position:bitLen});
+        if(crossChains[remoteChainId].delsAddress.length < 64){
+            uint64 temp = 0;
+            crossChains[remoteChainId].delsPositionBit = (temp - 1) >> (64 - crossChains[remoteChainId].delsAddress.length - 1);
+            crossChains[remoteChainId].delAnchors[del] = Anchor({remoteChainId:remoteChainId, position:uint8(crossChains[remoteChainId].delsAddress.length)});
+            crossChains[remoteChainId].delsAddress.push(del);
+
+        }else{ //bitLen == 64 （处理环）
+            delete crossChains[remoteChainId].delAnchors[crossChains[remoteChainId].delsAddress[crossChains[remoteChainId].delId]];
+            crossChains[remoteChainId].delsAddress[crossChains[remoteChainId].delId] = del;
+            crossChains[remoteChainId].delAnchors[del] = Anchor({remoteChainId:remoteChainId, position:crossChains[remoteChainId].delId});
+            crossChains[remoteChainId].delId ++;
+            if(crossChains[remoteChainId].delId == 64){
+                crossChains[remoteChainId].delId = 0;
+            }
+        }
     }
 
     function setSignConfirmCount(uint remoteChainId,uint8 count) public onlyOwner {
