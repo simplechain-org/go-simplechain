@@ -216,7 +216,10 @@ contract crossDemo{
         require(crossChains[remoteChainId].remoteChainId > 0,"chainId not exist"); //是否支持的跨链
         bytes32 txId = keccak256(abi.encodePacked(msg.sender, list(), remoteChainId));
         assert(crossChains[remoteChainId].makerTxs[txId].value == 0);
-        crossChains[remoteChainId].makerTxs[txId] = MakerInfo({value:msg.value,signatureCount:0,to:address(0x0)});
+        crossChains[remoteChainId].makerTxs[txId] = MakerInfo({value:(msg.value - crossChains[remoteChainId].reward),signatureCount:0,to:address(0x0)});
+        uint total = crossChains[remoteChainId].totalReward + crossChains[remoteChainId].reward;
+        assert(total >= crossChains[remoteChainId].totalReward);
+        crossChains[remoteChainId].totalReward = total;
         emit MakerTx(txId, msg.sender, remoteChainId, msg.value, destValue, data);
     }
 
@@ -238,11 +241,8 @@ contract crossDemo{
         crossChains[remoteChainId].makerTxs[rtx.txId].signatureCount ++;
         crossChains[remoteChainId].makerTxs[rtx.txId].to = rtx.to;
         if(crossChains[remoteChainId].makerTxs[rtx.txId].signatureCount >= crossChains[remoteChainId].signConfirmCount){
-            rtx.to.transfer(crossChains[remoteChainId].makerTxs[rtx.txId].value - crossChains[remoteChainId].reward);
+            rtx.to.transfer(crossChains[remoteChainId].makerTxs[rtx.txId].value);
             delete crossChains[remoteChainId].makerTxs[rtx.txId];
-            uint total = crossChains[remoteChainId].totalReward + crossChains[remoteChainId].reward;
-            assert(total >= crossChains[remoteChainId].totalReward);
-            crossChains[remoteChainId].totalReward = total;
             emit MakerFinish(rtx.txId,rtx.to);
         }
     }
