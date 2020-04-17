@@ -118,20 +118,18 @@ func (this *MsgHandler) SetProtocolManager(pm ProtocolManager) {
 func (this *MsgHandler) Start() {
 	this.makerStartEventCh = make(chan core.NewCTxsEvent, txChanSize)
 	this.makerStartEventSub = this.blockChain.SubscribeNewCTxsEvent(this.makerStartEventCh)
-	this.takerEventCh = make(chan core.NewRTxsEvent, txChanSize)
-	this.takerEventSub = this.blockChain.SubscribeNewRTxsEvent(this.takerEventCh)
 	this.makerSignedCh = make(chan core.NewCWsEvent, txChanSize)
 	this.makerSignedSub = this.ctxStore.SubscribeCWssResultEvent(this.makerSignedCh)
 	this.makerFinishEventCh = make(chan core.TransationFinishEvent, txChanSize)
 	this.makerFinishEventSub = this.blockChain.SubscribeNewFinishsEvent(this.makerFinishEventCh)
-	this.updateAnchorCh = make(chan core.AnchorEvent, txChanSize)
-	this.updateAnchorSub = this.blockChain.SubscribeUpdateAnchorEvent(this.updateAnchorCh)
-
+	this.takerEventCh = make(chan core.NewRTxsEvent, txChanSize)
+	this.takerEventSub = this.blockChain.SubscribeNewRTxsEvent(this.takerEventCh)
 	this.takerStampCh = make(chan core.NewTakerStampEvent, txChanSize)
 	this.takerStampSub = this.blockChain.SubscribeNewStampEvent(this.takerStampCh)
-
 	this.rmLogsCh = make(chan core.RemovedLogsEvent, rmLogsChanSize)
 	this.rmLogsSub = this.blockChain.SubscribeRemovedLogsEvent(this.rmLogsCh)
+	this.updateAnchorCh = make(chan core.AnchorEvent, txChanSize)
+	this.updateAnchorSub = this.blockChain.SubscribeUpdateAnchorEvent(this.updateAnchorCh)
 
 	go this.loop()
 	go this.readCrossMessage()
@@ -176,7 +174,6 @@ func (this *MsgHandler) loop() {
 			}
 			if this.role.IsAnchor() {
 				this.writeCrossMessage(ev.Txs)
-				log.Info("Anchor WriteCrossMessage")
 			}
 			this.ctxStore.RemoveRemotes(ev.Txs)
 		case <-this.takerEventSub.Err():
@@ -198,14 +195,16 @@ func (this *MsgHandler) loop() {
 			}
 		case <-this.makerFinishEventSub.Err():
 			return
-		case <-this.updateAnchorSub.Err():
-			return
+
 		case ev := <-this.updateAnchorCh:
 			for _, v := range ev.ChainInfo {
 				if err := this.ctxStore.UpdateAnchors(v); err != nil {
 					log.Info("ctxStore.UpdateAnchors", "err", err)
 				}
 			}
+		case <-this.updateAnchorSub.Err():
+			return
+
 		case <-expire.C:
 			this.UpdateSelfTx()
 		}
@@ -286,32 +285,34 @@ func (this *MsgHandler) readCrossMessage() {
 }
 
 func (this *MsgHandler) GetTxForLockOut(rwss []*types.ReceptTransaction) ([]*types.Transaction, error) {
-	nonce := this.pm.GetNonce(this.anchorSigner)
-	tokenAddress := this.getCrossContractAddr()
-	var param *TranParam
-	var txs []*types.Transaction
-	var tx *types.Transaction
 	var err error
 	var count uint64
-	log.Info("GetTxForLockOut", "len", len(rwss))
+	var param *TranParam
+	var tx *types.Transaction
+	var txs []*types.Transaction
+
+	tokenAddress := this.getCrossContractAddr()
+	nonce := this.pm.GetNonce(this.anchorSigner)
+
 	for _, rws := range rwss {
 		if rws.DestinationId.Uint64() == this.pm.NetworkId() {
 			param, err = this.CreateTransaction(this.anchorSigner, rws)
 			if err != nil {
-				log.Info("GetTxForLockOut", "err", err)
+				log.Error("GetTxForLockOut CreateTransaction", "err", err)
 				continue
 			}
-			tx, err = newSignedTransaction(nonce+count, tokenAddress, param.gasLimit, param.gasPrice, param.data, this.pm.NetworkId(), this.signHash)
+			tx, err = newSignedTransaction(nonce+count, tokenAddress, param.gasLimit, param.gasPrice, param.data,
+				this.pm.NetworkId(), this.signHash)
 			if err != nil {
-				log.Info("GetTxForLockOut", "err1", err)
+				log.Error("GetTxForLockOut newSignedTransaction", "err", err)
 				return nil, err
 			}
 			txs = append(txs, tx)
 			count++
 		}
 	}
-	return txs, nil
 
+	return txs, nil
 }
 
 func (this *MsgHandler) clearStore(finishes []*types.FinishInfo) error {
@@ -374,11 +375,15 @@ func (this *MsgHandler) UpdateSelfTx() {
 			var newTxs []*types.Transaction
 			for _, v := range txs {
 				if count < core.DefaultTxPoolConfig.AccountSlots {
-					gasPrice := new(big.Int).Div(new(big.Int).Mul(v.GasPrice(), big.NewInt(100+int64(core.DefaultTxPoolConfig.PriceBump))), big.NewInt(100))
-					tx, err := newSignedTransaction(v.Nonce(), this.getCrossContractAddr(), v.Gas(), gasPrice, v.Data(), this.pm.NetworkId(), this.signHash)
+					gasPrice := new(big.Int).Div(new(big.Int).Mul(
+						v.GasPrice(), big.NewInt(100+int64(core.DefaultTxPoolConfig.PriceBump))), big.NewInt(100))
+
+					tx, err := newSignedTransaction(v.Nonce(), this.getCrossContractAddr(), v.Gas(), gasPrice, v.Data(),
+						this.pm.NetworkId(), this.signHash)
 					if err != nil {
 						log.Info("UpdateSelfTx", "err", err)
 					}
+
 					newTxs = append(newTxs, tx)
 					count++
 				} else {

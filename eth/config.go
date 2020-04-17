@@ -63,7 +63,6 @@ var DefaultConfig = Config{
 		Percentile: 60,
 	},
 	CtxStore: core.DefaultCtxStoreConfig,
-	//RtxStore: core.DefaultRtxStoreConfig,
 	Role:     common.RoleMainChain,
 	Istanbul: *istanbul.DefaultConfig,
 }
