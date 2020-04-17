@@ -867,11 +867,6 @@ var (
 		Usage: "it can be one of (mainchain,subchain,anchor)",
 		Value: &role,
 	}
-	AnchorAccountsFlag = cli.StringFlag{
-		Name:  "anchors",
-		Usage: "Comma separated list of accounts to anchors",
-		Value: "",
-	}
 	ContractMainFlag = cli.StringFlag{
 		Name:  "contract.main",
 		Usage: "The address of main contract",

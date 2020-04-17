@@ -19,6 +19,7 @@ type headerRetriever interface {
 	RtxsFeedSend(transaction NewRTxsEvent) int
 	TransactionFinishFeedSend(transaction TransationFinishEvent) int
 	IsCtxAddress(addr common.Address) bool
+	GetChainConfig() *params.ChainConfig
 }
 
 // unconfirmedBlock is a small collection of metadata about a locally mined block
@@ -122,12 +123,9 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 							rtxs = append(rtxs,
 								types.NewReceptTransaction(
 									ctxId,
-									v.TxHash,
-									v.BlockHash,
 									to,
 									common.BytesToHash(v.Data[:common.HashLength]).Big(),
-									v.BlockNumber,
-									v.TxIndex,
+									set.chain.GetChainConfig().ChainID,
 									v.Data[common.HashLength*6:common.HashLength*6+count]))
 							continue
 						}

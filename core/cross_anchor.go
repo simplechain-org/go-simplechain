@@ -35,13 +35,6 @@ func (as AnchorSet) IsAnchorSignedCtx(tx *types.CrossTransaction, signer types.C
 	return false
 }
 
-func (as AnchorSet) IsAnchorSignedRtx(tx *types.ReceptTransaction, signer types.RtxSigner) bool {
-	if addr, err := signer.Sender(tx); err == nil {
-		return as.IsAnchor(addr)
-	}
-	return false
-}
-
 func QueryAnchor(config *params.ChainConfig, bc ChainContext, statedb *state.StateDB, header *types.Header,
 	address common.Address, remoteChainId uint64) ([]common.Address, int) {
 	res, err := NewEvmInvoke(bc, header, statedb, config, vm.Config{}).CallContract(common.Address{}, &address, params.GetAnchorFn, common.LeftPadBytes(big.NewInt(int64(remoteChainId)).Bytes(), 32))

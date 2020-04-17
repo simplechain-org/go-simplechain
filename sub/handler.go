@@ -940,25 +940,25 @@ func (pm *ProtocolManager) BroadcastCtx(ctxs []*types.CrossTransaction) {
 }
 
 //锚定节点广播签名Rtx
-func (pm *ProtocolManager) BroadcastRtx(rtxs []*types.ReceptTransaction) {
-	for _, rtx := range rtxs {
-		var txset = make(map[*peer]*types.ReceptTransaction)
-
-		// Broadcast rtx to a batch of peers not knowing about it
-
-		peers := pm.peers.PeersWithoutRTx(rtx.SignHash())
-		for _, peer := range peers {
-			txset[peer] = rtx
-		}
-		log.Trace("Broadcast transaction", "hash", rtx.Hash(), "recipients", len(peers))
-
-		// FIXME include this again: peers = peers[:int(math.Sqrt(float64(len(peers))))]
-		for peer, rt := range txset {
-			peer.AsyncSendReceptTransaction(rt)
-		}
-	}
-
-}
+//func (pm *ProtocolManager) BroadcastRtx(rtxs []*types.ReceptTransaction) {
+//	for _, rtx := range rtxs {
+//		var txset = make(map[*peer]*types.ReceptTransaction)
+//
+//		// Broadcast rtx to a batch of peers not knowing about it
+//
+//		peers := pm.peers.PeersWithoutRTx(rtx.SignHash())
+//		for _, peer := range peers {
+//			txset[peer] = rtx
+//		}
+//		log.Trace("Broadcast transaction", "hash", rtx.Hash(), "recipients", len(peers))
+//
+//		// FIXME include this again: peers = peers[:int(math.Sqrt(float64(len(peers))))]
+//		for peer, rt := range txset {
+//			peer.AsyncSendReceptTransaction(rt)
+//		}
+//	}
+//
+//}
 
 func (pm *ProtocolManager) SetMsgHandler(msgHandler *cross.MsgHandler) {
 	pm.msgHandler = msgHandler
@@ -978,12 +978,21 @@ func (pm *ProtocolManager) NetworkId() uint64 {
 }
 
 func (pm *ProtocolManager) GetNonce(address common.Address) uint64 {
-	return pm.txpool.GetCurrentNonce(address)
+	//return pm.txpool.GetCurrentNonce(address)
+	return pm.txpool.Nonce(address)
 }
 
-func (pm *ProtocolManager) GetAnchorTxs(address common.Address) (map[common.Address]types.Transactions, error) {
-	return pm.txpool.GetAnchorTxs(address)
+func (pm *ProtocolManager) Pending() (map[common.Address]types.Transactions, error) {
+	return pm.txpool.Pending()
 }
+
+//func (pm *ProtocolManager) GetAnchorTxs(address common.Address) (map[common.Address]types.Transactions, error) {
+//	return pm.txpool.GetAnchorTxs(address)
+//}
+
+//func (pm *ProtocolManager) GetAnchorTxs(address common.Address) (map[common.Address]types.Transactions, error) {
+//	return pm.txpool.GetAnchorTxs(address)
+//}
 
 // Accept PBFT committed block
 func (pm *ProtocolManager) Enqueue(id string, block *types.Block) {
@@ -1000,4 +1009,11 @@ func (pm *ProtocolManager) FindPeers(targets map[common.Address]bool) map[common
 		}
 	}
 	return m
+}
+
+func (pm *ProtocolManager) AddLocals(txs []*types.Transaction) {
+	for _, v := range txs {
+		pm.txpool.AddLocal(v)
+	}
+	//return pm.txpool.AddRemotes(txs)
 }

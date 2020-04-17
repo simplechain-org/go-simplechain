@@ -86,14 +86,6 @@ type NewCWsEvent struct {
 	Txs *types.CrossTransactionWithSignatures
 }
 
-type NewRWsEvent struct {
-	Tws *types.ReceptTransactionWithSignatures
-}
-
-type NewRWssEvent struct {
-	Tws []*types.ReceptTransactionWithSignatures
-}
-
 type TransationRemoveEvent struct {
 	Transactions types.Transactions
 }
@@ -103,4 +95,8 @@ type TransationFinishEvent struct {
 
 type NewCtxStatusEvent struct {
 	Status map[uint64]*Statistics
+}
+
+type AnchorEvent struct {
+	ChainInfo []*types.RemoteChainInfo
 }

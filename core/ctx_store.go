@@ -1,6 +1,7 @@
 package core
 
 import (
+	"container/heap"
 	"errors"
 	"fmt"
 	"math/big"
@@ -16,6 +17,13 @@ import (
 	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/rlp"
 )
+
+const (
+	expireInterval = time.Second * 60 * 12
+	expireNumber   = 30 //pending rtx expired after block num
+)
+
+var requireSignatureCount = 2
 
 type CtxStoreConfig struct {
 	ChainId      *big.Int
@@ -475,9 +483,9 @@ func (store *CtxStore) RemoveRemotes(rtxs []*types.ReceptTransaction) error {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	for _, v := range rtxs {
-		if s, ok := store.remoteStore[v.Data.DestinationId.Uint64()]; ok {
-			s.Remove(v.ID())
-			if err := store.ctxDb.Delete(v.ID()); err != nil {
+		if s, ok := store.remoteStore[v.DestinationId.Uint64()]; ok {
+			s.Remove(v.CTxId)
+			if err := store.ctxDb.Delete(v.CTxId); err != nil {
 				log.Warn("RemoveRemotes", "err", err)
 				return err
 			}
@@ -655,4 +663,90 @@ func (store *CtxStore) SubscribeCWssResultEvent(ch chan<- NewCWsEvent) event.Sub
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	return store.resultScope.Track(store.resultFeed.Subscribe(ch))
+}
+
+func (store *CtxStore) UpdateAnchors(info *types.RemoteChainInfo) error {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	newHead := store.chain.CurrentBlock().Header() // Special case during testing
+	statedb, err := store.chain.StateAt(newHead.Root)
+	if err != nil {
+		log.Error("Failed to reset txpool state", "err", err)
+		return fmt.Errorf("stateAt err:%s", err.Error())
+	}
+	anchors, signedCount := QueryAnchor(store.chainConfig, store.chain, statedb, newHead, store.CrossDemoAddress, info.RemoteChainId)
+	store.config.Anchors = anchors
+	requireSignatureCount = signedCount
+	store.anchors[info.RemoteChainId] = NewAnchorSet(store.config.Anchors)
+	return nil
+}
+
+type byBlockNum struct {
+	txId     common.Hash
+	blockNum uint64
+}
+
+type byBlockNumHeap []byBlockNum
+
+func (h byBlockNumHeap) Len() int           { return len(h) }
+func (h byBlockNumHeap) Less(i, j int) bool { return h[i].blockNum < h[j].blockNum }
+func (h byBlockNumHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+
+func (h *byBlockNumHeap) Push(x interface{}) {
+	*h = append(*h, x.(byBlockNum))
+}
+
+func (h *byBlockNumHeap) Pop() interface{} {
+	old := *h
+	n := len(old)
+	x := old[n-1]
+	*h = old[0 : n-1]
+	return x
+}
+
+type CtxSortedMap struct {
+	//items map[common.Hash]*types.ReceptTransactionWithSignatures
+	items map[common.Hash]CrossTransactionInvoke
+	index *byBlockNumHeap
+}
+
+func NewCtxSortedMap() *CtxSortedMap {
+	return &CtxSortedMap{
+		items: make(map[common.Hash]CrossTransactionInvoke),
+		index: new(byBlockNumHeap),
+	}
+}
+
+func (m *CtxSortedMap) Get(txId common.Hash) CrossTransactionInvoke {
+	return m.items[txId]
+}
+
+func (m *CtxSortedMap) Put(rws CrossTransactionInvoke, number uint64) {
+	id := rws.ID()
+	if m.items[id] != nil {
+		return
+	}
+
+	m.items[id] = rws
+	m.index.Push(byBlockNum{id, number})
+}
+
+func (m *CtxSortedMap) Len() int {
+	return len(m.items)
+}
+
+func (m *CtxSortedMap) RemoveByHash(hash common.Hash) {
+	delete(m.items, hash)
+}
+
+func (m *CtxSortedMap) RemoveUnderNum(num uint64) {
+	for i := 0; i < m.index.Len(); i++ {
+		if (*m.index)[i].blockNum <= num {
+			deleteId := (*m.index)[i].txId
+			delete(m.items, deleteId)
+			heap.Remove(m.index, i)
+			continue
+		}
+		break
+	}
 }

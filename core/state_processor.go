@@ -91,23 +91,7 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 
 	if len(tx.Data()) > 68 && tx.To() != nil && (*tx.To() == address) {
 		evmInvoke := NewEvmInvoke(bc, header, statedb, config, cfg)
-		if bytes.Equal(tx.Data()[:4], params.FinishFn) {
-			// call -> function getMakerTx(bytes32 txId, uint remoteChainId) public view returns(uint)
-			paddedCtxId := common.LeftPadBytes(tx.Data()[4+32*3:4+32*4], 32) //CtxId
-			remoteChainId := tx.Data()[4+32 : 4+32*2]
-			res, err := evmInvoke.CallContract(common.Address{}, tx.To(), params.GetMakerTxFn, paddedCtxId, remoteChainId)
-			if err != nil {
-				log.Info("Apply makerFinish Transaction failed", "err", err)
-				return nil, err
-			}
-			if new(big.Int).SetBytes(res).Cmp(big.NewInt(0)) == 0 {
-				//log.Info("already finish!", "res", new(big.Int).SetBytes(res).Uint64(), "tx", tx.Hash().String())
-				return nil, ErrRepetitionCrossTransaction
-			} else { //TODO 交易失败一直finish ok
-				//log.Info("finish ok!", "res", new(big.Int).SetBytes(res).Uint64(), "tx", tx.Hash().String())
-			}
-
-		} else if bytes.Equal(tx.Data()[:4], params.TakerFn) {
+		if bytes.Equal(tx.Data()[:4], params.TakerFn) {
 			// call -> function getTakerTx(bytes32 txId, uint remoteChainId) public view returns(uint)
 			paddedCtxId := common.LeftPadBytes(tx.Data()[4+32*4:4+32*5], 32) //CtxId
 			remoteChainId := tx.Data()[4+32 : 4+32*2]

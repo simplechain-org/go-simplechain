@@ -139,22 +139,23 @@ type BlockChain struct {
 	triegc *prque.Prque   // Priority queue mapping block numbers to tries to gc
 	gcproc time.Duration  // Accumulates canonical block processing for trie dumping
 
-	hc             *HeaderChain
-	rmLogsFeed     event.Feed
-	chainFeed      event.Feed
-	chainSideFeed  event.Feed
-	chainHeadFeed  event.Feed
-	logsFeed       event.Feed
-	blockProcFeed  event.Feed
-	ctxFeed        event.Feed
-	cwsFeed        event.Feed
-	rtxFeed        event.Feed
-	rtxsFeed       event.Feed
-	rtxsRemoveFeed event.Feed
-	takerStampFeed event.Feed
-	FinishsFeed    event.Feed
-	scope          event.SubscriptionScope
-	genesisBlock   *types.Block
+	hc               *HeaderChain
+	rmLogsFeed       event.Feed
+	chainFeed        event.Feed
+	chainSideFeed    event.Feed
+	chainHeadFeed    event.Feed
+	logsFeed         event.Feed
+	blockProcFeed    event.Feed
+	ctxFeed          event.Feed
+	cwsFeed          event.Feed
+	rtxFeed          event.Feed
+	rtxsFeed         event.Feed
+	rtxsRemoveFeed   event.Feed
+	takerStampFeed   event.Feed
+	FinishsFeed      event.Feed
+	updateAnchorFeed event.Feed
+	scope            event.SubscriptionScope
+	genesisBlock     *types.Block
 
 	chainmu sync.RWMutex // blockchain insertion lock
 
@@ -2253,12 +2254,21 @@ func (bc *BlockChain) StoreContractLog(blockNumber uint64, hash common.Hash, log
 	var blockLogs []*types.Log
 	if logs != nil {
 		var rtxs []*types.RTxsInfo
+		var updates []*types.RemoteChainInfo
 		for _, v := range logs {
 			if len(v.Topics) > 0 && bc.IsCtxAddress(v.Address) {
 
-				if v.Topics[0] == params.MakerTopic || v.Topics[0] == params.MakerFinishTopic ||
-					v.Topics[0] == params.AddAnchorsTopic || v.Topics[0] == params.RemoveAnchorsTopic {
+				if v.Topics[0] == params.MakerTopic || v.Topics[0] == params.MakerFinishTopic {
 					blockLogs = append(blockLogs, v)
+					continue
+				}
+
+				if v.Topics[0] == params.AddAnchorsTopic || v.Topics[0] == params.RemoveAnchorsTopic {
+					updates = append(updates,
+						&types.RemoteChainInfo{
+							RemoteChainId: common.BytesToHash(v.Data[:common.HashLength]).Big().Uint64(),
+							BlockNumber:   v.BlockNumber,
+						})
 					continue
 				}
 
@@ -2273,6 +2283,9 @@ func (bc *BlockChain) StoreContractLog(blockNumber uint64, hash common.Hash, log
 		}
 		if len(rtxs) > 0 {
 			go bc.takerStampFeed.Send(NewTakerStampEvent{rtxs})
+		}
+		if len(updates) > 0 {
+			go bc.updateAnchorFeed.Send(AnchorEvent{updates})
 		}
 	}
 	if len(blockLogs) > 0 {
@@ -2338,4 +2351,12 @@ func (bc *BlockChain) IsCtxAddress(addr common.Address) bool {
 
 func (bc *BlockChain) GetBlockNumber(hash common.Hash) *uint64 {
 	return bc.hc.GetBlockNumber(hash)
+}
+
+func (bc *BlockChain) SubscribeUpdateAnchorEvent(ch chan<- AnchorEvent) event.Subscription {
+	return bc.scope.Track(bc.updateAnchorFeed.Subscribe(ch))
+}
+
+func (bc *BlockChain) GetChainConfig() *params.ChainConfig {
+	return bc.chainConfig
 }

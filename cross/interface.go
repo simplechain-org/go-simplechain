@@ -3,7 +3,6 @@ package cross
 import (
 	"context"
 
-	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"
@@ -24,28 +23,12 @@ type CtxStore interface {
 	VerifyLocalCws(cws *types.CrossTransactionWithSignatures) ([]error, []int)
 	VerifyRemoteCws(cws *types.CrossTransactionWithSignatures) ([]error, []int)
 
-	//TODO-D
-	//ReadFromLocals(common.Hash) *types.CrossTransactionWithSignatures
-	//RemoveFromLocalsByTransaction(common.Hash) error
-
 	StampStatus([]*types.RTxsInfo, uint64) error
 	List(int, bool) []*types.CrossTransactionWithSignatures
 
 	SubscribeCWssResultEvent(chan<- core.NewCWsEvent) event.Subscription
-}
 
-type rtxStore interface {
-	AddLocal(*types.ReceptTransaction) error
-	AddRemote(*types.ReceptTransaction) error
-	AddWithSignatures(...*types.ReceptTransactionWithSignatures) []error
-
-	RemoveLocals(finishes []*types.FinishInfo) error
-	ReadFromLocals(ctxId common.Hash) *types.ReceptTransactionWithSignatures
-
-	VerifyRtx(rtx *types.ReceptTransaction) error
-
-	SubscribeRWssResultEvent(chan<- core.NewRWsEvent) event.Subscription
-	SubscribeNewRWssEvent(chan<- core.NewRWssEvent) event.Subscription
+	UpdateAnchors(*types.RemoteChainInfo) error
 }
 
 type simplechain interface {

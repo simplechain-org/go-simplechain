@@ -109,6 +109,10 @@ func (p *testTxPool) AddRemotes(txs []*types.Transaction) []error {
 	}
 	return make([]error, len(txs))
 }
+func (p *testTxPool) AddLocal(tx *types.Transaction) error {
+	//TODO
+	return nil
+}
 
 // Pending returns all the transactions known to the pool
 func (p *testTxPool) Pending() (map[common.Address]types.Transactions, error) {
@@ -136,6 +140,10 @@ func (p *testTxPool) GetCurrentNonce(address common.Address) uint64 {
 func (pool *testTxPool) GetAnchorTxs(anchor common.Address) (map[common.Address]types.Transactions, error) {
 	pending := make(map[common.Address]types.Transactions)
 	return pending, nil
+}
+func (pool *testTxPool) Nonce(addr common.Address) uint64 {
+	//TODO
+	return 0
 }
 
 // newTestTransaction create a new dummy transaction.

@@ -97,8 +97,6 @@ type peer struct {
 	knownCWss                                mapset.Set
 	queuedCtxSign                            chan *types.CrossTransaction
 	knownCTxs                                mapset.Set
-	queuedRtxSign                            chan *types.ReceptTransaction
-	knownRTxs                                mapset.Set
 	internalCrossTransactionWithSignaturesCh chan []*types.CrossTransactionWithSignatures
 	internalCrossTransactionWithSignatures   mapset.Set
 }
@@ -119,8 +117,6 @@ func newPeer(version int, p *p2p.Peer, rw p2p.MsgReadWriter) *peer {
 		knownCWss:                                mapset.NewSet(),
 		queuedCtxSign:                            make(chan *types.CrossTransaction, maxQueuedTxs),
 		knownCTxs:                                mapset.NewSet(),
-		queuedRtxSign:                            make(chan *types.ReceptTransaction, maxQueuedTxs),
-		knownRTxs:                                mapset.NewSet(),
 		internalCrossTransactionWithSignaturesCh: make(chan []*types.CrossTransactionWithSignatures, maxQueuedTxs),
 		internalCrossTransactionWithSignatures:   mapset.NewSet(),
 	}
@@ -157,11 +153,6 @@ func (p *peer) broadcast() {
 				p.Log().Trace("SendCrossTransaction", "err", err)
 				return
 			}
-		case rtx := <-p.queuedRtxSign:
-			if err := p.SendReceptTransaction(rtx); err != nil {
-				return
-			}
-			p.Log().Trace("Broadcast rtxSign", "hash", rtx.Hash())
 		}
 	}
 }
@@ -668,41 +659,6 @@ func (p *peer) AsyncSendCrossTransaction(ctx *types.CrossTransaction) {
 	}
 }
 
-func (p *peer) MarkReceptTransaction(hash common.Hash) {
-	// If we reached the memory allowance, drop a previously known transaction hash
-	for p.knownRTxs.Cardinality() >= maxKnownTxs {
-		p.knownRTxs.Pop()
-	}
-	p.knownRTxs.Add(hash)
-}
-
-func (ps *peerSet) PeersWithoutRTx(hash common.Hash) []*peer {
-	ps.lock.RLock()
-	defer ps.lock.RUnlock()
-
-	list := make([]*peer, 0, len(ps.peers))
-	for _, p := range ps.peers {
-		if !p.knownRTxs.Contains(hash) {
-			list = append(list, p)
-		}
-	}
-	return list
-}
-
-func (p *peer) SendReceptTransaction(rtx *types.ReceptTransaction) error {
-	return p2p.Send(p.rw, RtxSignMsg, rtx)
-}
-
-func (p *peer) AsyncSendReceptTransaction(rtx *types.ReceptTransaction) {
-	select {
-	case p.queuedRtxSign <- rtx:
-		p.knownRTxs.Add(rtx.SignHash())
-
-	default:
-		p.Log().Debug("Dropping transaction propagation", "hash", rtx.Hash())
-	}
-}
-
 func (p *peer) MarkCrossTransactionWithSignatures(hash common.Hash) {
 	// If we reached the memory allowance, drop a previously known transaction hash
 	for p.knownCWss.Cardinality() >= maxKnownTxs {
@@ -752,11 +708,6 @@ func (ps *peerSet) PeersWithoutInternalCrossTransactionWithSignatures(hash commo
 	}
 	return list
 }
-
-//func (p *peer) SendInternalCrossTransactionWithSignatures(txs []*types.CrossTransactionWithSignatures) error {
-//	//log.Info("SendLocalCrossTransactionWithSignatures", "len", len(txs), "peer", p.id)
-//	return p2p.Send(p.rw, CtxSignsInternalMsg, txs)
-//}
 
 func (p *peer) AsyncSendInternalCrossTransactionWithSignatures(cwss []*types.CrossTransactionWithSignatures) {
 	select {
