@@ -55,52 +55,32 @@ type ChainHeadEvent struct {
 	Block *types.Block
 }
 
-type NewCTxsEvent struct {
+type ConfirmedMakerEvent struct {
 	Txs []*types.CrossTransaction
 }
 
-type NewCTxEvent struct {
-	Txs *types.CrossTransaction
+type NewTakerEvent struct {
+	Txs []*types.RTxsInfo
 }
 
-type NewRTxEvent struct {
-	Txs *types.ReceptTransaction
-}
-
-type NewRTxsEvent struct {
+type ConfirmedTakerEvent struct {
 	Txs []*types.ReceptTransaction
 }
-type NewRTxsRemoveEvent struct {
-	Txs []*types.RTxsInfo
+
+type SignedCtxEvent struct {
+	Tws      *types.CrossTransactionWithSignatures
+	CallBack func(cws *types.CrossTransactionWithSignatures, invalidSigIndex ...int)
 }
 
-type NewTakerStampEvent struct {
-	Txs []*types.RTxsInfo
+type SignedRtxEvent struct {
+	Tws      *types.ReceptTransactionWithSignatures
+	CallBack func(*types.ReceptTransactionWithSignatures, error)
 }
 
-type NewCWssEvent struct {
-	Txs []*types.CrossTransactionWithSignatures
-}
-
-type NewCWsEvent struct {
-	Txs *types.CrossTransactionWithSignatures
-}
-
-type NewRWsEvent struct {
-	Tws *types.ReceptTransactionWithSignatures
-}
-
-type NewRWssEvent struct {
+type AvailableRtxEvent struct {
 	Tws []*types.ReceptTransactionWithSignatures
 }
 
-type TransationRemoveEvent struct {
-	Transactions types.Transactions
-}
-type TransationFinishEvent struct {
+type ConfirmedFinishEvent struct {
 	Finish []*types.FinishInfo
-}
-
-type NewCtxStatusEvent struct {
-	Status map[uint64]*Statistics
 }

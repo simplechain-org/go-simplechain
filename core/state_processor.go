@@ -107,7 +107,7 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 			}
 
 		} else if bytes.Equal(tx.Data()[:4], params.TakerFn) {
-			log.Error("[debug] taker Tx", "id", tx.Hash().String())
+			log.Error("[debug] taker Tws", "id", tx.Hash().String())
 			// call -> function getTakerTx(bytes32 txId, uint remoteChainId) public view returns(uint)
 			paddedCtxId := common.LeftPadBytes(tx.Data()[4+32*4:4+32*5], 32) //CtxId
 			remoteChainId := tx.Data()[4+32 : 4+32*2]
@@ -117,10 +117,10 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 				return nil, err
 			}
 			if new(big.Int).SetBytes(res).Cmp(big.NewInt(0)) == 0 {
-				log.Error("[debug] taker Tx check ok", "id", tx.Hash().String())
+				log.Error("[debug] taker Tws check ok", "id", tx.Hash().String())
 				//log.Info("take ok!", "res", new(big.Int).SetBytes(res).Uint64(), "tx", tx.Hash().String())
 			} else {
-				log.Error("[debug] taker Tx ErrRepetitionCrossTransaction", "id", tx.Hash().String())
+				log.Error("[debug] taker Tws ErrRepetitionCrossTransaction", "id", tx.Hash().String())
 				//log.Info("already take!", "res", new(big.Int).SetBytes(res).Uint64(), "tx", tx.Hash().String())
 				return nil, ErrRepetitionCrossTransaction
 			}

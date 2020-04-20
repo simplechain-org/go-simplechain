@@ -139,22 +139,19 @@ type BlockChain struct {
 	triegc *prque.Prque   // Priority queue mapping block numbers to tries to gc
 	gcproc time.Duration  // Accumulates canonical block processing for trie dumping
 
-	hc             *HeaderChain
-	rmLogsFeed     event.Feed
-	chainFeed      event.Feed
-	chainSideFeed  event.Feed
-	chainHeadFeed  event.Feed
-	logsFeed       event.Feed
-	blockProcFeed  event.Feed
-	ctxFeed        event.Feed
-	cwsFeed        event.Feed
-	rtxFeed        event.Feed
-	rtxsFeed       event.Feed
-	rtxsRemoveFeed event.Feed
-	takerStampFeed event.Feed
-	FinishsFeed    event.Feed
-	scope          event.SubscriptionScope
-	genesisBlock   *types.Block
+	hc                  *HeaderChain
+	rmLogsFeed          event.Feed
+	chainFeed           event.Feed
+	chainSideFeed       event.Feed
+	chainHeadFeed       event.Feed
+	logsFeed            event.Feed
+	blockProcFeed       event.Feed
+	confirmedMakerFeed  event.Feed
+	confirmedTakerFeed  event.Feed
+	takerFeed           event.Feed //
+	confirmedFinishFeed event.Feed
+	scope               event.SubscriptionScope
+	genesisBlock        *types.Block
 
 	chainmu sync.RWMutex // blockchain insertion lock
 
@@ -2272,7 +2269,7 @@ func (bc *BlockChain) StoreContractLog(blockNumber uint64, hash common.Hash, log
 			}
 		}
 		if len(rtxs) > 0 {
-			go bc.takerStampFeed.Send(NewTakerStampEvent{rtxs})
+			go bc.takerFeed.Send(NewTakerEvent{rtxs})
 		}
 	}
 	if len(blockLogs) > 0 {
@@ -2300,36 +2297,32 @@ func (bc *BlockChain) GetTransactionByTxHash(hash common.Hash) (*types.Transacti
 	return tx, blockHash, blockNumber
 }
 
-func (bc *BlockChain) SubscribeNewCTxsEvent(ch chan<- NewCTxsEvent) event.Subscription {
-	return bc.scope.Track(bc.ctxFeed.Subscribe(ch))
+func (bc *BlockChain) ConfirmedMakerFeedSend(ctx ConfirmedMakerEvent) int {
+	return bc.confirmedMakerFeed.Send(ctx)
 }
 
-func (bc *BlockChain) CtxsFeedSend(ctx NewCTxsEvent) int {
-	return bc.ctxFeed.Send(ctx)
+func (bc *BlockChain) SubscribeConfirmedMakerEvent(ch chan<- ConfirmedMakerEvent) event.Subscription {
+	return bc.scope.Track(bc.confirmedMakerFeed.Subscribe(ch))
 }
 
-func (bc *BlockChain) SubscribeNewRTxsEvent(ch chan<- NewRTxsEvent) event.Subscription {
-	return bc.scope.Track(bc.rtxFeed.Subscribe(ch))
+func (bc *BlockChain) ConfirmedTakerSend(transaction ConfirmedTakerEvent) int {
+	return bc.confirmedTakerFeed.Send(transaction)
 }
 
-func (bc *BlockChain) RtxsFeedSend(transaction NewRTxsEvent) int {
-	return bc.rtxFeed.Send(transaction)
+func (bc *BlockChain) SubscribeConfirmedTakerEvent(ch chan<- ConfirmedTakerEvent) event.Subscription {
+	return bc.scope.Track(bc.confirmedTakerFeed.Subscribe(ch))
 }
 
-func (bc *BlockChain) SubscribeNewStampEvent(ch chan<- NewTakerStampEvent) event.Subscription {
-	return bc.scope.Track(bc.takerStampFeed.Subscribe(ch))
+func (bc *BlockChain) SubscribeNewTakerEvent(ch chan<- NewTakerEvent) event.Subscription {
+	return bc.scope.Track(bc.takerFeed.Subscribe(ch))
 }
 
-func (bc *BlockChain) SubscribeNewRTxssEvent(ch chan<- NewRTxsEvent) event.Subscription {
-	return bc.scope.Track(bc.rtxsFeed.Subscribe(ch))
+func (bc *BlockChain) ConfirmedFinishFeedSend(tx ConfirmedFinishEvent) int {
+	return bc.confirmedFinishFeed.Send(tx)
 }
 
-func (bc *BlockChain) TransactionFinishFeedSend(tx TransationFinishEvent) int {
-	return bc.FinishsFeed.Send(tx)
-}
-
-func (bc *BlockChain) SubscribeNewFinishsEvent(ch chan<- TransationFinishEvent) event.Subscription {
-	return bc.scope.Track(bc.FinishsFeed.Subscribe(ch))
+func (bc *BlockChain) SubscribeConfirmedFinishEvent(ch chan<- ConfirmedFinishEvent) event.Subscription {
+	return bc.scope.Track(bc.confirmedFinishFeed.Subscribe(ch))
 }
 
 func (bc *BlockChain) IsCtxAddress(addr common.Address) bool {

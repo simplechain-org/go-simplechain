@@ -13,16 +13,18 @@ import (
 	"github.com/simplechain-org/go-simplechain/params"
 )
 
-type ChainInvoke struct {
-	bc blockChain
-}
-
 type CrossTransactionInvoke interface {
 	ID() common.Hash
 	ChainId() *big.Int
 	DestinationId() *big.Int
 	Hash() common.Hash
 	BlockHash() common.Hash
+}
+
+type CrossValidator func(cws *types.CrossTransactionWithSignatures) error
+
+type ChainInvoke struct {
+	bc blockChain
 }
 
 func NewChainInvoke(chain blockChain) *ChainInvoke {

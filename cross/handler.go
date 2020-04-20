@@ -52,31 +52,35 @@ type GetCtxSignsData struct {
 }
 
 type MsgHandler struct {
-	roleHandler         RoleHandler
-	role                common.ChainRole
-	ctxStore            CtxStore
-	rtxStore            rtxStore
-	blockChain          *core.BlockChain
-	pm                  ProtocolManager
-	crossMsgReader      <-chan interface{}
-	crossMsgWriter      chan<- interface{}
-	quitSync            chan struct{}
-	knownRwssTx         map[common.Hash]*TranParam
-	makerStartEventCh   chan core.NewCTxsEvent
-	makerStartEventSub  event.Subscription
-	makerSignedCh       chan core.NewCWsEvent
-	makerSignedSub      event.Subscription
-	takerEventCh        chan core.NewRTxsEvent
-	takerEventSub       event.Subscription
-	takerSignedCh       chan core.NewRWsEvent
-	takerSignedSub      event.Subscription
-	availableTakerCh    chan core.NewRWssEvent
-	availableTakerSub   event.Subscription
-	makerFinishEventCh  chan core.TransationFinishEvent
-	makerFinishEventSub event.Subscription
+	roleHandler RoleHandler
+	role        common.ChainRole
+	ctxStore    CtxStore
+	rtxStore    rtxStore
+	blockChain  *core.BlockChain
+	pm          ProtocolManager
 
-	takerStampCh  chan core.NewTakerStampEvent
-	takerStampSub event.Subscription
+	quitSync       chan struct{}
+	crossMsgReader <-chan interface{} // Channel to read  cross-chain message
+	crossMsgWriter chan<- interface{} // Channel to write cross-chain message
+
+	confirmedMakerCh  chan core.ConfirmedMakerEvent // Channel to reveive one-signed makerTx from ctxStore
+	confirmedMakerSub event.Subscription
+	signedCtxCh       chan core.SignedCtxEvent // Channel to receive signed-completely makerTx from ctxStore
+	signedCtxSub      event.Subscription
+
+	newTakerCh        chan core.NewTakerEvent // Channel to receive taker tx
+	newTakerSub       event.Subscription
+	confirmedTakerCh  chan core.ConfirmedTakerEvent // Channel to reveive one-signed takerTx from rtxStore
+	confirmedTakerSub event.Subscription
+	signedRtxCh       chan core.SignedRtxEvent // Channel to receive signed-completely takerTx from rtxStore
+	signedRtxSub      event.Subscription
+
+	availableRtxCh    chan core.AvailableRtxEvent // Channel to receive available takerTx from rtxStore reports
+	availableRtxSub   event.Subscription
+	knownAvailableRtx map[common.Hash]*TranParam
+
+	makerFinishEventCh  chan core.ConfirmedFinishEvent // Channel to receive confirmed makerFinish event
+	makerFinishEventSub event.Subscription
 
 	rmLogsCh  chan core.RemovedLogsEvent // Channel to receive removed log event
 	rmLogsSub event.Subscription         // Subscription for removed log event
@@ -109,7 +113,7 @@ func NewMsgHandler(chain simplechain, roleHandler RoleHandler, role common.Chain
 		gasHelper:           gasHelper,
 		MainChainCtxAddress: mainAddr,
 		SubChainCtxAddress:  subAddr,
-		knownRwssTx:         make(map[common.Hash]*TranParam),
+		knownAvailableRtx:   make(map[common.Hash]*TranParam),
 		signHash:            signHash,
 		anchorSigner:        anchorSigner,
 	}
@@ -119,21 +123,23 @@ func (this *MsgHandler) SetProtocolManager(pm ProtocolManager) {
 }
 
 func (this *MsgHandler) Start() {
-	this.makerStartEventCh = make(chan core.NewCTxsEvent, txChanSize)
-	this.makerStartEventSub = this.blockChain.SubscribeNewCTxsEvent(this.makerStartEventCh)
-	this.takerEventCh = make(chan core.NewRTxsEvent, txChanSize)
-	this.takerEventSub = this.blockChain.SubscribeNewRTxsEvent(this.takerEventCh)
-	this.makerSignedCh = make(chan core.NewCWsEvent, txChanSize)
-	this.makerSignedSub = this.ctxStore.SubscribeCWssResultEvent(this.makerSignedCh)
-	this.takerSignedCh = make(chan core.NewRWsEvent, txChanSize)
-	this.takerSignedSub = this.rtxStore.SubscribeRWssResultEvent(this.takerSignedCh)
-	this.availableTakerCh = make(chan core.NewRWssEvent, txChanSize)
-	this.availableTakerSub = this.rtxStore.SubscribeNewRWssEvent(this.availableTakerCh)
-	this.makerFinishEventCh = make(chan core.TransationFinishEvent, txChanSize)
-	this.makerFinishEventSub = this.blockChain.SubscribeNewFinishsEvent(this.makerFinishEventCh)
+	this.confirmedMakerCh = make(chan core.ConfirmedMakerEvent, txChanSize)
+	this.confirmedMakerSub = this.blockChain.SubscribeConfirmedMakerEvent(this.confirmedMakerCh)
+	this.confirmedTakerCh = make(chan core.ConfirmedTakerEvent, txChanSize)
+	this.confirmedTakerSub = this.blockChain.SubscribeConfirmedTakerEvent(this.confirmedTakerCh)
 
-	this.takerStampCh = make(chan core.NewTakerStampEvent, txChanSize)
-	this.takerStampSub = this.blockChain.SubscribeNewStampEvent(this.takerStampCh)
+	this.signedCtxCh = make(chan core.SignedCtxEvent, txChanSize)
+	this.signedCtxSub = this.ctxStore.SubscribeSignedCtxEvent(this.signedCtxCh)
+	this.signedRtxCh = make(chan core.SignedRtxEvent, txChanSize)
+	this.signedRtxSub = this.rtxStore.SubscribeSignedRtxEvent(this.signedRtxCh)
+
+	this.availableRtxCh = make(chan core.AvailableRtxEvent, txChanSize)
+	this.availableRtxSub = this.rtxStore.SubscribeAvailableRtxEvent(this.availableRtxCh)
+	this.makerFinishEventCh = make(chan core.ConfirmedFinishEvent, txChanSize)
+	this.makerFinishEventSub = this.blockChain.SubscribeConfirmedFinishEvent(this.makerFinishEventCh)
+
+	this.newTakerCh = make(chan core.NewTakerEvent, txChanSize)
+	this.newTakerSub = this.blockChain.SubscribeNewTakerEvent(this.newTakerCh)
 
 	this.rmLogsCh = make(chan core.RemovedLogsEvent, rmLogsChanSize)
 	this.rmLogsSub = this.blockChain.SubscribeRemovedLogsEvent(this.rmLogsCh)
@@ -153,7 +159,7 @@ func (this *MsgHandler) SetGasPriceOracle(gpo GasPriceOracle) {
 func (this *MsgHandler) loop() {
 	for {
 		select {
-		case ev := <-this.makerStartEventCh:
+		case ev := <-this.confirmedMakerCh:
 			if this.role.IsAnchor() {
 				for _, tx := range ev.Txs {
 					if err := this.ctxStore.AddLocal(tx); err != nil {
@@ -162,18 +168,18 @@ func (this *MsgHandler) loop() {
 				}
 				this.pm.BroadcastCtx(ev.Txs) //CtxSignMsg
 			}
-		case <-this.makerStartEventSub.Err():
+		case <-this.confirmedMakerSub.Err():
 			return
 
-		case ev := <-this.makerSignedCh:
-			log.Warn("makerSignedCh", "finish maker", ev.Txs.ID().String())
+		case ev := <-this.signedCtxCh:
+			log.Warn("signedCtxCh", "finish maker", ev.Tws.ID().String())
 			if this.role.IsAnchor() {
-				this.writeCrossMessage(ev.Txs)
+				this.writeCrossMessage(ev)
 			}
-		case <-this.makerSignedSub.Err():
+		case <-this.signedCtxSub.Err():
 			return
 
-		case ev := <-this.takerEventCh:
+		case ev := <-this.confirmedTakerCh:
 			if this.role.IsAnchor() {
 				for _, tx := range ev.Txs {
 					if err := this.rtxStore.AddLocal(tx); err != nil {
@@ -183,21 +189,22 @@ func (this *MsgHandler) loop() {
 				this.pm.BroadcastRtx(ev.Txs)
 			}
 			this.ctxStore.RemoveRemotes(ev.Txs)
-		case <-this.takerEventSub.Err():
+		case <-this.confirmedTakerSub.Err():
 			return
 
-		case ev := <-this.takerSignedCh:
+		case ev := <-this.signedRtxCh:
 			if this.role.IsAnchor() {
-				this.writeCrossMessage(ev.Tws)
+				this.writeCrossMessage(ev)
 			}
-		case <-this.takerSignedSub.Err():
+		case <-this.signedRtxSub.Err():
 			return
 
-		case ev := <-this.availableTakerCh:
+		case ev := <-this.availableRtxCh:
+			// anchor send makerFinish tx
 			if this.role.IsAnchor() {
 				if len(ev.Tws) == 0 {
-					for k := range this.knownRwssTx {
-						delete(this.knownRwssTx, k)
+					for k := range this.knownAvailableRtx {
+						delete(this.knownAvailableRtx, k)
 					}
 					break
 				}
@@ -211,12 +218,13 @@ func (this *MsgHandler) loop() {
 					}
 				}
 			}
-		case <-this.availableTakerSub.Err():
+		case <-this.availableRtxSub.Err():
 			return
 
-		case ev := <-this.takerStampCh:
-			this.ctxStore.StampStatus(ev.Txs, types.RtxStatusImplementing)
-		case <-this.takerStampSub.Err():
+		case ev := <-this.newTakerCh:
+			this.ctxStore.MarkStatus(ev.Txs, types.RtxStatusImplementing)
+
+		case <-this.newTakerSub.Err():
 			return
 
 		case ev := <-this.rmLogsCh:
@@ -237,12 +245,12 @@ func (this *MsgHandler) loop() {
 
 func (this *MsgHandler) Stop() {
 	log.Info("Stopping SimpleChain MsgHandler")
-	this.makerStartEventSub.Unsubscribe()
-	this.makerSignedSub.Unsubscribe()
-	this.takerEventSub.Unsubscribe()
-	this.takerSignedSub.Unsubscribe()
-	this.takerStampSub.Unsubscribe()
-	this.availableTakerSub.Unsubscribe()
+	this.confirmedMakerSub.Unsubscribe()
+	this.signedCtxSub.Unsubscribe()
+	this.confirmedTakerSub.Unsubscribe()
+	this.signedRtxSub.Unsubscribe()
+	this.newTakerSub.Unsubscribe()
+	this.availableRtxSub.Unsubscribe()
 	this.makerFinishEventSub.Unsubscribe()
 	this.rmLogsSub.Unsubscribe()
 
@@ -301,23 +309,28 @@ func (this *MsgHandler) readCrossMessage() {
 	for {
 		select {
 		case v := <-this.crossMsgReader:
-			cws, ok := v.(*types.CrossTransactionWithSignatures)
-			if ok && cws.Data.DestinationId.Uint64() == this.pm.NetworkId() {
-				this.ctxStore.AddWithSignatures([]*types.CrossTransactionWithSignatures{cws})
-				break
-			}
+			switch ev := v.(type) {
+			case core.SignedCtxEvent:
+				cws := ev.Tws
+				if cws.DestinationId().Uint64() == this.pm.NetworkId() {
+					if err := this.ctxStore.AddWithSignatures(cws, ev.CallBack); err != nil {
+						log.Warn("readCrossMessage failed", "error", err.Error())
+					}
+				}
 
-			rws, ok := v.(*types.ReceptTransactionWithSignatures)
-			if ok && rws.Data.DestinationId.Uint64() == this.pm.NetworkId() {
-				if v := this.rtxStore.ReadFromLocals(rws.Data.CTxId); v == nil {
-					errs := this.rtxStore.AddWithSignatures(rws)
-					for _, err := range errs {
-						if err != nil {
-							log.Error("MsgHandler signed rtx save failed", "error", err.Error())
+			case core.SignedRtxEvent:
+				rws := ev.Tws
+				if rws.Data.DestinationId.Uint64() == this.pm.NetworkId() {
+					if this.rtxStore.ReadFromLocals(rws.Data.CTxId) == nil {
+						errs := this.rtxStore.AddWithSignatures(rws)
+						for _, err := range errs {
+							ev.CallBack(rws, err)
 						}
 					}
 				}
 			}
+
+
 		case <-this.quitSync:
 			return
 		}
@@ -336,16 +349,16 @@ func (this *MsgHandler) getTxForLockOut(rwss []*types.ReceptTransactionWithSigna
 	nonce := this.pm.GetNonce(this.anchorSigner)
 
 	for _, rws := range rwss {
-		if _, ok := this.knownRwssTx[rws.ID()]; !ok {
+		if _, ok := this.knownAvailableRtx[rws.ID()]; !ok {
 			param, err = this.createTransaction(this.anchorSigner, crossAddr, rws)
 			if err != nil {
 				errorRws = append(errorRws, rws)
 				errTx1++
 				continue
 			}
-			this.knownRwssTx[rws.ID()] = param
+			this.knownAvailableRtx[rws.ID()] = param
 		} else { //TODO delete
-			param = this.knownRwssTx[rws.ID()]
+			param = this.knownAvailableRtx[rws.ID()]
 			if ok, _ := this.checkTransaction(this.anchorSigner, crossAddr, param.gasLimit,
 				param.gasPrice, param.data); !ok {
 				errorRws = append(errorRws, rws)
@@ -450,7 +463,7 @@ func (this *MsgHandler) reorgLogs(logs []*types.Log) {
 	}
 
 	if len(takerLogs) > 0 {
-		this.ctxStore.StampStatus(takerLogs, types.RtxStatusWaiting)
+		this.ctxStore.MarkStatus(takerLogs, types.RtxStatusWaiting)
 	}
 }
 

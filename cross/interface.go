@@ -15,23 +15,17 @@ import (
 type CtxStore interface {
 	AddLocal(*types.CrossTransaction) error
 	AddRemote(*types.CrossTransaction) error
-	AddWithSignatures([]*types.CrossTransactionWithSignatures) []error
+	AddWithSignatures(*types.CrossTransactionWithSignatures, func(*types.CrossTransactionWithSignatures, ...int)) error
 
 	RemoveLocals([]*types.FinishInfo) error
 	RemoveRemotes([]*types.ReceptTransaction) error
 
 	VerifyCtx(*types.CrossTransaction) error
-	VerifyLocalCws(cws *types.CrossTransactionWithSignatures) ([]error, []int)
-	VerifyRemoteCws(cws *types.CrossTransactionWithSignatures) ([]error, []int)
 
-	//TODO-D
-	//ReadFromLocals(common.Hash) *types.CrossTransactionWithSignatures
-	//RemoveFromLocalsByTransaction(common.Hash) error
+	MarkStatus([]*types.RTxsInfo, uint64)
+	ListCrossTransactions(int, bool) []*types.CrossTransactionWithSignatures
 
-	StampStatus([]*types.RTxsInfo, uint64) error
-	List(int, bool) []*types.CrossTransactionWithSignatures
-
-	SubscribeCWssResultEvent(chan<- core.NewCWsEvent) event.Subscription
+	SubscribeSignedCtxEvent(chan<- core.SignedCtxEvent) event.Subscription
 }
 
 type rtxStore interface {
@@ -44,8 +38,8 @@ type rtxStore interface {
 
 	VerifyRtx(rtx *types.ReceptTransaction) error
 
-	SubscribeRWssResultEvent(chan<- core.NewRWsEvent) event.Subscription
-	SubscribeNewRWssEvent(chan<- core.NewRWssEvent) event.Subscription
+	SubscribeSignedRtxEvent(chan<- core.SignedRtxEvent) event.Subscription
+	SubscribeAvailableRtxEvent(chan<- core.AvailableRtxEvent) event.Subscription
 }
 
 type simplechain interface {

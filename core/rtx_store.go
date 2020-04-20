@@ -52,9 +52,8 @@ type RtxStore struct {
 	chain       blockChain
 	chainConfig *params.ChainConfig
 
-	pending       *CtxSortedMap
-	queued        *CtxSortedMap
-	finishedCache *lru.Cache
+	pending *CtxSortedMap
+	queued  *CtxSortedMap
 
 	anchors     map[uint64]*AnchorSet
 	signer      types.RtxSigner
@@ -69,7 +68,8 @@ type RtxStore struct {
 
 	journal *RtxJournal
 
-	db ethdb.KeyValueStore // database to store cws
+	db            ethdb.KeyValueStore // database to store cws
+	finishedCache *lru.Cache
 
 	all              *rwsLookup
 	task             *rwsList
@@ -181,11 +181,11 @@ func (store *RtxStore) VerifyRtx(rtx *types.ReceptTransaction) error {
 	return store.validateRtx(rtx)
 }
 
-func (store *RtxStore) SubscribeRWssResultEvent(ch chan<- NewRWsEvent) event.Subscription {
+func (store *RtxStore) SubscribeSignedRtxEvent(ch chan<- SignedRtxEvent) event.Subscription {
 	return store.resultScope.Track(store.resultFeed.Subscribe(ch))
 }
 
-func (store *RtxStore) SubscribeNewRWssEvent(ch chan<- NewRWssEvent) event.Subscription {
+func (store *RtxStore) SubscribeAvailableRtxEvent(ch chan<- AvailableRtxEvent) event.Subscription {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	return store.rwsScope.Track(store.rwsFeed.Subscribe(ch))
@@ -222,7 +222,7 @@ func (store *RtxStore) loop() {
 			taker := store.task.Discard(1024) //todo 当确认高度增长时，提高该值
 			log.Info("report", "taker", len(taker), "task", len(store.task.all.all))
 			store.mu.RUnlock()
-			go store.rwsFeed.Send(NewRWssEvent{taker})
+			go store.rwsFeed.Send(AvailableRtxEvent{taker})
 		case <-journal.C:
 			if store.journal != nil {
 				store.mu.Lock()
@@ -275,8 +275,7 @@ func (store *RtxStore) addTxLocked(rtx *types.ReceptTransaction, local bool) err
 	id := rtx.ID()
 	chainInvoke := NewChainInvoke(store.chain)
 	checkAndCommit := func(rws *types.ReceptTransactionWithSignatures) error {
-		if rws != nil && len(rws.Data.V) >= requireSignatureCount {
-			//TODO signatures combine or multi-sign msg?
+		if rws != nil && rws.SignaturesLength() >= requireSignatureCount {
 			log.Debug("taker checkAndCommit", "txId", rws.ID().String())
 			store.pending.RemoveByHash(id)
 			store.finishedCache.Add(id, struct{}{}) //finished需要用db存,db信息需和链上信息一一对应
@@ -284,7 +283,9 @@ func (store *RtxStore) addTxLocked(rtx *types.ReceptTransaction, local bool) err
 				log.Error("db.Put", "err", err)
 				return err
 			}
-			store.resultFeed.Send(NewRWsEvent{rws})
+			store.resultFeed.Send(SignedRtxEvent{rws, func(rws *types.ReceptTransactionWithSignatures, err error) {
+
+			}})
 		}
 		return nil
 	}
@@ -345,7 +346,7 @@ func (store *RtxStore) validateRtx(rtx *types.ReceptTransaction) error {
 		return fmt.Errorf("rtx is already expired, id: %s", id.String())
 	}
 
-	as, ok := store.anchors[rtx.Data.DestinationId.Uint64()]
+	as, ok := store.anchors[rtx.DestinationId().Uint64()]
 	if ok {
 		if !as.IsAnchorSignedRtx(rtx, store.signer) {
 			return fmt.Errorf("invalid signature of rtx:%s", id.String())
@@ -357,11 +358,11 @@ func (store *RtxStore) validateRtx(rtx *types.ReceptTransaction) error {
 			log.Error("Failed to reset txpool state", "err", err)
 			return fmt.Errorf("stateAt err:%s", err.Error())
 		}
-		anchors, signedCount := QueryAnchor(store.chainConfig, store.chain, statedb, newHead, store.CrossDemoAddress, rtx.Data.DestinationId.Uint64())
+		anchors, signedCount := QueryAnchor(store.chainConfig, store.chain, statedb, newHead, store.CrossDemoAddress, rtx.DestinationId().Uint64())
 		store.config.Anchors = anchors
 		requireSignatureCount = signedCount
-		store.anchors[rtx.Data.DestinationId.Uint64()] = NewAnchorSet(store.config.Anchors)
-		if !store.anchors[rtx.Data.DestinationId.Uint64()].IsAnchorSignedRtx(rtx, store.signer) {
+		store.anchors[rtx.DestinationId().Uint64()] = NewAnchorSet(store.config.Anchors)
+		if !store.anchors[rtx.DestinationId().Uint64()].IsAnchorSignedRtx(rtx, store.signer) {
 			return fmt.Errorf("invalid signature of ctx:%s", id.String())
 		}
 	}

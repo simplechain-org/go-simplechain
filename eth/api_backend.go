@@ -323,5 +323,5 @@ func (b *EthAPIBackend) CtxPoolContent() (map[uint64][]*types.CrossTransactionWi
 }
 
 func (b *EthAPIBackend) GetSelfCtx(from common.Address) (map[uint64][]*types.CrossTransactionWithSignatures, map[uint64][]*types.CrossTransactionWithSignatures) {
-	return b.eth.ctxStore.CtxOwner(from)
+	return b.eth.ctxStore.ListCrossTransactionBySender(from)
 }

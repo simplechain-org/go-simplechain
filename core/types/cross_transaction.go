@@ -178,8 +178,6 @@ const (
 	RtxStatusWaiting = RtxStatus(0)
 	// RtxStatusImplementing is the status code of a rtx transaction if execution implementing.
 	RtxStatusImplementing = RtxStatus(1)
-	// RtxStatusSuccessful is the status code of a rtx transaction if execution succeeded.
-	RtxStatusSuccessful = RtxStatus(2)
 )
 
 type CrossTransactionWithSignatures struct {
@@ -268,7 +266,7 @@ func (cws *CrossTransactionWithSignatures) BlockHash() common.Hash {
 	return cws.Data.BlockHash
 }
 
-func (cws *CrossTransactionWithSignatures) AddSignatures(ctx *CrossTransaction) error {
+func (cws *CrossTransactionWithSignatures) AddSignature(ctx *CrossTransaction) error {
 	if cws.Hash() == ctx.Hash() {
 		var exist bool
 		for _, r := range cws.Data.R {
@@ -285,6 +283,13 @@ func (cws *CrossTransactionWithSignatures) AddSignatures(ctx *CrossTransaction) 
 		return errors.New("already exist")
 	}
 	return errors.New("not same Ctx")
+}
+func (cws *CrossTransactionWithSignatures) RemoveSignature(index int) {
+	if index < cws.SignaturesLength() {
+		cws.Data.V = append(cws.Data.V[:index], cws.Data.V[index+1:]...)
+		cws.Data.R = append(cws.Data.R[:index], cws.Data.R[index+1:]...)
+		cws.Data.S = append(cws.Data.S[:index], cws.Data.S[index+1:]...)
+	}
 }
 
 func (cws *CrossTransactionWithSignatures) SignaturesLength() int {
@@ -324,14 +329,11 @@ func (cws *CrossTransactionWithSignatures) Key() []byte {
 	return key
 }
 
-func (cws *CrossTransactionWithSignatures) Price() (*big.Int, *big.Int) {
-	if cws.Data.Value.Cmp(big.NewInt(0)) == 0 {
-		return nil, nil
+func (cws *CrossTransactionWithSignatures) Price() *big.Rat {
+	if cws.Data.Value.Cmp(common.Big0) == 0 {
+		return nil
 	}
-	z := new(big.Int)
-	m := new(big.Int)
-	z, m = z.DivMod(cws.Data.DestinationValue, cws.Data.Value, m)
-	return z, m
+	return new(big.Rat).SetFrac(cws.Data.DestinationValue, cws.Data.Value)
 }
 
 func (cws *CrossTransactionWithSignatures) Size() common.StorageSize {

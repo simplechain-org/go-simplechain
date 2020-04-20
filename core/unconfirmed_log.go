@@ -15,9 +15,9 @@ type headerRetriever interface {
 	GetHeaderByNumber(number uint64) *types.Header
 	GetReceiptsByTxHash(hash common.Hash) *types.Receipt
 	GetTransactionByTxHash(hash common.Hash) (*types.Transaction, common.Hash, uint64)
-	CtxsFeedSend(transaction NewCTxsEvent) int
-	RtxsFeedSend(transaction NewRTxsEvent) int
-	TransactionFinishFeedSend(transaction TransationFinishEvent) int
+	ConfirmedMakerFeedSend(transaction ConfirmedMakerEvent) int
+	ConfirmedTakerSend(transaction ConfirmedTakerEvent) int
+	ConfirmedFinishFeedSend(transaction ConfirmedFinishEvent) int
 	IsCtxAddress(addr common.Address) bool
 }
 
@@ -146,13 +146,13 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 					}
 				}
 				if len(ctxs) > 0 {
-					set.chain.CtxsFeedSend(NewCTxsEvent{ctxs})
+					set.chain.ConfirmedMakerFeedSend(ConfirmedMakerEvent{ctxs})
 				}
 				if len(rtxs) > 0 {
-					set.chain.RtxsFeedSend(NewRTxsEvent{rtxs})
+					set.chain.ConfirmedTakerSend(ConfirmedTakerEvent{rtxs})
 				}
 				if len(finishes) > 0 {
-					set.chain.TransactionFinishFeedSend(TransationFinishEvent{finishes})
+					set.chain.ConfirmedFinishFeedSend(ConfirmedFinishEvent{finishes})
 				}
 			}
 		default:

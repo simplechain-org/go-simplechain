@@ -19,186 +19,114 @@ package core
 import (
 	"math/big"
 
+	"github.com/Beyond-simplechain/foundation/container/redblacktree"
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/types"
 )
 
 func ComparePrice(hi, hj *types.CrossTransactionWithSignatures) bool {
-	zi, mi := hi.Price()
-	zj, mj := hj.Price()
-
-	if zi == nil || zj == nil {
-		return false
-	}
-
-	switch zi.Cmp(zj) {
-	case -1:
-		return true
-	case 1:
-		return false
-	default: //0
-		switch mi.Cmp(mj) {
-		case -1:
-			return true
-		case 1:
-			return false
-		default: //0
-			return false
-		}
-	}
+	ri := hi.Price()
+	rj := hj.Price()
+	return ri != nil && rj != nil && ri.Cmp(rj) < 0
 }
 
-func ComparePrice2(chargei, valuei, chargej, valuej *big.Int) bool {
-	if valuei.Cmp(big.NewInt(0)) == 0 || valuej.Cmp(big.NewInt(0)) == 0 {
+func ComparePrice2(dvi, vi, dvj, vj *big.Int) bool {
+	if vi.Cmp(common.Big0) == 0 || vj.Cmp(common.Big0) == 0 {
 		return false
 	}
-	zi := new(big.Int)
-	mi := new(big.Int)
-	zi, mi = zi.DivMod(chargei, valuei, mi)
-
-	zj := new(big.Int)
-	zj, mj := zj.DivMod(chargej, valuej, mi)
-
-	switch zi.Cmp(zj) {
-	case -1:
-		return true
-	case 1:
-		return false
-	default: //0
-		switch mi.Cmp(mj) {
-		case -1:
-			return true
-		case 1:
-			return false
-		default: //0
-			return false
-		}
-	}
+	ri, rj := new(big.Rat).SetFrac(dvi, vi), new(big.Rat).SetFrac(dvj, vj)
+	return ri != nil && rj != nil && ri.Cmp(rj) < 0
 }
 
-type CWssList struct {
+type CwsSortedByPrice struct {
 	all      map[common.Hash]*types.CrossTransactionWithSignatures
-	list     []*types.CrossTransactionWithSignatures
+	list     *redblacktree.Tree
 	capacity uint64
 }
 
-func newCWssList(n uint64) *CWssList {
-	return &CWssList{
-		all:      make(map[common.Hash]*types.CrossTransactionWithSignatures),
-		list:     []*types.CrossTransactionWithSignatures{},
+func newCWssList(n uint64) *CwsSortedByPrice {
+	return &CwsSortedByPrice{
+		all: make(map[common.Hash]*types.CrossTransactionWithSignatures),
+		list: redblacktree.NewWith(func(a, b interface{}) int {
+			if ComparePrice(a.(*types.CrossTransactionWithSignatures), b.(*types.CrossTransactionWithSignatures)) {
+				return -1
+			}
+			return 0
+		}, true),
 		capacity: n,
 	}
 }
 
-func (t *CWssList) Get(id common.Hash) *types.CrossTransactionWithSignatures {
+func (t *CwsSortedByPrice) Get(id common.Hash) *types.CrossTransactionWithSignatures {
 	return t.all[id]
 }
 
 // Count returns the current number of items in the all.
-func (t *CWssList) Count() int {
+func (t *CwsSortedByPrice) Count() int {
 	return len(t.all)
 }
 
-func (t *CWssList) Add(tx *types.CrossTransactionWithSignatures) {
-	l := uint64(len(t.all))
-	if _, ok := t.all[tx.ID()]; !ok {
-		var temp []*types.CrossTransactionWithSignatures
+func (t *CwsSortedByPrice) Add(tx *types.CrossTransactionWithSignatures) {
+	if _, ok := t.all[tx.ID()]; ok {
+		return
+	}
 
-		if l == 0 {
-			t.list = append(t.list, tx)
-			t.all[tx.ID()] = tx
-		} else if l == 1 {
-			if ComparePrice(tx, t.list[0]) {
-				temp = append(temp, tx)
-				temp = append(temp, t.list[0])
-				t.list = temp
-			} else { // >=
-				t.list = append(t.list, tx)
-			}
-			t.all[tx.ID()] = tx
-
-		} else if l >= 2 && l < t.capacity {
-			if ComparePrice(tx, t.list[0]) {
-				temp = append(temp, tx)
-				temp = append(temp, t.list...)
-				t.list = temp
-			} else if !ComparePrice(tx, t.list[l-1]) {
-				t.list = append(t.list, tx)
-			} else {
-				for k, v := range t.list {
-					if ComparePrice(tx, v) && !ComparePrice(tx, t.list[k-1]) {
-						temp = append(temp, t.list[:k]...)
-						temp = append(temp, tx)
-						temp = append(temp, t.list[k:]...)
-					}
-				}
-				t.list = temp
-			}
-			t.all[tx.ID()] = tx
-		} else { //l == capacity
-			if ComparePrice(tx, t.list[0]) {
-				delete(t.all, t.list[t.capacity-1].ID())
-				temp = append(temp, tx)
-				temp = append(temp, t.list[:t.capacity-1]...)
-				t.list = temp
-				t.all[tx.ID()] = tx
-			} else if !ComparePrice(tx, t.list[t.capacity-1]) {
-				//价格太高，舍弃该交易
-			} else {
-				for k, v := range t.list {
-					if ComparePrice(tx, v) && !ComparePrice(tx, t.list[k-1]) {
-						temp = append(temp, t.list[:k]...)
-						temp = append(temp, tx)
-						temp = append(temp, t.list[k:t.capacity-1]...)
-					}
-				}
-				delete(t.all, t.list[t.capacity-1].ID())
-				t.list = temp
-				t.all[tx.ID()] = tx
-			}
+	if uint64(len(t.all)) == t.capacity {
+		last := t.list.End()
+		if last.Prev() {
+			id := last.Key().(*types.CrossTransactionWithSignatures).ID()
+			t.list.RemoveOne(last)
+			delete(t.all, id)
 		}
 	}
+
+	t.list.Put(tx, nil)
+	t.all[tx.ID()] = tx
 }
 
 // Remove removes a transaction from the all.
-func (t *CWssList) Remove(hash common.Hash) {
-	if _, ok := t.all[hash]; ok {
-		var temp []*types.CrossTransactionWithSignatures
-		for k, v := range t.list {
-			if v.ID() == hash {
-				temp = append(temp, t.list[:k]...)
-				temp = append(temp, t.list[k+1:]...)
-			}
-		}
-		delete(t.all, hash)
-		t.list = temp
-	}
-}
-
-// Remove removes a transaction from the all.
-func (t *CWssList) StampTx(hash common.Hash, status uint64) {
-	if _, ok := t.all[hash]; ok {
-		for _, v := range t.list {
-			if v.ID() == hash {
-				v.Status = status
-				t.all[hash] = v
+func (t *CwsSortedByPrice) Remove(id common.Hash) {
+	if tx, ok := t.all[id]; ok {
+		for itr := t.list.LowerBound(tx); itr != t.list.UpperBound(tx); itr.Next() {
+			if itr.Key().(*types.CrossTransactionWithSignatures).ID() == id {
+				t.list.RemoveOne(itr)
+				delete(t.all, id)
+				return
 			}
 		}
 	}
 }
 
-func (t *CWssList) GetList() []*types.CrossTransactionWithSignatures {
-	return t.list
+// UpdateStatus mark tx status
+func (t *CwsSortedByPrice) UpdateStatus(id common.Hash, status uint64) {
+	if tx, ok := t.all[id]; ok {
+		for itr := t.list.LowerBound(tx); itr != t.list.UpperBound(tx); itr.Next() {
+			if itr.Key().(*types.CrossTransactionWithSignatures).ID() == id {
+				itr.Key().(*types.CrossTransactionWithSignatures).Status = status
+				t.all[id].Status = status
+				return
+			}
+		}
+	}
 }
 
-func (t *CWssList) GetAll() map[common.Hash]*types.CrossTransactionWithSignatures {
+func (t *CwsSortedByPrice) GetList() []*types.CrossTransactionWithSignatures {
+	res := make([]*types.CrossTransactionWithSignatures, t.list.Size())
+	for i, cws := range t.list.Keys() {
+		res[i] = cws.(*types.CrossTransactionWithSignatures)
+	}
+	return res
+}
+
+func (t *CwsSortedByPrice) GetAll() map[common.Hash]*types.CrossTransactionWithSignatures {
 	return t.all
 }
 
-func (t *CWssList) GetCountList(amount int) []*types.CrossTransactionWithSignatures {
-	if len(t.list) > amount {
-		return t.list[:amount]
-	} else {
-		return t.list
+func (t *CwsSortedByPrice) GetCountList(pageSize int) []*types.CrossTransactionWithSignatures {
+	res := make([]*types.CrossTransactionWithSignatures, pageSize)
+	it := t.list.Iterator()
+	for i := 0; it.Next() && i < pageSize; i++ {
+		res[i] = it.Key().(*types.CrossTransactionWithSignatures)
 	}
+	return res
 }

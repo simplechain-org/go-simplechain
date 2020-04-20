@@ -17,7 +17,7 @@ func TestEIP155CtxSigning(t *testing.T) {
 	}
 
 	signer := NewEIP155CtxSigner(big.NewInt(18))
-	tx, err := SignCTx(NewCrossTransaction(big.NewInt(1e18),
+	tx, err := SignCtx(NewCrossTransaction(big.NewInt(1e18),
 		big.NewInt(2e18),
 		big.NewInt(19),
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
@@ -46,7 +46,7 @@ func TestEIP155CtxChainId(t *testing.T) {
 		return crypto.Sign(hash, key)
 	}
 	signer := NewEIP155CtxSigner(big.NewInt(18))
-	tx, err := SignCTx(NewCrossTransaction(big.NewInt(1e18),
+	tx, err := SignCtx(NewCrossTransaction(big.NewInt(1e18),
 		big.NewInt(2e18),
 		big.NewInt(19),
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
@@ -122,7 +122,7 @@ func TestCtxChainId(t *testing.T) {
 		nil)
 
 	var err error
-	tx, err = SignCTx(tx, NewEIP155CtxSigner(big.NewInt(1)), signHash)
+	tx, err = SignCtx(tx, NewEIP155CtxSigner(big.NewInt(1)), signHash)
 	if err != nil {
 		t.Fatal(err)
 	}

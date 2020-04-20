@@ -17,15 +17,15 @@ func makerKey(id common.Hash) []byte {
 	return append(makerPrefix, id.Bytes()...)
 }
 
-type CtxDb struct {
+type CrossTransactionDb struct {
 	db ethdb.KeyValueStore
 }
 
-func NewCtxDb(db ethdb.KeyValueStore) *CtxDb {
-	return &CtxDb{db: db}
+func NewCtxDb(db ethdb.KeyValueStore) *CrossTransactionDb {
+	return &CrossTransactionDb{db: db}
 }
 
-func (this *CtxDb) Write(maker *types.CrossTransactionWithSignatures) error {
+func (this *CrossTransactionDb) Write(maker *types.CrossTransactionWithSignatures) error {
 	if maker == nil {
 		return errors.New("maker is nil")
 	}
@@ -36,7 +36,7 @@ func (this *CtxDb) Write(maker *types.CrossTransactionWithSignatures) error {
 	return this.db.Put(makerKey(maker.ID()), enc)
 }
 
-func (this *CtxDb) Read(ctxId common.Hash) (*types.CrossTransactionWithSignatures, error) {
+func (this *CrossTransactionDb) Read(ctxId common.Hash) (*types.CrossTransactionWithSignatures, error) {
 	data, err := this.db.Get(makerKey(ctxId))
 	if err != nil {
 		return nil, err
@@ -49,17 +49,17 @@ func (this *CtxDb) Read(ctxId common.Hash) (*types.CrossTransactionWithSignature
 	return maker, nil
 }
 
-func (this *CtxDb) ListAll(add func(
+func (this *CrossTransactionDb) ListAll(add func(
 	cwsList []*types.CrossTransactionWithSignatures,
-	validator func(*types.CrossTransactionWithSignatures) error,
+	validator CrossValidator,
 	persist bool) []error) error {
 	var (
 		failure error
 		total   int
+		result  []*types.CrossTransactionWithSignatures
 	)
-	it := this.db.NewIteratorWithPrefix(makerPrefix)
-	var result []*types.CrossTransactionWithSignatures
-	for it.Next() && total < 512 { //todo 每次将db循环一下太傻了
+
+	for it := this.db.NewIteratorWithPrefix(makerPrefix); it.Next() && total < 512; { //todo 每次将db循环一下太傻了
 		state := new(types.CrossTransactionWithSignatures)
 		if err := rlp.Decode(bytes.NewReader(it.Value()), state); err != nil {
 			failure = err
@@ -80,7 +80,7 @@ func (this *CtxDb) ListAll(add func(
 	return failure
 }
 
-func (this *CtxDb) Has(ctxId common.Hash) bool {
+func (this *CrossTransactionDb) Has(ctxId common.Hash) bool {
 	has, err := this.db.Has(makerKey(ctxId))
 	if err != nil {
 		return false
@@ -88,39 +88,21 @@ func (this *CtxDb) Has(ctxId common.Hash) bool {
 	return has
 }
 
-func (this *CtxDb) Delete(ctxId common.Hash) error {
+func (this *CrossTransactionDb) Delete(ctxId common.Hash) error {
 	return this.db.Delete(makerKey(ctxId))
 }
 
-func (this *CtxDb) List() []*types.CrossTransactionWithSignatures {
-	it := this.db.NewIteratorWithPrefix(makerPrefix)
+func (this *CrossTransactionDb) Query(filter func(*types.CrossTransactionWithSignatures) bool) []*types.CrossTransactionWithSignatures {
 	var result []*types.CrossTransactionWithSignatures
-	for it.Next() {
-		state := new(types.CrossTransactionWithSignatures)
-		err := rlp.Decode(bytes.NewReader(it.Value()), state)
+	for it := this.db.NewIteratorWithPrefix(makerPrefix); it.Next(); {
+		cws := new(types.CrossTransactionWithSignatures)
+		err := rlp.Decode(bytes.NewReader(it.Value()), cws)
 		if err != nil {
-			log.Info("List", "err", err)
+			log.Info("Query error occurs", "err", err)
 			break
-		} else {
-			result = append(result, state)
 		}
-	}
-	return result
-}
-
-func (this *CtxDb) Query(from common.Address) []*types.CrossTransactionWithSignatures {
-	it := this.db.NewIteratorWithPrefix(makerPrefix)
-	var result []*types.CrossTransactionWithSignatures
-	for it.Next() {
-		state := new(types.CrossTransactionWithSignatures)
-		err := rlp.Decode(bytes.NewReader(it.Value()), state)
-		if err != nil {
-			log.Info("List", "err", err)
-			break
-		} else {
-			if state.Data.From == from {
-				result = append(result, state)
-			}
+		if filter == nil || filter(cws) {
+			result = append(result, cws)
 		}
 	}
 	return result

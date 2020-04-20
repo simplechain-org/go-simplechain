@@ -22,7 +22,7 @@ func TestNewCtxStoreAdd(t *testing.T) {
 	}
 
 	signer := types.NewEIP155CtxSigner(big.NewInt(18))
-	tx1, err := types.SignCTx(types.NewCrossTransaction(big.NewInt(1e18),
+	tx1, err := types.SignCtx(types.NewCrossTransaction(big.NewInt(1e18),
 		big.NewInt(2e18),
 		big.NewInt(19),
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
@@ -36,7 +36,7 @@ func TestNewCtxStoreAdd(t *testing.T) {
 	}
 
 	ctxStore := setupCtxStore()
-	tx2, err := types.SignCTx(types.NewCrossTransaction(big.NewInt(1e18),
+	tx2, err := types.SignCtx(types.NewCrossTransaction(big.NewInt(1e18),
 		big.NewInt(2e18),
 		big.NewInt(19),
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
