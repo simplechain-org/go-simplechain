@@ -3,7 +3,6 @@ package cross
 import (
 	"context"
 
-	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"
@@ -22,25 +21,12 @@ type CtxStore interface {
 
 	VerifyCtx(*types.CrossTransaction) error
 
-	MarkStatus([]*types.RTxsInfo, uint64)
-	ListCrossTransactions(int, bool) []*types.CrossTransactionWithSignatures
+	StampStatus([]*types.RTxsInfo, uint64) error
+	List(int, bool) []*types.CrossTransactionWithSignatures
 
-	SubscribeSignedCtxEvent(chan<- core.SignedCtxEvent) event.Subscription
-}
+	SubscribeCWssResultEvent(chan<- core.SignedCtxEvent) event.Subscription
 
-type rtxStore interface {
-	AddLocal(*types.ReceptTransaction) error
-	AddRemote(*types.ReceptTransaction) error
-	AddWithSignatures(...*types.ReceptTransactionWithSignatures) []error
-
-	RemoveLocals(finishes []*types.FinishInfo) error
-	ReadFromLocals(ctxId common.Hash) *types.ReceptTransactionWithSignatures
-
-	VerifyRtx(rtx *types.ReceptTransaction) error
-
-	SubscribeSignedRtxEvent(chan<- core.SignedRtxEvent) event.Subscription
-	SubscribeAvailableRtxEvent(chan<- core.AvailableRtxEvent) event.Subscription
-}
+	UpdateAnchors(*types.RemoteChainInfo) error
 
 type simplechain interface {
 	GetEVM(ctx context.Context, msg core.Message, state *state.StateDB, header *types.Header, vmCfg vm.Config) (*vm.EVM, func() error, error)

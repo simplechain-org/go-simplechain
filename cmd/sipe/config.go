@@ -23,7 +23,6 @@ import (
 	"math/big"
 	"os"
 	"reflect"
-	"strings"
 	"unicode"
 
 	"github.com/naoina/toml"
@@ -152,19 +151,6 @@ func makeConfigNode(ctx *cli.Context) (*node.Node, gethConfig) {
 		if common.IsHexAddress(subCtxAddress) {
 			address := common.HexToAddress(subCtxAddress)
 			cfg.Eth.SubChainCtxAddress = address
-		}
-	}
-	if ctx.GlobalIsSet(utils.AnchorAccountsFlag.Name) {
-		anchors := strings.Split(ctx.GlobalString(utils.AnchorAccountsFlag.Name), ",")
-		if len(anchors) > 0 {
-			addresses := make([]common.Address, 0, len(anchors))
-			for _, anchor := range anchors {
-				if common.IsHexAddress(anchor) {
-					addresses = append(addresses, common.HexToAddress(anchor))
-				}
-			}
-			cfg.Eth.CtxStore.Anchors = addresses
-			cfg.Eth.RtxStore.Anchors = addresses
 		}
 	}
 

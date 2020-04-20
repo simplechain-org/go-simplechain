@@ -72,15 +72,17 @@ type SignedCtxEvent struct {
 	CallBack func(cws *types.CrossTransactionWithSignatures, invalidSigIndex ...int)
 }
 
-type SignedRtxEvent struct {
-	Tws      *types.ReceptTransactionWithSignatures
-	CallBack func(*types.ReceptTransactionWithSignatures, error)
+type TransationRemoveEvent struct {
+	Transactions types.Transactions
 }
-
-type AvailableRtxEvent struct {
-	Tws []*types.ReceptTransactionWithSignatures
-}
-
 type ConfirmedFinishEvent struct {
 	Finish []*types.FinishInfo
+}
+
+type NewCtxStatusEvent struct {
+	Status map[uint64]*Statistics
+}
+
+type AnchorEvent struct {
+	ChainInfo []*types.RemoteChainInfo
 }

@@ -345,3 +345,8 @@ func (cws *CrossTransactionWithSignatures) Size() common.StorageSize {
 	cws.size.Store(common.StorageSize(c))
 	return common.StorageSize(c)
 }
+
+type RemoteChainInfo struct {
+	RemoteChainId uint64
+	BlockNumber   uint64
+}
