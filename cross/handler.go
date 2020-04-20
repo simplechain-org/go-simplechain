@@ -108,7 +108,6 @@ func NewMsgHandler(chain simplechain, roleHandler RoleHandler, role common.Chain
 		gasHelper:           gasHelper,
 		MainChainCtxAddress: mainAddr,
 		SubChainCtxAddress:  subAddr,
-		knownAvailableRtx:   make(map[common.Hash]*TranParam),
 		signHash:            signHash,
 		anchorSigner:        anchorSigner,
 	}
@@ -180,7 +179,7 @@ func (this *MsgHandler) loop() {
 				break
 			}
 			if this.role.IsAnchor() {
-				this.writeCrossMessage(ev.Txs)
+				this.writeCrossMessage(ev)
 			}
 			this.ctxStore.RemoveRemotes(ev.Txs)
 		case <-this.confirmedTakerSub.Err():
@@ -279,9 +278,8 @@ func (this *MsgHandler) readCrossMessage() {
 					}
 				}
 
-			rtxs, ok := v.([]*types.ReceptTransaction)
-			if ok {
-				txs, err := this.GetTxForLockOut(rtxs)
+			case core.ConfirmedTakerEvent:
+				txs, err := this.GetTxForLockOut(ev.Txs)
 				if err != nil {
 					log.Error("GetTxForLockOut", "err", err)
 				}
@@ -289,7 +287,6 @@ func (this *MsgHandler) readCrossMessage() {
 					this.pm.AddLocals(txs)
 				}
 			}
-
 
 		case <-this.quitSync:
 			return
@@ -391,8 +388,7 @@ func (this *MsgHandler) UpdateSelfTx() {
 					gasPrice := new(big.Int).Div(new(big.Int).Mul(
 						v.GasPrice(), big.NewInt(100+int64(core.DefaultTxPoolConfig.PriceBump))), big.NewInt(100))
 
-					tx, err := newSignedTransaction(v.Nonce(), this.getCrossContractAddr(), v.Gas(), gasPrice, v.Data(),
-						this.pm.NetworkId(), this.signHash)
+					tx, err := newSignedTransaction(v.Nonce(), this.getCrossContractAddr(), v.Gas(), gasPrice, v.Data(), this.pm.NetworkId(), this.signHash)
 					if err != nil {
 						log.Info("UpdateSelfTx", "err", err)
 					}
@@ -411,7 +407,6 @@ func (this *MsgHandler) UpdateSelfTx() {
 
 func newSignedTransaction(nonce uint64, to common.Address, gasLimit uint64, gasPrice *big.Int,
 	data []byte, networkId uint64, signHash types.SignHash) (*types.Transaction, error) {
-
 	tx := types.NewTransaction(nonce, to, big.NewInt(0), gasLimit, gasPrice, data)
 	signer := types.NewEIP155Signer(big.NewInt(int64(networkId)))
 	txHash := signer.Hash(tx)

@@ -149,7 +149,8 @@ type BlockChain struct {
 	confirmedMakerFeed  event.Feed
 	confirmedTakerFeed  event.Feed
 	takerFeed           event.Feed //
-	confirmedFinishFeed event.FeedupdateAnchorFeed event.Feed
+	confirmedFinishFeed event.Feed
+	updateAnchorFeed    event.Feed
 	scope               event.SubscriptionScope
 	genesisBlock        *types.Block
 

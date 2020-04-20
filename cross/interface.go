@@ -21,12 +21,13 @@ type CtxStore interface {
 
 	VerifyCtx(*types.CrossTransaction) error
 
-	StampStatus([]*types.RTxsInfo, uint64) error
-	List(int, bool) []*types.CrossTransactionWithSignatures
+	MarkStatus([]*types.RTxsInfo, uint64)
+	ListCrossTransactions(int, bool) []*types.CrossTransactionWithSignatures
 
-	SubscribeCWssResultEvent(chan<- core.SignedCtxEvent) event.Subscription
+	SubscribeSignedCtxEvent(chan<- core.SignedCtxEvent) event.Subscription
 
 	UpdateAnchors(*types.RemoteChainInfo) error
+}
 
 type simplechain interface {
 	GetEVM(ctx context.Context, msg core.Message, state *state.StateDB, header *types.Header, vmCfg vm.Config) (*vm.EVM, func() error, error)

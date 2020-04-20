@@ -36,7 +36,6 @@ func TestCWssList(t *testing.T) {
 
 	t.Log(cwss.Count())
 
-
 	printCwsList(cwss.GetCountList(15))
 
 	cwss.UpdateStatus(last, types.RtxStatusImplementing)
