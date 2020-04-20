@@ -24,7 +24,7 @@ type ProtocolManager interface {
 	GetNonce(address common.Address) uint64
 	AddLocals([]*types.Transaction)
 	AddRemotes([]*types.Transaction)
-	SetMsgHandler(msgHandler *MsgHandler)
+	SetMsgHandler(msgHandler *Handler)
 	Pending() (map[common.Address]types.Transactions, error)
 }
 

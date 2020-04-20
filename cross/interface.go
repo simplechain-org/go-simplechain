@@ -2,7 +2,6 @@ package cross
 
 import (
 	"context"
-
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"

@@ -37,7 +37,8 @@ func (as AnchorSet) IsAnchorSignedCtx(tx *types.CrossTransaction, signer types.C
 
 func QueryAnchor(config *params.ChainConfig, bc ChainContext, statedb *state.StateDB, header *types.Header,
 	address common.Address, remoteChainId uint64) ([]common.Address, int) {
-	res, err := NewEvmInvoke(bc, header, statedb, config, vm.Config{}).CallContract(common.Address{}, &address, params.GetAnchorFn, common.LeftPadBytes(big.NewInt(int64(remoteChainId)).Bytes(), 32))
+	res, err := NewEvmInvoke(bc, header, statedb, config, vm.Config{}).
+		CallContract(common.Address{}, &address, params.GetAnchorFn, common.LeftPadBytes(big.NewInt(int64(remoteChainId)).Bytes(), 32))
 	if err != nil {
 		log.Info("QueryAnchor apply getAnchor transaction failed", "err", err)
 	}

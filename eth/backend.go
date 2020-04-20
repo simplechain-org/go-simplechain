@@ -108,7 +108,7 @@ type Ethereum struct {
 
 	genesisHash common.Hash
 	ctxStore    *core.CtxStore
-	msgHandler  *cross.MsgHandler
+	msgHandler  *cross.Handler
 }
 
 func (s *Ethereum) AddLesServer(ls LesServer) {
@@ -244,11 +244,13 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 		return nil, err
 	}
 
-	eth.msgHandler = cross.NewMsgHandler(eth, cross.RoleMainHandler, config.Role, eth.ctxStore, eth.blockchain, ctx.MainCh, ctx.SubCh, config.MainChainCtxAddress, config.SubChainCtxAddress, eth.SignHash, config.AnchorSigner)
+	if config.Role == common.RoleAnchor {
+		eth.msgHandler = cross.NewCrossHandler(eth, cross.RoleMainHandler, config.Role, eth.ctxStore, eth.blockchain, ctx.MainCh, ctx.SubCh, config.MainChainCtxAddress, config.SubChainCtxAddress, eth.SignHash, config.AnchorSigner)
 
-	eth.msgHandler.SetProtocolManager(eth.protocolManager)
+		eth.msgHandler.SetProtocolManager(eth.protocolManager)
 
-	eth.protocolManager.SetMsgHandler(eth.msgHandler)
+		eth.protocolManager.SetMsgHandler(eth.msgHandler)
+	}
 
 	eth.miner = miner.New(eth, &config.Miner, chainConfig, eth.EventMux(), eth.engine, eth.isLocalBlock, eth.ctxStore)
 	eth.miner.SetExtra(makeExtraData(config.Miner.ExtraData))
@@ -259,7 +261,10 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 		gpoParams.Default = config.Miner.GasPrice
 	}
 	eth.APIBackend.gpo = gasprice.NewOracle(eth.APIBackend, gpoParams)
-	eth.msgHandler.SetGasPriceOracle(eth.APIBackend.gpo)
+	if eth.msgHandler != nil {
+		eth.msgHandler.SetGasPriceOracle(eth.APIBackend.gpo)
+	}
+
 	return eth, nil
 }
 

@@ -104,7 +104,7 @@ type Ethereum struct {
 
 	serverPool *serverPool
 
-	msgHandler *cross.MsgHandler
+	msgHandler *cross.Handler
 
 	chainConfig *params.ChainConfig
 	ctxStore    *core.CtxStore
@@ -244,9 +244,14 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*Ethereum, error) {
 	if eth.protocolManager, err = NewProtocolManager(chainConfig, checkpoint, config.SyncMode, chainConfig.ChainID.Uint64(), eth.eventMux, eth.txPool, eth.engine, eth.blockchain, chainDb, cacheLimit, config.Whitelist, eth.serverPool); err != nil {
 		return nil, err
 	}
-	eth.msgHandler = cross.NewMsgHandler(eth, cross.RoleSubHandler, config.Role, eth.ctxStore, eth.blockchain, ctx.SubCh, ctx.MainCh, config.MainChainCtxAddress, config.SubChainCtxAddress, eth.SignHash, config.AnchorSigner)
-	eth.msgHandler.SetProtocolManager(eth.protocolManager)
-	eth.protocolManager.SetMsgHandler(eth.msgHandler)
+	if config.Role == common.RoleAnchor {
+		eth.msgHandler = cross.NewCrossHandler(eth, cross.RoleSubHandler, config.Role, eth.ctxStore, eth.blockchain, ctx.SubCh, ctx.MainCh, config.MainChainCtxAddress, config.SubChainCtxAddress, eth.SignHash, config.AnchorSigner)
+
+		eth.msgHandler.SetProtocolManager(eth.protocolManager)
+
+		eth.protocolManager.SetMsgHandler(eth.msgHandler)
+	}
+
 	eth.miner = miner.New(eth, &config.Miner, chainConfig, eth.EventMux(), eth.engine, eth.isLocalBlock, eth.ctxStore)
 	eth.miner.SetExtra(makeExtraData(config.Miner.ExtraData))
 
@@ -256,7 +261,10 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*Ethereum, error) {
 		gpoParams.Default = config.Miner.GasPrice
 	}
 	eth.APIBackend.gpo = gasprice.NewOracle(eth.APIBackend, gpoParams)
-	eth.msgHandler.SetGasPriceOracle(eth.APIBackend.gpo)
+	if eth.msgHandler != nil {
+		eth.msgHandler.SetGasPriceOracle(eth.APIBackend.gpo)
+	}
+
 	return eth, nil
 }
 
