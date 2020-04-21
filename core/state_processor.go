@@ -103,7 +103,8 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 			if new(big.Int).SetBytes(res).Cmp(big.NewInt(0)) == 0 {
 				//log.Info("take ok!", "res", new(big.Int).SetBytes(res).Uint64(), "tx", tx.Hash().String())
 			} else {
-				//log.Info("already take!", "res", new(big.Int).SetBytes(res).Uint64(), "tx", tx.Hash().String())
+				//TODO-//
+				log.Info("already take!", "res", new(big.Int).SetBytes(res).Uint64(), "tx", tx.Hash().String())
 				return nil, ErrRepetitionCrossTransaction
 			}
 		}

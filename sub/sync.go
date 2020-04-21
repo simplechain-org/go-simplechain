@@ -231,7 +231,7 @@ func (pm *ProtocolManager) syncCtxs(p *peer) {
 	if pm.msgHandler.GetCtxstore() == nil {
 		return
 	}
-	txs := pm.msgHandler.GetCtxstore().ListCrossTransactions(0, true)
+	txs := pm.msgHandler.GetCtxstore().ListCrossTransactions(0)
 	if len(txs) == 0 {
 		return
 	}

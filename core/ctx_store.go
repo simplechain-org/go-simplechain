@@ -1,8 +1,6 @@
 package core
 
 import (
-	"container/heap"
-	"errors"
 	"fmt"
 	"math/big"
 	"sync"
@@ -15,7 +13,6 @@ import (
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/params"
-	"github.com/simplechain-org/go-simplechain/rlp"
 )
 
 const (
@@ -64,21 +61,18 @@ type CtxStore struct {
 	config      CtxStoreConfig
 	chainConfig *params.ChainConfig
 	chain       blockChain
-	pending     *CtxSortedMap //带有local签名
-	queued      *CtxSortedMap //网络其他节点签名
-	//TODO-D
-	localStore  map[uint64]*CwsSortedByPrice
-	remoteStore map[uint64]*CwsSortedByPrice
+	pending     *CtxSortedByBlockNum //带有local签名
+	queued      *CtxSortedByBlockNum //网络其他节点签名
+	//TODO-UP
+	localStore  CtxDB            //存储本链跨链交易
+	remoteStore map[uint64]CtxDB //存储其他链的跨链交易
 
 	anchors     map[uint64]*AnchorSet
 	signer      types.CtxSigner
 	resultFeed  event.Feed
 	resultScope event.SubscriptionScope
 
-	//database to store cws
-	db ethdb.KeyValueStore //database to store cws
-	//TODO-D
-	ctxDb *CrossTransactionDb
+	db ethdb.KeyValueStore // database to store cws
 
 	mu               sync.RWMutex
 	wg               sync.WaitGroup // for shutdown sync
@@ -95,31 +89,30 @@ func NewCtxStore(config CtxStoreConfig, chainConfig *params.ChainConfig, chain b
 	signer := types.MakeCtxSigner(chainConfig)
 	config.ChainId = chainConfig.ChainID
 	store := &CtxStore{
-		config:           config,
-		chainConfig:      chainConfig,
-		chain:            chain,
-		pending:          NewCtxSortedMap(),
-		queued:           NewCtxSortedMap(),
-		localStore:       make(map[uint64]*CwsSortedByPrice),
-		remoteStore:      make(map[uint64]*CwsSortedByPrice),
-		signer:           signer,
-		anchors:          make(map[uint64]*AnchorSet),
-		db:               makerDb,
-		ctxDb:            NewCtxDb(makerDb),
+		config:      config,
+		chainConfig: chainConfig,
+		chain:       chain,
+		pending:     NewCtxSortedMap(),
+		queued:      NewCtxSortedMap(),
+		localStore:  NewCtxDb(config.ChainId, makerDb, config.GlobalSlots),
+		remoteStore: make(map[uint64]CtxDB),
+		signer:      signer,
+		anchors:     make(map[uint64]*AnchorSet),
+		db:          makerDb,
+		//TODO-D
+		//ctxDb:            NewCtxDb(makerDb),
 		mu:               sync.RWMutex{},
 		stopCh:           make(chan struct{}),
 		CrossDemoAddress: address,
 		signHash:         signHash,
 	}
 
-	if err := store.ctxDb.ListAll(store.addTxsWithSignatures); err != nil {
-		log.Warn("Failed to load ctx db store", "err", err)
-	}
+	store.restore()
 
 	// Start the event loop and return
 	store.wg.Add(1)
 	go store.loop()
-	go store.CleanUpDb()
+	go store.CleanUpDb() //TODO-???
 	return store
 }
 
@@ -148,78 +141,54 @@ func (store *CtxStore) loop() {
 		case <-expire.C:
 			store.mu.Lock()
 			currentNum := store.chain.CurrentBlock().NumberU64()
-			if currentNum > expireNumber { //内存回收
-				//log.Info("RemoveUnderNum Ctx")
+			if currentNum > expireNumber {
 				store.pending.RemoveUnderNum(currentNum - expireNumber)
 				store.queued.RemoveUnderNum(currentNum - expireNumber)
 			}
 			store.mu.Unlock()
-		case <-journal.C: //local store
-			store.mu.Lock()
-			if err := store.ctxDb.ListAll(store.addTxsWithSignatures); err != nil {
-				log.Warn("Failed to load ctx db at journal.C", "err", err)
-			}
-			store.mu.Unlock()
+
+		case <-journal.C:
+			store.restore()
 		}
 	}
 }
 
-func (store *CtxStore) storeCtx(cws *types.CrossTransactionWithSignatures) error {
-	if store.ctxDb == nil {
-		return errors.New("db is nil")
-	}
-	ok, err := store.db.Has(cws.Key())
-	if err != nil {
-		return fmt.Errorf("db Has failed, id: %s", cws.ID().String())
+func (store *CtxStore) restore() {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+
+	// Load Local
+	if err := store.localStore.Load(); err != nil {
+		log.Warn("Failed to load local ctx", "err", err)
 	}
 
-	if ok {
-		ctxOld, err := store.db.Get(cws.Key())
-		log.Debug("AddLocal", "ctxOld", ctxOld, "err", err)
-		if err != nil {
-			return fmt.Errorf("db Get failed, id: %s", cws.ID().String())
-		}
-
-		var hash common.Hash
-		if err = rlp.DecodeBytes(ctxOld, &hash); err != nil {
-			return fmt.Errorf("rlp failed, id: %s", cws.ID().String())
-		}
-		if hash != cws.Data.BlockHash {
-			return fmt.Errorf("blockchain Reorg")
+	// Load Remote from local
+	for _, ctx := range store.localStore.Query(nil, int(store.config.GlobalSlots)) {
+		if store.remoteStore[ctx.DestinationId().Uint64()] == nil {
+			store.remoteStore[ctx.DestinationId().Uint64()] = NewCtxDb(ctx.DestinationId(), store.db, store.config.GlobalSlots)
 		}
 	}
 
-	if err := store.ctxDb.Write(cws); err != nil {
-		log.Warn("Failed to store local cross transaction", "err", err)
-		return err
+	for _, remote := range store.remoteStore {
+		if err := remote.Load(); err != nil {
+			log.Warn("Failed to load remote ctx", "err", err)
+		}
 	}
-	return nil
 }
 
 func (store *CtxStore) AddLocal(ctx *types.CrossTransaction) error {
 	store.mu.Lock()
 	defer store.mu.Unlock()
-	ok, err := store.db.Has(ctx.Key())
-	if err != nil {
-		return fmt.Errorf("db Has failed, id: %s", ctx.ID().String())
-	}
 
-	if ok {
-		ctxOld, err := store.db.Get(ctx.Key())
-		log.Debug("AddLocal", "ctxOld", ctxOld, "err", err)
+	if store.localStore.Has(ctx.ID()) { //
+		oldBlockHash, err := store.localStore.ReadAll(ctx.ID())
 		if err != nil {
-			return fmt.Errorf("db Get failed, id: %s", ctx.ID().String())
+			return err
 		}
-
-		var hash common.Hash
-		if err = rlp.DecodeBytes(ctxOld, &hash); err != nil {
-			return fmt.Errorf("rlp failed, id: %s", ctx.ID().String())
-		}
-		if hash != ctx.Data.BlockHash {
-			return fmt.Errorf("blockchain Reorg,txId:%s,hash:%s,BlockHash:%s", ctx.ID().String(), hash.String(), ctx.Data.BlockHash.String())
+		if ctx.BlockHash() != oldBlockHash {
+			return fmt.Errorf("blockchain Reorg,txId:%s,old:%s,new:%s", ctx.ID().String(), oldBlockHash.String(), ctx.BlockHash().String())
 		}
 	}
-
 	return store.addTx(ctx, true)
 }
 
@@ -229,28 +198,39 @@ func (store *CtxStore) AddRemote(ctx *types.CrossTransaction) error {
 	return store.addTx(ctx, false)
 }
 
-func (store *CtxStore) AddWithSignatures(cws *types.CrossTransactionWithSignatures, callback func(*types.CrossTransactionWithSignatures, ...int)) error {
+// AddFromRemoteChain add remote-chain ctx with signatures
+func (store *CtxStore) AddFromRemoteChain(ctx *types.CrossTransactionWithSignatures, callback func(*types.CrossTransactionWithSignatures, ...int)) error {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 
-	return store.addTxWithSignatures(cws, func(cws *types.CrossTransactionWithSignatures) error {
-		log.Warn("[debug] call addTxWithSignatures", "cws", cws.ID())
-		chainId := cws.ChainId()
-		var invalidSigIndex []int
-		for i, ctx := range cws.Resolution() {
-			if store.verifySigner(ctx, chainId, chainId) != nil {
-				invalidSigIndex = append(invalidSigIndex, i)
-			}
+	chainId := ctx.ChainId()
+	var invalidSigIndex []int
+	for i, ctx := range ctx.Resolution() {
+		if store.verifySigner(ctx, chainId, chainId) != nil {
+			invalidSigIndex = append(invalidSigIndex, i)
 		}
-		log.Warn("[debug] call callback", "callback", callback != nil, "invalidSigIndex", invalidSigIndex)
-		if callback != nil {
-			callback(cws, invalidSigIndex...)
-		}
-		if invalidSigIndex != nil {
-			return fmt.Errorf("invalid signature of ctx:%s for signature:%v", cws.ID().String(), invalidSigIndex)
-		}
-		return store.verifyCwsInvoking(cws)
-	}, true)
+	}
+	if callback != nil {
+		callback(ctx, invalidSigIndex...) //call callback with signer checking results
+	}
+
+	if invalidSigIndex != nil {
+		return fmt.Errorf("invalid signature of ctx:%s for signature:%v", ctx.ID().String(), invalidSigIndex)
+	}
+
+	if err := store.verifyCwsInvoking(ctx); err != nil {
+		return err
+	}
+
+	db, ok := store.remoteStore[chainId.Uint64()]
+	if !ok {
+		db = NewCtxDb(chainId, store.db, store.config.GlobalSlots)
+		store.remoteStore[chainId.Uint64()] = db
+	}
+	if db.Has(ctx.ID()) {
+		return nil
+	}
+	return db.Write(ctx)
 }
 
 func (store *CtxStore) addTx(ctx *types.CrossTransaction, local bool) error {
@@ -268,42 +248,29 @@ func (store *CtxStore) addTxLocked(ctx *types.CrossTransaction, local bool) erro
 		*ctx = *signedTx
 	}
 
-	checkAndCommit := func(id common.Hash) error {
+	checkAndCommit := func(id common.Hash) {
 		if cws, _ := store.pending.Get(id).(*types.CrossTransactionWithSignatures); cws != nil && cws.SignaturesLength() >= requireSignatureCount {
 			go store.resultFeed.Send(SignedCtxEvent{
 				Tws: cws,
 				CallBack: func(cws *types.CrossTransactionWithSignatures, invalidSigIndex ...int) {
-					if invalidSigIndex == nil {
-						log.Warn("[debug] deal remote ctx && store")
-						keyId := cws.Data.DestinationId.Uint64()
-						if _, yes := store.localStore[keyId]; yes {
-							store.localStore[keyId].Add(cws)
-						} else {
-							store.localStore[keyId] = newCWssList(store.config.GlobalSlots)
-							store.localStore[keyId].Add(cws)
-						}
-						if err := store.storeCtx(cws); err != nil {
-							log.Warn("Failed to commit local tx journal", "err", err)
+					store.mu.Lock()
+					defer store.mu.Unlock()
+					if invalidSigIndex == nil { // check signer successfully, store ctx
+						if err := store.localStore.Write(cws); err != nil {
+							log.Warn("commit local ctx failed", "txID", cws.ID(), "err", err)
 							return
 						}
-
+						// persist successfully, remove it from pending
 						store.pending.RemoveByHash(id)
-						data, err := rlp.EncodeToBytes(cws.Data.BlockHash)
-						if err != nil {
-							log.Error("Failed to encode cws", "err", err)
-						}
-						store.db.Put(cws.Key(), data)
-					} else {
-						log.Warn("[debug] deal remote ctx && remove sig:", "invalids", invalidSigIndex)
+
+					} else { // check failed, remove wrong signatures
 						for _, invalid := range invalidSigIndex {
 							store.pending.Get(id).(*types.CrossTransactionWithSignatures).RemoveSignature(invalid)
 						}
 					}
 				}},
 			)
-
 		}
-		return nil
 	}
 
 	// if this pending ctx exist, add signature to pending directly
@@ -311,7 +278,7 @@ func (store *CtxStore) addTxLocked(ctx *types.CrossTransaction, local bool) erro
 		if err := cws.AddSignature(ctx); err != nil {
 			return err
 		}
-		return checkAndCommit(id)
+		checkAndCommit(id)
 	}
 
 	// add new local ctx, move queued signatures of this ctx to pending
@@ -328,7 +295,7 @@ func (store *CtxStore) addTxLocked(ctx *types.CrossTransaction, local bool) erro
 		}
 		store.pending.Put(pendingRws, bNumber)
 		store.queued.RemoveByHash(id)
-		return checkAndCommit(id)
+		checkAndCommit(id)
 	}
 
 	// add new remote ctx, only add to pending pool
@@ -342,75 +309,12 @@ func (store *CtxStore) addTxLocked(ctx *types.CrossTransaction, local bool) erro
 	return nil
 }
 
-func (store *CtxStore) addTxsWithSignatures(cwsList []*types.CrossTransactionWithSignatures, validator CrossValidator, persist bool) []error {
-	errs := make([]error, len(cwsList))
-	for i, cws := range cwsList {
-		if errs[i] = store.addTxWithSignatures(cws, validator, persist); errs[i] != nil {
-			continue
-		}
-	}
-	return errs
-}
-
-func (store *CtxStore) addTxWithSignatures(cws *types.CrossTransactionWithSignatures, validator CrossValidator, persist bool) error {
-	if validator != nil {
-		if err := validator(cws); err != nil {
-			return err
-		}
-	}
-	if !persist {
-		store.storeCws(cws)
-		return nil
-	}
-
-	if ok, _ := store.db.Has(cws.Key()); ok {
-		return nil
-	}
-
-	store.storeCws(cws)
-	return store.persistCws(cws)
-}
-
-func (store *CtxStore) storeCws(cws *types.CrossTransactionWithSignatures) {
-	if cws.DestinationId().Cmp(store.config.ChainId) == 0 {
-		keyId := cws.ChainId().Uint64()
-		if _, yes := store.remoteStore[keyId]; yes {
-			store.remoteStore[keyId].Add(cws)
-		} else {
-			store.remoteStore[keyId] = newCWssList(store.config.GlobalSlots)
-			store.remoteStore[keyId].Add(cws)
-		}
-	} else {
-		keyId := cws.DestinationId().Uint64()
-		if _, yes := store.localStore[keyId]; yes {
-			store.localStore[keyId].Add(cws)
-		} else {
-			store.localStore[keyId] = newCWssList(store.config.GlobalSlots)
-			store.localStore[keyId].Add(cws)
-		}
-	}
-}
-
-func (store *CtxStore) persistCws(cws *types.CrossTransactionWithSignatures) error {
-	data, err := rlp.EncodeToBytes(cws.Data.BlockHash)
-	if err != nil {
-		return fmt.Errorf("failed to encode cws, err: %v", err)
-	}
-	if err := store.db.Put(cws.Key(), data); err != nil {
-		return err
-	}
-	return store.storeCtx(cws)
-}
-
 func (store *CtxStore) VerifyCtx(ctx *types.CrossTransaction) error {
 	store.mu.Lock()
 	defer store.mu.Unlock()
+
 	if store.config.ChainId.Cmp(ctx.ChainId()) == 0 {
-		ok, err := store.db.Has(ctx.Key())
-		if err != nil {
-			return fmt.Errorf("db has failed, id: %s", ctx.ID().String())
-		}
-		if ok {
+		if store.localStore.Has(ctx.ID()) {
 			return fmt.Errorf("ctx was already signatured, id: %s", ctx.ID().String())
 		}
 	}
@@ -429,7 +333,6 @@ func (store *CtxStore) verifySigner(ctx *types.CrossTransaction, signChain, dest
 	if as, ok := store.anchors[destChain.Uint64()]; ok {
 		anchorSet = as
 	} else { // ctx receive from remote, signChain == destChain
-		log.Error("[debug] verifySigner: anchor not exist in", "chain", destChain.Uint64())
 		newHead := store.chain.CurrentBlock().Header() // Special case during testing
 		statedb, err := store.chain.StateAt(newHead.Root)
 		if err != nil {
@@ -485,59 +388,46 @@ func (store *CtxStore) verifyCwsInvoking(cws CrossTransactionInvoke) error {
 	return nil
 }
 
-func (store *CtxStore) RemoveRemotes(rtxs []*types.ReceptTransaction) error {
+func (store *CtxStore) RemoveRemotes(rtxs []*types.ReceptTransaction) []error {
 	store.mu.Lock()
 	defer store.mu.Unlock()
+
+	var errs []error
 	for _, v := range rtxs {
 		if s, ok := store.remoteStore[v.DestinationId.Uint64()]; ok {
-			s.Remove(v.CTxId)
-			if err := store.ctxDb.Delete(v.CTxId); err != nil {
-				log.Warn("RemoveRemotes", "err", err)
-				return err
+			if err := s.Delete(v.CTxId); err != nil {
+				errs = append(errs, fmt.Errorf("id:%s, err:%s", v.CTxId.String(), err.Error()))
 			}
 		}
 	}
-	if err := store.ctxDb.ListAll(store.addTxsWithSignatures); err != nil {
-		log.Warn("Failed to load transaction journal", "err", err)
-	}
-
-	return nil
+	return errs
 }
 
-func (store *CtxStore) RemoveLocals(finishes []*types.FinishInfo) error {
+func (store *CtxStore) RemoveLocals(finishes []common.Hash) []error {
 	store.mu.Lock()
 	defer store.mu.Unlock()
-	for _, f := range finishes {
-		for _, v := range store.localStore {
-			v.Remove(f.TxId)
-		}
-		if err := store.ctxDb.Delete(f.TxId); err != nil {
-			log.Warn("RemoveLocals", "err", err)
-			return err
+
+	var errs []error
+	for _, id := range finishes {
+		if err := store.localStore.Delete(id); err != nil {
+			errs = append(errs, fmt.Errorf("id:%s, err:%s", id.String(), err.Error()))
 		}
 	}
-
-	if err := store.ctxDb.ListAll(store.addTxsWithSignatures); err != nil {
-		log.Warn("Failed to load transaction journal", "err", err)
-	}
-
-	return nil
+	return errs
 }
 
 func (store *CtxStore) CleanUpDb() {
 	time.Sleep(time.Minute)
-	var finishes []*types.FinishInfo
-	ctxs := store.ListCrossTransactions(0, true)
+	var finishes []common.Hash
+	ctxs := store.ListCrossTransactions(0)
 	for _, v := range ctxs {
 		if err := store.verifyCwsInvoking(v); err == ErrRepetitionCrossTransaction {
-
-			finishes = append(finishes, &types.FinishInfo{
-				TxId:  v.ID(),
-				Taker: common.Address{},
-			})
+			finishes = append(finishes, v.ID())
 		}
 	}
-	store.RemoveLocals(finishes)
+	if errs := store.RemoveLocals(finishes); errs != nil {
+		log.Warn("CleanUpDb RemoveLocals failed", "error", errs)
+	}
 }
 
 type Statistics struct {
@@ -548,114 +438,104 @@ type Statistics struct {
 func (store *CtxStore) Stats() int {
 	store.mu.Lock()
 	defer store.mu.Unlock()
+
 	var count int
-	for _, v := range store.localStore {
-		count += v.Count()
-	}
-
+	count += store.localStore.Size()
 	for _, s := range store.remoteStore {
-		count += s.Count()
+		count += s.Size()
 	}
-
 	return count
 }
 
 func (store *CtxStore) Status() map[uint64]*Statistics {
 	store.mu.RLock()
 	defer store.mu.RUnlock()
-	status := make(map[uint64]*Statistics, len(store.localStore))
-	for k, v := range store.localStore {
-		if uint64(v.Count()) >= store.config.GlobalSlots {
-			status[k] = &Statistics{
-				true,
-				v.GetList()[0],
-			}
-		} else {
-			status[k] = &Statistics{
-				false,
-				nil,
-			}
+	remoteChainCount := 0
+	remoteChainSize := 0
+	for _, v := range store.remoteStore {
+		remoteChainCount++
+		remoteChainSize += v.Size()
+	}
+	log.Error("[debug] Status", "chain", store.config.ChainId, "chains", remoteChainCount, "local", store.localStore.Size(), "remote", remoteChainSize)
+
+	status := make(map[uint64]*Statistics, 1)
+	if uint64(store.localStore.Size()) >= store.config.GlobalSlots {
+		status[store.config.ChainId.Uint64()] = &Statistics{
+			true,
+			store.localStore.Query(nil, 1)[0],
+		}
+	} else {
+		status[store.config.ChainId.Uint64()] = &Statistics{
+			false,
+			nil,
 		}
 	}
 	return status
 }
 
-func (store *CtxStore) MarkStatus(rtxs []*types.RTxsInfo, status uint64) {
+func (store *CtxStore) MarkStatus(rtxs []*types.ReceptTransaction, status uint64) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 
 	for _, v := range rtxs {
 		if s, ok := store.remoteStore[v.DestinationId.Uint64()]; ok {
-			s.UpdateStatus(v.CtxId, status)
-
-			cws, err := store.ctxDb.Read(v.CtxId)
+			err := s.Update(v.CTxId, func(ctx *types.CrossTransactionWithSignatures) {
+				ctx.Status = status
+			})
 			if err != nil {
-				log.Warn("MarkStatus read remotes from db ", "err", err)
-			}
-			cws.Status = status
-			if err := store.ctxDb.Write(cws); err != nil {
-				log.Warn("MarkStatus rewrite ctx", "err", err)
+				log.Warn("MarkStatus failed ", "err", err)
 			}
 		}
 	}
 }
 
 func (store *CtxStore) Query() (map[uint64][]*types.CrossTransactionWithSignatures, map[uint64][]*types.CrossTransactionWithSignatures) {
-	store.mu.Lock()
-	defer store.mu.Unlock()
+	store.mu.RLock()
+	defer store.mu.RUnlock()
 	remotes := make(map[uint64][]*types.CrossTransactionWithSignatures)
 	locals := make(map[uint64][]*types.CrossTransactionWithSignatures)
 	var re, lo, allRe int
-	for k, v := range store.remoteStore {
-		for _, tx := range v.GetList() {
+	for chainID, s := range store.remoteStore {
+		all := s.Query(func(tx *types.CrossTransactionWithSignatures) bool {
 			if tx.Status == types.RtxStatusWaiting {
-				remotes[k] = append(remotes[k], tx)
+				remotes[chainID] = append(remotes[chainID], tx)
 			}
-		}
-		re += len(remotes[k])
-		allRe += len(v.GetList())
+			// always true to filter all to calculate allRe
+			return true
+		}, int(store.config.GlobalSlots))
+		re += len(remotes[chainID])
+		allRe += len(all)
 	}
-	for k, v := range store.localStore {
-		locals[k] = v.GetList()
-		lo += len(locals[k])
-	}
+
+	locals[store.config.ChainId.Uint64()] = store.localStore.Query(nil, int(store.config.GlobalSlots))
+	lo += len(locals[store.config.ChainId.Uint64()])
+
 	log.Info("CtxStore Query", "allRemote", allRe, "waitingRemote", re, "local", lo)
 	return remotes, locals
 }
 
-func (store *CtxStore) ListCrossTransactions(pageSize int, all bool) []*types.CrossTransactionWithSignatures {
+func (store *CtxStore) ListCrossTransactions(pageSize int) []*types.CrossTransactionWithSignatures {
 	store.mu.RLock()
 	defer store.mu.RUnlock()
+
 	var result []*types.CrossTransactionWithSignatures
-	if all {
-		return store.ctxDb.Query(nil)
+	for _, s := range store.remoteStore {
+		result = append(result, s.Query(nil, pageSize)...)
 	}
-	if pageSize > 0 {
-		for _, v := range store.remoteStore {
-			result = append(result, v.GetCountList(pageSize)...)
-		}
-		for _, v := range store.localStore {
-			result = append(result, v.GetCountList(pageSize)...)
-		}
-	}
-	return result
+	return append(result, store.localStore.Query(nil, pageSize)...)
 }
 
 func (store *CtxStore) ListCrossTransactionBySender(from common.Address) (map[uint64][]*types.CrossTransactionWithSignatures, map[uint64][]*types.CrossTransactionWithSignatures) {
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	cwsList := store.ctxDb.Query(func(cws *types.CrossTransactionWithSignatures) bool { return cws.Data.From == from })
+	store.mu.RLock()
+	defer store.mu.RUnlock()
+
 	remotes := make(map[uint64][]*types.CrossTransactionWithSignatures)
 	locals := make(map[uint64][]*types.CrossTransactionWithSignatures)
-	for _, cws := range cwsList {
-		if cws.DestinationId().Cmp(store.config.ChainId) == 0 {
-			keyId := cws.ChainId().Uint64()
-			remotes[keyId] = append(remotes[keyId], cws)
-		} else {
-			keyId := cws.DestinationId().Uint64()
-			locals[keyId] = append(locals[keyId], cws)
-		}
+	filter := func(cws *types.CrossTransactionWithSignatures) bool { return cws.Data.From == from }
+	for chainID, s := range store.remoteStore {
+		remotes[chainID] = append(remotes[chainID], s.Query(filter, int(store.config.GlobalSlots))...)
 	}
+	locals[store.config.ChainId.Uint64()] = append(locals[store.config.ChainId.Uint64()], store.localStore.Query(filter, int(store.config.GlobalSlots))...)
 	return remotes, locals
 }
 
@@ -679,74 +559,4 @@ func (store *CtxStore) UpdateAnchors(info *types.RemoteChainInfo) error {
 	requireSignatureCount = signedCount
 	store.anchors[info.RemoteChainId] = NewAnchorSet(store.config.Anchors)
 	return nil
-}
-
-type byBlockNum struct {
-	txId     common.Hash
-	blockNum uint64
-}
-
-type byBlockNumHeap []byBlockNum
-
-func (h byBlockNumHeap) Len() int           { return len(h) }
-func (h byBlockNumHeap) Less(i, j int) bool { return h[i].blockNum < h[j].blockNum }
-func (h byBlockNumHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
-
-func (h *byBlockNumHeap) Push(x interface{}) {
-	*h = append(*h, x.(byBlockNum))
-}
-
-func (h *byBlockNumHeap) Pop() interface{} {
-	old := *h
-	n := len(old)
-	x := old[n-1]
-	*h = old[0 : n-1]
-	return x
-}
-
-type CtxSortedMap struct {
-	//items map[common.Hash]*types.ReceptTransactionWithSignatures
-	items map[common.Hash]CrossTransactionInvoke
-	index *byBlockNumHeap
-}
-
-func NewCtxSortedMap() *CtxSortedMap {
-	return &CtxSortedMap{
-		items: make(map[common.Hash]CrossTransactionInvoke),
-		index: new(byBlockNumHeap),
-	}
-}
-
-func (m *CtxSortedMap) Get(txId common.Hash) CrossTransactionInvoke {
-	return m.items[txId]
-}
-
-func (m *CtxSortedMap) Put(rws CrossTransactionInvoke, number uint64) {
-	id := rws.ID()
-	if m.items[id] != nil {
-		return
-	}
-
-	m.items[id] = rws
-	m.index.Push(byBlockNum{id, number})
-}
-
-func (m *CtxSortedMap) Len() int {
-	return len(m.items)
-}
-
-func (m *CtxSortedMap) RemoveByHash(hash common.Hash) {
-	delete(m.items, hash)
-}
-
-func (m *CtxSortedMap) RemoveUnderNum(num uint64) {
-	for i := 0; i < m.index.Len(); i++ {
-		if (*m.index)[i].blockNum <= num {
-			deleteId := (*m.index)[i].txId
-			delete(m.items, deleteId)
-			heap.Remove(m.index, i)
-			continue
-		}
-		break
-	}
 }

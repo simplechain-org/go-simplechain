@@ -13,7 +13,7 @@ import (
 func TestCtxDb(t *testing.T) {
 	var (
 		db    = memorydb.New()
-		ctxDb = NewCtxDb(db)
+		ctxDb = NewCtxDb(big.NewInt(1), db, 10)
 	)
 	var i int64
 	for i = 0; i < 1024; i++ {

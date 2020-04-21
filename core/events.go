@@ -60,7 +60,7 @@ type ConfirmedMakerEvent struct {
 }
 
 type NewTakerEvent struct {
-	Txs []*types.RTxsInfo
+	Txs []*types.ReceptTransaction
 }
 
 type ConfirmedTakerEvent struct {
@@ -76,7 +76,7 @@ type TransationRemoveEvent struct {
 	Transactions types.Transactions
 }
 type ConfirmedFinishEvent struct {
-	Finish []*types.FinishInfo
+	FinishIds []common.Hash
 }
 
 type NewCtxStatusEvent struct {

@@ -2,7 +2,6 @@ package cross
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math/big"
 	"time"
@@ -62,14 +61,14 @@ type MsgHandler struct {
 	crossMsgReader <-chan interface{} // Channel to read  cross-chain message
 	crossMsgWriter chan<- interface{} // Channel to write cross-chain message
 
-	confirmedMakerCh  chan core.ConfirmedMakerEvent // Channel to reveive one-signed makerTx from ctxStore
+	confirmedMakerCh  chan core.ConfirmedMakerEvent // Channel to receive one-signed makerTx from ctxStore
 	confirmedMakerSub event.Subscription
 	signedCtxCh       chan core.SignedCtxEvent // Channel to receive signed-completely makerTx from ctxStore
 	signedCtxSub      event.Subscription
 
 	newTakerCh        chan core.NewTakerEvent // Channel to receive taker tx
 	newTakerSub       event.Subscription
-	confirmedTakerCh  chan core.ConfirmedTakerEvent // Channel to reveive one-signed takerTx from rtxStore
+	confirmedTakerCh  chan core.ConfirmedTakerEvent // Channel to receive one-signed takerTx from rtxStore
 	confirmedTakerSub event.Subscription
 
 	makerFinishEventCh  chan core.ConfirmedFinishEvent // Channel to receive confirmed makerFinish event
@@ -181,7 +180,10 @@ func (this *MsgHandler) loop() {
 			if this.role.IsAnchor() {
 				this.writeCrossMessage(ev)
 			}
-			this.ctxStore.RemoveRemotes(ev.Txs)
+			if errs := this.ctxStore.RemoveRemotes(ev.Txs); errs != nil {
+				log.Warn("RemoveRemotes failed", "error", errs)
+			}
+
 		case <-this.confirmedTakerSub.Err():
 			return
 
@@ -197,9 +199,8 @@ func (this *MsgHandler) loop() {
 			return
 
 		case ev := <-this.makerFinishEventCh:
-			if err := this.clearStore(ev.Finish); err != nil {
-				log.Error("clearStore", "err", err)
-			}
+			this.clearStore(ev.FinishIds)
+
 		case <-this.makerFinishEventSub.Err():
 			return
 
@@ -273,7 +274,7 @@ func (this *MsgHandler) readCrossMessage() {
 			case core.SignedCtxEvent:
 				cws := ev.Tws
 				if cws.DestinationId().Uint64() == this.pm.NetworkId() {
-					if err := this.ctxStore.AddWithSignatures(cws, ev.CallBack); err != nil {
+					if err := this.ctxStore.AddFromRemoteChain(cws, ev.CallBack); err != nil {
 						log.Warn("readCrossMessage failed", "error", err.Error())
 					}
 				}
@@ -325,14 +326,13 @@ func (this *MsgHandler) GetTxForLockOut(rwss []*types.ReceptTransaction) ([]*typ
 	return txs, nil
 }
 
-func (this *MsgHandler) clearStore(finishes []*types.FinishInfo) error {
-	for _, finish := range finishes {
-		log.Info("cross transaction finish", "txId", finish.TxId.String())
+func (this *MsgHandler) clearStore(finishes []common.Hash) {
+	for _, id := range finishes {
+		log.Info("cross transaction finished", "txId", id.String())
 	}
-	if err := this.ctxStore.RemoveLocals(finishes); err != nil {
-		return errors.New("rm ctx error")
+	if errs := this.ctxStore.RemoveLocals(finishes); errs != nil {
+		log.Warn("CleanUpDb RemoveLocals failed", "error", errs)
 	}
-	return nil
 }
 
 func (this *MsgHandler) getCrossContractAddr() common.Address {
@@ -347,18 +347,17 @@ func (this *MsgHandler) getCrossContractAddr() common.Address {
 }
 
 func (this *MsgHandler) reorgLogs(logs []*types.Log) {
-	var takerLogs []*types.RTxsInfo
-	for _, log := range logs {
-		if this.blockChain.IsCtxAddress(log.Address) {
-			if log.Topics[0] == params.TakerTopic && len(log.Topics) >= 3 && len(log.Data) >= common.HashLength*6 {
-				takerLogs = append(takerLogs, &types.RTxsInfo{
-					DestinationId: common.BytesToHash(log.Data[:common.HashLength]).Big(),
-					CtxId:         log.Topics[1],
+	var takerLogs []*types.ReceptTransaction
+	for _, l := range logs {
+		if this.blockChain.IsCtxAddress(l.Address) {
+			if l.Topics[0] == params.TakerTopic && len(l.Topics) >= 3 && len(l.Data) >= common.HashLength*6 {
+				takerLogs = append(takerLogs, &types.ReceptTransaction{
+					DestinationId: common.BytesToHash(l.Data[:common.HashLength]).Big(),
+					CTxId:         l.Topics[1],
 				})
 			}
 		}
 	}
-
 	if len(takerLogs) > 0 {
 		this.ctxStore.MarkStatus(takerLogs, types.RtxStatusWaiting)
 	}

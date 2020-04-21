@@ -3,6 +3,7 @@ package cross
 import (
 	"context"
 
+	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"
@@ -14,15 +15,15 @@ import (
 type CtxStore interface {
 	AddLocal(*types.CrossTransaction) error
 	AddRemote(*types.CrossTransaction) error
-	AddWithSignatures(*types.CrossTransactionWithSignatures, func(*types.CrossTransactionWithSignatures, ...int)) error
+	AddFromRemoteChain(*types.CrossTransactionWithSignatures, func(*types.CrossTransactionWithSignatures, ...int)) error
 
-	RemoveLocals([]*types.FinishInfo) error
-	RemoveRemotes([]*types.ReceptTransaction) error
+	RemoveLocals([]common.Hash) []error
+	RemoveRemotes([]*types.ReceptTransaction) []error
 
 	VerifyCtx(*types.CrossTransaction) error
 
-	MarkStatus([]*types.RTxsInfo, uint64)
-	ListCrossTransactions(int, bool) []*types.CrossTransactionWithSignatures
+	MarkStatus([]*types.ReceptTransaction, uint64)
+	ListCrossTransactions(int) []*types.CrossTransactionWithSignatures
 
 	SubscribeSignedCtxEvent(chan<- core.SignedCtxEvent) event.Subscription
 

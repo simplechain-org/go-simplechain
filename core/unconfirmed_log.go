@@ -90,7 +90,8 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 			if next.logs != nil {
 				var ctxs []*types.CrossTransaction
 				var rtxs []*types.ReceptTransaction
-				var finishes []*types.FinishInfo
+				var finishes []common.Hash
+
 				//todo add and del anchors
 				for _, v := range next.logs {
 					tx, blockHash, blockNumber := set.chain.GetTransactionByTxHash(v.TxHash)
@@ -134,11 +135,7 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 						if v.Topics[0] == params.MakerFinishTopic && len(v.Topics) >= 3 {
 							if len(v.Topics) >= 2 {
 								ctxId := v.Topics[1]
-								to := v.Topics[2]
-								finishes = append(finishes, &types.FinishInfo{
-									TxId:  ctxId,
-									Taker: common.BytesToAddress(to[:]),
-								})
+								finishes = append(finishes, ctxId)
 							}
 						}
 					}

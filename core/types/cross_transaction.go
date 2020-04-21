@@ -37,11 +37,6 @@ type ctxdata struct {
 	S *big.Int `json:"s" gencodec:"required"`
 }
 
-type FinishInfo struct {
-	TxId  common.Hash
-	Taker common.Address
-}
-
 func NewCrossTransaction(amount, charge, networkId *big.Int, id, txHash, bHash common.Hash, from common.Address, input []byte) *CrossTransaction {
 	return &CrossTransaction{
 		Data: ctxdata{
@@ -126,12 +121,6 @@ func (tx *CrossTransaction) SignHash() (h common.Hash) {
 	hash.Sum(h[:0])
 	tx.signHash.Store(h)
 	return h
-}
-
-func (tx *CrossTransaction) Key() []byte {
-	key := []byte("m_")
-	key = append(key, tx.Data.CTxId.Bytes()...)
-	return key
 }
 
 // Transactions is a Transaction slice type for basic sorting.
@@ -323,11 +312,12 @@ func (cws *CrossTransactionWithSignatures) Resolution() []*CrossTransaction {
 	return ctxs
 }
 
-func (cws *CrossTransactionWithSignatures) Key() []byte {
-	key := []byte("m_")
-	key = append(key, cws.Data.CTxId.Bytes()...)
-	return key
-}
+//TODO-D
+//func (cws *CrossTransactionWithSignatures) Key() []byte {
+//	key := []byte("m_")
+//	key = append(key, cws.Data.CTxId.Bytes()...)
+//	return key
+//}
 
 func (cws *CrossTransactionWithSignatures) Price() *big.Rat {
 	if cws.Data.Value.Cmp(common.Big0) == 0 {

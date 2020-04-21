@@ -10,6 +10,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/core/types"
 )
 
+//TODO-UP
 func TestCWssList(t *testing.T) {
 	txs := make([]*types.CrossTransactionWithSignatures, 1024)
 	var i int64
@@ -24,7 +25,7 @@ func TestCWssList(t *testing.T) {
 			common.Address{},
 			nil))
 	}
-	cwss := newCWssList(100)
+	cwss := NewCtxSortedByPrice(100)
 	for _, v := range txs {
 		cwss.Add(v)
 	}
@@ -36,11 +37,10 @@ func TestCWssList(t *testing.T) {
 
 	t.Log(cwss.Count())
 
-	printCwsList(cwss.GetCountList(15))
-
-	cwss.UpdateStatus(last, types.RtxStatusImplementing)
-	printCwsList(cwss.GetList())
-
+	cwss.Update(last, func(ctx *types.CrossTransactionWithSignatures) {
+		ctx.Status = types.RtxStatusImplementing
+	})
+	printCwsList(cwss.GetList(nil, 5))
 }
 
 func printCwsList(cwsList []*types.CrossTransactionWithSignatures) {

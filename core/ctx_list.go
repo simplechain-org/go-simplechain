@@ -17,11 +17,14 @@
 package core
 
 import (
+	"container/heap"
 	"math/big"
 
-	"github.com/Beyond-simplechain/foundation/container/redblacktree"
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/types"
+
+	"github.com/Beyond-simplechain/foundation/container/redblacktree"
+	lru "github.com/hashicorp/golang-lru"
 )
 
 func ComparePrice(hi, hj *types.CrossTransactionWithSignatures) bool {
@@ -38,14 +41,14 @@ func ComparePrice2(dvi, vi, dvj, vj *big.Int) bool {
 	return ri != nil && rj != nil && ri.Cmp(rj) < 0
 }
 
-type CwsSortedByPrice struct {
+type CtxSortedByPrice struct {
 	all      map[common.Hash]*types.CrossTransactionWithSignatures
 	list     *redblacktree.Tree
 	capacity uint64
 }
 
-func newCWssList(n uint64) *CwsSortedByPrice {
-	return &CwsSortedByPrice{
+func NewCtxSortedByPrice(cap uint64) *CtxSortedByPrice {
+	return &CtxSortedByPrice{
 		all: make(map[common.Hash]*types.CrossTransactionWithSignatures),
 		list: redblacktree.NewWith(func(a, b interface{}) int {
 			if ComparePrice(a.(*types.CrossTransactionWithSignatures), b.(*types.CrossTransactionWithSignatures)) {
@@ -53,25 +56,30 @@ func newCWssList(n uint64) *CwsSortedByPrice {
 			}
 			return 0
 		}, true),
-		capacity: n,
+		capacity: cap,
 	}
 }
 
-func (t *CwsSortedByPrice) Get(id common.Hash) *types.CrossTransactionWithSignatures {
+func (t *CtxSortedByPrice) Get(id common.Hash) *types.CrossTransactionWithSignatures {
 	return t.all[id]
 }
 
 // Count returns the current number of items in the all.
-func (t *CwsSortedByPrice) Count() int {
+func (t *CtxSortedByPrice) Count() int {
 	return len(t.all)
 }
 
-func (t *CwsSortedByPrice) Add(tx *types.CrossTransactionWithSignatures) {
+func (t *CtxSortedByPrice) Cap() uint64 {
+	return t.capacity
+}
+
+func (t *CtxSortedByPrice) Add(tx *types.CrossTransactionWithSignatures) {
 	if _, ok := t.all[tx.ID()]; ok {
 		return
 	}
 
-	if uint64(len(t.all)) == t.capacity {
+	// remove the last one when out of capacity
+	if t.capacity > 0 && uint64(len(t.all)) == t.capacity {
 		last := t.list.End()
 		if last.Prev() {
 			id := last.Key().(*types.CrossTransactionWithSignatures).ID()
@@ -85,48 +93,142 @@ func (t *CwsSortedByPrice) Add(tx *types.CrossTransactionWithSignatures) {
 }
 
 // Remove removes a transaction from the all.
-func (t *CwsSortedByPrice) Remove(id common.Hash) {
+func (t *CtxSortedByPrice) Remove(id common.Hash) bool {
 	if tx, ok := t.all[id]; ok {
 		for itr := t.list.LowerBound(tx); itr != t.list.UpperBound(tx); itr.Next() {
 			if itr.Key().(*types.CrossTransactionWithSignatures).ID() == id {
 				t.list.RemoveOne(itr)
 				delete(t.all, id)
-				return
+				return true
 			}
 		}
 	}
+	return false
 }
 
-// UpdateStatus mark tx status
-func (t *CwsSortedByPrice) UpdateStatus(id common.Hash, status uint64) {
+// Update
+func (t *CtxSortedByPrice) Update(id common.Hash, updater func(*types.CrossTransactionWithSignatures)) {
 	if tx, ok := t.all[id]; ok {
 		for itr := t.list.LowerBound(tx); itr != t.list.UpperBound(tx); itr.Next() {
 			if itr.Key().(*types.CrossTransactionWithSignatures).ID() == id {
-				itr.Key().(*types.CrossTransactionWithSignatures).Status = status
-				t.all[id].Status = status
+				updater(itr.Key().(*types.CrossTransactionWithSignatures))
+				updater(t.all[id])
 				return
 			}
 		}
 	}
 }
 
-func (t *CwsSortedByPrice) GetList() []*types.CrossTransactionWithSignatures {
-	res := make([]*types.CrossTransactionWithSignatures, t.list.Size())
-	for i, cws := range t.list.Keys() {
-		res[i] = cws.(*types.CrossTransactionWithSignatures)
+func (t *CtxSortedByPrice) GetList(filter func(*types.CrossTransactionWithSignatures) bool, pageSize ...int) []*types.CrossTransactionWithSignatures {
+	res := make([]*types.CrossTransactionWithSignatures, 0, t.list.Size())
+	for itr := t.list.Iterator(); itr.Next(); {
+		if ctx := itr.Key().(*types.CrossTransactionWithSignatures); filter == nil || filter(ctx) {
+			res = append(res, ctx)
+			if pageSize != nil && len(res) >= pageSize[0] {
+				break
+			}
+		}
 	}
 	return res
 }
 
-func (t *CwsSortedByPrice) GetAll() map[common.Hash]*types.CrossTransactionWithSignatures {
+func (t *CtxSortedByPrice) GetAll() map[common.Hash]*types.CrossTransactionWithSignatures {
 	return t.all
 }
 
-func (t *CwsSortedByPrice) GetCountList(pageSize int) []*types.CrossTransactionWithSignatures {
-	res := make([]*types.CrossTransactionWithSignatures, pageSize)
-	it := t.list.Iterator()
-	for i := 0; it.Next() && i < pageSize; i++ {
-		res[i] = it.Key().(*types.CrossTransactionWithSignatures)
+type byBlockNum struct {
+	txId     common.Hash
+	blockNum uint64
+}
+
+type byBlockNumHeap []byBlockNum
+
+func (h byBlockNumHeap) Len() int           { return len(h) }
+func (h byBlockNumHeap) Less(i, j int) bool { return h[i].blockNum < h[j].blockNum }
+func (h byBlockNumHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+
+func (h *byBlockNumHeap) Push(x interface{}) {
+	*h = append(*h, x.(byBlockNum))
+}
+
+func (h *byBlockNumHeap) Pop() interface{} {
+	old := *h
+	n := len(old)
+	x := old[n-1]
+	*h = old[0 : n-1]
+	return x
+}
+
+type CtxSortedByBlockNum struct {
+	items map[common.Hash]CrossTransactionInvoke
+	index *byBlockNumHeap
+}
+
+func NewCtxSortedMap() *CtxSortedByBlockNum {
+	return &CtxSortedByBlockNum{
+		items: make(map[common.Hash]CrossTransactionInvoke),
+		index: new(byBlockNumHeap),
 	}
-	return res
+}
+
+func (m *CtxSortedByBlockNum) Get(txId common.Hash) CrossTransactionInvoke {
+	return m.items[txId]
+}
+
+func (m *CtxSortedByBlockNum) Put(rws CrossTransactionInvoke, number uint64) {
+	id := rws.ID()
+	if m.items[id] != nil {
+		return
+	}
+
+	m.items[id] = rws
+	m.index.Push(byBlockNum{id, number})
+}
+
+func (m *CtxSortedByBlockNum) Len() int {
+	return len(m.items)
+}
+
+func (m *CtxSortedByBlockNum) RemoveByHash(hash common.Hash) {
+	delete(m.items, hash)
+}
+
+func (m *CtxSortedByBlockNum) RemoveUnderNum(num uint64) {
+	for i := 0; i < m.index.Len(); i++ {
+		if (*m.index)[i].blockNum <= num {
+			deleteId := (*m.index)[i].txId
+			delete(m.items, deleteId)
+			heap.Remove(m.index, i)
+			continue
+		}
+		break
+	}
+}
+
+type CtxToBlockHash lru.ARCCache
+
+func NewCtxToBlockHash(cap int) *CtxToBlockHash {
+	cache, _ := lru.NewARC(cap)
+	return (*CtxToBlockHash)(cache)
+}
+
+func (m *CtxToBlockHash) Has(txID common.Hash) bool {
+	return (*lru.ARCCache)(m).Contains(txID)
+}
+
+func (m *CtxToBlockHash) Get(txID common.Hash) (common.Hash, bool) {
+	item, ok := (*lru.ARCCache)(m).Get(txID)
+	if !ok {
+		return common.Hash{}, false
+	}
+	return item.(common.Hash), ok
+}
+
+func (m *CtxToBlockHash) Put(txID common.Hash, blockHash common.Hash) bool {
+	var update bool
+	if oldBlockHash, ok := m.Get(txID); ok {
+		update = blockHash != oldBlockHash
+	}
+	(*lru.ARCCache)(m).Add(txID, blockHash)
+	return update
 }

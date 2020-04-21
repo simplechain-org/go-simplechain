@@ -56,10 +56,10 @@ var (
 	accountUpdateTimer = metrics.NewRegisteredTimer("chain/account/updates", nil)
 	accountCommitTimer = metrics.NewRegisteredTimer("chain/account/commits", nil)
 
-	storageReadTimer   = metrics.NewRegisteredTimer("chain/storage/reads", nil)
-	storageHashTimer   = metrics.NewRegisteredTimer("chain/storage/hashes", nil)
-	storageUpdateTimer = metrics.NewRegisteredTimer("chain/storage/updates", nil)
-	storageCommitTimer = metrics.NewRegisteredTimer("chain/storage/commits", nil)
+	storageReadTimer   = metrics.NewRegisteredTimer("chain/db/reads", nil)
+	storageHashTimer   = metrics.NewRegisteredTimer("chain/db/hashes", nil)
+	storageUpdateTimer = metrics.NewRegisteredTimer("chain/db/updates", nil)
+	storageCommitTimer = metrics.NewRegisteredTimer("chain/db/commits", nil)
 
 	blockInsertTimer     = metrics.NewRegisteredTimer("chain/inserts", nil)
 	blockValidationTimer = metrics.NewRegisteredTimer("chain/validation", nil)
@@ -817,7 +817,7 @@ func (bc *BlockChain) GetUnclesInChain(block *types.Block, length int) []*types.
 }
 
 // TrieNode retrieves a blob of data associated with a trie node (or code hash)
-// either from ephemeral in-memory cache, or from persistent storage.
+// either from ephemeral in-memory cache, or from persistent db.
 func (bc *BlockChain) TrieNode(hash common.Hash) ([]byte, error) {
 	return bc.stateCache.TrieDB().Node(hash)
 }
@@ -1644,7 +1644,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 			return it.index, err
 		}
 		// If we have a followup block, run that against the current state to pre-cache
-		// transactions and probabilistically some of the account/storage trie nodes.
+		// transactions and probabilistically some of the account/db trie nodes.
 		var followupInterrupt uint32
 
 		if !bc.cacheConfig.TrieCleanNoPrefetch {
@@ -2250,7 +2250,7 @@ func (bc *BlockChain) SubscribeBlockProcessingEvent(ch chan<- bool) event.Subscr
 func (bc *BlockChain) StoreContractLog(blockNumber uint64, hash common.Hash, logs []*types.Log) {
 	var blockLogs []*types.Log
 	if logs != nil {
-		var rtxs []*types.RTxsInfo
+		var rtxs []*types.ReceptTransaction
 		var updates []*types.RemoteChainInfo
 		for _, v := range logs {
 			if len(v.Topics) > 0 && bc.IsCtxAddress(v.Address) {
@@ -2270,9 +2270,9 @@ func (bc *BlockChain) StoreContractLog(blockNumber uint64, hash common.Hash, log
 				}
 
 				if v.Topics[0] == params.TakerTopic && len(v.Topics) >= 3 && len(v.Data) >= common.HashLength*6 {
-					rtxs = append(rtxs, &types.RTxsInfo{
+					rtxs = append(rtxs, &types.ReceptTransaction{
 						DestinationId: common.BytesToHash(v.Data[:common.HashLength]).Big(),
-						CtxId:         v.Topics[1],
+						CTxId:         v.Topics[1],
 					})
 					blockLogs = append(blockLogs, v)
 				}

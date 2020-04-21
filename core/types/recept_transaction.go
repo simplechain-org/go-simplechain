@@ -10,11 +10,6 @@ import (
 	"github.com/simplechain-org/go-simplechain/params"
 )
 
-type RTxsInfo struct {
-	DestinationId *big.Int
-	CtxId         common.Hash
-}
-
 type ReceptTransaction struct {
 	CTxId         common.Hash    `json:"ctxId" gencodec:"required"`         //cross_transaction ID
 	To            common.Address `json:"to" gencodec:"required"`            //Token buyer
