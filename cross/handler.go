@@ -3,7 +3,6 @@ package cross
 import (
 	"context"
 	"errors"
-	"fmt"
 	"math/big"
 	"time"
 
@@ -20,17 +19,6 @@ const (
 	rmLogsChanSize = 10
 )
 
-type errCode int
-
-const (
-	ErrMsgTooLarge = iota
-	ErrVerifyCtx
-)
-
-func errResp(code errCode, format string, v ...interface{}) error {
-	return fmt.Errorf("%v - %v", code, fmt.Sprintf(format, v...))
-}
-
 type RoleHandler int
 
 const (
@@ -42,11 +30,6 @@ type TranParam struct {
 	gasLimit uint64
 	gasPrice *big.Int
 	data     []byte
-}
-
-type GetCtxSignsData struct {
-	Amount int  // Maximum number of headers to retrieve
-	GetAll bool // Query all
 }
 
 type Handler struct {
@@ -110,6 +93,7 @@ func NewCrossHandler(chain simplechain, roleHandler RoleHandler, role common.Cha
 		anchorSigner:        anchorSigner,
 	}
 }
+
 func (h *Handler) SetProtocolManager(pm ProtocolManager) {
 	h.pm = pm
 }
@@ -138,12 +122,35 @@ func (h *Handler) Start() {
 	go h.readCrossMessage()
 }
 
-func (h *Handler) GetCtxstore() CtxStore {
+func (h *Handler) GetCtxStore() CtxStore {
 	return h.ctxStore
 }
 
 func (h *Handler) SetGasPriceOracle(gpo GasPriceOracle) {
 	h.gpo = gpo
+}
+
+func (h *Handler) AddRemoteCtx(ctx *types.CrossTransaction) {
+	log.Info("Add remote ctx", "id", ctx.ID().String())
+	if err := h.ctxStore.VerifyCtx(ctx); err == nil {
+		if err := h.ctxStore.AddRemote(ctx); err != nil {
+			log.Error("Add remote ctx", "id", ctx.ID().String(), "err", err)
+		}
+	}
+}
+
+func (h *Handler) Stop() {
+	h.confirmedMakerSub.Unsubscribe()
+	h.signedCtxSub.Unsubscribe()
+	h.confirmedTakerSub.Unsubscribe()
+	h.newTakerSub.Unsubscribe()
+	h.makerFinishEventSub.Unsubscribe()
+	h.rmLogsSub.Unsubscribe()
+	h.updateAnchorSub.Unsubscribe()
+
+	close(h.quitSync)
+
+	log.Info("SimpleChain MsgHandler stopped")
 }
 
 func (h *Handler) loop() {
@@ -153,44 +160,35 @@ func (h *Handler) loop() {
 	for {
 		select {
 		case ev := <-h.confirmedMakerCh:
-			if h.role.IsAnchor() {
-				for _, tx := range ev.Txs {
-					if err := h.ctxStore.AddLocal(tx); err != nil {
-						log.Warn("Add local rtx", "err", err)
-					}
+			for _, tx := range ev.Txs {
+				if err := h.ctxStore.AddLocal(tx); err != nil {
+					log.Warn("Add local rtx", "err", err)
 				}
-				h.pm.BroadcastCtx(ev.Txs)
 			}
+			h.pm.BroadcastCtx(ev.Txs)
+
 		case <-h.confirmedMakerSub.Err():
 			return
 
 		case ev := <-h.signedCtxCh:
-			log.Warn("signedCtxCh", "finish maker", ev.Tws.ID().String())
-			if h.role.IsAnchor() {
-				h.writeCrossMessage(ev)
-			}
+			log.Info("[debug] signedCtxCh", "finish maker", ev.Tws.ID().String())
+			h.writeCrossMessage(ev)
 		case <-h.signedCtxSub.Err():
 			return
 
 		case ev := <-h.confirmedTakerCh:
-			if !h.pm.CanAcceptTxs() {
-				break
-			}
-			if h.role.IsAnchor() {
-				h.writeCrossMessage(ev)
-			}
+			h.writeCrossMessage(ev)
 			h.ctxStore.RemoveRemotes(ev.Txs)
 		case <-h.confirmedTakerSub.Err():
 			return
 
 		case ev := <-h.newTakerCh:
 			h.ctxStore.MarkStatus(ev.Txs, types.RtxStatusImplementing)
-
 		case <-h.newTakerSub.Err():
 			return
 
 		case ev := <-h.rmLogsCh:
-			h.reorgLogs(ev.Logs)
+			h.reOrgLogs(ev.Logs)
 		case <-h.rmLogsSub.Err():
 			return
 
@@ -211,36 +209,9 @@ func (h *Handler) loop() {
 			return
 
 		case <-expire.C:
-			h.UpdateSelfTx()
+			h.updateSelfTx()
 		}
 	}
-}
-
-func (h *Handler) Stop() {
-	log.Info("Stopping SimpleChain MsgHandler")
-	h.confirmedMakerSub.Unsubscribe()
-	h.signedCtxSub.Unsubscribe()
-	h.confirmedTakerSub.Unsubscribe()
-	h.newTakerSub.Unsubscribe()
-	h.makerFinishEventSub.Unsubscribe()
-	h.rmLogsSub.Unsubscribe()
-	h.updateAnchorSub.Unsubscribe()
-
-	close(h.quitSync)
-
-	log.Info("SimpleChain MsgHandler stopped")
-}
-
-func (h *Handler) AddRemoteCtx(ctx *types.CrossTransaction) error {
-	log.Info("Add remote ctx", "id", ctx.ID().String())
-	if err := h.ctxStore.VerifyCtx(ctx); err == nil {
-		if err := h.ctxStore.AddRemote(ctx); err != nil {
-			log.Error("Add remote ctx", "id", ctx.ID().String(), "err", err)
-			return errResp(ErrVerifyCtx, "Add remote ctx %v", err)
-		}
-	}
-
-	return nil
 }
 
 func (h *Handler) writeCrossMessage(v interface{}) {
@@ -265,7 +236,7 @@ func (h *Handler) readCrossMessage() {
 				}
 
 			case core.ConfirmedTakerEvent:
-				txs, err := h.GetTxForLockOut(ev.Txs)
+				txs, err := h.getTxForLockOut(ev.Txs)
 				if err != nil {
 					log.Error("GetTxForLockOut", "err", err)
 				}
@@ -280,19 +251,19 @@ func (h *Handler) readCrossMessage() {
 	}
 }
 
-func (h *Handler) GetTxForLockOut(rwss []*types.ReceptTransaction) ([]*types.Transaction, error) {
+func (h *Handler) getTxForLockOut(rwss []*types.ReceptTransaction) ([]*types.Transaction, error) {
 	var err error
 	var count uint64
 	var param *TranParam
 	var tx *types.Transaction
 	var txs []*types.Transaction
 
-	tokenAddress := h.getCrossContractAddr()
 	nonce := h.pm.GetNonce(h.anchorSigner)
+	tokenAddress := h.getCrossContractAddr()
 
 	for _, rws := range rwss {
 		if rws.DestinationId.Uint64() == h.pm.NetworkId() {
-			param, err = h.CreateTransaction(h.anchorSigner, rws)
+			param, err = h.createTransaction(rws)
 			if err != nil {
 				log.Error("GetTxForLockOut CreateTransaction", "err", err)
 				continue
@@ -332,7 +303,7 @@ func (h *Handler) getCrossContractAddr() common.Address {
 	return crossAddr
 }
 
-func (h *Handler) reorgLogs(logs []*types.Log) {
+func (h *Handler) reOrgLogs(logs []*types.Log) {
 	var takerLogs []*types.RTxsInfo
 	for _, log := range logs {
 		if h.blockChain.IsCtxAddress(log.Address) {
@@ -350,7 +321,7 @@ func (h *Handler) reorgLogs(logs []*types.Log) {
 	}
 }
 
-func (h *Handler) CreateTransaction(address common.Address, rws *types.ReceptTransaction) (*TranParam, error) {
+func (h *Handler) createTransaction(rws *types.ReceptTransaction) (*TranParam, error) {
 	gasPrice, err := h.gpo.SuggestPrice(context.Background())
 	if err != nil {
 		return nil, err
@@ -364,7 +335,7 @@ func (h *Handler) CreateTransaction(address common.Address, rws *types.ReceptTra
 	return &TranParam{gasLimit: 250000, gasPrice: gasPrice, data: data}, nil
 }
 
-func (h *Handler) UpdateSelfTx() {
+func (h *Handler) updateSelfTx() {
 	if pending, err := h.pm.Pending(); err == nil {
 		if txs, ok := pending[h.anchorSigner]; ok {
 			var count uint64

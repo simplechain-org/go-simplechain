@@ -821,7 +821,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		pm.BroadcastCtx([]*types.CrossTransaction{ctx})
 
 		if pm.msgHandler != nil {
-			return pm.msgHandler.AddRemoteCtx(ctx)
+			pm.msgHandler.AddRemoteCtx(ctx)
 		}
 	default:
 		return errResp(ErrInvalidMsgCode, "%v", msg.Code)
