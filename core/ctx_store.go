@@ -592,6 +592,7 @@ func (store *CtxStore) MarkStatus(rtxs []*types.RTxsInfo, status uint64) {
 			cws, err := store.ctxDb.Read(v.CtxId)
 			if err != nil {
 				log.Warn("MarkStatus read remotes from db ", "err", err)
+				continue
 			}
 			cws.Status = status
 			if err := store.ctxDb.Write(cws); err != nil {

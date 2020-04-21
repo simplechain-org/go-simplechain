@@ -148,7 +148,7 @@ func testBlockChainImport(chain types.Blocks, blockchain *BlockChain) error {
 		if err != nil {
 			return err
 		}
-		receipts, _, usedGas, err := blockchain.processor.Process(block, statedb, vm.Config{}, blockchain.CrossDemoAddress)
+		receipts, _, usedGas, err := blockchain.processor.Process(block, statedb, vm.Config{}, blockchain.CrossContractAddr)
 		if err != nil {
 			blockchain.reportBlock(block, receipts, err)
 			return err
