@@ -103,7 +103,7 @@ type ProtocolManager struct {
 
 	serverPool *serverPool
 
-	msgHandler *cross.MsgHandler
+	msgHandler *cross.Handler
 
 	raftMode bool
 	engine   consensus.Engine // used for istanbul consensus
@@ -803,13 +803,58 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 		pm.AddRemotes(txs)
 
-	default:
-		if pm.msgHandler != nil {
-			return pm.msgHandler.CrossChainMsg(msg, p)
+		//msg for crossChain
+	case msg.Code == CtxSignMsg:
+		// Transactions arrived, make sure we have a valid and fresh chain to handle them
+		if atomic.LoadUint32(&pm.acceptTxs) == 0 {
+			break
 		}
+		var ctx *types.CrossTransaction
+		if err := msg.Decode(&ctx); err != nil {
+			return errResp(ErrDecode, "msg %v: %v", msg, err)
+		}
+		if err := pm.verifySigner(ctx); err != nil {
+			return errResp(ErrVerifyCtx, "msg %v: %v", ctx.ID(), err)
+		}
+
+		p.MarkCrossTransaction(ctx.SignHash())
+		pm.BroadcastCtx([]*types.CrossTransaction{ctx})
+
+		if pm.msgHandler != nil {
+			pm.msgHandler.AddRemoteCtx(ctx)
+		}
+	default:
 		return errResp(ErrInvalidMsgCode, "%v", msg.Code)
 
 	}
+	return nil
+}
+
+func (pm *ProtocolManager) verifySigner(ctx *types.CrossTransaction) error {
+	receipt := pm.blockchain.GetReceiptsByTxHash(ctx.Data.TxHash)
+	if receipt == nil || receipt.Status == 0 {
+		return fmt.Errorf("get maker tx receipt false")
+	}
+	tx, _, _ := pm.blockchain.GetTransactionByTxHash(ctx.Data.TxHash)
+	if tx == nil {
+		return fmt.Errorf("get maker tx false")
+	}
+
+	newHead := pm.blockchain.CurrentBlock().Header() // Special case during testing
+	stateDB, err := pm.blockchain.StateAt(newHead.Root)
+	if err != nil {
+		return fmt.Errorf("stateAt err:%s", err.Error())
+	}
+	anchors, _ := core.QueryAnchor(pm.blockchain.GetChainConfig(), pm.blockchain, stateDB, newHead,
+		*tx.To(), ctx.DestinationId().Uint64())
+	if len(anchors) == 0 {
+		return fmt.Errorf("query anchor err")
+	}
+	anchorSet := core.NewAnchorSet(anchors)
+	if !anchorSet.IsAnchorSignedCtx(ctx, types.NewEIP155CtxSigner(ctx.ChainId())) {
+		return fmt.Errorf("invalid signature of ctx:%s", ctx.ID().String())
+	}
+
 	return nil
 }
 
@@ -939,28 +984,7 @@ func (pm *ProtocolManager) BroadcastCtx(ctxs []*types.CrossTransaction) {
 	}
 }
 
-//锚定节点广播签名Rtx
-//func (pm *ProtocolManager) BroadcastRtx(rtxs []*types.ReceptTransaction) {
-//	for _, rtx := range rtxs {
-//		var txset = make(map[*peer]*types.ReceptTransaction)
-//
-//		// Broadcast rtx to a batch of peers not knowing about it
-//
-//		peers := pm.peers.PeersWithoutRTx(rtx.SignHash())
-//		for _, peer := range peers {
-//			txset[peer] = rtx
-//		}
-//		log.Trace("Broadcast transaction", "hash", rtx.Hash(), "recipients", len(peers))
-//
-//		// FIXME include this again: peers = peers[:int(math.Sqrt(float64(len(peers))))]
-//		for peer, rt := range txset {
-//			peer.AsyncSendReceptTransaction(rt)
-//		}
-//	}
-//
-//}
-
-func (pm *ProtocolManager) SetMsgHandler(msgHandler *cross.MsgHandler) {
+func (pm *ProtocolManager) SetMsgHandler(msgHandler *cross.Handler) {
 	pm.msgHandler = msgHandler
 }
 
@@ -986,14 +1010,6 @@ func (pm *ProtocolManager) Pending() (map[common.Address]types.Transactions, err
 	return pm.txpool.Pending()
 }
 
-//func (pm *ProtocolManager) GetAnchorTxs(address common.Address) (map[common.Address]types.Transactions, error) {
-//	return pm.txpool.GetAnchorTxs(address)
-//}
-
-//func (pm *ProtocolManager) GetAnchorTxs(address common.Address) (map[common.Address]types.Transactions, error) {
-//	return pm.txpool.GetAnchorTxs(address)
-//}
-
 // Accept PBFT committed block
 func (pm *ProtocolManager) Enqueue(id string, block *types.Block) {
 	pm.fetcher.Enqueue(id, block)
@@ -1015,5 +1031,4 @@ func (pm *ProtocolManager) AddLocals(txs []*types.Transaction) {
 	for _, v := range txs {
 		pm.txpool.AddLocal(v)
 	}
-	//return pm.txpool.AddRemotes(txs)
 }

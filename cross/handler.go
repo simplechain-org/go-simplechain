@@ -2,7 +2,6 @@ package cross
 
 import (
 	"context"
-	"fmt"
 	"math/big"
 	"time"
 
@@ -11,7 +10,6 @@ import (
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/log"
-	"github.com/simplechain-org/go-simplechain/p2p"
 	"github.com/simplechain-org/go-simplechain/params"
 )
 
@@ -19,18 +17,6 @@ const (
 	txChanSize     = 4096
 	rmLogsChanSize = 10
 )
-
-type errCode int
-
-const (
-	ErrMsgTooLarge = iota
-	ErrDecode
-	ErrInvalidMsgCode
-)
-
-func errResp(code errCode, format string, v ...interface{}) error {
-	return fmt.Errorf("%v - %v", code, fmt.Sprintf(format, v...))
-}
 
 type RoleHandler int
 
@@ -45,12 +31,7 @@ type TranParam struct {
 	data     []byte
 }
 
-type GetCtxSignsData struct {
-	Amount int  // Maximum number of headers to retrieve
-	GetAll bool // Query all
-}
-
-type MsgHandler struct {
+type Handler struct {
 	roleHandler RoleHandler
 	role        common.ChainRole
 	ctxStore    CtxStore
@@ -89,13 +70,13 @@ type MsgHandler struct {
 	signHash            types.SignHash
 }
 
-func NewMsgHandler(chain simplechain, roleHandler RoleHandler, role common.ChainRole, ctxPool CtxStore,
+func NewCrossHandler(chain simplechain, roleHandler RoleHandler, role common.ChainRole, ctxPool CtxStore,
 	blockChain *core.BlockChain, crossMsgReader <-chan interface{},
 	crossMsgWriter chan<- interface{}, mainAddr common.Address, subAddr common.Address,
-	signHash types.SignHash, anchorSigner common.Address) *MsgHandler {
+	signHash types.SignHash, anchorSigner common.Address) *Handler {
 
 	gasHelper := NewGasHelper(blockChain, chain)
-	return &MsgHandler{
+	return &Handler{
 		chain:               chain,
 		roleHandler:         roleHandler,
 		role:                role,
@@ -111,218 +92,194 @@ func NewMsgHandler(chain simplechain, roleHandler RoleHandler, role common.Chain
 		anchorSigner:        anchorSigner,
 	}
 }
-func (this *MsgHandler) SetProtocolManager(pm ProtocolManager) {
-	this.pm = pm
+
+func (h *Handler) SetProtocolManager(pm ProtocolManager) {
+	h.pm = pm
 }
 
-func (this *MsgHandler) RegisterCrossChain(chainID *big.Int) {
-	this.writeCrossMessage(core.NewCrossChainEvent{ChainID: chainID})
+func (h *Handler) RegisterCrossChain(chainID *big.Int) {
+	h.writeCrossMessage(core.NewCrossChainEvent{ChainID: chainID})
 }
 
-func (this *MsgHandler) Start() {
-	this.confirmedMakerCh = make(chan core.ConfirmedMakerEvent, txChanSize)
-	this.confirmedMakerSub = this.blockChain.SubscribeConfirmedMakerEvent(this.confirmedMakerCh)
-	this.confirmedTakerCh = make(chan core.ConfirmedTakerEvent, txChanSize)
-	this.confirmedTakerSub = this.blockChain.SubscribeConfirmedTakerEvent(this.confirmedTakerCh)
+func (h *Handler) Start() {
+	h.confirmedMakerCh = make(chan core.ConfirmedMakerEvent, txChanSize)
+	h.confirmedMakerSub = h.blockChain.SubscribeConfirmedMakerEvent(h.confirmedMakerCh)
+	h.confirmedTakerCh = make(chan core.ConfirmedTakerEvent, txChanSize)
+	h.confirmedTakerSub = h.blockChain.SubscribeConfirmedTakerEvent(h.confirmedTakerCh)
 
-	this.signedCtxCh = make(chan core.SignedCtxEvent, txChanSize)
-	this.signedCtxSub = this.ctxStore.SubscribeSignedCtxEvent(this.signedCtxCh)
+	h.signedCtxCh = make(chan core.SignedCtxEvent, txChanSize)
+	h.signedCtxSub = h.ctxStore.SubscribeSignedCtxEvent(h.signedCtxCh)
 
-	this.makerFinishEventCh = make(chan core.ConfirmedFinishEvent, txChanSize)
-	this.makerFinishEventSub = this.blockChain.SubscribeConfirmedFinishEvent(this.makerFinishEventCh)
+	h.makerFinishEventCh = make(chan core.ConfirmedFinishEvent, txChanSize)
+	h.makerFinishEventSub = h.blockChain.SubscribeConfirmedFinishEvent(h.makerFinishEventCh)
 
-	this.newTakerCh = make(chan core.NewTakerEvent, txChanSize)
-	this.newTakerSub = this.blockChain.SubscribeNewTakerEvent(this.newTakerCh)
+	h.newTakerCh = make(chan core.NewTakerEvent, txChanSize)
+	h.newTakerSub = h.blockChain.SubscribeNewTakerEvent(h.newTakerCh)
 
-	this.rmLogsCh = make(chan core.RemovedLogsEvent, rmLogsChanSize)
-	this.rmLogsSub = this.blockChain.SubscribeRemovedLogsEvent(this.rmLogsCh)
-	this.updateAnchorCh = make(chan core.AnchorEvent, txChanSize)
-	this.updateAnchorSub = this.blockChain.SubscribeUpdateAnchorEvent(this.updateAnchorCh)
+	h.rmLogsCh = make(chan core.RemovedLogsEvent, rmLogsChanSize)
+	h.rmLogsSub = h.blockChain.SubscribeRemovedLogsEvent(h.rmLogsCh)
+	h.updateAnchorCh = make(chan core.AnchorEvent, txChanSize)
+	h.updateAnchorSub = h.blockChain.SubscribeUpdateAnchorEvent(h.updateAnchorCh)
 
-	go this.loop()
-	go this.readCrossMessage()
+	go h.loop()
+	go h.readCrossMessage()
 }
 
-func (this *MsgHandler) GetCtxstore() CtxStore {
-	return this.ctxStore
+func (h *Handler) GetCtxStore() CtxStore {
+	return h.ctxStore
 }
 
-func (this *MsgHandler) SetGasPriceOracle(gpo GasPriceOracle) {
-	this.gpo = gpo
+func (h *Handler) SetGasPriceOracle(gpo GasPriceOracle) {
+	h.gpo = gpo
 }
 
-func (this *MsgHandler) loop() {
+func (h *Handler) AddRemoteCtx(ctx *types.CrossTransaction) {
+	log.Info("Add remote ctx", "id", ctx.ID().String())
+	if err := h.ctxStore.VerifyCtx(ctx); err == nil {
+		if err := h.ctxStore.AddRemote(ctx); err != nil {
+			log.Error("Add remote ctx", "id", ctx.ID().String(), "err", err)
+		}
+	}
+}
+
+func (h *Handler) Stop() {
+	h.confirmedMakerSub.Unsubscribe()
+	h.signedCtxSub.Unsubscribe()
+	h.confirmedTakerSub.Unsubscribe()
+	h.newTakerSub.Unsubscribe()
+	h.makerFinishEventSub.Unsubscribe()
+	h.rmLogsSub.Unsubscribe()
+	h.updateAnchorSub.Unsubscribe()
+
+	close(h.quitSync)
+
+	log.Info("SimpleChain MsgHandler stopped")
+}
+
+func (h *Handler) loop() {
 	expire := time.NewTicker(30 * time.Second)
 	defer expire.Stop()
 
 	for {
 		select {
-		case ev := <-this.confirmedMakerCh:
-			if this.role.IsAnchor() {
-				for _, tx := range ev.Txs {
-					if err := this.ctxStore.AddLocal(tx); err != nil {
-						log.Warn("Add local rtx", "err", err)
-					}
+		case ev := <-h.confirmedMakerCh:
+			for _, tx := range ev.Txs {
+				if err := h.ctxStore.AddLocal(tx); err != nil {
+					log.Warn("Add local rtx", "err", err)
 				}
-				this.pm.BroadcastCtx(ev.Txs)
 			}
-		case <-this.confirmedMakerSub.Err():
+			h.pm.BroadcastCtx(ev.Txs)
+
+		case <-h.confirmedMakerSub.Err():
 			return
 
-		case ev := <-this.signedCtxCh:
-			log.Warn("signedCtxCh", "finish maker", ev.Tws.ID().String())
-			if this.role.IsAnchor() {
-				this.writeCrossMessage(ev)
-			}
-		case <-this.signedCtxSub.Err():
+		case ev := <-h.signedCtxCh:
+			log.Info("[debug] signedCtxCh", "finish maker", ev.Tws.ID().String())
+			h.writeCrossMessage(ev)
+		case <-h.signedCtxSub.Err():
 			return
 
-		case ev := <-this.confirmedTakerCh:
-			if !this.pm.CanAcceptTxs() {
-				break
-			}
-			if this.role.IsAnchor() {
-				this.writeCrossMessage(ev)
-			}
-			if errs := this.ctxStore.RemoveRemotes(ev.Txs); errs != nil {
+		case ev := <-h.confirmedTakerCh:
+			h.writeCrossMessage(ev)
+			if errs := h.ctxStore.RemoveRemotes(ev.Txs); errs != nil {
 				log.Warn("RemoveRemotes failed", "error", errs)
 			}
 
-		case <-this.confirmedTakerSub.Err():
+		case <-h.confirmedTakerSub.Err():
 			return
 
-		case ev := <-this.newTakerCh:
-			this.ctxStore.MarkStatus(ev.Txs, types.RtxStatusImplementing)
-
-		case <-this.newTakerSub.Err():
+		case ev := <-h.newTakerCh:
+			h.ctxStore.MarkStatus(ev.Txs, types.RtxStatusImplementing)
+		case <-h.newTakerSub.Err():
 			return
 
-		case ev := <-this.rmLogsCh:
-			this.reorgLogs(ev.Logs)
-		case <-this.rmLogsSub.Err():
+		case ev := <-h.rmLogsCh:
+			h.reOrgLogs(ev.Logs)
+		case <-h.rmLogsSub.Err():
 			return
 
-		case ev := <-this.makerFinishEventCh:
-			this.clearStore(ev.FinishIds)
+		case ev := <-h.makerFinishEventCh:
+			h.clearStore(ev.FinishIds)
 
-		case <-this.makerFinishEventSub.Err():
+		case <-h.makerFinishEventSub.Err():
 			return
 
-		case ev := <-this.updateAnchorCh:
+		case ev := <-h.updateAnchorCh:
 			for _, v := range ev.ChainInfo {
-				if err := this.ctxStore.UpdateAnchors(v); err != nil {
+				if err := h.ctxStore.UpdateAnchors(v); err != nil {
 					log.Info("ctxStore.UpdateAnchors", "err", err)
 				}
 			}
-		case <-this.updateAnchorSub.Err():
+		case <-h.updateAnchorSub.Err():
 			return
 
 		case <-expire.C:
-			this.UpdateSelfTx()
+			h.updateSelfTx()
 		}
 	}
 }
 
-func (this *MsgHandler) Stop() {
-	log.Info("Stopping SimpleChain MsgHandler")
-	this.confirmedMakerSub.Unsubscribe()
-	this.signedCtxSub.Unsubscribe()
-	this.confirmedTakerSub.Unsubscribe()
-	this.newTakerSub.Unsubscribe()
-	this.makerFinishEventSub.Unsubscribe()
-	this.rmLogsSub.Unsubscribe()
-	this.updateAnchorSub.Unsubscribe()
-
-	close(this.quitSync)
-
-	log.Info("SimpleChain MsgHandler stopped")
-}
-
-func (this *MsgHandler) CrossChainMsg(msg p2p.Msg, p Peer) error {
-	switch {
-	case msg.Code == CtxSignMsg:
-		if !this.pm.CanAcceptTxs() {
-			break
-		}
-		var ctx *types.CrossTransaction
-		if err := msg.Decode(&ctx); err != nil {
-			return errResp(ErrDecode, "msg %v: %v", msg, err)
-		}
-		if err := this.ctxStore.VerifyCtx(ctx); err == nil {
-			p.MarkCrossTransaction(ctx.SignHash())
-			this.pm.BroadcastCtx([]*types.CrossTransaction{ctx})
-			if err := this.ctxStore.AddRemote(ctx); err != nil {
-				log.Debug("Add remote ctx", "err", err, "id", ctx.ID().String())
-			}
-		}
-
-	default:
-		return errResp(ErrInvalidMsgCode, "%v", msg.Code)
-	}
-	return nil
-}
-
-func (this *MsgHandler) writeCrossMessage(v interface{}) {
+func (h *Handler) writeCrossMessage(v interface{}) {
 	select {
-	case this.crossMsgWriter <- v:
-	case <-this.quitSync:
+	case h.crossMsgWriter <- v:
+	case <-h.quitSync:
 		return
 	}
 }
 
-func (this *MsgHandler) readCrossMessage() {
+func (h *Handler) readCrossMessage() {
 	for {
 		select {
-		case v := <-this.crossMsgReader:
+		case v := <-h.crossMsgReader:
 			switch ev := v.(type) {
 			case core.SignedCtxEvent:
 				cws := ev.Tws
-				if cws.DestinationId().Uint64() == this.pm.NetworkId() {
-					if err := this.ctxStore.AddFromRemoteChain(cws, ev.CallBack); err != nil {
+				if cws.DestinationId().Uint64() == h.pm.NetworkId() {
+					if err := h.ctxStore.AddFromRemoteChain(cws, ev.CallBack); err != nil {
 						log.Warn("readCrossMessage failed", "error", err.Error())
 					}
 				}
 
 			case core.ConfirmedTakerEvent:
-				txs, err := this.GetTxForLockOut(ev.Txs)
+				txs, err := h.getTxForLockOut(ev.Txs)
 				if err != nil {
 					log.Error("GetTxForLockOut", "err", err)
 				}
 				if len(txs) > 0 {
-					this.pm.AddLocals(txs)
+					h.pm.AddLocals(txs)
 				}
 
 			case core.NewCrossChainEvent:
-				if ev.ChainID.Uint64() != this.pm.NetworkId() {
-					this.ctxStore.RegisterChain(ev.ChainID)
+				if ev.ChainID.Uint64() != h.pm.NetworkId() {
+					h.ctxStore.RegisterChain(ev.ChainID)
 				}
 			}
 
-		case <-this.quitSync:
+		case <-h.quitSync:
 			return
 		}
 	}
 }
 
-func (this *MsgHandler) GetTxForLockOut(rwss []*types.ReceptTransaction) ([]*types.Transaction, error) {
+func (h *Handler) getTxForLockOut(rwss []*types.ReceptTransaction) ([]*types.Transaction, error) {
 	var err error
 	var count uint64
 	var param *TranParam
 	var tx *types.Transaction
 	var txs []*types.Transaction
 
-	tokenAddress := this.getCrossContractAddr()
-	nonce := this.pm.GetNonce(this.anchorSigner)
+	nonce := h.pm.GetNonce(h.anchorSigner)
+	tokenAddress := h.getCrossContractAddr()
 
 	for _, rws := range rwss {
-		if rws.DestinationId.Uint64() == this.pm.NetworkId() {
-			param, err = this.CreateTransaction(this.anchorSigner, rws)
+		if rws.DestinationId.Uint64() == h.pm.NetworkId() {
+			param, err = h.createTransaction(rws)
 			if err != nil {
 				log.Error("GetTxForLockOut CreateTransaction", "err", err)
 				continue
 			}
 			tx, err = newSignedTransaction(nonce+count, tokenAddress, param.gasLimit, param.gasPrice, param.data,
-				this.pm.NetworkId(), this.signHash)
+				h.pm.NetworkId(), h.signHash)
 			if err != nil {
 				log.Error("GetTxForLockOut newSignedTransaction", "err", err)
 				return nil, err
@@ -335,30 +292,30 @@ func (this *MsgHandler) GetTxForLockOut(rwss []*types.ReceptTransaction) ([]*typ
 	return txs, nil
 }
 
-func (this *MsgHandler) clearStore(finishes []common.Hash) {
+func (h *Handler) clearStore(finishes []common.Hash) {
 	for _, id := range finishes {
 		log.Info("cross transaction finished", "txId", id.String())
 	}
-	if errs := this.ctxStore.RemoveLocals(finishes); errs != nil {
+	if errs := h.ctxStore.RemoveLocals(finishes); errs != nil {
 		log.Warn("CleanUpDb RemoveLocals failed", "error", errs)
 	}
 }
 
-func (this *MsgHandler) getCrossContractAddr() common.Address {
+func (h *Handler) getCrossContractAddr() common.Address {
 	var crossAddr common.Address
-	switch this.roleHandler {
+	switch h.roleHandler {
 	case RoleMainHandler:
-		crossAddr = this.MainChainCtxAddress
+		crossAddr = h.MainChainCtxAddress
 	case RoleSubHandler:
-		crossAddr = this.SubChainCtxAddress
+		crossAddr = h.SubChainCtxAddress
 	}
 	return crossAddr
 }
 
-func (this *MsgHandler) reorgLogs(logs []*types.Log) {
+func (h *Handler) reOrgLogs(logs []*types.Log) {
 	var takerLogs []*types.ReceptTransaction
 	for _, l := range logs {
-		if this.blockChain.IsCtxAddress(l.Address) {
+		if h.blockChain.IsCtxAddress(l.Address) {
 			if l.Topics[0] == params.TakerTopic && len(l.Topics) >= 3 && len(l.Data) >= common.HashLength*6 {
 				takerLogs = append(takerLogs, &types.ReceptTransaction{
 					DestinationId: common.BytesToHash(l.Data[:common.HashLength]).Big(),
@@ -368,12 +325,12 @@ func (this *MsgHandler) reorgLogs(logs []*types.Log) {
 		}
 	}
 	if len(takerLogs) > 0 {
-		this.ctxStore.MarkStatus(takerLogs, types.RtxStatusWaiting)
+		h.ctxStore.MarkStatus(takerLogs, types.RtxStatusWaiting)
 	}
 }
 
-func (this *MsgHandler) CreateTransaction(address common.Address, rws *types.ReceptTransaction) (*TranParam, error) {
-	gasPrice, err := this.gpo.SuggestPrice(context.Background())
+func (h *Handler) createTransaction(rws *types.ReceptTransaction) (*TranParam, error) {
+	gasPrice, err := h.gpo.SuggestPrice(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -386,9 +343,9 @@ func (this *MsgHandler) CreateTransaction(address common.Address, rws *types.Rec
 	return &TranParam{gasLimit: 250000, gasPrice: gasPrice, data: data}, nil
 }
 
-func (this *MsgHandler) UpdateSelfTx() {
-	if pending, err := this.pm.Pending(); err == nil {
-		if txs, ok := pending[this.anchorSigner]; ok {
+func (h *Handler) updateSelfTx() {
+	if pending, err := h.pm.Pending(); err == nil {
+		if txs, ok := pending[h.anchorSigner]; ok {
 			var count uint64
 			var newTxs []*types.Transaction
 			for _, v := range txs {
@@ -396,7 +353,7 @@ func (this *MsgHandler) UpdateSelfTx() {
 					gasPrice := new(big.Int).Div(new(big.Int).Mul(
 						v.GasPrice(), big.NewInt(100+int64(core.DefaultTxPoolConfig.PriceBump))), big.NewInt(100))
 
-					tx, err := newSignedTransaction(v.Nonce(), this.getCrossContractAddr(), v.Gas(), gasPrice, v.Data(), this.pm.NetworkId(), this.signHash)
+					tx, err := newSignedTransaction(v.Nonce(), h.getCrossContractAddr(), v.Gas(), gasPrice, v.Data(), h.pm.NetworkId(), h.signHash)
 					if err != nil {
 						log.Info("UpdateSelfTx", "err", err)
 					}
@@ -408,7 +365,7 @@ func (this *MsgHandler) UpdateSelfTx() {
 				}
 			}
 			log.Info("UpdateSelfTx", "len", len(newTxs))
-			this.pm.AddLocals(newTxs)
+			h.pm.AddLocals(newTxs)
 		}
 	}
 }

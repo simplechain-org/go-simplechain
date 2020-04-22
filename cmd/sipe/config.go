@@ -154,10 +154,6 @@ func makeConfigNode(ctx *cli.Context) (*node.Node, gethConfig) {
 		}
 	}
 
-	//if ctx.GlobalIsSet(utils.AnchorPriKeyFlag.Name) {
-	//	rpctx.PrivateKey = ctx.GlobalString(utils.AnchorPriKeyFlag.Name)
-	//}
-
 	return stack, cfg
 }
 

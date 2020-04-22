@@ -153,7 +153,6 @@ var (
 		utils.EWASMInterpreterFlag,
 		utils.EVMInterpreterFlag,
 		utils.RoleFlag,
-		utils.AnchorPriKeyFlag,
 		utils.ContractMainFlag,
 		utils.ContractSubFlag,
 		configFileFlag,

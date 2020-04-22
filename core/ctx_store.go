@@ -311,7 +311,8 @@ func (store *CtxStore) VerifyCtx(ctx *types.CrossTransaction) error {
 	if NewChainInvoke(store.chain).IsTransactionInExpiredBlock(ctx, expireNumber) {
 		return fmt.Errorf("ctx is already expired, id: %s", ctx.ID().String())
 	}
-	return store.verifySigner(ctx, ctx.ChainId(), ctx.DestinationId())
+	return nil
+	//return store.verifySigner(ctx, ctx.ChainId(), ctx.DestinationId())
 }
 
 // validate ctx signed by anchor (fromChain:tx signed by fromChain, )

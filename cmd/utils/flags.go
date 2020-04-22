@@ -870,22 +870,14 @@ var (
 	ContractMainFlag = cli.StringFlag{
 		Name:  "contract.main",
 		Usage: "The address of main contract",
-		Value: params.MainChainCtxAddress.String(),
 	}
 	ContractSubFlag = cli.StringFlag{
 		Name:  "contract.sub",
 		Usage: "The address of sub contract",
-		Value: params.SubChainCtxAddress.String(),
-	}
-	AnchorPriKeyFlag = cli.StringFlag{
-		Name:  "anchor.pri",
-		Usage: "define anchor's private key",
-		Value: "0x86840df867b8eb3ee29001f5878a494c38c3a5ed733f220e05b24111667780b5",
 	}
 	AnchorSignerFlag = cli.StringFlag{
 		Name:  "anchor.signer",
 		Usage: "public address of anchor signer",
-		Value: "0",
 	}
 )
 

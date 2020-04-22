@@ -179,11 +179,11 @@ type BlockChain struct {
 	processor  Processor  // Block transaction processor interface
 	vmConfig   vm.Config
 
-	badBlocks        *lru.Cache                     // Bad block cache
-	shouldPreserve   func(*types.Block) bool        // Function used to determine whether should preserve the given block.
-	terminateInsert  func(common.Hash, uint64) bool // Testing hook used to terminate ancient receipt chain insertion.
-	trigger          *UnconfirmedBlockLogs
-	CrossDemoAddress common.Address
+	badBlocks         *lru.Cache                     // Bad block cache
+	shouldPreserve    func(*types.Block) bool        // Function used to determine whether should preserve the given block.
+	terminateInsert   func(common.Hash, uint64) bool // Testing hook used to terminate ancient receipt chain insertion.
+	trigger           *UnconfirmedBlockLogs
+	CrossContractAddr common.Address
 }
 
 // NewBlockChain returns a fully initialised block chain using information
@@ -206,23 +206,23 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 	badBlocks, _ := lru.New(badBlockLimit)
 
 	bc := &BlockChain{
-		chainConfig:      chainConfig,
-		cacheConfig:      cacheConfig,
-		db:               db,
-		triegc:           prque.New(nil),
-		stateCache:       state.NewDatabaseWithCache(db, cacheConfig.TrieCleanLimit),
-		quit:             make(chan struct{}),
-		shouldPreserve:   shouldPreserve,
-		bodyCache:        bodyCache,
-		bodyRLPCache:     bodyRLPCache,
-		receiptsCache:    receiptsCache,
-		blockCache:       blockCache,
-		txLookupCache:    txLookupCache,
-		futureBlocks:     futureBlocks,
-		engine:           engine,
-		vmConfig:         vmConfig,
-		badBlocks:        badBlocks,
-		CrossDemoAddress: contract,
+		chainConfig:       chainConfig,
+		cacheConfig:       cacheConfig,
+		db:                db,
+		triegc:            prque.New(nil),
+		stateCache:        state.NewDatabaseWithCache(db, cacheConfig.TrieCleanLimit),
+		quit:              make(chan struct{}),
+		shouldPreserve:    shouldPreserve,
+		bodyCache:         bodyCache,
+		bodyRLPCache:      bodyRLPCache,
+		receiptsCache:     receiptsCache,
+		blockCache:        blockCache,
+		txLookupCache:     txLookupCache,
+		futureBlocks:      futureBlocks,
+		engine:            engine,
+		vmConfig:          vmConfig,
+		badBlocks:         badBlocks,
+		CrossContractAddr: contract,
 	}
 	bc.validator = NewBlockValidator(chainConfig, bc, engine)
 	bc.prefetcher = newStatePrefetcher(chainConfig, bc, engine)
@@ -1415,7 +1415,10 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 		if len(logs) > 0 {
 			bc.logsFeed.Send(logs)
 		}
-		bc.StoreContractLog(block.NumberU64(), block.Hash(), logs)
+
+		if bc.chainConfig.IsSingularity(currentBlock.Number()) && bc.CrossContractAddr != (common.Address{}) {
+			bc.StoreCrossContractLog(block.NumberU64(), block.Hash(), logs)
+		}
 
 		// In theory we should fire a ChainHeadEvent when we inject
 		// a canonical block, but sometimes we can insert a batch of
@@ -1662,7 +1665,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		}
 		// Process block using the parent state as reference point
 		substart := time.Now()
-		receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig, bc.CrossDemoAddress)
+		receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig, bc.CrossContractAddr)
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
 			atomic.StoreUint32(&followupInterrupt, 1)
@@ -2247,7 +2250,7 @@ func (bc *BlockChain) SubscribeBlockProcessingEvent(ch chan<- bool) event.Subscr
 	return bc.scope.Track(bc.blockProcFeed.Subscribe(ch))
 }
 
-func (bc *BlockChain) StoreContractLog(blockNumber uint64, hash common.Hash, logs []*types.Log) {
+func (bc *BlockChain) StoreCrossContractLog(blockNumber uint64, hash common.Hash, logs []*types.Log) {
 	var blockLogs []*types.Log
 	if logs != nil {
 		var rtxs []*types.ReceptTransaction
@@ -2339,7 +2342,7 @@ func (bc *BlockChain) SubscribeConfirmedFinishEvent(ch chan<- ConfirmedFinishEve
 }
 
 func (bc *BlockChain) IsCtxAddress(addr common.Address) bool {
-	return addr == bc.CrossDemoAddress
+	return addr == bc.CrossContractAddr
 }
 
 func (bc *BlockChain) GetBlockNumber(hash common.Hash) *uint64 {

@@ -105,7 +105,7 @@ type ProtocolManager struct {
 	// and processing
 	wg sync.WaitGroup
 
-	msgHandler *cross.MsgHandler
+	msgHandler *cross.Handler
 	raftMode   bool
 	engine     consensus.Engine // used for istanbul consensus
 }
@@ -283,7 +283,7 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 	go pm.ctxsyncLoop()
 	go pm.syncer()
 	go pm.txsyncLoop()
-
+	//node is anchor
 	if pm.msgHandler != nil {
 		pm.msgHandler.Start()
 	}
@@ -789,14 +789,59 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 
 		}
 		pm.AddRemotes(txs)
-
-	default:
-		if pm.msgHandler != nil {
-			return pm.msgHandler.CrossChainMsg(msg, p)
+		//msg for crossChain
+	case msg.Code == CtxSignMsg:
+		// Transactions arrived, make sure we have a valid and fresh chain to handle them
+		if atomic.LoadUint32(&pm.acceptTxs) == 0 {
+			break
 		}
+		var ctx *types.CrossTransaction
+		if err := msg.Decode(&ctx); err != nil {
+			return errResp(ErrDecode, "msg %v: %v", msg, err)
+		}
+
+		if err := pm.verifySigner(ctx); err != nil {
+			return errResp(ErrVerifyCtx, "msg %v: %v", ctx.ID(), err)
+		}
+
+		p.MarkCrossTransaction(ctx.SignHash())
+		pm.BroadcastCtx([]*types.CrossTransaction{ctx})
+
+		if pm.msgHandler != nil {
+			pm.msgHandler.AddRemoteCtx(ctx)
+		}
+	default:
 		return errResp(ErrInvalidMsgCode, "%v", msg.Code)
 
 	}
+	return nil
+}
+
+func (pm *ProtocolManager) verifySigner(ctx *types.CrossTransaction) error {
+	receipt := pm.blockchain.GetReceiptsByTxHash(ctx.Data.TxHash)
+	if receipt == nil || receipt.Status == 0 {
+		return fmt.Errorf("get maker tx receipt false")
+	}
+	tx, _, _ := pm.blockchain.GetTransactionByTxHash(ctx.Data.TxHash)
+	if tx == nil {
+		return fmt.Errorf("get maker tx false")
+	}
+
+	newHead := pm.blockchain.CurrentBlock().Header() // Special case during testing
+	stateDB, err := pm.blockchain.StateAt(newHead.Root)
+	if err != nil {
+		return fmt.Errorf("stateAt err:%s", err.Error())
+	}
+	anchors, _ := core.QueryAnchor(pm.blockchain.GetChainConfig(), pm.blockchain, stateDB, newHead,
+		*tx.To(), ctx.DestinationId().Uint64())
+	if len(anchors) == 0 {
+		return fmt.Errorf("query anchor err")
+	}
+	anchorSet := core.NewAnchorSet(anchors)
+	if !anchorSet.IsAnchorSignedCtx(ctx, types.NewEIP155CtxSigner(ctx.ChainId())) {
+		return fmt.Errorf("invalid signature of ctx:%s", ctx.ID().String())
+	}
+
 	return nil
 }
 
@@ -946,7 +991,7 @@ func (pm *ProtocolManager) BroadcastCtx(ctxs []*types.CrossTransaction) {
 	}
 }
 
-func (pm *ProtocolManager) SetMsgHandler(msgHandler *cross.MsgHandler) {
+func (pm *ProtocolManager) SetMsgHandler(msgHandler *cross.Handler) {
 	pm.msgHandler = msgHandler
 }
 func (pm *ProtocolManager) AddLocals(txs []*types.Transaction) {
