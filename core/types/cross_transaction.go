@@ -311,3 +311,8 @@ func (cws *CrossTransactionWithSignatures) Size() common.StorageSize {
 	cws.size.Store(common.StorageSize(c))
 	return common.StorageSize(c)
 }
+
+type OwnerCrossTransactionWithSignatures struct {
+	Cws *CrossTransactionWithSignatures
+	Time uint64
+}

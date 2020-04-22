@@ -847,20 +847,26 @@ func (store *CtxStore) validateRemoteCtx(ctx *types.CrossTransaction) error {
 	return nil
 }
 
-func (store *CtxStore) CtxOwner (from common.Address) (map[uint64][]*types.CrossTransactionWithSignatures, map[uint64][]*types.CrossTransactionWithSignatures) {
+func (store *CtxStore) CtxOwner (from common.Address) map[uint64][]*types.OwnerCrossTransactionWithSignatures {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	cwss := store.ctxDb.Query(from)
-	remotes := make(map[uint64][]*types.CrossTransactionWithSignatures)
-	locals := make(map[uint64][]*types.CrossTransactionWithSignatures)
+	//TODO 排序
+	//remotes := make(map[uint64][]*types.CrossTransactionWithSignatures)
+	locals := make(map[uint64][]*types.OwnerCrossTransactionWithSignatures)
 	for _, cws := range cwss {
-		if cws.Data.DestinationId.Cmp(store.config.ChainId) == 0 {
-			keyId := cws.ChainId().Uint64()
-			remotes[keyId] = append(remotes[keyId],cws)
-		} else {
-			keyId := cws.Data.DestinationId.Uint64()
-			locals[keyId] = append(locals[keyId],cws)
+		if cws.Data.DestinationId.Cmp(store.config.ChainId) != 0 {
+		//	keyId := cws.ChainId().Uint64()
+		//	remotes[keyId] = append(remotes[keyId],cws)
+		//} else {
+			var ows types.OwnerCrossTransactionWithSignatures
+			ows.Cws = cws
+			if block := store.chain.GetBlockByHash(cws.Data.BlockHash);block != nil {
+				ows.Time = block.Time()
+				keyId := cws.Data.DestinationId.Uint64()
+				locals[keyId] = append(locals[keyId],&ows)
+			}
 		}
 	}
-	return remotes, locals
+	return locals
 }

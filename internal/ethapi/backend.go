@@ -88,7 +88,7 @@ type Backend interface {
 	CtxStats() (pending int)
 
 	CtxPoolContent() (map[uint64][]*types.CrossTransactionWithSignatures, map[uint64][]*types.CrossTransactionWithSignatures)
-	GetSelfCtx(from common.Address) (map[uint64][]*types.CrossTransactionWithSignatures, map[uint64][]*types.CrossTransactionWithSignatures)
+	GetSelfCtx(from common.Address) map[uint64][]*types.OwnerCrossTransactionWithSignatures
 }
 
 func GetAPIs(apiBackend Backend) []rpc.API {
