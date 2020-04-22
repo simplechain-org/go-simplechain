@@ -34,8 +34,8 @@ func TestCtxDb(t *testing.T) {
 		}
 	}
 
-	if len(ctxDb.Query(nil)) != 1024 {
-		t.Errorf("write count err,len:%d", len(ctxDb.Query(nil)))
+	if len(ctxDb.Query(nil, 0)) != 1024 {
+		t.Errorf("write count err,len:%d", len(ctxDb.Query(nil, 0)))
 	}
 
 	cws, err := ctxDb.Read(common.BigToHash(big.NewInt(1000)))
@@ -50,7 +50,7 @@ func TestCtxDb(t *testing.T) {
 		t.Errorf("Delete err,id:%s", cws.ID().String())
 	}
 
-	if len(ctxDb.Query(nil)) != 1023 {
-		t.Errorf("write count err,len:%d", len(ctxDb.Query(nil)))
+	if len(ctxDb.Query(nil, 0)) != 1023 {
+		t.Errorf("write count err,len:%d", len(ctxDb.Query(nil, 0)))
 	}
 }

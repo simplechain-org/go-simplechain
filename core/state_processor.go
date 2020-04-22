@@ -89,6 +89,7 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 		return nil, err
 	}
 
+	//TODO:不应该修改共识
 	if len(tx.Data()) > 68 && tx.To() != nil && (*tx.To() == address) {
 		evmInvoke := NewEvmInvoke(bc, header, statedb, config, cfg)
 		if bytes.Equal(tx.Data()[:4], params.TakerFn) {
@@ -103,8 +104,7 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 			if new(big.Int).SetBytes(res).Cmp(big.NewInt(0)) == 0 {
 				//log.Info("take ok!", "res", new(big.Int).SetBytes(res).Uint64(), "tx", tx.Hash().String())
 			} else {
-				//TODO-//
-				log.Info("already take!", "res", new(big.Int).SetBytes(res).Uint64(), "tx", tx.Hash().String())
+				//log.Info("already take!", "res", new(big.Int).SetBytes(res).Uint64(), "tx", tx.Hash().String())
 				return nil, ErrRepetitionCrossTransaction
 			}
 		}

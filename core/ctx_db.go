@@ -32,7 +32,7 @@ type CtxDB interface {
 	Delete(ctxId common.Hash) error
 	Update(id common.Hash, updater func(ctx *types.CrossTransactionWithSignatures)) error
 	Has(id common.Hash) bool
-	Query(filter func(*types.CrossTransactionWithSignatures) bool, pageSize ...int) []*types.CrossTransactionWithSignatures
+	Query(filter func(*types.CrossTransactionWithSignatures) bool, pageSize int) []*types.CrossTransactionWithSignatures
 }
 
 type cacheDB struct {
@@ -259,15 +259,14 @@ func (d *cacheDB) Has(txID common.Hash) bool {
 }
 
 //TODO: pageSize array for perPageSize=pageSize[0], startPage=pageSize[1]
-func (d *cacheDB) Query(filter func(*types.CrossTransactionWithSignatures) bool, pageSize ...int) []*types.CrossTransactionWithSignatures {
+func (d *cacheDB) Query(filter func(*types.CrossTransactionWithSignatures) bool, pageSize int) []*types.CrossTransactionWithSignatures {
 	d.mux.RLock()
 	defer d.mux.RUnlock()
-	res := d.cache.GetList(filter, pageSize...)
-	if pageSize != nil && len(res) < pageSize[0] && d.cache.Cap() > 0 && d.cache.Count() < d.total {
+	res := d.cache.GetList(filter, pageSize)
+	if pageSize > 0 && len(res) < pageSize && d.cache.Cap() > 0 && d.cache.Count() < d.total {
 		//TODO: support kv-db if cache is not enough
 		log.Warn("Query in kv-db is not support yet")
 	}
-	log.Error("[debug] query results", "res", res)
 	return res
 }
 

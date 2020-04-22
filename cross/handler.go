@@ -115,6 +115,10 @@ func (this *MsgHandler) SetProtocolManager(pm ProtocolManager) {
 	this.pm = pm
 }
 
+func (this *MsgHandler) RegisterCrossChain(chainID *big.Int) {
+	this.writeCrossMessage(core.NewCrossChainEvent{ChainID: chainID})
+}
+
 func (this *MsgHandler) Start() {
 	this.confirmedMakerCh = make(chan core.ConfirmedMakerEvent, txChanSize)
 	this.confirmedMakerSub = this.blockChain.SubscribeConfirmedMakerEvent(this.confirmedMakerCh)
@@ -286,6 +290,11 @@ func (this *MsgHandler) readCrossMessage() {
 				}
 				if len(txs) > 0 {
 					this.pm.AddLocals(txs)
+				}
+
+			case core.NewCrossChainEvent:
+				if ev.ChainID.Uint64() != this.pm.NetworkId() {
+					this.ctxStore.RegisterChain(ev.ChainID)
 				}
 			}
 

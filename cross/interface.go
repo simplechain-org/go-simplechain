@@ -2,6 +2,7 @@ package cross
 
 import (
 	"context"
+	"math/big"
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core"
@@ -28,6 +29,7 @@ type CtxStore interface {
 	SubscribeSignedCtxEvent(chan<- core.SignedCtxEvent) event.Subscription
 
 	UpdateAnchors(*types.RemoteChainInfo) error
+	RegisterChain(*big.Int)
 }
 
 type simplechain interface {

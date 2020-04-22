@@ -312,13 +312,6 @@ func (cws *CrossTransactionWithSignatures) Resolution() []*CrossTransaction {
 	return ctxs
 }
 
-//TODO-D
-//func (cws *CrossTransactionWithSignatures) Key() []byte {
-//	key := []byte("m_")
-//	key = append(key, cws.Data.CTxId.Bytes()...)
-//	return key
-//}
-
 func (cws *CrossTransactionWithSignatures) Price() *big.Rat {
 	if cws.Data.Value.Cmp(common.Big0) == 0 {
 		return nil

@@ -119,12 +119,12 @@ func (t *CtxSortedByPrice) Update(id common.Hash, updater func(*types.CrossTrans
 	}
 }
 
-func (t *CtxSortedByPrice) GetList(filter func(*types.CrossTransactionWithSignatures) bool, pageSize ...int) []*types.CrossTransactionWithSignatures {
+func (t *CtxSortedByPrice) GetList(filter func(*types.CrossTransactionWithSignatures) bool, pageSize int) []*types.CrossTransactionWithSignatures {
 	res := make([]*types.CrossTransactionWithSignatures, 0, t.list.Size())
 	for itr := t.list.Iterator(); itr.Next(); {
 		if ctx := itr.Key().(*types.CrossTransactionWithSignatures); filter == nil || filter(ctx) {
 			res = append(res, ctx)
-			if pageSize != nil && len(res) >= pageSize[0] {
+			if pageSize > 0 && len(res) >= pageSize {
 				break
 			}
 		}

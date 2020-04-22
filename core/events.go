@@ -17,6 +17,8 @@
 package core
 
 import (
+	"math/big"
+
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/types"
 )
@@ -85,4 +87,8 @@ type NewCtxStatusEvent struct {
 
 type AnchorEvent struct {
 	ChainInfo []*types.RemoteChainInfo
+}
+
+type NewCrossChainEvent struct {
+	ChainID *big.Int
 }

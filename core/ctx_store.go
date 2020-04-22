@@ -63,9 +63,8 @@ type CtxStore struct {
 	chain       blockChain
 	pending     *CtxSortedByBlockNum //带有local签名
 	queued      *CtxSortedByBlockNum //网络其他节点签名
-	//TODO-UP
-	localStore  CtxDB            //存储本链跨链交易
-	remoteStore map[uint64]CtxDB //存储其他链的跨链交易
+	localStore  CtxDB                //存储本链跨链交易
+	remoteStore map[uint64]CtxDB     //存储其他链的跨链交易
 
 	anchors     map[uint64]*AnchorSet
 	signer      types.CtxSigner
@@ -89,18 +88,16 @@ func NewCtxStore(config CtxStoreConfig, chainConfig *params.ChainConfig, chain b
 	signer := types.MakeCtxSigner(chainConfig)
 	config.ChainId = chainConfig.ChainID
 	store := &CtxStore{
-		config:      config,
-		chainConfig: chainConfig,
-		chain:       chain,
-		pending:     NewCtxSortedMap(),
-		queued:      NewCtxSortedMap(),
-		localStore:  NewCtxDb(config.ChainId, makerDb, config.GlobalSlots),
-		remoteStore: make(map[uint64]CtxDB),
-		signer:      signer,
-		anchors:     make(map[uint64]*AnchorSet),
-		db:          makerDb,
-		//TODO-D
-		//ctxDb:            NewCtxDb(makerDb),
+		config:           config,
+		chainConfig:      chainConfig,
+		chain:            chain,
+		pending:          NewCtxSortedMap(),
+		queued:           NewCtxSortedMap(),
+		localStore:       NewCtxDb(config.ChainId, makerDb, config.GlobalSlots),
+		remoteStore:      make(map[uint64]CtxDB),
+		signer:           signer,
+		anchors:          make(map[uint64]*AnchorSet),
+		db:               makerDb,
 		mu:               sync.RWMutex{},
 		stopCh:           make(chan struct{}),
 		CrossDemoAddress: address,
@@ -157,18 +154,9 @@ func (store *CtxStore) restore() {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 
-	// Load Local
 	if err := store.localStore.Load(); err != nil {
 		log.Warn("Failed to load local ctx", "err", err)
 	}
-
-	// Load Remote from local
-	for _, ctx := range store.localStore.Query(nil, int(store.config.GlobalSlots)) {
-		if store.remoteStore[ctx.DestinationId().Uint64()] == nil {
-			store.remoteStore[ctx.DestinationId().Uint64()] = NewCtxDb(ctx.DestinationId(), store.db, store.config.GlobalSlots)
-		}
-	}
-
 	for _, remote := range store.remoteStore {
 		if err := remote.Load(); err != nil {
 			log.Warn("Failed to load remote ctx", "err", err)
@@ -456,8 +444,6 @@ func (store *CtxStore) Status() map[uint64]*Statistics {
 		remoteChainCount++
 		remoteChainSize += v.Size()
 	}
-	log.Error("[debug] Status", "chain", store.config.ChainId, "chains", remoteChainCount, "local", store.localStore.Size(), "remote", remoteChainSize)
-
 	status := make(map[uint64]*Statistics, 1)
 	if uint64(store.localStore.Size()) >= store.config.GlobalSlots {
 		status[store.config.ChainId.Uint64()] = &Statistics{
@@ -559,4 +545,18 @@ func (store *CtxStore) UpdateAnchors(info *types.RemoteChainInfo) error {
 	requireSignatureCount = signedCount
 	store.anchors[info.RemoteChainId] = NewAnchorSet(store.config.Anchors)
 	return nil
+}
+
+func (store *CtxStore) RegisterChain(chainID *big.Int) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	logger := log.New("chain", store.config.ChainId, "remote", chainID)
+	if store.remoteStore[chainID.Uint64()] == nil {
+		store.remoteStore[chainID.Uint64()] = NewCtxDb(chainID, store.db, store.config.GlobalSlots)
+	}
+	if err := store.remoteStore[chainID.Uint64()].Load(); err != nil {
+		logger.Warn("RegisterChain failed", "error", err)
+		return
+	}
+	logger.Info("Register remote chain successfully", "remoteSize", store.remoteStore[chainID.Uint64()].Size())
 }

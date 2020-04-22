@@ -230,11 +230,6 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*Ethereum, error) {
 	}
 	eth.ctxStore = core.NewCtxStore(config.CtxStore, eth.chainConfig, eth.blockchain, makerDb, config.SubChainCtxAddress, eth.SignHash)
 
-	//if config.RtxStore.Journal != "" {
-	//	config.RtxStore.Journal = ctx.ResolvePath(fmt.Sprintf("subChain_%s", config.RtxStore.Journal))
-	//}
-	//eth.rtxStore = core.NewRtxStore(config.RtxStore, eth.chainConfig, eth.blockchain, chainDb, config.SubChainCtxAddress, eth.SignHash)
-
 	// Permit the downloader to use the trie cache allowance during fast sync
 	cacheLimit := cacheConfig.TrieCleanLimit + cacheConfig.TrieDirtyLimit
 	checkpoint := config.Checkpoint
@@ -246,6 +241,8 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*Ethereum, error) {
 	}
 	eth.msgHandler = cross.NewMsgHandler(eth, cross.RoleSubHandler, config.Role, eth.ctxStore, eth.blockchain, ctx.SubCh, ctx.MainCh, config.MainChainCtxAddress, config.SubChainCtxAddress, eth.SignHash, config.AnchorSigner)
 	eth.msgHandler.SetProtocolManager(eth.protocolManager)
+	eth.msgHandler.RegisterCrossChain(chainConfig.ChainID)
+
 	eth.protocolManager.SetMsgHandler(eth.msgHandler)
 	eth.miner = miner.New(eth, &config.Miner, chainConfig, eth.EventMux(), eth.engine, eth.isLocalBlock, eth.ctxStore)
 	eth.miner.SetExtra(makeExtraData(config.Miner.ExtraData))
