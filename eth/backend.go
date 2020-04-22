@@ -247,8 +247,7 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 	if config.Role == common.RoleAnchor {
 		eth.msgHandler = cross.NewCrossHandler(eth, cross.RoleMainHandler, config.Role, eth.ctxStore, eth.blockchain, ctx.MainCh, ctx.SubCh, config.MainChainCtxAddress, config.SubChainCtxAddress, eth.SignHash, config.AnchorSigner)
 		eth.msgHandler.SetProtocolManager(eth.protocolManager)
-	eth.msgHandler.RegisterCrossChain(chainConfig.ChainID)
-
+		eth.msgHandler.RegisterCrossChain(chainConfig.ChainID)
 		eth.protocolManager.SetMsgHandler(eth.msgHandler)
 	}
 

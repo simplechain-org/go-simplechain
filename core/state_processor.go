@@ -52,7 +52,7 @@ func NewStateProcessor(config *params.ChainConfig, bc *BlockChain, engine consen
 // Process returns the receipts and logs accumulated during the process and
 // returns the amount of gas that was used in the process. If any of the
 // transactions failed to execute due to insufficient gas it will return an error.
-func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config, contractAddress common.Address) (types.Receipts, []*types.Log, uint64, error) {
+func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, error) {
 	var (
 		receipts types.Receipts
 		usedGas  = new(uint64)
@@ -64,7 +64,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
 		statedb.Prepare(tx.Hash(), block.Hash(), i)
-		receipt, err := ApplyTransaction(p.config, p.bc, nil, gp, statedb, header, tx, usedGas, cfg, contractAddress)
+		receipt, err := ApplyTransaction(p.config, p.bc, nil, gp, statedb, header, tx, usedGas, cfg)
 		if err != nil {
 			return nil, nil, 0, err
 		}
@@ -79,30 +79,11 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 // and uses the input parameters for its environment. It returns the receipt
 // for the transaction, gas used and an error if the transaction failed,
 // indicating the block was invalid.
-func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config, address common.Address) (*types.Receipt, error) {
+func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config) (*types.Receipt, error) {
 	msg, err := tx.AsMessage(types.MakeSigner(config))
 	if err != nil {
 		return nil, err
 	}
-	//if len(tx.Data()) > 68 && tx.To() != nil && (*tx.To() == address) {
-	//	evmInvoke := NewEvmInvoke(bc, header, statedb, config, cfg)
-	//	if bytes.Equal(tx.Data()[:4], params.TakerFn) {
-	//		// call -> function getTakerTx(bytes32 txId, uint remoteChainId) public view returns(uint)
-	//		paddedCtxId := common.LeftPadBytes(tx.Data()[4+32*4:4+32*5], 32) //CtxId
-	//		remoteChainId := tx.Data()[4+32 : 4+32*2]
-	//		res, err := evmInvoke.CallContract(common.Address{}, tx.To(), params.GetTakerTxFn, paddedCtxId, remoteChainId)
-	//		if err != nil {
-	//			log.Info("Apply taker Transaction failed", "err", err)
-	//			return nil, err
-	//		}
-	//		if new(big.Int).SetBytes(res).Cmp(big.NewInt(0)) == 0 {
-	//			//log.Info("take ok!", "res", new(big.Int).SetBytes(res).Uint64(), "tx", tx.Hash().String())
-	//		} else {
-	//			//log.Info("already take!", "res", new(big.Int).SetBytes(res).Uint64(), "tx", tx.Hash().String())
-	//			return nil, ErrRepetitionCrossTransaction
-	//		}
-	//	}
-	//}
 	// Create a new context to be used in the EVM environment
 	context := NewEVMContext(msg, header, bc, author)
 	// Create a new environment which holds all relevant information
