@@ -17,16 +17,12 @@
 package core
 
 import (
-	"bytes"
-	"math/big"
-
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/consensus"
 	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/core/vm"
 	"github.com/simplechain-org/go-simplechain/crypto"
-	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/params"
 )
 
@@ -88,27 +84,25 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 	if err != nil {
 		return nil, err
 	}
-
-	//TODO:不应该修改共识
-	if len(tx.Data()) > 68 && tx.To() != nil && (*tx.To() == address) {
-		evmInvoke := NewEvmInvoke(bc, header, statedb, config, cfg)
-		if bytes.Equal(tx.Data()[:4], params.TakerFn) {
-			// call -> function getTakerTx(bytes32 txId, uint remoteChainId) public view returns(uint)
-			paddedCtxId := common.LeftPadBytes(tx.Data()[4+32*4:4+32*5], 32) //CtxId
-			remoteChainId := tx.Data()[4+32 : 4+32*2]
-			res, err := evmInvoke.CallContract(common.Address{}, tx.To(), params.GetTakerTxFn, paddedCtxId, remoteChainId)
-			if err != nil {
-				log.Info("Apply taker Transaction failed", "err", err)
-				return nil, err
-			}
-			if new(big.Int).SetBytes(res).Cmp(big.NewInt(0)) == 0 {
-				//log.Info("take ok!", "res", new(big.Int).SetBytes(res).Uint64(), "tx", tx.Hash().String())
-			} else {
-				//log.Info("already take!", "res", new(big.Int).SetBytes(res).Uint64(), "tx", tx.Hash().String())
-				return nil, ErrRepetitionCrossTransaction
-			}
-		}
-	}
+	//if len(tx.Data()) > 68 && tx.To() != nil && (*tx.To() == address) {
+	//	evmInvoke := NewEvmInvoke(bc, header, statedb, config, cfg)
+	//	if bytes.Equal(tx.Data()[:4], params.TakerFn) {
+	//		// call -> function getTakerTx(bytes32 txId, uint remoteChainId) public view returns(uint)
+	//		paddedCtxId := common.LeftPadBytes(tx.Data()[4+32*4:4+32*5], 32) //CtxId
+	//		remoteChainId := tx.Data()[4+32 : 4+32*2]
+	//		res, err := evmInvoke.CallContract(common.Address{}, tx.To(), params.GetTakerTxFn, paddedCtxId, remoteChainId)
+	//		if err != nil {
+	//			log.Info("Apply taker Transaction failed", "err", err)
+	//			return nil, err
+	//		}
+	//		if new(big.Int).SetBytes(res).Cmp(big.NewInt(0)) == 0 {
+	//			//log.Info("take ok!", "res", new(big.Int).SetBytes(res).Uint64(), "tx", tx.Hash().String())
+	//		} else {
+	//			//log.Info("already take!", "res", new(big.Int).SetBytes(res).Uint64(), "tx", tx.Hash().String())
+	//			return nil, ErrRepetitionCrossTransaction
+	//		}
+	//	}
+	//}
 	// Create a new context to be used in the EVM environment
 	context := NewEVMContext(msg, header, bc, author)
 	// Create a new environment which holds all relevant information
