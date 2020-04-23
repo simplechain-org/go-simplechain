@@ -161,7 +161,6 @@ var DefaultTxPoolConfig = TxPoolConfig{
 	PriceLimit: 1,
 	PriceBump:  10,
 
-	//AccountSlots: 16,
 	AccountSlots: 128,
 	GlobalSlots:  4096,
 	AccountQueue: 64,
@@ -235,14 +234,11 @@ type TxPool struct {
 	locals  *accountSet // Set of local transaction to exempt from eviction rules
 	journal *txJournal  // Journal of local transaction to back up to disk
 
-	pending map[common.Address]*txList   // All currently processable transactions
-	queue   map[common.Address]*txList   // Queued but non-processable transactions
-	beats   map[common.Address]time.Time // Last heartbeat from each known account
-	all     *txLookup                    // All transactions to allow lookups
-	priced  *txPricedList                // All transactions sorted by price
-	//crossDemoAddress common.Address
-	//anchors          map[uint64][]common.Address
-
+	pending         map[common.Address]*txList   // All currently processable transactions
+	queue           map[common.Address]*txList   // Queued but non-processable transactions
+	beats           map[common.Address]time.Time // Last heartbeat from each known account
+	all             *txLookup                    // All transactions to allow lookups
+	priced          *txPricedList                // All transactions sorted by price
 	chainHeadCh     chan ChainHeadEvent
 	chainHeadSub    event.Subscription
 	reqResetCh      chan *txpoolResetRequest
@@ -259,7 +255,7 @@ type txpoolResetRequest struct {
 
 // NewTxPool creates a new transaction pool to gather, sort and filter inbound
 // transactions from the network.
-func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain blockChain, contractAddress common.Address) *TxPool {
+func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain blockChain) *TxPool {
 	// Sanitize the input to ensure no vulnerable gas prices are set
 	config = (&config).sanitize()
 
@@ -280,8 +276,6 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		reorgDoneCh:     make(chan chan struct{}),
 		reorgShutdownCh: make(chan struct{}),
 		gasPrice:        new(big.Int).SetUint64(config.PriceLimit),
-		//crossDemoAddress: contractAddress, //todo 参数传入
-		//anchors:          make(map[uint64][]common.Address),
 	}
 	pool.locals = newAccountSet(pool.signer)
 	for _, addr := range config.Locals {
@@ -597,7 +591,6 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 		return false, err
 	}
 	from, _ := types.Sender(pool.signer, tx) // already validated
-	//isAnchor := pool.IsAnchor(tx)
 	// If the transaction pool is full, discard underpriced transactions
 	if uint64(pool.all.Count()) >= pool.config.GlobalSlots+pool.config.GlobalQueue {
 		// If the new transaction is underpriced, don't accept it
@@ -665,7 +658,6 @@ func (pool *TxPool) enqueueTx(hash common.Hash, tx *types.Transaction) (bool, er
 	if pool.queue[from] == nil {
 		pool.queue[from] = newTxList(false)
 	}
-	//isAnchor := pool.IsAnchor(tx)
 	inserted, old := pool.queue[from].Add(tx, pool.config.PriceBump)
 	if !inserted {
 		// An older transaction was better, discard this
@@ -1387,13 +1379,6 @@ func (pool *TxPool) demoteUnexecutables() {
 		for _, tx := range olds {
 			hash := tx.Hash()
 			pool.all.Remove(hash)
-			//if len(tx.Data()) > 68 && tx.To() != nil && (*tx.To() == pool.crossDemoAddress) {
-			//	if bytes.Equal(tx.Data()[:4], finishID) {
-			//		pool.removeTxByCtxId(common.BytesToHash(common.LeftPadBytes(tx.Data()[4:36], 32)), finishID, true)
-			//	} else if bytes.Equal(tx.Data()[:4], takerID) {
-			//		pool.removeTxByCtxId(common.BytesToHash(common.LeftPadBytes(tx.Data()[36:68], 32)), takerID, true)
-			//	}
-			//}
 			log.Trace("Removed old pending transaction", "hash", hash)
 		}
 		// Drop all transactions that are too costly (low balance or out of gas), and queue any invalids back for later
@@ -1525,8 +1510,7 @@ func (as *accountSet) merge(other *accountSet) {
 // peeking into the pool in TxPool.Get without having to acquire the widely scoped
 // TxPool.mu mutex.
 type txLookup struct {
-	all map[common.Hash]*types.Transaction
-	//crossDemoAddress common.Address
+	all  map[common.Hash]*types.Transaction
 	lock sync.RWMutex
 }
 
@@ -1534,7 +1518,6 @@ type txLookup struct {
 func newTxLookup() *txLookup {
 	return &txLookup{
 		all: make(map[common.Hash]*types.Transaction),
-		//crossDemoAddress: address,
 	}
 }
 

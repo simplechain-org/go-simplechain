@@ -84,7 +84,7 @@ func (w *worker) raftLoop() {
 func (w *worker) mintingLoop(recommit time.Duration) {
 	throttledMintNewBlock := throttle(recommit, func() {
 		if w.isRunning() {
-			w.commitRaftWork(w.ctxStore.Status())
+			w.commitRaftWork()
 		}
 	})
 
@@ -118,7 +118,7 @@ func (w *worker) updateSpeculativeChainPerInvalidOrdering(headBlock *types.Block
 	w.raftCtx.speculativeChain.UnwindFrom(invalidHash, headBlock)
 }
 
-func (w *worker) commitRaftWork(status map[uint64]*core.Statistics) {
+func (w *worker) commitRaftWork() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -140,7 +140,7 @@ func (w *worker) commitRaftWork(status map[uint64]*core.Statistics) {
 		Time:       uint64(tstamp),
 	}
 
-	if err := w.makeCurrent(parent, header, status); err != nil {
+	if err := w.makeCurrent(parent, header); err != nil {
 		log.Warn("Failed to create mining context", "err", err)
 		return
 	}
