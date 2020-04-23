@@ -446,7 +446,8 @@ func (store *CtxStore) Status() map[uint64]*Statistics {
 		remoteChainSize += v.Size()
 	}
 	status := make(map[uint64]*Statistics, 1)
-	if uint64(store.localStore.Size()) >= store.config.GlobalSlots {
+	fmt.Println(store.localStore)
+	if store.localStore.Size() > 0 && uint64(store.localStore.Size()) >= store.config.GlobalSlots {
 		status[store.config.ChainId.Uint64()] = &Statistics{
 			true,
 			store.localStore.Query(nil, 1)[0],
