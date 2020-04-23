@@ -12,15 +12,17 @@ import (
 
 type ReceptTransaction struct {
 	CTxId         common.Hash    `json:"ctxId" gencodec:"required"`         //cross_transaction ID
+	From          common.Address `json:"from" gencodec:"required"`          //Token seller
 	To            common.Address `json:"to" gencodec:"required"`            //Token buyer
 	DestinationId *big.Int       `json:"destinationId" gencodec:"required"` //Message destination networkId
 	ChainId       *big.Int       `json:"chainId" gencodec:"required"`
 	Input         []byte         `json:"input"    gencodec:"required"`
 }
 
-func NewReceptTransaction(id common.Hash, to common.Address, remoteChainId, chainId *big.Int, input []byte) *ReceptTransaction {
+func NewReceptTransaction(id common.Hash, from,to common.Address, remoteChainId, chainId *big.Int, input []byte) *ReceptTransaction {
 	return &ReceptTransaction{
 		CTxId:         id,
+		From:          from,
 		To:            to,
 		DestinationId: remoteChainId,
 		ChainId:       chainId,
@@ -39,12 +41,14 @@ func (rws *ReceptTransaction) ConstructData() ([]byte, error) {
 	}
 	type Recept struct {
 		TxId  common.Hash
+		From  common.Address
 		To    common.Address
 		Input []byte
 	}
 
 	var rep Recept
 	rep.TxId = rws.CTxId
+	rep.From = rws.From
 	rep.To = rws.To
 	rep.Input = rws.Input
 	out, err := abi.Pack("makerFinish", rep, rws.ChainId)

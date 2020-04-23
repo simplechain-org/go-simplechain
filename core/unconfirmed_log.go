@@ -117,13 +117,15 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 						}
 
 						if v.Topics[0] == params.TakerTopic && len(v.Topics) >= 3 && len(v.Data) >= common.HashLength*6 {
-							var to common.Address
+							var to,from common.Address
 							copy(to[:], v.Topics[2][common.HashLength-common.AddressLength:])
+							from = common.BytesToAddress(v.Data[common.HashLength*2-common.AddressLength : common.HashLength*2])
 							ctxId := v.Topics[1]
 							count := common.BytesToHash(v.Data[common.HashLength*5 : common.HashLength*6]).Big().Int64()
 							rtxs = append(rtxs,
 								types.NewReceptTransaction(
 									ctxId,
+									from,
 									to,
 									common.BytesToHash(v.Data[:common.HashLength]).Big(),
 									set.chain.GetChainConfig().ChainID,
