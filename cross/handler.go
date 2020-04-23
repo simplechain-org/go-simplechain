@@ -174,7 +174,6 @@ func (h *Handler) loop() {
 			return
 
 		case ev := <-h.signedCtxCh:
-			log.Info("[debug] signedCtxCh", "finish maker", ev.Tws.ID().String())
 			h.writeCrossMessage(ev)
 		case <-h.signedCtxSub.Err():
 			return
