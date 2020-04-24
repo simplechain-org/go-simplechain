@@ -137,7 +137,7 @@ func taker() {
 					S:                s,
 				}
 
-				out, err := abi.Pack("taker", &ord, chainId, []byte{})
+				out, err := abi.Pack("taker", &ord, chainId)
 				if err != nil {
 					fmt.Println("abi.Pack err=", err)
 					continue

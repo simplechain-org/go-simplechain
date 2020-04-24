@@ -1,11 +1,14 @@
 package cross
 
 import (
+	"bytes"
 	"context"
 	"math/big"
 	"time"
 
+	"github.com/simplechain-org/go-simplechain/accounts/abi"
 	"github.com/simplechain-org/go-simplechain/common"
+	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/event"
@@ -68,6 +71,7 @@ type Handler struct {
 	SubChainCtxAddress  common.Address
 	anchorSigner        common.Address
 	signHash            types.SignHash
+	crossABI            abi.ABI
 }
 
 func NewCrossHandler(chain simplechain, roleHandler RoleHandler, role common.ChainRole, ctxPool CtxStore,
@@ -76,6 +80,17 @@ func NewCrossHandler(chain simplechain, roleHandler RoleHandler, role common.Cha
 	signHash types.SignHash, anchorSigner common.Address) *Handler {
 
 	gasHelper := NewGasHelper(blockChain, chain)
+	data, err := hexutil.Decode(params.CrossDemoAbi)
+	if err != nil {
+		log.Error("Parse crossABI", "err", err)
+		return nil
+	}
+	crossAbi, err := abi.JSON(bytes.NewReader(data))
+	if err != nil {
+		log.Error("Decode cross abi", "err", err)
+		return nil
+	}
+
 	return &Handler{
 		chain:               chain,
 		roleHandler:         roleHandler,
@@ -90,6 +105,7 @@ func NewCrossHandler(chain simplechain, roleHandler RoleHandler, role common.Cha
 		SubChainCtxAddress:  subAddr,
 		signHash:            signHash,
 		anchorSigner:        anchorSigner,
+		crossABI:            crossAbi,
 	}
 }
 
@@ -134,7 +150,6 @@ func (h *Handler) SetGasPriceOracle(gpo GasPriceOracle) {
 }
 
 func (h *Handler) AddRemoteCtx(ctx *types.CrossTransaction) {
-	log.Info("Add remote ctx", "id", ctx.ID().String())
 	if err := h.ctxStore.VerifyCtx(ctx); err == nil {
 		if err := h.ctxStore.AddRemote(ctx); err != nil {
 			log.Error("Add remote ctx", "id", ctx.ID().String(), "err", err)
@@ -199,7 +214,6 @@ func (h *Handler) loop() {
 
 		case ev := <-h.makerFinishEventCh:
 			h.clearStore(ev.FinishIds)
-
 		case <-h.makerFinishEventSub.Err():
 			return
 
@@ -238,6 +252,7 @@ func (h *Handler) readCrossMessage() {
 						log.Warn("readCrossMessage failed", "error", err.Error())
 					}
 				}
+				//log.Info("cross message SignedCtx", "ID", cws.ID().String())
 
 			case core.ConfirmedTakerEvent:
 				txs, err := h.getTxForLockOut(ev.Txs)
@@ -247,6 +262,7 @@ func (h *Handler) readCrossMessage() {
 				if len(txs) > 0 {
 					h.pm.AddLocals(txs)
 				}
+				//log.Info("cross message ConfirmedTaker", "length", len(ev.Txs))
 
 			case core.NewCrossChainEvent:
 				if ev.ChainID.Uint64() != h.pm.NetworkId() {
@@ -315,7 +331,7 @@ func (h *Handler) reOrgLogs(logs []*types.Log) {
 	var takerLogs []*types.ReceptTransaction
 	for _, l := range logs {
 		if h.blockChain.IsCtxAddress(l.Address) {
-			if l.Topics[0] == params.TakerTopic && len(l.Topics) >= 3 && len(l.Data) >= common.HashLength*6 {
+			if l.Topics[0] == params.TakerTopic && len(l.Topics) >= 3 && len(l.Data) >= common.HashLength*4 {
 				takerLogs = append(takerLogs, &types.ReceptTransaction{
 					DestinationId: common.BytesToHash(l.Data[:common.HashLength]).Big(),
 					CTxId:         l.Topics[1],
@@ -333,7 +349,7 @@ func (h *Handler) createTransaction(rws *types.ReceptTransaction) (*TranParam, e
 	if err != nil {
 		return nil, err
 	}
-	data, err := rws.ConstructData()
+	data, err := rws.ConstructData(h.crossABI)
 	if err != nil {
 		log.Error("ConstructData", "err", err)
 		return nil, err

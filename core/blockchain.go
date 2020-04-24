@@ -2272,7 +2272,7 @@ func (bc *BlockChain) StoreCrossContractLog(blockNumber uint64, hash common.Hash
 					continue
 				}
 
-				if v.Topics[0] == params.TakerTopic && len(v.Topics) >= 3 && len(v.Data) >= common.HashLength*6 {
+				if v.Topics[0] == params.TakerTopic && len(v.Topics) >= 3 && len(v.Data) >= common.HashLength*4 {
 					rtxs = append(rtxs, &types.ReceptTransaction{
 						DestinationId: common.BytesToHash(v.Data[:common.HashLength]).Big(),
 						CTxId:         v.Topics[1],
