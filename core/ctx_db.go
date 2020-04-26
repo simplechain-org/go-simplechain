@@ -7,7 +7,6 @@ import (
 	"math/big"
 	"sync"
 
-	lru "github.com/hashicorp/golang-lru"
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/ethdb"
@@ -45,12 +44,11 @@ type cacheDB struct {
 }
 
 func NewCtxDb(chainID *big.Int, db ethdb.KeyValueStore, cacheSize uint64) CtxDB {
-	arcCache, _ := lru.NewARC(int(cacheSize))
 	return &cacheDB{
 		chainID: chainID,
 		db:      db,
 		cache:   NewCtxSortedByPrice(0), //TODO: ignore cacheSize (cache如果不与db数据一致，在每次删除时必须重新load整个db排序)
-		all:     (*CtxToBlockHash)(arcCache),
+		all:     NewCtxToBlockHash(int(cacheSize)),
 	}
 }
 
@@ -71,14 +69,15 @@ func (d *cacheDB) Write(ctx *types.CrossTransactionWithSignatures) error {
 	}
 	d.mux.Lock()
 	defer d.mux.Unlock()
-	// write DB
-	if err := d.writeDB(ctx); err != nil {
-		return err
-	}
+
 	// write all (txID=>blockHash)
 	if err := d.writeAll(ctx); err != nil {
 		// rollback if writeAll failed
-		d.db.Delete(d.chainMakerKey(ctx.ID()))
+		return err
+	}
+	// write DB
+	if err := d.writeDB(ctx); err != nil {
+		d.db.Delete(d.makerKey(ctx.ID()))
 		return err
 	}
 	// write price cache
@@ -274,4 +273,44 @@ func (d *cacheDB) Size() int {
 	d.mux.RLock()
 	defer d.mux.RUnlock()
 	return d.total
+}
+
+// TODO: use indexed DB to save ctx
+type indexDB struct {
+}
+
+func (d *indexDB) Size() int {
+	return 0
+}
+
+func (d *indexDB) Load() error {
+	return nil
+}
+
+func (d *indexDB) Write(ctx *types.CrossTransactionWithSignatures) error {
+	return nil
+}
+
+func (d *indexDB) Read(ctxId common.Hash) (*types.CrossTransactionWithSignatures, error) {
+	return nil, nil
+}
+
+func (d *indexDB) ReadAll(ctxId common.Hash) (common.Hash, error) {
+	return common.Hash{}, nil
+}
+
+func (d *indexDB) Delete(ctxId common.Hash) error {
+	return nil
+}
+
+func (d *indexDB) Update(id common.Hash, updater func(ctx *types.CrossTransactionWithSignatures)) error {
+	return nil
+}
+
+func (d *indexDB) Has(id common.Hash) bool {
+	return false
+}
+
+func (d *indexDB) Query(filter func(*types.CrossTransactionWithSignatures) bool, pageSize int) []*types.CrossTransactionWithSignatures {
+	return nil
 }

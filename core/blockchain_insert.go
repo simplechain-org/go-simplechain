@@ -39,7 +39,7 @@ const statsReportLimit = 8 * time.Second
 
 // report prints statistics if some number of blocks have been processed
 // or more than a few seconds have passed since the last message.
-func (st *insertStats) report(chain []*types.Block, index int, dirty common.StorageSize) {
+func (st *insertStats) report(chain []*types.Block, index int, dirty common.StorageSize, ctx ...interface{}) {
 	// Fetch the timings for the batch
 	var (
 		now     = mclock.Now()
@@ -55,11 +55,11 @@ func (st *insertStats) report(chain []*types.Block, index int, dirty common.Stor
 		end := chain[index]
 
 		// Assemble the log context and send it to the logger
-		context := []interface{}{
+		context := append(ctx, []interface{}{
 			"blocks", st.processed, "txs", txs, "mgas", float64(st.usedGas) / 1000000,
 			"elapsed", common.PrettyDuration(elapsed), "mgasps", float64(st.usedGas) * 1000 / float64(elapsed),
 			"number", end.Number(), "hash", end.Hash(),
-		}
+		}...)
 		if timestamp := time.Unix(int64(end.Time()), 0); time.Since(timestamp) > time.Minute {
 			context = append(context, []interface{}{"age", common.PrettyAge(timestamp)}...)
 		}

@@ -25,11 +25,13 @@ type CtxStore interface {
 
 	MarkStatus([]*types.ReceptTransaction, uint64)
 	ListCrossTransactions(int) []*types.CrossTransactionWithSignatures
+	ListCrossTransactionsByChainIDAndTxID(chainID uint64, txID common.Hash, pageSize int) []*types.CrossTransactionWithSignatures
 
 	SubscribeSignedCtxEvent(chan<- core.SignedCtxEvent) event.Subscription
 
 	UpdateAnchors(*types.RemoteChainInfo) error
 	RegisterChain(*big.Int)
+	SyncCrossTransactions([]*types.CrossTransactionWithSignatures) int
 }
 
 type simplechain interface {
@@ -37,4 +39,19 @@ type simplechain interface {
 	BlockByNumber(ctx context.Context, blockNr rpc.BlockNumber) (*types.Block, error)
 	HeaderByNumber(ctx context.Context, blockNr rpc.BlockNumber) (*types.Header, error)
 	StateAndHeaderByNumber(ctx context.Context, blockNr rpc.BlockNumber) (*state.StateDB, *types.Header, error)
+}
+
+type ProtocolManager interface {
+	BroadcastCtx(ctx []*types.CrossTransaction)
+	CanAcceptTxs() bool
+	NetworkId() uint64
+	GetNonce(address common.Address) uint64
+	AddLocals([]*types.Transaction)
+	AddRemotes([]*types.Transaction)
+	SetMsgHandler(msgHandler *Handler)
+	Pending() (map[common.Address]types.Transactions, error)
+}
+
+type GasPriceOracle interface {
+	SuggestPrice(ctx context.Context) (*big.Int, error)
 }

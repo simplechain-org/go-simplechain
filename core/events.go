@@ -74,15 +74,8 @@ type SignedCtxEvent struct {
 	CallBack func(cws *types.CrossTransactionWithSignatures, invalidSigIndex ...int)
 }
 
-type TransationRemoveEvent struct {
-	Transactions types.Transactions
-}
 type ConfirmedFinishEvent struct {
 	FinishIds []common.Hash
-}
-
-type NewCtxStatusEvent struct {
-	Status map[uint64]*Statistics
 }
 
 type AnchorEvent struct {

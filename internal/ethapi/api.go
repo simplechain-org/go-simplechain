@@ -1863,6 +1863,11 @@ func (s *PublicCtxPoolAPI) CtxStats() int {
 	return s.b.CtxStats()
 }
 
+func (s *PublicCtxPoolAPI) CtxStatus() map[string]int {
+	pending, queue := s.b.CtxStatus()
+	return map[string]int{"pending": pending, "queue": queue}
+}
+
 func (s *PublicCtxPoolAPI) CtxQuery(ctx context.Context, hash common.Hash) *RPCCrossTransaction {
 	remotes, locals := s.b.CtxPoolContent()
 	for _, txs := range remotes {

@@ -118,6 +118,7 @@ func (h *Handler) Start() {
 
 	h.rmLogsCh = make(chan core.RemovedLogsEvent, rmLogsChanSize)
 	h.rmLogsSub = h.blockChain.SubscribeRemovedLogsEvent(h.rmLogsCh)
+
 	h.updateAnchorCh = make(chan core.AnchorEvent, txChanSize)
 	h.updateAnchorSub = h.blockChain.SubscribeUpdateAnchorEvent(h.updateAnchorCh)
 
@@ -206,7 +207,7 @@ func (h *Handler) loop() {
 		case ev := <-h.updateAnchorCh:
 			for _, v := range ev.ChainInfo {
 				if err := h.ctxStore.UpdateAnchors(v); err != nil {
-					log.Info("ctxStore.UpdateAnchors", "err", err)
+					log.Info("ctxStore UpdateAnchors failed", "err", err)
 				}
 			}
 		case <-h.updateAnchorSub.Err():
@@ -383,4 +384,22 @@ func newSignedTransaction(nonce uint64, to common.Address, gasLimit uint64, gasP
 		return nil, err
 	}
 	return signedTx, nil
+}
+
+type SyncReq struct {
+	Chain   uint64
+	StartID common.Hash
+}
+
+type SyncResp struct {
+	Chain uint64
+	Data  [][]byte
+}
+
+func (h *Handler) GetSyncCrossTransaction(startTxID common.Hash, syncSize int) []*types.CrossTransactionWithSignatures {
+	return h.ctxStore.ListCrossTransactionsByChainIDAndTxID(h.pm.NetworkId(), startTxID, syncSize)
+}
+
+func (h *Handler) SyncCrossTransaction(ctx []*types.CrossTransactionWithSignatures) int {
+	return h.ctxStore.SyncCrossTransactions(ctx)
 }

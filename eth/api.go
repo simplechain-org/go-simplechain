@@ -35,10 +35,10 @@ import (
 	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/internal/ethapi"
+	"github.com/simplechain-org/go-simplechain/miner"
 	"github.com/simplechain-org/go-simplechain/rlp"
 	"github.com/simplechain-org/go-simplechain/rpc"
 	"github.com/simplechain-org/go-simplechain/trie"
-	"github.com/simplechain-org/go-simplechain/miner"
 )
 
 // PublicEthereumAPI provides an API to access Ethereum full node-related

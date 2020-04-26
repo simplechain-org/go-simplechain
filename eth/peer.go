@@ -32,9 +32,9 @@ import (
 )
 
 var (
-	errClosed            = errors.New("peer set is closed")
-	errAlreadyRegistered = errors.New("peer is already registered")
-	errNotRegistered     = errors.New("peer is not registered")
+	ErrClosed            = errors.New("peer set is closed")
+	ErrAlreadyRegistered = errors.New("peer is already registered")
+	ErrNotRegistered     = errors.New("peer is not registered")
 )
 
 const (
@@ -93,8 +93,8 @@ type peer struct {
 	queuedAnns  chan *types.Block         // Queue of blocks to announce to the peer
 	term        chan struct{}             // Termination channel to stop the broadcaster
 
-	queuedCWss                               chan []*types.CrossTransactionWithSignatures
-	knownCWss                                mapset.Set
+	queuedCWss chan []*types.CrossTransactionWithSignatures
+	//knownCWss                                mapset.Set //TODO-D
 	queuedCtxSign                            chan *types.CrossTransaction
 	knownCTxs                                mapset.Set
 	internalCrossTransactionWithSignaturesCh chan []*types.CrossTransactionWithSignatures
@@ -114,7 +114,6 @@ func newPeer(version int, p *p2p.Peer, rw p2p.MsgReadWriter) *peer {
 		queuedAnns:                               make(chan *types.Block, maxQueuedAnns),
 		term:                                     make(chan struct{}),
 		queuedCWss:                               make(chan []*types.CrossTransactionWithSignatures, maxQueuedTxs),
-		knownCWss:                                mapset.NewSet(),
 		queuedCtxSign:                            make(chan *types.CrossTransaction, maxQueuedTxs),
 		knownCTxs:                                mapset.NewSet(),
 		internalCrossTransactionWithSignaturesCh: make(chan []*types.CrossTransactionWithSignatures, maxQueuedTxs),
@@ -442,23 +441,23 @@ func (p *peer) readStatusLegacy(network uint64, status *statusData63, genesis co
 		return err
 	}
 	if msg.Code != StatusMsg {
-		return errResp(ErrNoStatusMsg, "first msg has code %x (!= %x)", msg.Code, StatusMsg)
+		return ErrResp(ErrNoStatusMsg, "first msg has code %x (!= %x)", msg.Code, StatusMsg)
 	}
 	if msg.Size > protocolMaxMsgSize {
-		return errResp(ErrMsgTooLarge, "%v > %v", msg.Size, protocolMaxMsgSize)
+		return ErrResp(ErrMsgTooLarge, "%v > %v", msg.Size, protocolMaxMsgSize)
 	}
 	// Decode the handshake and make sure everything matches
 	if err := msg.Decode(&status); err != nil {
-		return errResp(ErrDecode, "msg %v: %v", msg, err)
+		return ErrResp(ErrDecode, "msg %v: %v", msg, err)
 	}
 	if status.GenesisBlock != genesis {
-		return errResp(ErrGenesisMismatch, "%x (!= %x)", status.GenesisBlock[:8], genesis[:8])
+		return ErrResp(ErrGenesisMismatch, "%x (!= %x)", status.GenesisBlock[:8], genesis[:8])
 	}
 	if status.NetworkId != network {
-		return errResp(ErrNetworkIDMismatch, "%d (!= %d)", status.NetworkId, network)
+		return ErrResp(ErrNetworkIDMismatch, "%d (!= %d)", status.NetworkId, network)
 	}
 	if int(status.ProtocolVersion) != p.version {
-		return errResp(ErrProtocolVersionMismatch, "%d (!= %d)", status.ProtocolVersion, p.version)
+		return ErrResp(ErrProtocolVersionMismatch, "%d (!= %d)", status.ProtocolVersion, p.version)
 	}
 	return nil
 }
@@ -469,26 +468,26 @@ func (p *peer) readStatus(network uint64, status *statusData, genesis common.Has
 		return err
 	}
 	if msg.Code != StatusMsg {
-		return errResp(ErrNoStatusMsg, "first msg has code %x (!= %x)", msg.Code, StatusMsg)
+		return ErrResp(ErrNoStatusMsg, "first msg has code %x (!= %x)", msg.Code, StatusMsg)
 	}
 	if msg.Size > protocolMaxMsgSize {
-		return errResp(ErrMsgTooLarge, "%v > %v", msg.Size, protocolMaxMsgSize)
+		return ErrResp(ErrMsgTooLarge, "%v > %v", msg.Size, protocolMaxMsgSize)
 	}
 	// Decode the handshake and make sure everything matches
 	if err := msg.Decode(&status); err != nil {
-		return errResp(ErrDecode, "msg %v: %v", msg, err)
+		return ErrResp(ErrDecode, "msg %v: %v", msg, err)
 	}
 	if status.NetworkID != network {
-		return errResp(ErrNetworkIDMismatch, "%d (!= %d)", status.NetworkID, network)
+		return ErrResp(ErrNetworkIDMismatch, "%d (!= %d)", status.NetworkID, network)
 	}
 	if int(status.ProtocolVersion) != p.version {
-		return errResp(ErrProtocolVersionMismatch, "%d (!= %d)", status.ProtocolVersion, p.version)
+		return ErrResp(ErrProtocolVersionMismatch, "%d (!= %d)", status.ProtocolVersion, p.version)
 	}
 	if status.Genesis != genesis {
-		return errResp(ErrGenesisMismatch, "%x (!= %x)", status.Genesis, genesis)
+		return ErrResp(ErrGenesisMismatch, "%x (!= %x)", status.Genesis, genesis)
 	}
 	if err := forkFilter(status.ForkID); err != nil {
-		return errResp(ErrForkIDRejected, "%v", err)
+		return ErrResp(ErrForkIDRejected, "%v", err)
 	}
 	return nil
 }
@@ -523,10 +522,10 @@ func (ps *peerSet) Register(p *peer) error {
 	defer ps.lock.Unlock()
 
 	if ps.closed {
-		return errClosed
+		return ErrClosed
 	}
 	if _, ok := ps.peers[p.id]; ok {
-		return errAlreadyRegistered
+		return ErrAlreadyRegistered
 	}
 	ps.peers[p.id] = p
 	go p.broadcast()
@@ -542,7 +541,7 @@ func (ps *peerSet) Unregister(id string) error {
 
 	p, ok := ps.peers[id]
 	if !ok {
-		return errNotRegistered
+		return ErrNotRegistered
 	}
 	delete(ps.peers, id)
 	p.close()
@@ -656,66 +655,5 @@ func (p *peer) AsyncSendCrossTransaction(ctx *types.CrossTransaction) {
 		p.knownCTxs.Add(ctx.SignHash())
 	default:
 		p.Log().Debug("Dropping ctx propagation", "hash", ctx.SignHash())
-	}
-}
-
-func (p *peer) MarkCrossTransactionWithSignatures(hash common.Hash) {
-	// If we reached the memory allowance, drop a previously known transaction hash
-	for p.knownCWss.Cardinality() >= maxKnownTxs {
-		p.knownCWss.Pop()
-	}
-	p.knownCWss.Add(hash)
-}
-
-func (ps *peerSet) PeersWithoutCWss(hash common.Hash) []*peer {
-	ps.lock.RLock()
-	defer ps.lock.RUnlock()
-
-	list := make([]*peer, 0, len(ps.peers))
-	for _, p := range ps.peers {
-		if !p.knownCWss.Contains(hash) {
-			list = append(list, p)
-		}
-	}
-	return list
-}
-
-func (p *peer) AsyncSendCrossTransactionWithSignatures(cwss []*types.CrossTransactionWithSignatures) {
-	select {
-	case p.queuedCWss <- cwss:
-		for _, cws := range cwss {
-			p.knownCWss.Add(cws.ID())
-		}
-	default:
-		p.Log().Debug("Dropping transaction propagation", "count", len(cwss))
-	}
-}
-func (p *peer) MarkInternalCrossTransactionWithSignatures(hash common.Hash) {
-	for p.internalCrossTransactionWithSignatures.Cardinality() >= maxKnownTxs {
-		p.internalCrossTransactionWithSignatures.Pop()
-	}
-	p.internalCrossTransactionWithSignatures.Add(hash)
-}
-
-func (ps *peerSet) PeersWithoutInternalCrossTransactionWithSignatures(hash common.Hash) []*peer {
-	ps.lock.RLock()
-	defer ps.lock.RUnlock()
-	list := make([]*peer, 0, len(ps.peers))
-	for _, p := range ps.peers {
-		if !p.internalCrossTransactionWithSignatures.Contains(hash) {
-			list = append(list, p)
-		}
-	}
-	return list
-}
-
-func (p *peer) AsyncSendInternalCrossTransactionWithSignatures(cwss []*types.CrossTransactionWithSignatures) {
-	select {
-	case p.internalCrossTransactionWithSignaturesCh <- cwss:
-		for _, cws := range cwss {
-			p.internalCrossTransactionWithSignatures.Add(cws.ID())
-		}
-	default:
-		p.Log().Debug("Dropping CrossTransactionWithSignature propagation", "count", len(cwss))
 	}
 }
