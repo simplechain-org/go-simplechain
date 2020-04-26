@@ -233,6 +233,7 @@ func (this *MsgHandler) HandleMsg(msg p2p.Msg, p Peer) error {
 		if !this.pm.CanAcceptTxs() {
 			break
 		}
+		log.Info("receive CtxSignMsg")
 		var ctx *types.CrossTransaction
 		if err := msg.Decode(&ctx); err != nil {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
@@ -254,12 +255,16 @@ func (this *MsgHandler) HandleMsg(msg p2p.Msg, p Peer) error {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
 
+
 		for _, cws := range cwss {
-			if this.ctxStore.VerifyRemoteCwsSigner(cws) == nil {
+			if err := this.ctxStore.VerifyRemoteCwsSigner(cws); err == nil {
 				p.MarkCrossTransactionWithSignatures(cws.ID())
 				verifyCwss = append(verifyCwss, cws)
+			} else {
+				log.Info("receive CtxSignsMsg","id",cws.ID().String(),"err",err)
 			}
 		}
+		log.Info("receive CtxSignsMsg","cwss",len(cwss),"verifyCwss",len(verifyCwss))
 
 		this.ctxStore.AddCWss(verifyCwss)
 		this.pm.BroadcastCWss(verifyCwss)
@@ -268,6 +273,7 @@ func (this *MsgHandler) HandleMsg(msg p2p.Msg, p Peer) error {
 		if !this.pm.CanAcceptTxs() {
 			break
 		}
+		log.Info("receive RtxSignMsg")
 		var rtx *types.ReceptTransaction
 		if err := msg.Decode(&rtx); err != nil {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
@@ -294,9 +300,11 @@ func (this *MsgHandler) HandleMsg(msg p2p.Msg, p Peer) error {
 		}
 		//Receive and broadcast
 		for _, cws := range cwss {
-			if this.ctxStore.VerifyLocalCwsSigner(cws) == nil {
+			if err := this.ctxStore.VerifyLocalCwsSigner(cws); err == nil {
 				p.MarkInternalCrossTransactionWithSignatures(cws.ID())
 				verifyCwss = append(verifyCwss, cws)
+			} else {
+				log.Info("receive CtxSignsInternalMsg","id",cws.ID().String(),"err",err)
 			}
 		}
 		this.ctxStore.AddCWss(verifyCwss)
@@ -354,6 +362,7 @@ func (this *MsgHandler) GetTxForLockOut(rwss []*types.ReceptTransactionWithSigna
 		if _, ok := this.knownRwssTx[rws.ID()]; !ok {
 			param, err = this.CreateTransaction(this.anchorSigner, rws, gasUsed)
 			if err != nil {
+				log.Info("GetTxForLockOut errTx1","len",rws.SignaturesLength())
 				errorRws = append(errorRws, rws)
 				errTx1++
 				continue

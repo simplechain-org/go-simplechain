@@ -1878,6 +1878,7 @@ func newRPCCrossTransaction(tx *types.CrossTransactionWithSignatures) *RPCCrossT
 		DestinationValue: (*hexutil.Big)(tx.Data.DestinationValue),
 		Input:            tx.Data.Input,
 	}
+	log.Info("newRPCCrossTransaction","len",len(tx.Data.V))
 	for _, v := range tx.Data.V {
 		result.V = append(result.V, (*hexutil.Big)(v))
 	}

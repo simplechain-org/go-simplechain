@@ -98,6 +98,7 @@ type ProtocolManager struct {
 	newPeerCh   chan *peer
 	txsyncCh    chan *txsync
 	ctxsyncCh   chan *ctxsync
+	ctxsyncLocal chan *ctxsync
 	quitSync    chan struct{}
 	noMorePeers chan struct{}
 
@@ -126,6 +127,7 @@ func NewProtocolManager(config *params.ChainConfig, checkpoint *params.TrustedCh
 		noMorePeers: make(chan struct{}),
 		txsyncCh:    make(chan *txsync),
 		ctxsyncCh:   make(chan *ctxsync),
+		ctxsyncLocal: make(chan *ctxsync),
 		quitSync:    make(chan struct{}),
 		raftMode:    config.Raft,
 		engine:      engine,
@@ -281,6 +283,7 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 
 	// start sync handlers
 	go pm.ctxsyncLoop()
+	go pm.ctxlocalsyncLoop()
 	go pm.syncer()
 	go pm.txsyncLoop()
 

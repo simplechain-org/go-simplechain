@@ -25,6 +25,7 @@ type CtxStore interface {
 	SubscribeCWssResultEvent(chan<- core.NewCWsEvent) event.Subscription
 	ReadFromLocals(common.Hash) *types.CrossTransactionWithSignatures
 	List(int, bool) []*types.CrossTransactionWithSignatures
+	Query()(map[uint64][]*types.CrossTransactionWithSignatures, map[uint64][]*types.CrossTransactionWithSignatures)
 	VerifyLocalCwsSigner(cws *types.CrossTransactionWithSignatures) error
 	VerifyRemoteCwsSigner(cws *types.CrossTransactionWithSignatures) error
 }

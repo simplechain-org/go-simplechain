@@ -280,7 +280,7 @@ func (store *RtxStore) addTxLocked(rtx *types.ReceptTransaction, local bool) err
 	bh := rtx.Data.BlockHash
 
 	checkAndCommit := func(rws *types.ReceptTransactionWithSignatures) error {
-		if rws != nil && len(rws.Data.V) >= requireSignatureCount {
+		if rws != nil && rws.SignaturesLength() >= requireSignatureCount {
 			//TODO signatures combine or multi-sign msg?
 			log.Debug("checkAndCommit", "ctxId", rws.ID().String())
 			store.pending.RemoveByHash(id)

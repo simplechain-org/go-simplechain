@@ -241,6 +241,7 @@ func (store *CtxStore) addTxs(cwss []*types.CrossTransactionWithSignatures) []er
 	for i, cws := range cwss {
 		if err := store.verifyCtx(cws); err != ErrRepetitionCrossTransaction {
 			if ok, err := store.db.Has(cws.Key()); !ok || err != nil {
+				log.Info("addTxs","key",cws.ID().String(),"ok",ok,"err",err)
 				if cws.Data.DestinationId.Cmp(store.config.ChainId) == 0 {
 
 					keyId := cws.ChainId().Uint64()
@@ -263,6 +264,7 @@ func (store *CtxStore) addTxs(cwss []*types.CrossTransactionWithSignatures) []er
 				data, err := rlp.EncodeToBytes(cws.Data.BlockHash)
 				if err != nil {
 					log.Error("Failed to encode cws", "err", err)
+					errs[i] = err
 				}
 				store.db.Put(cws.Key(), data)
 				errs[i] = store.storeCtx(cws)
@@ -310,7 +312,7 @@ func (store *CtxStore) addTxLocked(ctx *types.CrossTransaction, local bool) erro
 	}
 
 	checkAndCommit := func(id common.Hash) error {
-		if cws := store.pending.Get(id); cws != nil && len(cws.Data.V) >= requireSignatureCount {
+		if cws := store.pending.Get(id); cws != nil && cws.SignaturesLength() >= requireSignatureCount {
 			//TODO signatures combine or multi-sign msg?
 			go store.resultFeed.Send(NewCWsEvent{cws})
 
@@ -779,7 +781,7 @@ func (store *CtxStore) VerifyRemoteCwsSigner(cws *types.CrossTransactionWithSign
 
 func (store *CtxStore) validateLocalCtx(ctx *types.CrossTransaction) error {
 	id := ctx.ID()
-	// discard if finished
+	//discard if finished
 	ok, err := store.db.Has(ctx.Key())
 	if err != nil {
 		return fmt.Errorf("db has failed, id: %s", id.String())
@@ -789,62 +791,73 @@ func (store *CtxStore) validateLocalCtx(ctx *types.CrossTransaction) error {
 	}
 
 	// discard if expired
-	if store.txExpired(ctx) {
-		return fmt.Errorf("ctx is already expired, id: %s", id.String())
-	}
-
-	if v, ok := store.anchors[ctx.Data.DestinationId.Uint64()]; ok {
-		if !v.isAnchorTx(ctx) {
-			return fmt.Errorf("invalid signature of ctx:%s", id.String())
+	//if store.txExpired(ctx) {
+	//	return fmt.Errorf("ctx is already expired, id: %s", id.String())
+	//}
+	if ctx.ChainId().Cmp(store.chainConfig.ChainID) == 0 {
+		if v, ok := store.anchors[ctx.Data.DestinationId.Uint64()]; ok {
+			if !v.isAnchorTx(ctx) {
+				return fmt.Errorf("invalid signature of ctx:%s", id.String())
+			}
+		} else {
+			newHead := store.chain.CurrentBlock().Header() // Special case during testing
+			statedb, err := store.chain.StateAt(newHead.Root)
+			if err != nil {
+				log.Error("Failed to reset txpool state", "err", err)
+				return fmt.Errorf("stateAt err:%s", err.Error())
+			}
+			anchors, signedCount := QueryAnchor(store.chainConfig, store.chain, statedb, newHead, store.CrossDemoAddress, ctx.Data.DestinationId.Uint64())
+			store.config.Anchors = anchors
+			requireSignatureCount = signedCount
+			store.anchors[ctx.Data.DestinationId.Uint64()] = newAnchorCtxSignerSet(store.config.Anchors, store.signer, types.NewEIP155CtxSigner(ctx.Data.DestinationId))
+			if !store.anchors[ctx.Data.DestinationId.Uint64()].isAnchorTx(ctx) {
+				return fmt.Errorf("invalid signature of ctx:%s", id.String())
+			}
 		}
+		return nil
 	} else {
-		newHead := store.chain.CurrentBlock().Header() // Special case during testing
-		statedb, err := store.chain.StateAt(newHead.Root)
-		if err != nil {
-			log.Error("Failed to reset txpool state", "err", err)
-			return fmt.Errorf("stateAt err:%s", err.Error())
-		}
-		anchors, signedCount := QueryAnchor(store.chainConfig, store.chain, statedb, newHead, store.CrossDemoAddress, ctx.Data.DestinationId.Uint64())
-		store.config.Anchors = anchors
-		requireSignatureCount = signedCount
-		store.anchors[ctx.Data.DestinationId.Uint64()] = newAnchorCtxSignerSet(store.config.Anchors, store.signer, types.NewEIP155CtxSigner(ctx.Data.DestinationId))
-		if !store.anchors[ctx.Data.DestinationId.Uint64()].isAnchorTx(ctx) {
-			return fmt.Errorf("invalid signature of ctx:%s", id.String())
-		}
+		return fmt.Errorf("invalid chainId of ctx:%s", id.String())
 	}
 
-	return nil
+
+
+
 }
 
 func (store *CtxStore) validateRemoteCtx(ctx *types.CrossTransaction) error {
 	id := ctx.ID()
 
-	// discard if expired
-	if store.txExpired(ctx) {
-		return fmt.Errorf("ctx is already expired, id: %s", id.String())
+	ok, err := store.db.Has(ctx.Key())
+	if err != nil {
+		return fmt.Errorf("db has failed, id: %s", id.String())
 	}
-
-	if v, ok := store.anchors[ctx.ChainId().Uint64()]; ok {
-		if !v.isAnchorTx(ctx) {
-			return fmt.Errorf("invalid signature of ctx:%s", id.String())
+	if ok {
+		return fmt.Errorf("ctx was already signatured, id: %s", id.String())
+	}
+	if ctx.Data.DestinationId.Cmp(store.chainConfig.ChainID) == 0 {
+		if v, ok := store.anchors[ctx.ChainId().Uint64()]; ok {
+			if !v.isAnchorTx(ctx) {
+				return fmt.Errorf("invalid signature of ctx:%s", id.String())
+			}
+		} else {
+			newHead := store.chain.CurrentBlock().Header() // Special case during testing
+			statedb, err := store.chain.StateAt(newHead.Root)
+			if err != nil {
+				log.Error("Failed to reset txpool state", "err", err)
+				return fmt.Errorf("stateAt err:%s", err.Error())
+			}
+			anchors, signedCount := QueryAnchor(store.chainConfig, store.chain, statedb, newHead, store.CrossDemoAddress, ctx.ChainId().Uint64())
+			store.config.Anchors = anchors
+			requireSignatureCount = signedCount
+			store.anchors[ctx.ChainId().Uint64()] = newAnchorCtxSignerSet(store.config.Anchors, store.signer, types.NewEIP155CtxSigner(ctx.ChainId()))
+			if !store.anchors[ctx.ChainId().Uint64()].isAnchorTx(ctx) {
+				return fmt.Errorf("invalid signature of ctx:%s", id.String())
+			}
 		}
+		return nil
 	} else {
-		newHead := store.chain.CurrentBlock().Header() // Special case during testing
-		statedb, err := store.chain.StateAt(newHead.Root)
-		if err != nil {
-			log.Error("Failed to reset txpool state", "err", err)
-			return fmt.Errorf("stateAt err:%s", err.Error())
-		}
-		anchors, signedCount := QueryAnchor(store.chainConfig, store.chain, statedb, newHead, store.CrossDemoAddress, ctx.ChainId().Uint64())
-		store.config.Anchors = anchors
-		requireSignatureCount = signedCount
-		store.anchors[ctx.ChainId().Uint64()] = newAnchorCtxSignerSet(store.config.Anchors, store.signer, types.NewEIP155CtxSigner(ctx.ChainId()))
-		if !store.anchors[ctx.ChainId().Uint64()].isAnchorTx(ctx) {
-			return fmt.Errorf("invalid signature of ctx:%s", id.String())
-		}
+		return fmt.Errorf("invalid chainId of ctx:%s", id.String())
 	}
-
-	return nil
 }
 
 func (store *CtxStore) CtxOwner (from common.Address) map[uint64][]*types.OwnerCrossTransactionWithSignatures {
