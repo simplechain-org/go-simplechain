@@ -172,7 +172,7 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 		if err := msg.Decode(&req); err != nil {
 			return eth.ErrResp(eth.ErrDecode, "msg %v: %v", msg, err)
 		}
-		logger.Info("GetCtxSyncMsg request", "chain", req.Chain, "startID", req.StartID)
+		logger.Info("receive ctx sync request", "chain", req.Chain, "startID", req.StartID)
 
 		var handler *cross.Handler
 		switch req.Chain {
@@ -181,7 +181,7 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 		case srv.sub.networkID:
 			handler = srv.sub.handler
 		default:
-			return fmt.Errorf("GetCtxSyncMsg invaild require chain:%d", req.Chain)
+			return fmt.Errorf("ctx sync request invaild require chain:%d", req.Chain)
 		}
 		ctxList := handler.GetSyncCrossTransaction(req.StartID, defaultMaxSyncSize)
 		var data [][]byte
@@ -204,7 +204,7 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 		if err := msg.Decode(&resp); err != nil {
 			return eth.ErrResp(eth.ErrDecode, "msg %v: %v", msg, err)
 		}
-		logger.Info("CtxSyncMsg response", "chain", resp.Chain, "len(data)", len(resp.Data))
+		logger.Info("receive ctx sync response", "chain", resp.Chain, "len(data)", len(resp.Data))
 
 		var ctxList []*types.CrossTransactionWithSignatures
 		for _, b := range resp.Data {

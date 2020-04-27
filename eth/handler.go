@@ -97,7 +97,6 @@ type ProtocolManager struct {
 	// channels for fetcher, syncer, txsyncLoop
 	newPeerCh   chan *peer
 	txsyncCh    chan *txsync
-	ctxsyncCh   chan *ctxsync
 	quitSync    chan struct{}
 	noMorePeers chan struct{}
 
@@ -125,7 +124,6 @@ func NewProtocolManager(config *params.ChainConfig, checkpoint *params.TrustedCh
 		newPeerCh:   make(chan *peer),
 		noMorePeers: make(chan struct{}),
 		txsyncCh:    make(chan *txsync),
-		ctxsyncCh:   make(chan *ctxsync),
 		quitSync:    make(chan struct{}),
 		raftMode:    config.Raft,
 		engine:      engine,
@@ -280,7 +278,6 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 	}
 
 	// start sync handlers
-	go pm.ctxsyncLoop()
 	go pm.syncer()
 	go pm.txsyncLoop()
 	//node is anchor
@@ -360,7 +357,6 @@ func (pm *ProtocolManager) handle(p *peer) error {
 	// Propagate existing transactions. new transactions appearing
 	// after this will be sent via broadcasts.
 	pm.syncTransactions(p)
-	pm.syncCtxs(p)
 
 	// If we have a trusted CHT, reject all peers below that (avoid fast sync eclipse)
 	if pm.checkpointHash != (common.Hash{}) {
@@ -981,7 +977,7 @@ func (pm *ProtocolManager) BroadcastCtx(ctxs []*types.CrossTransaction) {
 	for _, ctx := range ctxs {
 		var txset = make(map[*peer]*types.CrossTransaction)
 		// Broadcast ctx to a batch of peers not knowing about it
-		peers := pm.peers.PeersWithoutCTx(ctx.SignHash())
+		peers := pm.peers.PeersWithoutCtx(ctx.SignHash())
 		for _, peer := range peers {
 			txset[peer] = ctx
 		}

@@ -46,6 +46,11 @@ const (
 	// contain a single transaction, or thousands.
 	maxQueuedTxs = 128
 
+	// maxQueuedCtx is the maximum number of cross transaction lists to queue up before
+	// dropping broadcasts.
+	// dropped ctx would never be sent to anchor peer but it should be, increase value to 4096 // TODO:researching...
+	maxQueuedCtx = 4096
+
 	// maxQueuedProps is the maximum number of block propagations to queue up before
 	// dropping broadcasts. There's not much point in queueing stale blocks, so a few
 	// that might cover uncles should be enough.
@@ -93,31 +98,24 @@ type peer struct {
 	queuedAnns  chan *types.Block         // Queue of blocks to announce to the peer
 	term        chan struct{}             // Termination channel to stop the broadcaster
 
-	queuedCWss chan []*types.CrossTransactionWithSignatures
-	//knownCWss                                mapset.Set //TODO-D
-	queuedCtxSign                            chan *types.CrossTransaction
-	knownCTxs                                mapset.Set
-	internalCrossTransactionWithSignaturesCh chan []*types.CrossTransactionWithSignatures
-	internalCrossTransactionWithSignatures   mapset.Set
+	queuedCtxSign chan *types.CrossTransaction
+	knownCTxs     mapset.Set
 }
 
 func newPeer(version int, p *p2p.Peer, rw p2p.MsgReadWriter) *peer {
 	return &peer{
-		Peer:                                     p,
-		rw:                                       rw,
-		version:                                  version,
-		id:                                       fmt.Sprintf("%x", p.ID().Bytes()[:8]),
-		knownTxs:                                 mapset.NewSet(),
-		knownBlocks:                              mapset.NewSet(),
-		queuedTxs:                                make(chan []*types.Transaction, maxQueuedTxs),
-		queuedProps:                              make(chan *propEvent, maxQueuedProps),
-		queuedAnns:                               make(chan *types.Block, maxQueuedAnns),
-		term:                                     make(chan struct{}),
-		queuedCWss:                               make(chan []*types.CrossTransactionWithSignatures, maxQueuedTxs),
-		queuedCtxSign:                            make(chan *types.CrossTransaction, maxQueuedTxs),
-		knownCTxs:                                mapset.NewSet(),
-		internalCrossTransactionWithSignaturesCh: make(chan []*types.CrossTransactionWithSignatures, maxQueuedTxs),
-		internalCrossTransactionWithSignatures:   mapset.NewSet(),
+		Peer:          p,
+		rw:            rw,
+		version:       version,
+		id:            fmt.Sprintf("%x", p.ID().Bytes()[:8]),
+		knownTxs:      mapset.NewSet(),
+		knownBlocks:   mapset.NewSet(),
+		queuedTxs:     make(chan []*types.Transaction, maxQueuedTxs),
+		queuedProps:   make(chan *propEvent, maxQueuedProps),
+		queuedAnns:    make(chan *types.Block, maxQueuedAnns),
+		term:          make(chan struct{}),
+		queuedCtxSign: make(chan *types.CrossTransaction, maxQueuedCtx),
+		knownCTxs:     mapset.NewSet(),
 	}
 }
 
@@ -632,7 +630,7 @@ func (p *peer) MarkCrossTransaction(hash common.Hash) {
 	p.knownCTxs.Add(hash)
 }
 
-func (ps *peerSet) PeersWithoutCTx(hash common.Hash) []*peer {
+func (ps *peerSet) PeersWithoutCtx(hash common.Hash) []*peer {
 	ps.lock.RLock()
 	defer ps.lock.RUnlock()
 
