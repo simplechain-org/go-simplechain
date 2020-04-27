@@ -1946,3 +1946,25 @@ func newOwnerRPCCrossTransaction(tx *types.OwnerCrossTransactionWithSignatures) 
 
 	return result
 }
+
+func (s *PublicCtxPoolAPI) CtxList(ctx context.Context, from common.Address) map[string]map[uint64][]*RPCCrossTransaction {
+	content := map[string]map[uint64][]*RPCCrossTransaction{
+		"remote": make(map[uint64][]*RPCCrossTransaction),
+		"local":  make(map[uint64][]*RPCCrossTransaction),
+	}
+	remotes, locals := s.b.CtxPoolContent()
+	for k, txs := range remotes {
+		for _, tx := range txs {
+			if tx.Data.From != from {
+				content["remote"][k] = append(content["remote"][k], newRPCCrossTransaction(tx))
+			}
+		}
+
+	}
+	for s, txs := range locals {
+		for _, tx := range txs {
+			content["local"][s] = append(content["local"][s], newRPCCrossTransaction(tx))
+		}
+	}
+	return content
+}

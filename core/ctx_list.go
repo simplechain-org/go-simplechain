@@ -36,56 +36,18 @@ func (h valueHeap) Less(i, j int) bool {
 }
 
 func ComparePrice(hi, hj *types.CrossTransactionWithSignatures) bool {
-	zi, mi := hi.Price()
-	zj, mj := hj.Price()
+	ri := hi.Price()
+	rj := hj.Price()
 
-	if zi == nil || zj == nil {
-		return false
-	}
-
-	switch zi.Cmp(zj) {
-	case -1:
-		return true
-	case 1:
-		return false
-	default: //0
-		switch mi.Cmp(mj) {
-		case -1:
-			return true
-		case 1:
-			return false
-		default: //0
-			return false
-		}
-	}
+	return ri != nil && rj != nil && ri.Cmp(rj) < 0
 }
 
 func ComparePrice2(chargei, valuei, chargej, valuej *big.Int) bool {
 	if valuei.Cmp(big.NewInt(0)) == 0 || valuej.Cmp(big.NewInt(0)) == 0 {
 		return false
 	}
-	zi := new(big.Int)
-	mi := new(big.Int)
-	zi, mi = zi.DivMod(chargei, valuei, mi)
-
-	zj := new(big.Int)
-	zj, mj := zj.DivMod(chargej, valuej, mi)
-
-	switch zi.Cmp(zj) {
-	case -1:
-		return true
-	case 1:
-		return false
-	default: //0
-		switch mi.Cmp(mj) {
-		case -1:
-			return true
-		case 1:
-			return false
-		default: //0
-			return false
-		}
-	}
+	ri, rj := new(big.Rat).SetFrac(chargei, valuei), new(big.Rat).SetFrac(chargej, valuej)
+	return ri != nil && rj != nil && ri.Cmp(rj) < 0
 }
 
 func (h *valueHeap) Push(x interface{}) {

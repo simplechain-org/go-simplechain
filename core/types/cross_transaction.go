@@ -292,14 +292,11 @@ func (cws *CrossTransactionWithSignatures) Key() []byte {
 	return key
 }
 
-func (cws *CrossTransactionWithSignatures) Price() (*big.Int, *big.Int) {
+func (cws *CrossTransactionWithSignatures) Price() *big.Rat {
 	if cws.Data.Value.Cmp(big.NewInt(0)) == 0 {
-		return nil, nil
+		return nil
 	}
-	z := new(big.Int)
-	m := new(big.Int)
-	z, m = z.DivMod(cws.Data.DestinationValue, cws.Data.Value, m)
-	return z, m
+	return new(big.Rat).SetFrac(cws.Data.DestinationValue,cws.Data.Value)
 }
 
 func (cws *CrossTransactionWithSignatures) Size() common.StorageSize {

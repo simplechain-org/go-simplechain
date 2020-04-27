@@ -762,6 +762,9 @@ type Statistics struct {
 }
 
 func (store *CtxStore) VerifyLocalCwsSigner(cws *types.CrossTransactionWithSignatures) error {
+	if cws.SignaturesLength() < requireSignatureCount {
+		return fmt.Errorf("cws has less signs","ctxId",cws.ID().String(),"len",cws.SignaturesLength())
+	}
 	for _, v := range cws.Resolution() {
 		if err := store.validateLocalCtx(v); err != nil {
 			return err
@@ -771,6 +774,10 @@ func (store *CtxStore) VerifyLocalCwsSigner(cws *types.CrossTransactionWithSigna
 }
 
 func (store *CtxStore) VerifyRemoteCwsSigner(cws *types.CrossTransactionWithSignatures) error {
+	if cws.SignaturesLength() < requireSignatureCount {
+		return fmt.Errorf("cws has less signs","ctxId",cws.ID().String(),"len",cws.SignaturesLength())
+	}
+
 	for _, v := range cws.Resolution() {
 		if err := store.validateRemoteCtx(v); err != nil {
 			return err
