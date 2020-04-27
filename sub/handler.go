@@ -93,7 +93,6 @@ type ProtocolManager struct {
 	// channels for fetcher, syncer, txsyncLoop
 	newPeerCh   chan *peer
 	txsyncCh    chan *txsync
-	ctxsyncCh   chan *ctxsync
 	quitSync    chan struct{}
 	noMorePeers chan struct{}
 
@@ -124,7 +123,6 @@ func NewProtocolManager(config *params.ChainConfig, checkpoint *params.TrustedCh
 		newPeerCh:   make(chan *peer),
 		noMorePeers: make(chan struct{}),
 		txsyncCh:    make(chan *txsync),
-		ctxsyncCh:   make(chan *ctxsync),
 		quitSync:    make(chan struct{}),
 		serverPool:  serverPool,
 		raftMode:    config.Raft,
@@ -288,7 +286,6 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 	}
 
 	// start sync handlers
-	go pm.ctxsyncLoop()
 	go pm.syncer()
 	go pm.txsyncLoop()
 
@@ -371,7 +368,6 @@ func (pm *ProtocolManager) handle(p *peer) error {
 	// Propagate existing transactions. new transactions appearing
 	// after this will be sent via broadcasts.
 	pm.syncTransactions(p)
-	pm.syncCtxs(p)
 
 	// If we have a trusted CHT, reject all peers below that (avoid fast sync eclipse)
 	if pm.checkpointHash != (common.Hash{}) {
@@ -818,7 +814,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 
 		p.MarkCrossTransaction(ctx.SignHash())
-		pm.BroadcastCtx([]*types.CrossTransaction{ctx})
+		pm.BroadcastCtx([]*types.CrossTransaction{ctx}, false)
 
 		if pm.msgHandler != nil {
 			pm.msgHandler.AddRemoteCtx(ctx)
@@ -964,7 +960,7 @@ func (pm *ProtocolManager) NodeInfo() *NodeInfo {
 }
 
 //锚定节点广播签名Ctx
-func (pm *ProtocolManager) BroadcastCtx(ctxs []*types.CrossTransaction) {
+func (pm *ProtocolManager) BroadcastCtx(ctxs []*types.CrossTransaction, local bool) {
 	for _, ctx := range ctxs {
 		var txset = make(map[*peer]*types.CrossTransaction)
 
@@ -978,7 +974,7 @@ func (pm *ProtocolManager) BroadcastCtx(ctxs []*types.CrossTransaction) {
 
 		// FIXME include this again: peers = peers[:int(math.Sqrt(float64(len(peers))))]
 		for peer, rt := range txset {
-			peer.AsyncSendCrossTransaction(rt)
+			peer.AsyncSendCrossTransaction(rt, local)
 			log.Debug("Broadcast CrossTransaction", "hash", ctx.SignHash(), "peer", peer.id)
 		}
 	}

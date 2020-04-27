@@ -48,8 +48,9 @@ const (
 
 	// maxQueuedCtx is the maximum number of cross transaction lists to queue up before
 	// dropping broadcasts.
-	// dropped ctx would never be sent to anchor peer but it should be, increase value to 4096 // TODO:researching...
-	maxQueuedCtx = 4096
+	// make a big capacity queue to save local signed ctx
+	maxQueuedLocalCtx  = 4096
+	maxQueuedRemoteCtx = 128
 
 	// maxQueuedProps is the maximum number of block propagations to queue up before
 	// dropping broadcasts. There's not much point in queueing stale blocks, so a few
@@ -98,24 +99,26 @@ type peer struct {
 	queuedAnns  chan *types.Block         // Queue of blocks to announce to the peer
 	term        chan struct{}             // Termination channel to stop the broadcaster
 
-	queuedCtxSign chan *types.CrossTransaction
-	knownCTxs     mapset.Set
+	queuedLocalCtxSign  chan *types.CrossTransaction
+	queuedRemoteCtxSign chan *types.CrossTransaction
+	knownCTxs           mapset.Set
 }
 
 func newPeer(version int, p *p2p.Peer, rw p2p.MsgReadWriter) *peer {
 	return &peer{
-		Peer:          p,
-		rw:            rw,
-		version:       version,
-		id:            fmt.Sprintf("%x", p.ID().Bytes()[:8]),
-		knownTxs:      mapset.NewSet(),
-		knownBlocks:   mapset.NewSet(),
-		queuedTxs:     make(chan []*types.Transaction, maxQueuedTxs),
-		queuedProps:   make(chan *propEvent, maxQueuedProps),
-		queuedAnns:    make(chan *types.Block, maxQueuedAnns),
-		term:          make(chan struct{}),
-		queuedCtxSign: make(chan *types.CrossTransaction, maxQueuedCtx),
-		knownCTxs:     mapset.NewSet(),
+		Peer:                p,
+		rw:                  rw,
+		version:             version,
+		id:                  fmt.Sprintf("%x", p.ID().Bytes()[:8]),
+		knownTxs:            mapset.NewSet(),
+		knownBlocks:         mapset.NewSet(),
+		queuedTxs:           make(chan []*types.Transaction, maxQueuedTxs),
+		queuedProps:         make(chan *propEvent, maxQueuedProps),
+		queuedAnns:          make(chan *types.Block, maxQueuedAnns),
+		term:                make(chan struct{}),
+		queuedLocalCtxSign:  make(chan *types.CrossTransaction, maxQueuedLocalCtx),
+		queuedRemoteCtxSign: make(chan *types.CrossTransaction, maxQueuedRemoteCtx),
+		knownCTxs:           mapset.NewSet(),
 	}
 }
 
@@ -145,7 +148,13 @@ func (p *peer) broadcast() {
 
 		case <-p.term:
 			return
-		case ctx := <-p.queuedCtxSign:
+
+		case ctx := <-p.queuedLocalCtxSign:
+			if err := p.SendCrossTransaction(ctx); err != nil {
+				p.Log().Trace("SendCrossTransaction", "err", err)
+				return
+			}
+		case ctx := <-p.queuedRemoteCtxSign:
 			if err := p.SendCrossTransaction(ctx); err != nil {
 				p.Log().Trace("SendCrossTransaction", "err", err)
 				return
@@ -647,9 +656,17 @@ func (p *peer) SendCrossTransaction(ctx *types.CrossTransaction) error {
 	return p2p.Send(p.rw, CtxSignMsg, ctx)
 }
 
-func (p *peer) AsyncSendCrossTransaction(ctx *types.CrossTransaction) {
+func (p *peer) AsyncSendCrossTransaction(ctx *types.CrossTransaction, local bool) {
+	if local {
+		// local signed ctx, wait until sent to queuedLocalCtxSign
+		p.queuedLocalCtxSign <- ctx
+		p.knownCTxs.Add(ctx.SignHash())
+		return
+	}
+
+	// received from p2p
 	select {
-	case p.queuedCtxSign <- ctx:
+	case p.queuedRemoteCtxSign <- ctx:
 		p.knownCTxs.Add(ctx.SignHash())
 	default:
 		p.Log().Debug("Dropping ctx propagation", "hash", ctx.SignHash())

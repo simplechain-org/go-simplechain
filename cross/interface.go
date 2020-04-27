@@ -42,7 +42,7 @@ type simplechain interface {
 }
 
 type ProtocolManager interface {
-	BroadcastCtx(ctx []*types.CrossTransaction)
+	BroadcastCtx(ctx []*types.CrossTransaction, local bool)
 	CanAcceptTxs() bool
 	NetworkId() uint64
 	GetNonce(address common.Address) uint64

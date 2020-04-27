@@ -240,7 +240,7 @@ func (store *CtxStore) addTxLocked(ctx *types.CrossTransaction, local bool) erro
 	checkAndCommit := func(id common.Hash) error {
 		if cws, _ := store.pending.Get(id).(*types.CrossTransactionWithSignatures); cws != nil && cws.SignaturesLength() >= requireSignatureCount {
 			go store.resultFeed.Send(SignedCtxEvent{
-				Tws: cws,
+				Tws: cws.Copy(),
 				CallBack: func(cws *types.CrossTransactionWithSignatures, invalidSigIndex ...int) {
 					store.mu.Lock()
 					defer store.mu.Unlock()

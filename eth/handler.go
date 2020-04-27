@@ -801,7 +801,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 
 		p.MarkCrossTransaction(ctx.SignHash())
-		pm.BroadcastCtx([]*types.CrossTransaction{ctx})
+		pm.BroadcastCtx([]*types.CrossTransaction{ctx}, false)
 
 		if pm.msgHandler != nil {
 			pm.msgHandler.AddRemoteCtx(ctx)
@@ -973,7 +973,7 @@ func (pm *ProtocolManager) getConsensusAlgorithm() string {
 }
 
 //锚定节点广播签名Ctx
-func (pm *ProtocolManager) BroadcastCtx(ctxs []*types.CrossTransaction) {
+func (pm *ProtocolManager) BroadcastCtx(ctxs []*types.CrossTransaction, local bool) {
 	for _, ctx := range ctxs {
 		var txset = make(map[*peer]*types.CrossTransaction)
 		// Broadcast ctx to a batch of peers not knowing about it
@@ -982,7 +982,7 @@ func (pm *ProtocolManager) BroadcastCtx(ctxs []*types.CrossTransaction) {
 			txset[peer] = ctx
 		}
 		for peer, rt := range txset {
-			peer.AsyncSendCrossTransaction(rt)
+			peer.AsyncSendCrossTransaction(rt, local)
 			log.Debug("Broadcast CrossTransaction", "hash", ctx.SignHash(), "peer", peer.id)
 		}
 	}

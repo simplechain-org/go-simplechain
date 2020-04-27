@@ -184,7 +184,7 @@ func (h *Handler) loop() {
 					log.Warn("Add local ctx failed", "err", err)
 				}
 			}
-			h.pm.BroadcastCtx(ev.Txs)
+			h.pm.BroadcastCtx(ev.Txs, true)
 
 		case <-h.confirmedMakerSub.Err():
 			return
