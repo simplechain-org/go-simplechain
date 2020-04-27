@@ -43,6 +43,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/consensus/scrypt"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/vm"
+	crossBackend "github.com/simplechain-org/go-simplechain/cross/backend"
 	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/eth"
 	"github.com/simplechain-org/go-simplechain/eth/downloader"
@@ -1703,18 +1704,18 @@ func RegisterEthService(stack *node.Node, cfg *eth.Config) <-chan *sub.Ethereum 
 			}
 
 			//crosschain
-			//err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
-			//	mainNode := <-crossMainChan
-			//	subNode := <-crossSubChan
-			//	crossNode := crossBackend.NewCrossService(mainNode, subNode, cfg)
-			//	close(crossMainChan)
-			//	close(crossSubChan)
-			//	return crossNode, nil
-			//})
-			//if err != nil {
-			//	Fatalf("Failed to register the CrossChain service: %v", err)
-			//	return nil
-			//}
+			err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
+				mainNode := <-crossMainChan
+				subNode := <-crossSubChan
+				crossNode := crossBackend.NewCrossService(mainNode, subNode, cfg)
+				close(crossMainChan)
+				close(crossSubChan)
+				return crossNode, nil
+			})
+			if err != nil {
+				Fatalf("Failed to register the CrossChain service: %v", err)
+				return nil
+			}
 		}
 	}
 	if err != nil {

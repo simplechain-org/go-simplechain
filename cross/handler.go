@@ -166,7 +166,7 @@ func (h *Handler) loop() {
 		case ev := <-h.confirmedMakerCh:
 			for _, tx := range ev.Txs {
 				if err := h.ctxStore.AddLocal(tx); err != nil {
-					log.Warn("Add local rtx", "err", err)
+					log.Warn("Add local ctx failed", "err", err)
 				}
 			}
 			h.pm.BroadcastCtx(ev.Txs)

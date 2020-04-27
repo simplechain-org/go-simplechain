@@ -17,7 +17,7 @@ import (
 
 const (
 	expireInterval = time.Second * 60 * 12
-	expireNumber   = 30 //pending rtx expired after block num
+	expireNumber   = 1024 //pending rtx expired after block num
 )
 
 var requireSignatureCount = 2
