@@ -108,7 +108,6 @@ type Ethereum struct {
 
 	chainConfig *params.ChainConfig
 	ctxStore    *core.CtxStore
-	//rtxStore    *core.RtxStore
 }
 
 func (s *Ethereum) AddLesServer(ls LesServer) {
@@ -122,6 +121,10 @@ func (s *Ethereum) SetContractBackend(backend bind.ContractBackend) {
 	if s.lesServer != nil {
 		s.lesServer.SetContractBackend(backend)
 	}
+}
+
+func (s *Ethereum) CrossHandler() *cross.Handler {
+	return s.msgHandler
 }
 
 // New creates a new Ethereum object (including the

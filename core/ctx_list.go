@@ -18,7 +18,6 @@ package core
 
 import (
 	"container/heap"
-	"math/big"
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/types"
@@ -30,14 +29,6 @@ import (
 func ComparePrice(hi, hj *types.CrossTransactionWithSignatures) bool {
 	ri := hi.Price()
 	rj := hj.Price()
-	return ri != nil && rj != nil && ri.Cmp(rj) < 0
-}
-
-func ComparePrice2(dvi, vi, dvj, vj *big.Int) bool {
-	if vi.Cmp(common.Big0) == 0 || vj.Cmp(common.Big0) == 0 {
-		return false
-	}
-	ri, rj := new(big.Rat).SetFrac(dvi, vi), new(big.Rat).SetFrac(dvj, vj)
 	return ri != nil && rj != nil && ri.Cmp(rj) < 0
 }
 

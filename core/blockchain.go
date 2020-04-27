@@ -1744,6 +1744,10 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		stats.usedGas += usedGas
 
 		dirty, _ := bc.stateCache.TrieDB().Size()
+		if bc.CrossContractAddr != (common.Address{}) { // report chain info for anchor node
+			stats.report(chain, it.index, dirty, "chainID", bc.chainConfig.ChainID)
+			continue
+		}
 		stats.report(chain, it.index, dirty)
 	}
 	// Any blocks remaining here? The only ones we care about are the future ones

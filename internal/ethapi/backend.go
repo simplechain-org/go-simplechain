@@ -86,6 +86,7 @@ type Backend interface {
 	CurrentBlock() *types.Block
 
 	CtxStats() (pending int)
+	CtxStatus() (pending, queue int)
 
 	CtxPoolContent() (map[uint64][]*types.CrossTransactionWithSignatures, map[uint64][]*types.CrossTransactionWithSignatures)
 	GetSelfCtx(from common.Address) (map[uint64][]*types.CrossTransactionWithSignatures, map[uint64][]*types.CrossTransactionWithSignatures)

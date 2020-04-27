@@ -124,6 +124,10 @@ func (s *Ethereum) SetContractBackend(backend bind.ContractBackend) {
 	}
 }
 
+func (s *Ethereum) CrossHandler() *cross.Handler {
+	return s.msgHandler
+}
+
 // New creates a new Ethereum object (including the
 // initialisation of the common Ethereum object)
 func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
@@ -374,7 +378,6 @@ func (s *Ethereum) APIs() []rpc.API {
 	if s.lesServer != nil {
 		apis = append(apis, s.lesServer.APIs()...)
 	}
-
 	// Append all the local APIs and return
 	return append(apis, []rpc.API{
 		{

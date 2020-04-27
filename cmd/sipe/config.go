@@ -176,9 +176,9 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 
 	cfg.Eth.Role = role
 
-	subChan := utils.RegisterEthService(stack, &cfg.Eth)
+	raftChan := utils.RegisterEthService(stack, &cfg.Eth)
 	if ctx.GlobalBool(utils.RaftModeFlag.Name) {
-		RegisterRaftService(stack, ctx, cfg, subChan)
+		RegisterRaftService(stack, ctx, cfg, raftChan)
 	}
 
 	// Whisper must be explicitly enabled by specifying at least 1 whisper flag or in dev mode

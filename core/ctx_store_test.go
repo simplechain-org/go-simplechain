@@ -22,6 +22,7 @@ func TestNewCtxStoreAdd(t *testing.T) {
 	}
 
 	signer := types.NewEIP155CtxSigner(big.NewInt(18))
+	// ctx signed by anchor1
 	tx1, err := types.SignCtx(types.NewCrossTransaction(big.NewInt(1e18),
 		big.NewInt(2e18),
 		big.NewInt(19),
@@ -36,6 +37,11 @@ func TestNewCtxStoreAdd(t *testing.T) {
 	}
 
 	ctxStore := setupCtxStore()
+	signedCh := make(chan SignedCtxEvent, 1) // receive signed ctx
+	signedSub := ctxStore.SubscribeSignedCtxEvent(signedCh)
+	defer signedSub.Unsubscribe()
+
+	// ctx signed by anchor2
 	tx2, err := types.SignCtx(types.NewCrossTransaction(big.NewInt(1e18),
 		big.NewInt(2e18),
 		big.NewInt(19),
@@ -55,7 +61,6 @@ func TestNewCtxStoreAdd(t *testing.T) {
 	if err := ctxStore.AddRemote(tx2); err != nil {
 		t.Fatal(err)
 	}
-	//rpctx.PrivateKey = "0xd000e97f00cd717d581e751a14d9f51e78d3b3db4b748a87023ef96eaf18334e"
 	if err := ctxStore.AddLocal(types.NewCrossTransaction(big.NewInt(1e18),
 		big.NewInt(2e18),
 		big.NewInt(19),
@@ -66,8 +71,11 @@ func TestNewCtxStoreAdd(t *testing.T) {
 		nil)); err != nil {
 		t.Fatal(err)
 	}
-	if ctxStore.Stats() != 1 {
-		t.Errorf("add err,stats:%d", ctxStore.Stats())
+	ev := <-signedCh
+	ev.CallBack(ev.Tws)
+
+	if ctxStore.StoreStats() != 1 {
+		t.Errorf("add failed,stats:%d (!= %d)", ctxStore.StoreStats(), 1)
 	}
 
 	ctxStore.Stop()
@@ -82,7 +90,5 @@ func setupCtxStore() *CtxStore {
 	blockchain := &testBlockChain{statedb, 1000000, new(event.Feed)}
 	db := memorydb.New()
 
-	pool := NewCtxStore(DefaultCtxStoreConfig, params.TestChainConfig, blockchain, db, common.Address{}, signHash)
-
-	return pool
+	return NewCtxStore(DefaultCtxStoreConfig, params.TestChainConfig, blockchain, db, common.Address{}, signHash)
 }

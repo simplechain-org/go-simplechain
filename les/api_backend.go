@@ -278,6 +278,10 @@ func (b *LesApiBackend) CtxStats() (pending int) {
 	return b.eth.ctxPool.Stats()
 }
 
+func (b *LesApiBackend) CtxStatus() (pending, queue int) {
+	return 0, 0
+}
+
 func (b *LesApiBackend) CtxPoolContent() (map[uint64][]*types.CrossTransactionWithSignatures, map[uint64][]*types.CrossTransactionWithSignatures) {
 	return nil, nil
 }

@@ -81,6 +81,8 @@ const (
 	ErrNoStatusMsg
 	ErrExtraStatusMsg
 	ErrVerifyCtx
+	ErrCrossMainChainMismatch
+	ErrCrossSubChainMismatch
 )
 
 func (e errCode) String() string {
@@ -98,6 +100,9 @@ var errorToString = map[int]string{
 	ErrForkIDRejected:          "Fork ID rejected",
 	ErrNoStatusMsg:             "No status message",
 	ErrExtraStatusMsg:          "Extra status message",
+	ErrVerifyCtx:               "Invalid Ctx",
+	ErrCrossMainChainMismatch:  "main chain contract mismatch",
+	ErrCrossSubChainMismatch:   "sub chain contract mismatch",
 }
 
 type txPool interface {
