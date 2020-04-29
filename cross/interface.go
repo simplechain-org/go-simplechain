@@ -2,6 +2,7 @@ package cross
 
 import (
 	"context"
+	"math/big"
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core"
@@ -13,32 +14,24 @@ import (
 )
 
 type CtxStore interface {
-	// AddRemotes should add the given transactions to the pool.
-	AddRemote(*types.CrossTransaction) error
-	// AddRemotes should add the given transactions to the pool.
 	AddLocal(*types.CrossTransaction) error
-	AddCWss([]*types.CrossTransactionWithSignatures) []error
-	ValidateCtx(*types.CrossTransaction) error
-	RemoveRemotes([]*types.ReceptTransaction) error
-	StampStatus([]*types.RTxsInfo, uint64) error
-	RemoveLocals([]*types.FinishInfo) error
-	RemoveFromLocalsByTransaction(common.Hash) error
-	SubscribeCWssResultEvent(chan<- core.NewCWsEvent) event.Subscription
-	ReadFromLocals(common.Hash) *types.CrossTransactionWithSignatures
-	List(int, bool) []*types.CrossTransactionWithSignatures
-	VerifyLocalCwsSigner(cws *types.CrossTransactionWithSignatures) error
-	VerifyRemoteCwsSigner(cws *types.CrossTransactionWithSignatures) error
-}
+	AddRemote(*types.CrossTransaction) error
+	AddFromRemoteChain(*types.CrossTransactionWithSignatures, func(*types.CrossTransactionWithSignatures, ...int)) error
 
-type rtxStore interface {
-	AddRemote(*types.ReceptTransaction) error
-	AddLocal(*types.ReceptTransaction) error
-	ValidateRtx(rtx *types.ReceptTransaction) error
-	SubscribeRWssResultEvent(chan<- core.NewRWsEvent) event.Subscription
-	SubscribeNewRWssEvent(chan<- core.NewRWssEvent) event.Subscription
-	AddLocals(...*types.ReceptTransactionWithSignatures) []error
-	RemoveLocals(finishes []*types.FinishInfo) error
-	ReadFromLocals(ctxId common.Hash) *types.ReceptTransactionWithSignatures
+	RemoveLocals([]common.Hash) []error
+	RemoveRemotes([]*types.ReceptTransaction) []error
+
+	VerifyCtx(*types.CrossTransaction) error
+
+	MarkStatus([]*types.ReceptTransaction, uint64)
+	ListCrossTransactions(int) []*types.CrossTransactionWithSignatures
+	ListCrossTransactionsByChainIDAndTxID(chainID uint64, txID common.Hash, pageSize int) []*types.CrossTransactionWithSignatures
+
+	SubscribeSignedCtxEvent(chan<- core.SignedCtxEvent) event.Subscription
+
+	UpdateAnchors(*types.RemoteChainInfo) error
+	RegisterChain(*big.Int)
+	SyncCrossTransactions([]*types.CrossTransactionWithSignatures) int
 }
 
 type simplechain interface {
@@ -46,4 +39,19 @@ type simplechain interface {
 	BlockByNumber(ctx context.Context, blockNr rpc.BlockNumber) (*types.Block, error)
 	HeaderByNumber(ctx context.Context, blockNr rpc.BlockNumber) (*types.Header, error)
 	StateAndHeaderByNumber(ctx context.Context, blockNr rpc.BlockNumber) (*state.StateDB, *types.Header, error)
+}
+
+type ProtocolManager interface {
+	BroadcastCtx(ctx []*types.CrossTransaction, local bool)
+	CanAcceptTxs() bool
+	NetworkId() uint64
+	GetNonce(address common.Address) uint64
+	AddLocals([]*types.Transaction)
+	AddRemotes([]*types.Transaction)
+	SetMsgHandler(msgHandler *Handler)
+	Pending() (map[common.Address]types.Transactions, error)
+}
+
+type GasPriceOracle interface {
+	SuggestPrice(ctx context.Context) (*big.Int, error)
 }

@@ -108,8 +108,7 @@ type Ethereum struct {
 
 	genesisHash common.Hash
 	ctxStore    *core.CtxStore
-	rtxStore    *core.RtxStore
-	msgHandler  *cross.MsgHandler
+	msgHandler  *cross.Handler
 }
 
 func (s *Ethereum) AddLesServer(ls LesServer) {
@@ -123,6 +122,10 @@ func (s *Ethereum) SetContractBackend(backend bind.ContractBackend) {
 	if s.lesServer != nil {
 		s.lesServer.SetContractBackend(backend)
 	}
+}
+
+func (s *Ethereum) CrossHandler() *cross.Handler {
+	return s.msgHandler
 }
 
 // New creates a new Ethereum object (including the
@@ -227,18 +230,13 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 	if config.TxPool.Journal != "" {
 		config.TxPool.Journal = ctx.ResolvePath(fmt.Sprintf("mainChain_%s", config.TxPool.Journal))
 	}
-	eth.txPool = core.NewTxPool(config.TxPool, chainConfig, eth.blockchain, config.MainChainCtxAddress)
+	eth.txPool = core.NewTxPool(config.TxPool, chainConfig, eth.blockchain)
 
 	makerDb, err := CreateDB(ctx, config, common.MainMakerData)
 	if err != nil {
 		return nil, err
 	}
 	eth.ctxStore = core.NewCtxStore(config.CtxStore, eth.chainConfig, eth.blockchain, makerDb, config.MainChainCtxAddress, eth.SignHash)
-
-	if config.RtxStore.Journal != "" {
-		config.RtxStore.Journal = ctx.ResolvePath(fmt.Sprintf("mainChain_%s", config.RtxStore.Journal))
-	}
-	eth.rtxStore = core.NewRtxStore(config.RtxStore, eth.chainConfig, eth.blockchain, chainDb, config.MainChainCtxAddress, eth.SignHash)
 
 	// Permit the downloader to use the trie cache allowance during fast sync
 	cacheLimit := cacheConfig.TrieCleanLimit + cacheConfig.TrieDirtyLimit
@@ -250,11 +248,12 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 		return nil, err
 	}
 
-	eth.msgHandler = cross.NewMsgHandler(eth, cross.RoleMainHandler, config.Role, eth.ctxStore, eth.rtxStore, eth.blockchain, ctx.MainCh, ctx.SubCh, config.MainChainCtxAddress, config.SubChainCtxAddress, eth.SignHash, config.AnchorSigner)
-
-	eth.msgHandler.SetProtocolManager(eth.protocolManager)
-
-	eth.protocolManager.SetMsgHandler(eth.msgHandler)
+	if config.Role == common.RoleAnchor {
+		eth.msgHandler = cross.NewCrossHandler(eth, cross.RoleMainHandler, config.Role, eth.ctxStore, eth.blockchain, ctx.MainCh, ctx.SubCh, config.MainChainCtxAddress, config.SubChainCtxAddress, eth.SignHash, config.AnchorSigner)
+		eth.msgHandler.SetProtocolManager(eth.protocolManager)
+		eth.msgHandler.RegisterCrossChain(chainConfig.ChainID)
+		eth.protocolManager.SetMsgHandler(eth.msgHandler)
+	}
 
 	eth.miner = miner.New(eth, &config.Miner, chainConfig, eth.EventMux(), eth.engine, eth.isLocalBlock, eth.ctxStore)
 	eth.miner.SetExtra(makeExtraData(config.Miner.ExtraData))
@@ -265,7 +264,10 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 		gpoParams.Default = config.Miner.GasPrice
 	}
 	eth.APIBackend.gpo = gasprice.NewOracle(eth.APIBackend, gpoParams)
-	eth.msgHandler.SetGasPriceOracle(eth.APIBackend.gpo)
+	if eth.msgHandler != nil {
+		eth.msgHandler.SetGasPriceOracle(eth.APIBackend.gpo)
+	}
+
 	return eth, nil
 }
 
@@ -376,7 +378,6 @@ func (s *Ethereum) APIs() []rpc.API {
 	if s.lesServer != nil {
 		apis = append(apis, s.lesServer.APIs()...)
 	}
-
 	// Append all the local APIs and return
 	return append(apis, []rpc.API{
 		{
@@ -653,7 +654,6 @@ func (s *Ethereum) Stop() error {
 	s.blockchain.Stop()
 	s.engine.Close()
 	s.ctxStore.Stop()
-	s.rtxStore.Stop()
 	s.protocolManager.Stop()
 	if s.lesServer != nil {
 		s.lesServer.Stop()

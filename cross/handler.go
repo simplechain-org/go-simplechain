@@ -1,32 +1,24 @@
 package cross
 
 import (
+	"bytes"
 	"context"
-	"errors"
-	"fmt"
 	"math/big"
+	"time"
 
+	"github.com/simplechain-org/go-simplechain/accounts/abi"
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/log"
-	"github.com/simplechain-org/go-simplechain/p2p"
 	"github.com/simplechain-org/go-simplechain/params"
 )
 
 const (
 	txChanSize     = 4096
 	rmLogsChanSize = 10
-)
-
-type errCode int
-
-const (
-	ErrMsgTooLarge = iota
-	ErrDecode
-	ErrInvalidMsgCode
 )
 
 type RoleHandler int
@@ -36,50 +28,41 @@ const (
 	RoleSubHandler
 )
 
-func errResp(code errCode, format string, v ...interface{}) error {
-	return fmt.Errorf("%v - %v", code, fmt.Sprintf(format, v...))
-}
-
 type TranParam struct {
 	gasLimit uint64
 	gasPrice *big.Int
 	data     []byte
 }
 
-type GetCtxSignsData struct {
-	Amount int  // Maximum number of headers to retrieve
-	GetAll bool // Query all
-}
+type Handler struct {
+	roleHandler RoleHandler
+	role        common.ChainRole
+	ctxStore    CtxStore
+	blockChain  *core.BlockChain
+	pm          ProtocolManager
 
-type MsgHandler struct {
-	roleHandler         RoleHandler
-	role                common.ChainRole
-	ctxStore            CtxStore
-	rtxStore            rtxStore
-	blockchain          *core.BlockChain
-	pm                  ProtocolManager
-	crossMsgReader      <-chan interface{}
-	crossMsgWriter      chan<- interface{}
-	quitSync            chan struct{}
-	knownRwssTx         map[common.Hash]*TranParam
-	makerStartEventCh   chan core.NewCTxsEvent
-	makerStartEventSub  event.Subscription
-	makerSignedCh       chan core.NewCWsEvent
-	makerSignedSub      event.Subscription
-	takerEventCh        chan core.NewRTxsEvent
-	takerEventSub       event.Subscription
-	takerSignedCh       chan core.NewRWsEvent
-	takerSignedSub      event.Subscription
-	availableTakerCh    chan core.NewRWssEvent
-	availableTakerSub   event.Subscription
-	makerFinishEventCh  chan core.TransationFinishEvent
+	quitSync       chan struct{}
+	crossMsgReader <-chan interface{} // Channel to read  cross-chain message
+	crossMsgWriter chan<- interface{} // Channel to write cross-chain message
+
+	confirmedMakerCh  chan core.ConfirmedMakerEvent // Channel to receive one-signed makerTx from ctxStore
+	confirmedMakerSub event.Subscription
+	signedCtxCh       chan core.SignedCtxEvent // Channel to receive signed-completely makerTx from ctxStore
+	signedCtxSub      event.Subscription
+
+	newTakerCh        chan core.NewTakerEvent // Channel to receive taker tx
+	newTakerSub       event.Subscription
+	confirmedTakerCh  chan core.ConfirmedTakerEvent // Channel to receive one-signed takerTx from rtxStore
+	confirmedTakerSub event.Subscription
+
+	makerFinishEventCh  chan core.ConfirmedFinishEvent // Channel to receive confirmed makerFinish event
 	makerFinishEventSub event.Subscription
-
-	takerStampCh  chan core.NewTakerStampEvent
-	takerStampSub event.Subscription
 
 	rmLogsCh  chan core.RemovedLogsEvent // Channel to receive removed log event
 	rmLogsSub event.Subscription         // Subscription for removed log event
+
+	updateAnchorCh  chan core.AnchorEvent
+	updateAnchorSub event.Subscription
 
 	chain               simplechain
 	gpo                 GasPriceOracle
@@ -88,419 +71,351 @@ type MsgHandler struct {
 	SubChainCtxAddress  common.Address
 	anchorSigner        common.Address
 	signHash            types.SignHash
+	crossABI            abi.ABI
 }
 
-func NewMsgHandler(chain simplechain, roleHandler RoleHandler, role common.ChainRole, ctxpool CtxStore, rtxStore rtxStore,
-	blockchain *core.BlockChain, crossMsgReader <-chan interface{},
+func NewCrossHandler(chain simplechain, roleHandler RoleHandler, role common.ChainRole, ctxPool CtxStore,
+	blockChain *core.BlockChain, crossMsgReader <-chan interface{},
 	crossMsgWriter chan<- interface{}, mainAddr common.Address, subAddr common.Address,
-	signHash types.SignHash, anchorSigner common.Address) *MsgHandler {
+	signHash types.SignHash, anchorSigner common.Address) *Handler {
 
-	gasHelper := NewGasHelper(blockchain, chain)
-	return &MsgHandler{
+	gasHelper := NewGasHelper(blockChain, chain)
+	data, err := hexutil.Decode(params.CrossDemoAbi)
+	if err != nil {
+		log.Error("Parse crossABI", "err", err)
+		return nil
+	}
+	crossAbi, err := abi.JSON(bytes.NewReader(data))
+	if err != nil {
+		log.Error("Decode cross abi", "err", err)
+		return nil
+	}
+
+	return &Handler{
 		chain:               chain,
 		roleHandler:         roleHandler,
 		role:                role,
 		quitSync:            make(chan struct{}),
-		ctxStore:            ctxpool,
-		rtxStore:            rtxStore,
-		blockchain:          blockchain,
+		ctxStore:            ctxPool,
+		blockChain:          blockChain,
 		crossMsgReader:      crossMsgReader,
 		crossMsgWriter:      crossMsgWriter,
 		gasHelper:           gasHelper,
 		MainChainCtxAddress: mainAddr,
 		SubChainCtxAddress:  subAddr,
-		knownRwssTx:         make(map[common.Hash]*TranParam),
 		signHash:            signHash,
 		anchorSigner:        anchorSigner,
+		crossABI:            crossAbi,
 	}
 }
-func (this *MsgHandler) SetProtocolManager(pm ProtocolManager) {
-	this.pm = pm
+
+func (h *Handler) SetProtocolManager(pm ProtocolManager) {
+	h.pm = pm
 }
 
-func (this *MsgHandler) Start() {
-	this.makerStartEventCh = make(chan core.NewCTxsEvent, txChanSize)
-	this.makerStartEventSub = this.blockchain.SubscribeNewCTxsEvent(this.makerStartEventCh)
-	this.takerEventCh = make(chan core.NewRTxsEvent, txChanSize)
-	this.takerEventSub = this.blockchain.SubscribeNewRTxsEvent(this.takerEventCh)
-	this.makerSignedCh = make(chan core.NewCWsEvent, txChanSize)
-	this.makerSignedSub = this.ctxStore.SubscribeCWssResultEvent(this.makerSignedCh)
-	this.takerSignedCh = make(chan core.NewRWsEvent, txChanSize)
-	this.takerSignedSub = this.rtxStore.SubscribeRWssResultEvent(this.takerSignedCh)
-	this.availableTakerCh = make(chan core.NewRWssEvent, txChanSize)
-	this.availableTakerSub = this.rtxStore.SubscribeNewRWssEvent(this.availableTakerCh)
-	this.makerFinishEventCh = make(chan core.TransationFinishEvent, txChanSize)
-	this.makerFinishEventSub = this.blockchain.SubscribeNewFinishsEvent(this.makerFinishEventCh)
-
-	//标记已接单
-	this.takerStampCh = make(chan core.NewTakerStampEvent, txChanSize)
-	this.takerStampSub = this.blockchain.SubscribeNewStampEvent(this.takerStampCh)
-
-	this.rmLogsCh = make(chan core.RemovedLogsEvent, rmLogsChanSize)
-	this.rmLogsSub = this.blockchain.SubscribeRemovedLogsEvent(this.rmLogsCh)
-
-	go this.loop()
-	go this.ReadCrossMessage()
+func (h *Handler) RegisterCrossChain(chainID *big.Int) {
+	h.writeCrossMessage(core.NewCrossChainEvent{ChainID: chainID})
 }
 
-func (this *MsgHandler) loop() {
+func (h *Handler) Start() {
+	h.confirmedMakerCh = make(chan core.ConfirmedMakerEvent, txChanSize)
+	h.confirmedMakerSub = h.blockChain.SubscribeConfirmedMakerEvent(h.confirmedMakerCh)
+	h.confirmedTakerCh = make(chan core.ConfirmedTakerEvent, txChanSize)
+	h.confirmedTakerSub = h.blockChain.SubscribeConfirmedTakerEvent(h.confirmedTakerCh)
+
+	h.signedCtxCh = make(chan core.SignedCtxEvent, txChanSize)
+	h.signedCtxSub = h.ctxStore.SubscribeSignedCtxEvent(h.signedCtxCh)
+
+	h.makerFinishEventCh = make(chan core.ConfirmedFinishEvent, txChanSize)
+	h.makerFinishEventSub = h.blockChain.SubscribeConfirmedFinishEvent(h.makerFinishEventCh)
+
+	h.newTakerCh = make(chan core.NewTakerEvent, txChanSize)
+	h.newTakerSub = h.blockChain.SubscribeNewTakerEvent(h.newTakerCh)
+
+	h.rmLogsCh = make(chan core.RemovedLogsEvent, rmLogsChanSize)
+	h.rmLogsSub = h.blockChain.SubscribeRemovedLogsEvent(h.rmLogsCh)
+
+	h.updateAnchorCh = make(chan core.AnchorEvent, txChanSize)
+	h.updateAnchorSub = h.blockChain.SubscribeUpdateAnchorEvent(h.updateAnchorCh)
+
+	go h.loop()
+	go h.readCrossMessage()
+}
+
+func (h *Handler) GetCtxStore() CtxStore {
+	return h.ctxStore
+}
+
+func (h *Handler) SetGasPriceOracle(gpo GasPriceOracle) {
+	h.gpo = gpo
+}
+
+func (h *Handler) AddRemoteCtx(ctx *types.CrossTransaction) {
+	if err := h.ctxStore.VerifyCtx(ctx); err == nil {
+		if err := h.ctxStore.AddRemote(ctx); err != nil {
+			log.Error("Add remote ctx", "id", ctx.ID().String(), "err", err)
+		}
+	}
+}
+
+func (h *Handler) Stop() {
+	h.confirmedMakerSub.Unsubscribe()
+	h.signedCtxSub.Unsubscribe()
+	h.confirmedTakerSub.Unsubscribe()
+	h.newTakerSub.Unsubscribe()
+	h.makerFinishEventSub.Unsubscribe()
+	h.rmLogsSub.Unsubscribe()
+	h.updateAnchorSub.Unsubscribe()
+
+	close(h.quitSync)
+
+	log.Info("SimpleChain MsgHandler stopped")
+}
+
+func (h *Handler) loop() {
+	expire := time.NewTicker(30 * time.Second)
+	defer expire.Stop()
+
 	for {
 		select {
-		case ev := <-this.makerStartEventCh:
-			//get cross transaction from the log
-			if !this.pm.CanAcceptTxs() {
-				break
-			}
-			if this.role.IsAnchor() {
-				for _, tx := range ev.Txs {
-					if err := this.ctxStore.AddLocal(tx); err != nil {
-						log.Warn("Add local rtx", "err", err)
-					}
-				}
-				this.pm.BroadcastCtx(ev.Txs)
-			}
-		case <-this.makerStartEventSub.Err():
-			return
-
-		case ev := <-this.makerSignedCh:
-			this.pm.BroadcastInternalCrossTransactionWithSignature([]*types.CrossTransactionWithSignatures{ev.Txs}) //主网广播
-			if this.role.IsAnchor() {
-				this.WriteCrossMessage(ev.Txs)
-			}
-		case <-this.makerSignedSub.Err():
-			return
-
-		case ev := <-this.availableTakerCh:
-			if this.role.IsAnchor() {
-				if len(ev.Tws) == 0 {
-					for k := range this.knownRwssTx {
-						delete(this.knownRwssTx, k)
-					}
-					break
-				}
-				if pending, err := this.pm.GetAnchorTxs(this.anchorSigner); err == nil && len(pending) < 10 {
-					//gasUsed, _ := new(big.Int).SetString("80000000000000", 10) //todo gasUsed
-					txs, err := this.GetTxForLockOut(ev.Tws)
-					if err != nil {
-						log.Error("GetTxForLockOut", "err", err)
-					}
-					if len(txs) > 0 {
-						this.pm.AddRemotes(txs)
-					}
+		case ev := <-h.confirmedMakerCh:
+			for _, tx := range ev.Txs {
+				if err := h.ctxStore.AddLocal(tx); err != nil {
+					log.Warn("Add local ctx failed", "err", err)
 				}
 			}
-		case <-this.availableTakerSub.Err():
+			h.pm.BroadcastCtx(ev.Txs, true)
+
+		case <-h.confirmedMakerSub.Err():
 			return
 
-		case ev := <-this.takerEventCh:
-			if !this.pm.CanAcceptTxs() {
-				break
+		case ev := <-h.signedCtxCh:
+			h.writeCrossMessage(ev)
+		case <-h.signedCtxSub.Err():
+			return
+
+		case ev := <-h.confirmedTakerCh:
+			h.writeCrossMessage(ev)
+			if errs := h.ctxStore.RemoveRemotes(ev.Txs); errs != nil {
+				log.Warn("RemoveRemotes failed", "error", errs)
 			}
-			if this.role.IsAnchor() {
-				for _, tx := range ev.Txs {
-					if err := this.rtxStore.AddLocal(tx); err != nil {
-						log.Warn("Add local rtx", "err", err)
-					}
+
+		case <-h.confirmedTakerSub.Err():
+			return
+
+		case ev := <-h.newTakerCh:
+			h.ctxStore.MarkStatus(ev.Txs, types.RtxStatusImplementing)
+		case <-h.newTakerSub.Err():
+			return
+
+		case ev := <-h.rmLogsCh:
+			h.reOrgLogs(ev.Logs)
+		case <-h.rmLogsSub.Err():
+			return
+
+		case ev := <-h.makerFinishEventCh:
+			h.clearStore(ev.FinishIds)
+		case <-h.makerFinishEventSub.Err():
+			return
+
+		case ev := <-h.updateAnchorCh:
+			for _, v := range ev.ChainInfo {
+				if err := h.ctxStore.UpdateAnchors(v); err != nil {
+					log.Info("ctxStore UpdateAnchors failed", "err", err)
 				}
-				this.pm.BroadcastRtx(ev.Txs)
 			}
-			this.ctxStore.RemoveRemotes(ev.Txs)
-		case <-this.takerEventSub.Err():
+		case <-h.updateAnchorSub.Err():
 			return
 
-		case ev := <-this.takerSignedCh:
-			if this.role.IsAnchor() {
-				this.WriteCrossMessage(ev.Tws)
-			}
-		case <-this.takerSignedSub.Err():
-			return
-
-		case ev := <-this.takerStampCh:
-			this.ctxStore.StampStatus(ev.Txs, types.RtxStatusImplementing)
-		case <-this.takerStampSub.Err():
-			return
-
-		case ev := <-this.rmLogsCh:
-			this.reorgLogs(ev.Logs)
-		case <-this.rmLogsSub.Err():
-			return
-
-		case ev := <-this.makerFinishEventCh:
-			if err := this.clearStore(ev.Finish); err != nil {
-				log.Info("clearStore", "err", err)
-			}
-		case <-this.makerFinishEventSub.Err():
-			return
-
+		case <-expire.C:
+			h.updateSelfTx()
 		}
 	}
 }
 
-func (this *MsgHandler) Stop() {
-	log.Info("Stopping Simplechain MsgHandler")
-	this.makerStartEventSub.Unsubscribe()
-	this.makerSignedSub.Unsubscribe()
-	this.takerEventSub.Unsubscribe()
-	this.takerSignedSub.Unsubscribe()
-	this.takerStampSub.Unsubscribe()
-	this.availableTakerSub.Unsubscribe()
-	this.makerFinishEventSub.Unsubscribe()
-	this.rmLogsSub.Unsubscribe()
-
-	close(this.quitSync)
-
-	log.Info("Simplechain MsgHandler stopped")
-}
-
-func (this *MsgHandler) HandleMsg(msg p2p.Msg, p Peer) error {
-	switch {
-	case msg.Code == CtxSignMsg:
-		if !this.pm.CanAcceptTxs() {
-			break
-		}
-		var ctx *types.CrossTransaction
-		if err := msg.Decode(&ctx); err != nil {
-			return errResp(ErrDecode, "msg %v: %v", msg, err)
-		}
-		if err := this.ctxStore.ValidateCtx(ctx); err == nil {
-			p.MarkCrossTransaction(ctx.SignHash())
-			this.pm.BroadcastCtx([]*types.CrossTransaction{ctx})
-			if err := this.ctxStore.AddRemote(ctx); err != nil {
-				log.Error("Add remote ctx", "err", err, "id", ctx.ID().String())
-			}
-		}
-	case msg.Code == CtxSignsMsg:
-		if !this.pm.CanAcceptTxs() {
-			break
-		}
-		var cwss []*types.CrossTransactionWithSignatures
-		var verifyCwss []*types.CrossTransactionWithSignatures
-		if err := msg.Decode(&cwss); err != nil {
-			return errResp(ErrDecode, "msg %v: %v", msg, err)
-		}
-
-		for _, cws := range cwss {
-			if this.ctxStore.VerifyRemoteCwsSigner(cws) == nil {
-				p.MarkCrossTransactionWithSignatures(cws.ID())
-				verifyCwss = append(verifyCwss, cws)
-			}
-		}
-
-		this.ctxStore.AddCWss(verifyCwss)
-		this.pm.BroadcastCWss(verifyCwss)
-
-	case msg.Code == RtxSignMsg:
-		if !this.pm.CanAcceptTxs() {
-			break
-		}
-		var rtx *types.ReceptTransaction
-		if err := msg.Decode(&rtx); err != nil {
-			return errResp(ErrDecode, "msg %v: %v", msg, err)
-		}
-		if err := this.rtxStore.ValidateRtx(rtx); err == nil {
-			p.MarkReceptTransaction(rtx.SignHash())
-			this.pm.BroadcastRtx([]*types.ReceptTransaction{rtx})
-			if err := this.rtxStore.AddRemote(rtx); err != nil {
-				//log.Warn("Add remote rtx", "err", err)
-			}
-		} else {
-			//log.Warn("Add remote rtx", "err", err)
-			break
-		}
-
-	case msg.Code == CtxSignsInternalMsg:
-		if !this.pm.CanAcceptTxs() {
-			break
-		}
-		var cwss []*types.CrossTransactionWithSignatures
-		var verifyCwss []*types.CrossTransactionWithSignatures
-		if err := msg.Decode(&cwss); err != nil {
-			return errResp(ErrDecode, "msg %v: %v", msg, err)
-		}
-		//Receive and broadcast
-		for _, cws := range cwss {
-			if this.ctxStore.VerifyLocalCwsSigner(cws) == nil {
-				p.MarkInternalCrossTransactionWithSignatures(cws.ID())
-				verifyCwss = append(verifyCwss, cws)
-			}
-		}
-		this.ctxStore.AddCWss(verifyCwss)
-		this.pm.BroadcastInternalCrossTransactionWithSignature(verifyCwss)
-
-	default:
-		return errResp(ErrInvalidMsgCode, "%v", msg.Code)
-	}
-	return nil
-}
-
-func (this *MsgHandler) ReadCrossMessage() {
-	for {
-		select {
-		case v := <-this.crossMsgReader:
-			cws, ok := v.(*types.CrossTransactionWithSignatures)
-			if ok && cws.Data.DestinationId.Uint64() == this.pm.NetworkId() {
-				this.ctxStore.AddCWss([]*types.CrossTransactionWithSignatures{cws})
-				this.pm.BroadcastCWss([]*types.CrossTransactionWithSignatures{cws})
-				break
-			}
-
-			rws, ok := v.(*types.ReceptTransactionWithSignatures)
-			if ok && rws.Data.DestinationId.Uint64() == this.pm.NetworkId() {
-				if v := this.rtxStore.ReadFromLocals(rws.Data.CTxId); v == nil {
-					errs := this.rtxStore.AddLocals(rws)
-					for _, err := range errs {
-						if err != nil {
-							log.Error("MsgHandler signed rtx save error")
-							break
-						}
-					}
-				}
-			}
-		case <-this.quitSync:
-			return
-		}
-	}
-}
-
-func (this *MsgHandler) GetTxForLockOut(rwss []*types.ReceptTransactionWithSignatures) ([]*types.Transaction, error) {
-	nonce := this.pm.GetNonce(this.anchorSigner)
-
-	var txs []*types.Transaction
-	var errorRws []*types.ReceptTransactionWithSignatures
-	var count, send, exec, errTx1, errTx2 uint64
-	tokenAddress := this.GetContractAddress()
-
-	var tx *types.Transaction
-	var param *TranParam
-	var err error
-
-	for _, rws := range rwss {
-		//TODO EstimateGas不仅测试GasLimit，同时能判断该交易是否执行成功
-		if _, ok := this.knownRwssTx[rws.ID()]; !ok {
-			param, err = this.CreateTransaction(this.anchorSigner, rws)
-			if err != nil {
-				errorRws = append(errorRws, rws)
-				errTx1++
-				continue
-			}
-			this.knownRwssTx[rws.ID()] = param
-		} else { //TODO delete
-			param = this.knownRwssTx[rws.ID()]
-			if ok, _ := this.CheckTransaction(this.anchorSigner, tokenAddress, rws, nonce+count, param.gasLimit, param.gasPrice, param.data); !ok {
-				errorRws = append(errorRws, rws)
-				exec++
-				continue
-			} else {
-				send++
-			}
-		}
-
-		tx, err = NewSignedTransaction(nonce+count, tokenAddress, param.gasLimit, param.gasPrice, param.data, this.pm.NetworkId(), this.signHash)
-		if err != nil {
-			return nil, err
-		}
-		txs = append(txs, tx)
-		count++
-		if len(txs) >= 200 {
-			break
-		}
-		if count >= 1024 { //TODO
-			break
-		}
-	}
-
-	log.Info("GetTxForLockOut", "errorRws", len(errorRws), "exec", exec, "errtx1", errTx1, "errtx2", errTx2, "tx", len(txs), "sent", send, "role", this.role.String())
-	return txs, nil
-}
-
-func (this *MsgHandler) WriteCrossMessage(v interface{}) {
+func (h *Handler) writeCrossMessage(v interface{}) {
 	select {
-	case this.crossMsgWriter <- v:
-	case <-this.quitSync:
+	case h.crossMsgWriter <- v:
+	case <-h.quitSync:
 		return
 	}
 }
 
-func (this *MsgHandler) clearStore(finishes []*types.FinishInfo) error {
-	log.Info("cross transaction finish", "clearStore count", len(finishes))
-	//for _, finish := range finishes {
-	//	log.Info("cross transaction finish", "txId", finish.TxId.String())
-	//}
-	if err := this.ctxStore.RemoveLocals(finishes); err != nil {
-		return errors.New("rm ctx error")
+func (h *Handler) readCrossMessage() {
+	for {
+		select {
+		case v := <-h.crossMsgReader:
+			switch ev := v.(type) {
+			case core.SignedCtxEvent:
+				cws := ev.Tws
+				if cws.DestinationId().Uint64() == h.pm.NetworkId() {
+					if err := h.ctxStore.AddFromRemoteChain(cws, ev.CallBack); err != nil {
+						log.Warn("readCrossMessage failed", "error", err.Error())
+					}
+				}
+				//log.Info("cross message SignedCtx", "ID", cws.ID().String())
+
+			case core.ConfirmedTakerEvent:
+				txs, err := h.getTxForLockOut(ev.Txs)
+				if err != nil {
+					log.Error("GetTxForLockOut", "err", err)
+				}
+				if len(txs) > 0 {
+					h.pm.AddLocals(txs)
+				}
+				//log.Info("cross message ConfirmedTaker", "length", len(ev.Txs))
+
+			case core.NewCrossChainEvent:
+				if ev.ChainID.Uint64() != h.pm.NetworkId() {
+					h.ctxStore.RegisterChain(ev.ChainID)
+				}
+			}
+
+		case <-h.quitSync:
+			return
+		}
 	}
-	if err := this.rtxStore.RemoveLocals(finishes); err != nil {
-		return errors.New("rm rtx error")
-	}
-	return nil
 }
 
-func (this *MsgHandler) GetContractAddress() common.Address {
-	var tokenAddress common.Address
-	switch this.roleHandler {
-	case RoleMainHandler:
-		tokenAddress = this.MainChainCtxAddress
-	case RoleSubHandler:
-		tokenAddress = this.SubChainCtxAddress
+func (h *Handler) getTxForLockOut(rwss []*types.ReceptTransaction) ([]*types.Transaction, error) {
+	var err error
+	var count uint64
+	var param *TranParam
+	var tx *types.Transaction
+	var txs []*types.Transaction
+
+	nonce := h.pm.GetNonce(h.anchorSigner)
+	tokenAddress := h.getCrossContractAddr()
+
+	for _, rws := range rwss {
+		if rws.DestinationId.Uint64() == h.pm.NetworkId() {
+			param, err = h.createTransaction(rws)
+			if err != nil {
+				log.Error("GetTxForLockOut CreateTransaction", "err", err)
+				continue
+			}
+			tx, err = newSignedTransaction(nonce+count, tokenAddress, param.gasLimit, param.gasPrice, param.data,
+				h.pm.NetworkId(), h.signHash)
+			if err != nil {
+				log.Error("GetTxForLockOut newSignedTransaction", "err", err)
+				return nil, err
+			}
+			txs = append(txs, tx)
+			count++
+		}
 	}
-	return tokenAddress
+
+	return txs, nil
 }
-func (this *MsgHandler) SetGasPriceOracle(gpo GasPriceOracle) {
-	this.gpo = gpo
+
+func (h *Handler) clearStore(finishes []common.Hash) {
+	for _, id := range finishes {
+		log.Info("cross transaction finished", "txId", id.String())
+	}
+	if errs := h.ctxStore.RemoveLocals(finishes); errs != nil {
+		log.Warn("CleanUpDb RemoveLocals failed", "error", errs)
+	}
 }
-func (this *MsgHandler) CreateTransaction(address common.Address, rws *types.ReceptTransactionWithSignatures) (*TranParam, error) {
-	tokenAddress := this.GetContractAddress()
-	gasPrice, err := this.gpo.SuggestPrice(context.Background())
+
+func (h *Handler) getCrossContractAddr() common.Address {
+	var crossAddr common.Address
+	switch h.roleHandler {
+	case RoleMainHandler:
+		crossAddr = h.MainChainCtxAddress
+	case RoleSubHandler:
+		crossAddr = h.SubChainCtxAddress
+	}
+	return crossAddr
+}
+
+func (h *Handler) reOrgLogs(logs []*types.Log) {
+	var takerLogs []*types.ReceptTransaction
+	for _, l := range logs {
+		if h.blockChain.IsCtxAddress(l.Address) {
+			if l.Topics[0] == params.TakerTopic && len(l.Topics) >= 3 && len(l.Data) >= common.HashLength*4 {
+				takerLogs = append(takerLogs, &types.ReceptTransaction{
+					DestinationId: common.BytesToHash(l.Data[:common.HashLength]).Big(),
+					CTxId:         l.Topics[1],
+				})
+			}
+		}
+	}
+	if len(takerLogs) > 0 {
+		h.ctxStore.MarkStatus(takerLogs, types.RtxStatusWaiting)
+	}
+}
+
+func (h *Handler) createTransaction(rws *types.ReceptTransaction) (*TranParam, error) {
+	gasPrice, err := h.gpo.SuggestPrice(context.Background())
 	if err != nil {
 		return nil, err
 	}
-	data, err := rws.ConstructData()
+	data, err := rws.ConstructData(h.crossABI)
 	if err != nil {
 		log.Error("ConstructData", "err", err)
 		return nil, err
 	}
 
-	gasLimit, err := this.gasHelper.EstimateGas(context.Background(), CallArgs{
-		From:     address,
-		To:       &tokenAddress,
-		Data:     data,
-		GasPrice: hexutil.Big(*gasPrice),
-	})
+	return &TranParam{gasLimit: 250000, gasPrice: gasPrice, data: data}, nil
+}
+
+func (h *Handler) updateSelfTx() {
+	if pending, err := h.pm.Pending(); err == nil {
+		if txs, ok := pending[h.anchorSigner]; ok {
+			var count uint64
+			var newTxs []*types.Transaction
+			for _, v := range txs {
+				if count < core.DefaultTxPoolConfig.AccountSlots {
+					gasPrice := new(big.Int).Div(new(big.Int).Mul(
+						v.GasPrice(), big.NewInt(100+int64(core.DefaultTxPoolConfig.PriceBump))), big.NewInt(100))
+
+					tx, err := newSignedTransaction(v.Nonce(), h.getCrossContractAddr(), v.Gas(), gasPrice, v.Data(), h.pm.NetworkId(), h.signHash)
+					if err != nil {
+						log.Info("UpdateSelfTx", "err", err)
+					}
+
+					newTxs = append(newTxs, tx)
+					count++
+				} else {
+					break
+				}
+			}
+			log.Info("UpdateSelfTx", "len", len(newTxs))
+			h.pm.AddLocals(newTxs)
+		}
+	}
+}
+
+func newSignedTransaction(nonce uint64, to common.Address, gasLimit uint64, gasPrice *big.Int,
+	data []byte, networkId uint64, signHash types.SignHash) (*types.Transaction, error) {
+	tx := types.NewTransaction(nonce, to, big.NewInt(0), gasLimit, gasPrice, data)
+	signer := types.NewEIP155Signer(big.NewInt(int64(networkId)))
+	txHash := signer.Hash(tx)
+	signature, err := signHash(txHash.Bytes())
 	if err != nil {
 		return nil, err
 	}
-
-	return &TranParam{gasLimit: gasLimit, gasPrice: gasPrice, data: data}, nil
-}
-
-func (this *MsgHandler) CheckTransaction(address, tokenAddress common.Address, rws *types.ReceptTransactionWithSignatures, nonce, gasLimit uint64, gasPrice *big.Int, data []byte) (bool, error) {
-	return this.gasHelper.CheckExec(context.Background(), CallArgs{
-		From:     address,
-		To:       &tokenAddress,
-		Data:     data,
-		GasPrice: hexutil.Big(*gasPrice),
-		Gas:      hexutil.Uint64(gasLimit),
-	})
-}
-
-func (this *MsgHandler) GetCtxstore() CtxStore {
-	return this.ctxStore
-}
-
-func (this *MsgHandler) reorgLogs(logs []*types.Log) {
-	var takerLogs []*types.RTxsInfo
-	for _, log := range logs {
-		if this.blockchain.IsCtxAddress(log.Address) {
-			if log.Topics[0] == params.TakerTopic && len(log.Topics) >= 3 && len(log.Data) >= common.HashLength*6 {
-				takerLogs = append(takerLogs, &types.RTxsInfo{
-					DestinationId: common.BytesToHash(log.Data[:common.HashLength]).Big(),
-					CtxId:         log.Topics[1],
-				})
-			}
-		}
+	signedTx, err := tx.WithSignature(signer, signature)
+	if err != nil {
+		return nil, err
 	}
+	return signedTx, nil
+}
 
-	if len(takerLogs) > 0 {
-		this.ctxStore.StampStatus(takerLogs, types.RtxStatusWaiting)
-	}
+type SyncReq struct {
+	Chain   uint64
+	StartID common.Hash
+}
+
+type SyncResp struct {
+	Chain uint64
+	Data  [][]byte
+}
+
+func (h *Handler) GetSyncCrossTransaction(startTxID common.Hash, syncSize int) []*types.CrossTransactionWithSignatures {
+	return h.ctxStore.ListCrossTransactionsByChainIDAndTxID(h.pm.NetworkId(), startTxID, syncSize)
+}
+
+func (h *Handler) SyncCrossTransaction(ctx []*types.CrossTransactionWithSignatures) int {
+	return h.ctxStore.SyncCrossTransactions(ctx)
 }

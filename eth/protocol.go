@@ -65,10 +65,7 @@ const (
 	ReceiptsMsg        = 0x10
 
 	//for eth64
-	CtxSignMsg          = 0x31
-	CtxSignsMsg         = 0x32
-	RtxSignMsg          = 0x33
-	CtxSignsInternalMsg = 0x34
+	CtxSignMsg = 0x31
 )
 
 type errCode int
@@ -83,6 +80,9 @@ const (
 	ErrForkIDRejected
 	ErrNoStatusMsg
 	ErrExtraStatusMsg
+	ErrVerifyCtx
+	ErrCrossMainChainMismatch
+	ErrCrossSubChainMismatch
 )
 
 func (e errCode) String() string {
@@ -100,22 +100,24 @@ var errorToString = map[int]string{
 	ErrForkIDRejected:          "Fork ID rejected",
 	ErrNoStatusMsg:             "No status message",
 	ErrExtraStatusMsg:          "Extra status message",
+	ErrVerifyCtx:               "Invalid Ctx",
+	ErrCrossMainChainMismatch:  "main chain contract mismatch",
+	ErrCrossSubChainMismatch:   "sub chain contract mismatch",
 }
 
 type txPool interface {
 	// AddRemotes should add the given transactions to the pool.
-	AddRemote(*types.Transaction) error
+	AddLocal(tx *types.Transaction) error
+	AddRemote(tx *types.Transaction) error
 
 	// Pending should return pending transactions.
 	// The slice should be modifiable by the caller.
 	Pending() (map[common.Address]types.Transactions, error)
-	GetAnchorTxs(common.Address) (map[common.Address]types.Transactions, error)
 	// SubscribeNewTxsEvent should return an event subscription of
 	// NewTxsEvent and send events to the given channel.
 	SubscribeNewTxsEvent(chan<- core.NewTxsEvent) event.Subscription
 
-	// GetLatestNonceFromQueueAndPending.
-	GetCurrentNonce(address common.Address) uint64
+	Nonce(addr common.Address) uint64
 }
 
 // statusData63 is the network packet for the status message for eth/63.

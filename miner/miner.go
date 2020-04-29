@@ -203,3 +203,13 @@ func (miner *Miner) Register(agent Agent) {
 func (miner *Miner) Unregister(agent Agent) {
 	miner.worker.unregister(agent)
 }
+
+func (miner *Miner) IsRegistered() bool {
+	for k := range miner.worker.agents {
+		_, ok := k.(*CpuAgent)
+		if ok {
+			return true
+		}
+	}
+	return false
+}

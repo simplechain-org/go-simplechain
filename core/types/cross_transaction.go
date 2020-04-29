@@ -37,11 +37,6 @@ type ctxdata struct {
 	S *big.Int `json:"s" gencodec:"required"`
 }
 
-type FinishInfo struct {
-	TxId  common.Hash
-	Taker common.Address
-}
-
 func NewCrossTransaction(amount, charge, networkId *big.Int, id, txHash, bHash common.Hash, from common.Address, input []byte) *CrossTransaction {
 	return &CrossTransaction{
 		Data: ctxdata{
@@ -77,6 +72,10 @@ func (tx *CrossTransaction) ChainId() *big.Int {
 	return deriveChainId(tx.Data.V)
 }
 
+func (tx CrossTransaction) DestinationId() *big.Int {
+	return tx.Data.DestinationId
+}
+
 func (tx *CrossTransaction) Hash() (h common.Hash) {
 	if hash := tx.hash.Load(); hash != nil {
 		return hash.(common.Hash)
@@ -95,6 +94,10 @@ func (tx *CrossTransaction) Hash() (h common.Hash) {
 	hash.Sum(h[:0])
 	tx.hash.Store(h)
 	return h
+}
+
+func (tx *CrossTransaction) BlockHash() common.Hash {
+	return tx.Data.BlockHash
 }
 
 func (tx *CrossTransaction) SignHash() (h common.Hash) {
@@ -118,12 +121,6 @@ func (tx *CrossTransaction) SignHash() (h common.Hash) {
 	hash.Sum(h[:0])
 	tx.signHash.Store(h)
 	return h
-}
-
-func (tx *CrossTransaction) Key() []byte {
-	key := []byte("m_")
-	key = append(key, tx.Data.CTxId.Bytes()...)
-	return key
 }
 
 // Transactions is a Transaction slice type for basic sorting.
@@ -163,18 +160,18 @@ func (s *CTxByPrice) Pop() interface{} {
 	return x
 }
 
+type RtxStatus = uint64
+
 const (
 	// RtxStatusWaiting is the status code of a rtx transaction if waiting for orders.
-	RtxStatusWaiting = uint64(0)
+	RtxStatusWaiting = RtxStatus(0)
 	// RtxStatusImplementing is the status code of a rtx transaction if execution implementing.
-	RtxStatusImplementing = uint64(1)
-	// RtxStatusSuccessful is the status code of a rtx transaction if execution succeeded.
-	RtxStatusSuccessful = uint64(2)
+	RtxStatusImplementing = RtxStatus(1)
 )
 
 type CrossTransactionWithSignatures struct {
 	Data   ctxdatas
-	Status uint64 `json:"status" gencodec:"required"` // Status tx
+	Status RtxStatus `json:"status" gencodec:"required"` // Status tx
 
 	// caches
 	hash atomic.Value
@@ -230,6 +227,9 @@ func (cws *CrossTransactionWithSignatures) ChainId() *big.Int {
 	}
 	return nil
 }
+func (cws *CrossTransactionWithSignatures) DestinationId() *big.Int {
+	return cws.Data.DestinationId
+}
 
 func (cws *CrossTransactionWithSignatures) Hash() (h common.Hash) {
 	if hash := cws.hash.Load(); hash != nil {
@@ -251,7 +251,11 @@ func (cws *CrossTransactionWithSignatures) Hash() (h common.Hash) {
 	return h
 }
 
-func (cws *CrossTransactionWithSignatures) AddSignatures(ctx *CrossTransaction) error {
+func (cws *CrossTransactionWithSignatures) BlockHash() common.Hash {
+	return cws.Data.BlockHash
+}
+
+func (cws *CrossTransactionWithSignatures) AddSignature(ctx *CrossTransaction) error {
 	if cws.Hash() == ctx.Hash() {
 		var exist bool
 		for _, r := range cws.Data.R {
@@ -268,6 +272,13 @@ func (cws *CrossTransactionWithSignatures) AddSignatures(ctx *CrossTransaction) 
 		return errors.New("already exist")
 	}
 	return errors.New("not same Ctx")
+}
+func (cws *CrossTransactionWithSignatures) RemoveSignature(index int) {
+	if index < cws.SignaturesLength() {
+		cws.Data.V = append(cws.Data.V[:index], cws.Data.V[index+1:]...)
+		cws.Data.R = append(cws.Data.R[:index], cws.Data.R[index+1:]...)
+		cws.Data.S = append(cws.Data.S[:index], cws.Data.S[index+1:]...)
+	}
 }
 
 func (cws *CrossTransactionWithSignatures) SignaturesLength() int {
@@ -301,20 +312,11 @@ func (cws *CrossTransactionWithSignatures) Resolution() []*CrossTransaction {
 	return ctxs
 }
 
-func (cws *CrossTransactionWithSignatures) Key() []byte {
-	key := []byte("m_")
-	key = append(key, cws.Data.CTxId.Bytes()...)
-	return key
-}
-
-func (cws *CrossTransactionWithSignatures) Price() (*big.Int, *big.Int) {
-	if cws.Data.Value.Cmp(big.NewInt(0)) == 0 {
-		return nil, nil
+func (cws *CrossTransactionWithSignatures) Price() *big.Rat {
+	if cws.Data.Value.Cmp(common.Big0) == 0 {
+		return nil
 	}
-	z := new(big.Int)
-	m := new(big.Int)
-	z, m = z.DivMod(cws.Data.DestinationValue, cws.Data.Value, m)
-	return z, m
+	return new(big.Rat).SetFrac(cws.Data.DestinationValue, cws.Data.Value)
 }
 
 func (cws *CrossTransactionWithSignatures) Size() common.StorageSize {
@@ -325,4 +327,14 @@ func (cws *CrossTransactionWithSignatures) Size() common.StorageSize {
 	rlp.Encode(&c, &cws.Data)
 	cws.size.Store(common.StorageSize(c))
 	return common.StorageSize(c)
+}
+
+func (cws *CrossTransactionWithSignatures) Copy() *CrossTransactionWithSignatures {
+	cpy := *cws
+	return &cpy
+}
+
+type RemoteChainInfo struct {
+	RemoteChainId uint64
+	BlockNumber   uint64
 }

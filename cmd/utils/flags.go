@@ -43,6 +43,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/consensus/scrypt"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/vm"
+	crossBackend "github.com/simplechain-org/go-simplechain/cross/backend"
 	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/eth"
 	"github.com/simplechain-org/go-simplechain/eth/downloader"
@@ -867,30 +868,17 @@ var (
 		Usage: "it can be one of (mainchain,subchain,anchor)",
 		Value: &role,
 	}
-	AnchorAccountsFlag = cli.StringFlag{
-		Name:  "anchors",
-		Usage: "Comma separated list of accounts to anchors",
-		Value: "",
-	}
 	ContractMainFlag = cli.StringFlag{
 		Name:  "contract.main",
 		Usage: "The address of main contract",
-		Value: params.MainChainCtxAddress.String(),
 	}
 	ContractSubFlag = cli.StringFlag{
 		Name:  "contract.sub",
 		Usage: "The address of sub contract",
-		Value: params.SubChainCtxAddress.String(),
-	}
-	AnchorPriKeyFlag = cli.StringFlag{
-		Name:  "anchor.pri",
-		Usage: "define anchor's private key",
-		Value: "0x86840df867b8eb3ee29001f5878a494c38c3a5ed733f220e05b24111667780b5",
 	}
 	AnchorSignerFlag = cli.StringFlag{
 		Name:  "anchor.signer",
 		Usage: "public address of anchor signer",
-		Value: "0",
 	}
 )
 
@@ -1659,8 +1647,10 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 // RegisterEthService adds an Ethereum client to the stack.
 func RegisterEthService(stack *node.Node, cfg *eth.Config) <-chan *sub.Ethereum {
 	var (
-		err     error
-		subChan = make(chan *sub.Ethereum, 1)
+		err           error
+		raftChan      = make(chan *sub.Ethereum, 1)
+		crossMainChan = make(chan *eth.Ethereum, 1)
+		crossSubChan  = make(chan *sub.Ethereum, 1)
 	)
 	if cfg.SyncMode == downloader.LightSync {
 		err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
@@ -1681,13 +1671,12 @@ func RegisterEthService(stack *node.Node, cfg *eth.Config) <-chan *sub.Ethereum 
 		} else if cfg.Role.IsSubChain() {
 			//subchain
 			err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
-				//subConfig := ToSubChainConfig(cfg)
 				fullNode, err := sub.New(ctx, cfg)
 				if fullNode != nil && cfg.LightServ > 0 {
 					ls, _ := les.NewLesServer(fullNode, cfg)
 					fullNode.AddLesServer(ls)
 				}
-				subChan <- fullNode
+				raftChan <- fullNode
 				return fullNode, err
 			})
 		} else if cfg.Role.IsAnchor() {
@@ -1695,25 +1684,44 @@ func RegisterEthService(stack *node.Node, cfg *eth.Config) <-chan *sub.Ethereum 
 			//mainchain
 			err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
 				fullNode, err := eth.New(ctx, cfg)
+				crossMainChan <- fullNode
 				return fullNode, err
 			})
 			if err != nil {
-				Fatalf("Failed to register the Ethereum service: %v", err)
+				Fatalf("Failed to register the MainChain service: %v", err)
 				return nil
 			}
 			//subchain
 			err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
-				//subConfig := ToSubChainConfig(cfg)
 				fullNode, err := sub.New(ctx, &subConfig)
-				subChan <- fullNode
+				raftChan <- fullNode
+				crossSubChan <- fullNode
 				return fullNode, err
 			})
+			if err != nil {
+				Fatalf("Failed to register the SubChain service: %v", err)
+				return nil
+			}
+
+			//crosschain
+			err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
+				mainNode := <-crossMainChan
+				subNode := <-crossSubChan
+				crossNode := crossBackend.NewCrossService(mainNode, subNode, cfg)
+				close(crossMainChan)
+				close(crossSubChan)
+				return crossNode, nil
+			})
+			if err != nil {
+				Fatalf("Failed to register the CrossChain service: %v", err)
+				return nil
+			}
 		}
 	}
 	if err != nil {
-		Fatalf("Failed to register the Ethereum service: %v", err)
+		Fatalf("Failed to register the SimpleChain service: %v", err)
 	}
-	return subChan
+	return raftChan
 }
 
 // RegisterShhService configures Whisper and adds it to the given node.

@@ -66,7 +66,7 @@ func decodeCtx(data []byte) (*CrossTransaction, error) {
 
 func TestCtxRecipientEmpty(t *testing.T) {
 	_, addr := defaultTestKey()
-	//cts,_ := SignCTx(emptyCtx,NewEIP155CtxSigner(big.NewInt(1)),pr)
+	//cts,_ := SignCtx(emptyCtx,NewEIP155CtxSigner(big.NewInt(1)),pr)
 	//b,_ := rlp.EncodeToBytes(&cts)
 	//t.Error(common.Bytes2Hex(b))
 	tx, err := decodeCtx(common.Hex2Bytes("f8c3f8c180a00b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbcaa00b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca94095e7baea6a6c7c4c2dfeb977efac326af552d87a00b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca820400808026a0a9a4473e3d9971f7de9808776b4cd831748b06b6450ca131cfef254fed27bf7da00c8e304e2384ef0ccc77bebbab82faa6846b05bc37c4920ae7dca507cad53e11"))
@@ -90,7 +90,7 @@ func TestCtxRecipientNormal(t *testing.T) {
 	//h := NewEIP155CtxSigner(big.NewInt(1)).Hash(rightvrsCtx)
 	//sig, _ := crypto.Sign(h[:], pr)
 	//t.Error(common.Bytes2Hex(sig))
-	//cts,_ := SignCTx(rightvrsCtx,NewEIP155CtxSigner(big.NewInt(1)),pr)
+	//cts,_ := SignCtx(rightvrsCtx,NewEIP155CtxSigner(big.NewInt(1)),pr)
 	//b,_ := rlp.EncodeToBytes(&cts)
 	//t.Error(common.Bytes2Hex(b))
 	tx, err := decodeCtx(common.Hex2Bytes("f8d3f8d1880de0b6b3a7640000a00b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbcaa00b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca94095e7baea6a6c7c4c2dfeb977efac326af552d87a00b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca820400881bc16d674ec800008025a0fff9e65e751407a69c5125a0e0dafd2e0048ce9b60d39bb0b58c251b4a72d382a02005750b091faae17b20a0a966b0c40ca44134fb214d0df0fed1c10646141f70"))

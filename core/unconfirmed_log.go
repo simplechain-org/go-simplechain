@@ -15,10 +15,11 @@ type headerRetriever interface {
 	GetHeaderByNumber(number uint64) *types.Header
 	GetReceiptsByTxHash(hash common.Hash) *types.Receipt
 	GetTransactionByTxHash(hash common.Hash) (*types.Transaction, common.Hash, uint64)
-	CtxsFeedSend(transaction NewCTxsEvent) int
-	RtxsFeedSend(transaction NewRTxsEvent) int
-	TransactionFinishFeedSend(transaction TransationFinishEvent) int
+	ConfirmedMakerFeedSend(transaction ConfirmedMakerEvent) int
+	ConfirmedTakerSend(transaction ConfirmedTakerEvent) int
+	ConfirmedFinishFeedSend(transaction ConfirmedFinishEvent) int
 	IsCtxAddress(addr common.Address) bool
+	GetChainConfig() *params.ChainConfig
 }
 
 // unconfirmedBlock is a small collection of metadata about a locally mined block
@@ -89,7 +90,8 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 			if next.logs != nil {
 				var ctxs []*types.CrossTransaction
 				var rtxs []*types.ReceptTransaction
-				var finishes []*types.FinishInfo
+				var finishes []common.Hash
+
 				//todo add and del anchors
 				for _, v := range next.logs {
 					tx, blockHash, blockNumber := set.chain.GetTransactionByTxHash(v.TxHash)
@@ -114,21 +116,14 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 							continue
 						}
 
-						if v.Topics[0] == params.TakerTopic && len(v.Topics) >= 3 && len(v.Data) >= common.HashLength*6 {
-							var to common.Address
+						if v.Topics[0] == params.TakerTopic && len(v.Topics) >= 3 && len(v.Data) >= common.HashLength*4 {
+							var to, from common.Address
 							copy(to[:], v.Topics[2][common.HashLength-common.AddressLength:])
+							from = common.BytesToAddress(v.Data[common.HashLength*2-common.AddressLength : common.HashLength*2])
 							ctxId := v.Topics[1]
-							count := common.BytesToHash(v.Data[common.HashLength*5 : common.HashLength*6]).Big().Int64()
 							rtxs = append(rtxs,
-								types.NewReceptTransaction(
-									ctxId,
-									v.TxHash,
-									v.BlockHash,
-									to,
-									common.BytesToHash(v.Data[:common.HashLength]).Big(),
-									v.BlockNumber,
-									v.TxIndex,
-									v.Data[common.HashLength*6:common.HashLength*6+count]))
+								types.NewReceptTransaction(ctxId, from, to, common.BytesToHash(v.Data[:common.HashLength]).Big(),
+									set.chain.GetChainConfig().ChainID))
 							continue
 						}
 
@@ -136,23 +131,19 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 						if v.Topics[0] == params.MakerFinishTopic && len(v.Topics) >= 3 {
 							if len(v.Topics) >= 2 {
 								ctxId := v.Topics[1]
-								to := v.Topics[2]
-								finishes = append(finishes, &types.FinishInfo{
-									TxId:  ctxId,
-									Taker: common.BytesToAddress(to[:]),
-								})
+								finishes = append(finishes, ctxId)
 							}
 						}
 					}
 				}
 				if len(ctxs) > 0 {
-					set.chain.CtxsFeedSend(NewCTxsEvent{ctxs})
+					set.chain.ConfirmedMakerFeedSend(ConfirmedMakerEvent{ctxs})
 				}
 				if len(rtxs) > 0 {
-					set.chain.RtxsFeedSend(NewRTxsEvent{rtxs})
+					set.chain.ConfirmedTakerSend(ConfirmedTakerEvent{rtxs})
 				}
 				if len(finishes) > 0 {
-					set.chain.TransactionFinishFeedSend(TransationFinishEvent{finishes})
+					set.chain.ConfirmedFinishFeedSend(ConfirmedFinishEvent{finishes})
 				}
 			}
 		default:

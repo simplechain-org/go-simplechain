@@ -315,6 +315,10 @@ func (b *EthAPIBackend) ServiceFilter(ctx context.Context, session *bloombits.Ma
 	}
 }
 func (b *EthAPIBackend) CtxStats() (pending int) {
+	return b.eth.ctxStore.StoreStats()
+}
+
+func (b *EthAPIBackend) CtxStatus() (pending, queue int) {
 	return b.eth.ctxStore.Stats()
 }
 
@@ -323,5 +327,5 @@ func (b *EthAPIBackend) CtxPoolContent() (map[uint64][]*types.CrossTransactionWi
 }
 
 func (b *EthAPIBackend) GetSelfCtx(from common.Address) (map[uint64][]*types.CrossTransactionWithSignatures, map[uint64][]*types.CrossTransactionWithSignatures) {
-	return b.eth.ctxStore.CtxOwner(from)
+	return b.eth.ctxStore.ListCrossTransactionBySender(from)
 }

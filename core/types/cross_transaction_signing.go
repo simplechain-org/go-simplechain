@@ -22,7 +22,7 @@ func MakeCtxSigner(config *params.ChainConfig) CtxSigner {
 }
 
 // SignTx signs the transaction using the given signer and private key
-func SignCTx(tx *CrossTransaction, s CtxSigner, signHash SignHash) (*CrossTransaction, error) {
+func SignCtx(tx *CrossTransaction, s CtxSigner, signHash SignHash) (*CrossTransaction, error) {
 	h := s.Hash(tx)
 	sig, err := signHash(h[:])
 	if err != nil {

@@ -35,6 +35,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/internal/ethapi"
+	"github.com/simplechain-org/go-simplechain/miner"
 	"github.com/simplechain-org/go-simplechain/rlp"
 	"github.com/simplechain-org/go-simplechain/rpc"
 	"github.com/simplechain-org/go-simplechain/trie"
@@ -104,6 +105,10 @@ func NewPrivateMinerAPI(e *Ethereum) *PrivateMinerAPI {
 // number of threads allowed to use and updates the minimum price required by the
 // transaction pool.
 func (api *PrivateMinerAPI) Start(threads *int) error {
+	if !api.e.Miner().IsRegistered() {
+		cpuMinerAgent := miner.NewCpuAgent(api.e.BlockChain(), api.e.Engine())
+		api.e.Miner().Register(cpuMinerAgent)
+	}
 	if threads == nil {
 		return api.e.StartMining(runtime.NumCPU())
 	}

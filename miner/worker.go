@@ -17,7 +17,6 @@
 package miner
 
 import (
-	"bytes"
 	"errors"
 	"math/big"
 	"strings"
@@ -27,7 +26,6 @@ import (
 
 	"github.com/eapache/channels"
 	"github.com/simplechain-org/go-simplechain/common"
-	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"github.com/simplechain-org/go-simplechain/consensus"
 	"github.com/simplechain-org/go-simplechain/consensus/dpos"
 	"github.com/simplechain-org/go-simplechain/consensus/raft"
@@ -97,7 +95,6 @@ type environment struct {
 	header   *types.Header
 	txs      []*types.Transaction
 	receipts []*types.Receipt
-	status   map[uint64]*core.Statistics
 }
 
 // task contains all information for consensus engine sealing and result submitting.
@@ -184,8 +181,7 @@ type worker struct {
 	resubmitHook func(time.Duration, time.Duration) // Method to call upon updating resubmitting interval.
 	agents       map[Agent]struct{}
 
-	ctxStore *core.CtxStore
-	raftCtx  *raftContext
+	raftCtx *raftContext
 }
 
 func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus.Engine, eth Backend, mux *event.TypeMux, isLocalBlock func(*types.Block) bool, init bool, ctxStore *core.CtxStore) *worker {
@@ -212,7 +208,6 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 		resubmitIntervalCh: make(chan time.Duration),
 		resubmitAdjustCh:   make(chan *intervalAdjust, resubmitAdjustChanSize),
 		agents:             make(map[Agent]struct{}),
-		ctxStore:           ctxStore,
 	}
 
 	// Subscribe NewTxsEvent for tx pool
@@ -478,7 +473,7 @@ func (w *worker) mainLoop() {
 	for {
 		select {
 		case req := <-w.newWorkCh:
-			w.commitNewWork(req.interrupt, req.noempty, req.timestamp, w.ctxStore.Status())
+			w.commitNewWork(req.interrupt, req.noempty, req.timestamp)
 
 		case ev := <-w.chainSideCh:
 			// Short circuit for duplicate side blocks
@@ -551,7 +546,7 @@ func (w *worker) mainLoop() {
 				// If clique is running in dev mode(period is 0), disable
 				// advance sealing here.
 				if w.chainConfig.Clique != nil && w.chainConfig.Clique.Period == 0 {
-					w.commitNewWork(nil, true, time.Now().Unix(), w.ctxStore.Status())
+					w.commitNewWork(nil, true, time.Now().Unix())
 				}
 			}
 			atomic.AddInt32(&w.newTxs, int32(len(ev.Txs)))
@@ -687,7 +682,7 @@ func (w *worker) resultLoop() {
 }
 
 // makeCurrent creates a new environment for the current cycle.
-func (w *worker) makeCurrent(parent *types.Block, header *types.Header, status map[uint64]*core.Statistics) error {
+func (w *worker) makeCurrent(parent *types.Block, header *types.Header) error {
 	state, err := w.chain.StateAt(parent.Root())
 	if err != nil {
 		return err
@@ -699,7 +694,6 @@ func (w *worker) makeCurrent(parent *types.Block, header *types.Header, status m
 		family:    mapset.NewSet(),
 		uncles:    mapset.NewSet(),
 		header:    header,
-		status:    status,
 	}
 
 	// when 08 is processed ancestors contain 07 (quick block)
@@ -769,10 +763,10 @@ func (w *worker) updateSnapshot() {
 	w.snapshotState = w.current.state.Copy()
 }
 
-func (w *worker) commitTransaction(tx *types.Transaction, coinbase common.Address, contractAddress common.Address) ([]*types.Log, error) {
+func (w *worker) commitTransaction(tx *types.Transaction, coinbase common.Address) ([]*types.Log, error) {
 	snap := w.current.state.Snapshot()
 
-	receipt, err := core.ApplyTransaction(w.chainConfig, w.chain, &coinbase, w.current.gasPool, w.current.state, w.current.header, tx, &w.current.header.GasUsed, *w.chain.GetVMConfig(), contractAddress)
+	receipt, err := core.ApplyTransaction(w.chainConfig, w.chain, &coinbase, w.current.gasPool, w.current.state, w.current.header, tx, &w.current.header.GasUsed, *w.chain.GetVMConfig())
 	if err != nil {
 		w.current.state.RevertToSnapshot(snap)
 		return nil, err
@@ -833,47 +827,42 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		//
 		// We use the eip155 signer regardless of the current hf.
 		from, _ := types.Sender(w.current.signer, tx)
-		if !w.current.storeCheck(tx, w.ctxStore.CrossDemoAddress) {
-			log.Info("ctxStore is busy!")
+
+		// Start executing the transaction
+		w.current.state.Prepare(tx.Hash(), common.Hash{}, w.current.tcount)
+		logs, err := w.commitTransaction(tx, coinbase)
+		switch err {
+		case core.ErrGasLimitReached:
+			// Pop the current out-of-gas transaction without shifting in the next from the account
+			log.Trace("Gas limit exceeded for current block", "sender", from)
 			txs.Pop()
-		} else {
-			// Start executing the transaction
-			w.current.state.Prepare(tx.Hash(), common.Hash{}, w.current.tcount)
 
-			logs, err := w.commitTransaction(tx, coinbase, w.chain.CrossDemoAddress)
-			switch err {
-			case core.ErrGasLimitReached:
-				// Pop the current out-of-gas transaction without shifting in the next from the account
-				log.Trace("Gas limit exceeded for current block", "sender", from)
-				txs.Pop()
+		case core.ErrNonceTooLow:
+			// New head notification data race between the transaction pool and miner, shift
+			log.Trace("Skipping transaction with low nonce", "sender", from, "nonce", tx.Nonce())
+			txs.Shift()
 
-			case core.ErrNonceTooLow:
-				// New head notification data race between the transaction pool and miner, shift
-				log.Trace("Skipping transaction with low nonce", "sender", from, "nonce", tx.Nonce())
-				txs.Shift()
+		case core.ErrNonceTooHigh:
+			// Reorg notification data race between the transaction pool and miner, skip account =
+			log.Trace("Skipping account with hight nonce", "sender", from, "nonce", tx.Nonce())
+			txs.Pop()
 
-			case core.ErrNonceTooHigh:
-				// Reorg notification data race between the transaction pool and miner, skip account =
-				log.Trace("Skipping account with hight nonce", "sender", from, "nonce", tx.Nonce())
-				txs.Pop()
+		//case core.ErrRepetitionCrossTransaction:
+		//	log.Trace("repetition", "sender", from, "hash", tx.Hash())
+		//	txHashs = append(txHashs, tx.Hash()) //record RepetitionCrossTransaction
+		//	txs.Pop()
 
-			case core.ErrRepetitionCrossTransaction:
-				log.Trace("repetition", "sender", from, "hash", tx.Hash())
-				txHashs = append(txHashs, tx.Hash()) //record RepetitionCrossTransaction
-				txs.Pop()
+		case nil:
+			// Everything ok, collect the logs and shift in the next transaction from the same account
+			coalescedLogs = append(coalescedLogs, logs...)
+			w.current.tcount++
+			txs.Shift()
 
-			case nil:
-				// Everything ok, collect the logs and shift in the next transaction from the same account
-				coalescedLogs = append(coalescedLogs, logs...)
-				w.current.tcount++
-				txs.Shift()
-
-			default:
-				// Strange error, discard the transaction and get the next in line (note, the
-				// nonce-too-high clause will prevent us from executing in vain).
-				log.Debug("Transaction failed, account skipped", "hash", tx.Hash(), "err", err)
-				txs.Shift()
-			}
+		default:
+			// Strange error, discard the transaction and get the next in line (note, the
+			// nonce-too-high clause will prevent us from executing in vain).
+			log.Debug("Transaction failed, account skipped", "hash", tx.Hash(), "err", err)
+			txs.Shift()
 		}
 	}
 
@@ -901,7 +890,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 }
 
 // commitNewWork generates several new sealing tasks based on the parent block.
-func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64, status map[uint64]*core.Statistics) {
+func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	tstart := time.Now()
@@ -938,7 +927,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64, 
 		return
 	}
 	// Could potentially happen if starting to mine in an odd state.
-	err := w.makeCurrent(parent, header, status)
+	err := w.makeCurrent(parent, header)
 	if err != nil {
 		log.Error("Failed to create mining context", "err", err)
 		return
@@ -1098,26 +1087,4 @@ func (w *worker) seal(work *types.Block) {
 	for agent := range w.agents {
 		agent.DispatchWork(work)
 	}
-}
-
-func (env *environment) storeCheck(tx *types.Transaction, address common.Address) bool {
-	if tx.To() != nil && (*tx.To() == address) {
-		startID, _ := hexutil.Decode("0xf56339a8")
-
-		if len(tx.Data()) >= 2*common.HashLength+4 && bytes.Equal(tx.Data()[:4], startID) {
-			networkId := common.BytesToHash(tx.Data()[4 : common.HashLength+4]).Big().Uint64()
-			if v, ok := env.status[networkId]; ok {
-				if v.Top {
-					if !core.ComparePrice2(
-						common.BytesToHash(tx.Data()[common.HashLength+4:2*common.HashLength+4]).Big(),
-						tx.Value(),
-						v.MinimumTx.Data.DestinationValue,
-						v.MinimumTx.Data.Value) {
-						return false
-					}
-				}
-			}
-		}
-	}
-	return true
 }

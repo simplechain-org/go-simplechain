@@ -137,7 +137,7 @@ func taker() {
 					S:                s,
 				}
 
-				out, err := abi.Pack("taker", &ord, chainId, []byte{})
+				out, err := abi.Pack("taker", &ord, chainId)
 				if err != nil {
 					fmt.Println("abi.Pack err=", err)
 					continue
@@ -153,11 +153,11 @@ func taker() {
 					Value: v.DestinationValue,
 					Input: &input,
 				}); err != nil {
-					fmt.Println("CallContext", "err", err)
+					fmt.Println("SendTransaction", "err", err)
 					return
 				}
 
-				fmt.Println("eth_sendTransaction result=", result.Hex())
+				fmt.Printf("eth_sendTransaction result=%s, ctxID=%s\n", result.Hex(), v.CTxId.String())
 			}
 
 		}
