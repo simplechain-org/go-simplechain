@@ -9,7 +9,6 @@ import (
 	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/crypto"
-	"github.com/simplechain-org/go-simplechain/ethdb/memorydb"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/params"
 )
@@ -36,7 +35,10 @@ func TestNewCtxStoreAdd(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ctxStore := setupCtxStore()
+	ctxStore, err := setupCtxStore()
+	if err != nil {
+		t.Fatal(err)
+	}
 	signedCh := make(chan SignedCtxEvent, 1) // receive signed ctx
 	signedSub := ctxStore.SubscribeSignedCtxEvent(signedCh)
 	defer signedSub.Unsubscribe()
@@ -81,14 +83,13 @@ func TestNewCtxStoreAdd(t *testing.T) {
 	ctxStore.Stop()
 }
 
-func setupCtxStore() *CtxStore {
+func setupCtxStore() (*CtxStore, error) {
 	signHash := func(hash []byte) ([]byte, error) {
 		key, _ := crypto.GenerateKey()
 		return crypto.Sign(hash, key)
 	}
 	statedb, _ := state.New(common.Hash{}, state.NewDatabase(rawdb.NewMemoryDatabase()))
 	blockchain := &testBlockChain{statedb, 1000000, new(event.Feed)}
-	db := memorydb.New()
 
-	return NewCtxStore(DefaultCtxStoreConfig, params.TestChainConfig, blockchain, db, common.Address{}, signHash)
+	return NewCtxStore(nil, DefaultCtxStoreConfig, params.TestChainConfig, blockchain, "testing-cross-store", common.Address{}, signHash)
 }

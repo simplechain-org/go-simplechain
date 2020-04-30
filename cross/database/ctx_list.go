@@ -14,10 +14,11 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-simplechain library. If not, see <http://www.gnu.org/licenses/>.
 
-package core
+package db
 
 import (
 	"container/heap"
+	"math/big"
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/types"
@@ -151,28 +152,28 @@ func (h *byBlockNumHeap) Pop() interface{} {
 }
 
 type CtxSortedByBlockNum struct {
-	items map[common.Hash]CrossTransactionInvoke
+	items map[common.Hash]*types.CrossTransactionWithSignatures
 	index *byBlockNumHeap
 }
 
 func NewCtxSortedMap() *CtxSortedByBlockNum {
 	return &CtxSortedByBlockNum{
-		items: make(map[common.Hash]CrossTransactionInvoke),
+		items: make(map[common.Hash]*types.CrossTransactionWithSignatures),
 		index: new(byBlockNumHeap),
 	}
 }
 
-func (m *CtxSortedByBlockNum) Get(txId common.Hash) CrossTransactionInvoke {
+func (m *CtxSortedByBlockNum) Get(txId common.Hash) *types.CrossTransactionWithSignatures {
 	return m.items[txId]
 }
 
-func (m *CtxSortedByBlockNum) Put(rws CrossTransactionInvoke, number uint64) {
-	id := rws.ID()
+func (m *CtxSortedByBlockNum) Put(ctx *types.CrossTransactionWithSignatures, number uint64) {
+	id := ctx.ID()
 	if m.items[id] != nil {
 		return
 	}
 
-	m.items[id] = rws
+	m.items[id] = ctx
 	m.index.Push(byBlockNum{id, number})
 }
 
@@ -222,4 +223,93 @@ func (m *CtxToBlockHash) Put(txID common.Hash, blockHash common.Hash) bool {
 	}
 	(*lru.ARCCache)(m).Add(txID, blockHash)
 	return update
+}
+
+type CrossTransactionIndexed struct {
+	PK    uint64         `storm:"id,increment"`
+	CtxId common.Hash    `storm:"unique"`
+	From  common.Address `storm:"index"`
+	Price *big.Float     `storm:"index"`
+
+	// normal field
+	Status types.CtxStatus
+
+	Value            *big.Int
+	TxHash           common.Hash
+	BlockHash        common.Hash
+	DestinationId    *big.Int
+	DestinationValue *big.Int
+	Input            []byte
+
+	V []*big.Int
+	R []*big.Int
+	S []*big.Int
+}
+
+func NewCrossTransactionIndexed(ctx *types.CrossTransactionWithSignatures) *CrossTransactionIndexed {
+	return &CrossTransactionIndexed{
+		CtxId:            ctx.ID(),
+		Status:           ctx.Status,
+		From:             ctx.Data.From,
+		Price:            new(big.Float).SetRat(ctx.Price()),
+		Value:            ctx.Data.Value,
+		TxHash:           ctx.Data.TxHash,
+		BlockHash:        ctx.Data.BlockHash,
+		DestinationId:    ctx.Data.DestinationId,
+		DestinationValue: ctx.Data.DestinationValue,
+		Input:            ctx.Data.Input,
+		V:                ctx.Data.V,
+		R:                ctx.Data.R,
+		S:                ctx.Data.S,
+	}
+
+}
+
+func (c CrossTransactionIndexed) ToCrossTransaction() *types.CrossTransactionWithSignatures {
+	return &types.CrossTransactionWithSignatures{
+		Status: c.Status,
+		Data: types.CtxDatas{
+			Value:            c.Value,
+			CTxId:            c.CtxId,
+			TxHash:           c.TxHash,
+			From:             c.From,
+			BlockHash:        c.BlockHash,
+			DestinationId:    c.DestinationId,
+			DestinationValue: c.DestinationValue,
+			Input:            c.Input,
+			V:                c.V,
+			R:                c.R,
+			S:                c.S,
+		},
+	}
+}
+
+type IndexDbCache lru.ARCCache
+
+func newIndexDbCache(cap int) *IndexDbCache {
+	cache, err := lru.NewARC(cap)
+	if cache == nil || err != nil {
+		return nil
+	}
+	return (*IndexDbCache)(cache)
+}
+
+func (m *IndexDbCache) Has(ctxID common.Hash) bool {
+	return (*lru.ARCCache)(m).Contains(ctxID)
+}
+
+func (m *IndexDbCache) Get(ctxID common.Hash) *CrossTransactionIndexed {
+	item, ok := (*lru.ARCCache)(m).Get(ctxID)
+	if !ok {
+		return nil
+	}
+	return item.(*CrossTransactionIndexed)
+}
+
+func (m *IndexDbCache) Put(ctxID common.Hash, ctx *CrossTransactionIndexed) {
+	(*lru.ARCCache)(m).Add(ctxID, ctx)
+}
+
+func (m *IndexDbCache) Remove(ctxID common.Hash) {
+	(*lru.ARCCache)(m).Remove(ctxID)
 }

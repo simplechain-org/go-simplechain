@@ -1,4 +1,4 @@
-package core
+package db
 
 import (
 	"bytes"
@@ -14,26 +14,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/rlp"
 )
 
-type ErrCtxDbFailure struct {
-	err error
-}
-
-func (e ErrCtxDbFailure) Error() string {
-	return fmt.Sprintf("DB ctx handle failed: %s", e.err)
-}
-
-type CtxDB interface {
-	Size() int
-	Load() error
-	Write(ctx *types.CrossTransactionWithSignatures) error
-	Read(ctxId common.Hash) (*types.CrossTransactionWithSignatures, error)
-	ReadAll(ctxId common.Hash) (common.Hash, error)
-	Delete(ctxId common.Hash) error
-	Update(id common.Hash, updater func(ctx *types.CrossTransactionWithSignatures)) error
-	Has(id common.Hash) bool
-	Query(filter func(*types.CrossTransactionWithSignatures) bool, pageSize int) []*types.CrossTransactionWithSignatures
-}
-
+// Deprecated: use indexDB, only for test
 type cacheDB struct {
 	chainID *big.Int
 	db      ethdb.KeyValueStore // storage in diskDB
@@ -43,7 +24,7 @@ type cacheDB struct {
 	mux     sync.RWMutex
 }
 
-func NewCtxDb(chainID *big.Int, db ethdb.KeyValueStore, cacheSize uint64) CtxDB {
+func NewCacheDb(chainID *big.Int, db ethdb.KeyValueStore, cacheSize uint64) *cacheDB {
 	return &cacheDB{
 		chainID: chainID,
 		db:      db,
@@ -62,10 +43,14 @@ func (d *cacheDB) makerKey(id common.Hash) []byte {
 	return append(makerPrefix, id.Bytes()...)
 }
 
+func (d *cacheDB) Close() error {
+	return d.db.Close()
+}
+
 // Write ctx into db and cache
 func (d *cacheDB) Write(ctx *types.CrossTransactionWithSignatures) error {
 	if ctx == nil {
-		return ErrCtxDbFailure{errors.New("ctx is nil")}
+		return ErrCtxDbFailure{err: errors.New("ctx is nil")}
 	}
 	d.mux.Lock()
 	defer d.mux.Unlock()
@@ -93,7 +78,7 @@ func (d *cacheDB) writeDB(ctx *types.CrossTransactionWithSignatures) error {
 	key := d.chainMakerKey(ctx.ID())
 	enc, err := rlp.EncodeToBytes(ctx)
 	if err != nil {
-		return ErrCtxDbFailure{err}
+		return ErrCtxDbFailure{err: err}
 	}
 
 	var update bool // flag for update exist ctx
@@ -102,7 +87,7 @@ func (d *cacheDB) writeDB(ctx *types.CrossTransactionWithSignatures) error {
 	}
 
 	if err := d.db.Put(key, enc); err != nil {
-		return ErrCtxDbFailure{err}
+		return ErrCtxDbFailure{err: err}
 	}
 	if !update {
 		d.total++
@@ -115,24 +100,24 @@ func (d *cacheDB) writeAll(ctx *types.CrossTransactionWithSignatures) error {
 	if has, _ := d.db.Has(key); has { // check exist ctx equals new
 		hash, err := d.db.Get(key)
 		if err != nil {
-			return ErrCtxDbFailure{err}
+			return ErrCtxDbFailure{err: err}
 		}
 		var oldBlockHash common.Hash
 		if err = rlp.DecodeBytes(hash, &oldBlockHash); err != nil {
-			return ErrCtxDbFailure{fmt.Errorf("rlp failed, id: %s, err: %s", ctx.ID().String(), err.Error())}
+			return ErrCtxDbFailure{fmt.Sprintf("rlp failed, id: %s", ctx.ID().String()), err}
 		}
 		if oldBlockHash != ctx.BlockHash() {
-			return ErrCtxDbFailure{fmt.Errorf("blockchain reorg, txID:%s, old:%s, new:%s",
+			return ErrCtxDbFailure{err: fmt.Errorf("blockchain reorg, txID:%s, old:%s, new:%s",
 				ctx.ID(), oldBlockHash.String(), ctx.BlockHash().String())}
 		}
 	}
 
 	enc, err := rlp.EncodeToBytes(ctx.BlockHash())
 	if err != nil {
-		return ErrCtxDbFailure{err}
+		return ErrCtxDbFailure{err: err}
 	}
 	if err := d.db.Put(d.makerKey(ctx.ID()), enc); err != nil {
-		return ErrCtxDbFailure{err}
+		return ErrCtxDbFailure{err: err}
 	}
 	return nil
 
@@ -170,7 +155,7 @@ func (d *cacheDB) Delete(ctxId common.Hash) error {
 		d.total--
 	}
 	if err := d.db.Delete(d.chainMakerKey(ctxId)); err != nil {
-		return ErrCtxDbFailure{err}
+		return ErrCtxDbFailure{err: err}
 	}
 	return nil
 }
@@ -204,12 +189,12 @@ func (d *cacheDB) Read(ctxId common.Hash) (*types.CrossTransactionWithSignatures
 
 	data, err := d.db.Get(d.chainMakerKey(ctxId))
 	if err != nil {
-		return nil, ErrCtxDbFailure{err}
+		return nil, ErrCtxDbFailure{err: err}
 	}
 	ctx := new(types.CrossTransactionWithSignatures)
 	err = rlp.Decode(bytes.NewReader(data), ctx)
 	if err != nil {
-		return nil, ErrCtxDbFailure{err}
+		return nil, ErrCtxDbFailure{err: err}
 	}
 	// put into cache
 	d.cache.Add(ctx)
@@ -227,7 +212,7 @@ func (d *cacheDB) ReadAll(ctxId common.Hash) (common.Hash, error) {
 	var oldBlockHash common.Hash
 	hash, err := d.db.Get(d.makerKey(ctxId))
 	if err != nil {
-		return oldBlockHash, ErrCtxDbFailure{err}
+		return oldBlockHash, ErrCtxDbFailure{err: err}
 	}
 	err = rlp.DecodeBytes(hash, &oldBlockHash)
 	return oldBlockHash, err
@@ -257,11 +242,24 @@ func (d *cacheDB) Has(txID common.Hash) bool {
 	return false
 }
 
-//TODO: pageSize array for perPageSize=pageSize[0], startPage=pageSize[1]
-func (d *cacheDB) Query(filter func(*types.CrossTransactionWithSignatures) bool, pageSize int) []*types.CrossTransactionWithSignatures {
+type Filter func(ctx *types.CrossTransactionWithSignatures) bool
+
+func (d *cacheDB) sanitize(filter ...interface{}) Filter {
+	return func(ctx *types.CrossTransactionWithSignatures) bool {
+		for _, f := range filter {
+			if !f.(Filter)(ctx) { // static-assert: type switch must success
+				return false
+			}
+		}
+		return true
+	}
+}
+
+func (d *cacheDB) Query(pageSize int, _ int, filter ...interface{}) []*types.CrossTransactionWithSignatures {
 	d.mux.RLock()
 	defer d.mux.RUnlock()
-	res := d.cache.GetList(filter, pageSize)
+
+	res := d.cache.GetList(d.sanitize(filter...), pageSize)
 	if pageSize > 0 && len(res) < pageSize && d.cache.Cap() > 0 && d.cache.Count() < d.total {
 		//TODO: support kv-db if cache is not enough
 		log.Warn("Query in kv-db is not support yet")
@@ -273,44 +271,4 @@ func (d *cacheDB) Size() int {
 	d.mux.RLock()
 	defer d.mux.RUnlock()
 	return d.total
-}
-
-// TODO: use indexed DB to save ctx
-type indexDB struct {
-}
-
-func (d *indexDB) Size() int {
-	return 0
-}
-
-func (d *indexDB) Load() error {
-	return nil
-}
-
-func (d *indexDB) Write(ctx *types.CrossTransactionWithSignatures) error {
-	return nil
-}
-
-func (d *indexDB) Read(ctxId common.Hash) (*types.CrossTransactionWithSignatures, error) {
-	return nil, nil
-}
-
-func (d *indexDB) ReadAll(ctxId common.Hash) (common.Hash, error) {
-	return common.Hash{}, nil
-}
-
-func (d *indexDB) Delete(ctxId common.Hash) error {
-	return nil
-}
-
-func (d *indexDB) Update(id common.Hash, updater func(ctx *types.CrossTransactionWithSignatures)) error {
-	return nil
-}
-
-func (d *indexDB) Has(id common.Hash) bool {
-	return false
-}
-
-func (d *indexDB) Query(filter func(*types.CrossTransactionWithSignatures) bool, pageSize int) []*types.CrossTransactionWithSignatures {
-	return nil
 }

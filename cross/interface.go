@@ -23,15 +23,14 @@ type CtxStore interface {
 
 	VerifyCtx(*types.CrossTransaction) error
 
-	MarkStatus([]*types.ReceptTransaction, uint64)
-	ListCrossTransactions(int) []*types.CrossTransactionWithSignatures
-	ListCrossTransactionsByChainIDAndTxID(chainID uint64, txID common.Hash, pageSize int) []*types.CrossTransactionWithSignatures
+	MarkStatus([]*types.ReceptTransaction, types.CtxStatus)
 
 	SubscribeSignedCtxEvent(chan<- core.SignedCtxEvent) event.Subscription
 
 	UpdateAnchors(*types.RemoteChainInfo) error
 	RegisterChain(*big.Int)
 	SyncCrossTransactions([]*types.CrossTransactionWithSignatures) int
+	GetSyncCrossTransactions(chainID uint64, txID common.Hash, pageSize int) []*types.CrossTransactionWithSignatures
 }
 
 type simplechain interface {

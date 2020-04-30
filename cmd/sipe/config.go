@@ -247,7 +247,7 @@ func RegisterRaftService(stack *node.Node, ctx *cli.Context, cfg gethConfig, sub
 		}
 
 		ethereum := <-subChan
-		return raftBackend.New(ctx, myId, raftPort, joinExisting, ethereum, peers, datadir, ethereum.GetCtxStore())
+		return raftBackend.New(ctx, myId, raftPort, joinExisting, ethereum, peers, datadir)
 	}); err != nil {
 		utils.Fatalf("Failed to register the Raft service: %v", err)
 	}

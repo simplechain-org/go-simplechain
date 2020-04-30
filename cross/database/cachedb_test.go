@@ -1,4 +1,4 @@
-package core
+package db
 
 import (
 	"math/big"
@@ -13,7 +13,7 @@ import (
 func TestCtxDb(t *testing.T) {
 	var (
 		db    = memorydb.New()
-		ctxDb = NewCtxDb(big.NewInt(1), db, 10)
+		ctxDb = NewCacheDb(big.NewInt(1), db, 10)
 	)
 	var i int64
 	for i = 0; i < 1024; i++ {
@@ -34,8 +34,8 @@ func TestCtxDb(t *testing.T) {
 		}
 	}
 
-	if len(ctxDb.Query(nil, 0)) != 1024 {
-		t.Errorf("write count err,len:%d", len(ctxDb.Query(nil, 0)))
+	if len(ctxDb.Query(0, 0)) != 1024 {
+		t.Errorf("write count err,len:%d", len(ctxDb.Query(0, 0)))
 	}
 
 	cws, err := ctxDb.Read(common.BigToHash(big.NewInt(1000)))
@@ -50,7 +50,7 @@ func TestCtxDb(t *testing.T) {
 		t.Errorf("Delete err,id:%s", cws.ID().String())
 	}
 
-	if len(ctxDb.Query(nil, 0)) != 1023 {
-		t.Errorf("write count err,len:%d", len(ctxDb.Query(nil, 0)))
+	if len(ctxDb.Query(0, 0)) != 1023 {
+		t.Errorf("write count err,len:%d", len(ctxDb.Query(0, 0)))
 	}
 }

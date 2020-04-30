@@ -19,9 +19,11 @@ import (
 )
 
 const (
-	GetCtxSyncMsg = 0x32
-	CtxSyncMsg    = 0x33
-	//TODO: move CtxSignMsg to here
+	CtxSignMsg        = 0x31
+	GetCtxSyncMsg     = 0x32
+	CtxSyncMsg        = 0x33
+	GetPendingSyncMsg = 0x34 //TODO: sync pending ctx when anchor restart
+	PendingSyncMsg    = 0x35
 
 	protocolVersion    = 31
 	protocolMaxMsgSize = 10 * 1024 * 1024
@@ -219,16 +221,14 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 			break
 		}
 
-		var success int
-		success += srv.main.handler.SyncCrossTransaction(ctxList)
-		success += srv.sub.handler.SyncCrossTransaction(ctxList)
+		srv.main.handler.SyncCrossTransaction(ctxList)
+		srv.sub.handler.SyncCrossTransaction(ctxList)
 
-		if success > 0 { // send next sync request if success in this round
-			return p.SendSyncRequest(&cross.SyncReq{
-				Chain:   resp.Chain,
-				StartID: ctxList[len(ctxList)-1].ID(),
-			})
-		}
+		// send next sync request after last
+		return p.SendSyncRequest(&cross.SyncReq{
+			Chain:   resp.Chain,
+			StartID: ctxList[len(ctxList)-1].ID(),
+		})
 
 	default:
 		return eth.ErrResp(eth.ErrInvalidMsgCode, "%v", msg.Code)
