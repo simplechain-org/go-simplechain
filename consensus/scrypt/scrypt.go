@@ -206,12 +206,6 @@ func (powScrypt *PowScrypt) Close() error {
 		powScrypt.exitCh <- errc
 		err = <-errc
 		close(powScrypt.exitCh)
-		//walker
-		//if powScrypt.remote ==nil{
-		//	return
-		//}
-		//close(powScrypt.remote.requestExit)
-		//<-powScrypt.remote.exitCh
 	})
 	return err
 }

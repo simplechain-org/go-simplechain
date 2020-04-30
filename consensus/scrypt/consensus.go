@@ -454,7 +454,7 @@ var (
 // reward. The total reward consists of the static block reward and rewards for
 // included uncles. The coinbase of each uncle block is also rewarded.
 func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) {
-	blockReward := CalculateFixedRewards(header.Number)
+	blockReward := calculateFixedRewards(header.Number)
 	uncleReward := big.NewInt(0)
 	r := new(big.Int)
 	for _, uncle := range uncles {
@@ -468,7 +468,7 @@ func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header 
 		uncleReward.Add(uncleReward, r)
 	}
 
-	foundation := CalculateFoundationRewards(header.Number, blockReward)
+	foundation := calculateFoundationRewards(header.Number, blockReward)
 	blockReward.Sub(blockReward, foundation)
 	blockReward.Add(blockReward, uncleReward)
 	state.AddBalance(header.Coinbase, blockReward)
@@ -476,7 +476,7 @@ func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header 
 
 }
 
-func CalculateFixedRewards(blockNumber *big.Int) *big.Int {
+func calculateFixedRewards(blockNumber *big.Int) *big.Int {
 	reward := new(big.Int).Set(BlockReward)
 	number := new(big.Int).Set(blockNumber)
 	if number.Sign() == 1 {
@@ -488,7 +488,7 @@ func CalculateFixedRewards(blockNumber *big.Int) *big.Int {
 	return reward
 }
 
-func CalculateFoundationRewards(blockNumber *big.Int, blockReward *big.Int) *big.Int {
+func calculateFoundationRewards(blockNumber *big.Int, blockReward *big.Int) *big.Int {
 	foundation := new(big.Int).Set(blockReward)
 	foundation.Mul(foundation, big5)
 	number := new(big.Int).Set(blockNumber)
