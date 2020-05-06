@@ -1907,7 +1907,7 @@ type RPCCrossTransaction struct {
 func newRPCCrossTransaction(tx *types.CrossTransactionWithSignatures) *RPCCrossTransaction {
 	result := &RPCCrossTransaction{
 		Value:            (*hexutil.Big)(tx.Data.Value),
-		CTxId:            tx.Data.CTxId,
+		CTxId:            tx.ID(),
 		TxHash:           tx.Data.TxHash,
 		From:             tx.Data.From,
 		BlockHash:        tx.Data.BlockHash,

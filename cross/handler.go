@@ -55,8 +55,10 @@ type Handler struct {
 	confirmedTakerCh  chan core.ConfirmedTakerEvent // Channel to receive one-signed takerTx from rtxStore
 	confirmedTakerSub event.Subscription
 
-	makerFinishEventCh  chan core.ConfirmedFinishEvent // Channel to receive confirmed makerFinish event
-	makerFinishEventSub event.Subscription
+	newFinishCh        chan core.NewFinishEvent
+	newFinishSub       event.Subscription
+	confirmedFinishCh  chan core.ConfirmedFinishEvent // Channel to receive confirmed makerFinish event
+	confirmedFinishSub event.Subscription
 
 	rmLogsCh  chan core.RemovedLogsEvent // Channel to receive removed log event
 	rmLogsSub event.Subscription         // Subscription for removed log event
@@ -126,11 +128,14 @@ func (h *Handler) Start() {
 	h.signedCtxCh = make(chan core.SignedCtxEvent, txChanSize)
 	h.signedCtxSub = h.ctxStore.SubscribeSignedCtxEvent(h.signedCtxCh)
 
-	h.makerFinishEventCh = make(chan core.ConfirmedFinishEvent, txChanSize)
-	h.makerFinishEventSub = h.blockChain.SubscribeConfirmedFinishEvent(h.makerFinishEventCh)
+	h.confirmedFinishCh = make(chan core.ConfirmedFinishEvent, txChanSize)
+	h.confirmedFinishSub = h.blockChain.SubscribeConfirmedFinishEvent(h.confirmedFinishCh)
 
 	h.newTakerCh = make(chan core.NewTakerEvent, txChanSize)
 	h.newTakerSub = h.blockChain.SubscribeNewTakerEvent(h.newTakerCh)
+
+	h.newFinishCh = make(chan core.NewFinishEvent, txChanSize)
+	h.newFinishSub = h.blockChain.SubscribeNewFinishEvent(h.newFinishCh)
 
 	h.rmLogsCh = make(chan core.RemovedLogsEvent, rmLogsChanSize)
 	h.rmLogsSub = h.blockChain.SubscribeRemovedLogsEvent(h.rmLogsCh)
@@ -163,7 +168,7 @@ func (h *Handler) Stop() {
 	h.signedCtxSub.Unsubscribe()
 	h.confirmedTakerSub.Unsubscribe()
 	h.newTakerSub.Unsubscribe()
-	h.makerFinishEventSub.Unsubscribe()
+	h.confirmedFinishSub.Unsubscribe()
 	h.rmLogsSub.Unsubscribe()
 	h.updateAnchorSub.Unsubscribe()
 
@@ -204,18 +209,21 @@ func (h *Handler) loop() {
 			return
 
 		case ev := <-h.newTakerCh:
-			h.ctxStore.MarkStatus(ev.Txs, types.RtxStatusImplementing)
+			h.ctxStore.MarkStatus(ev.Txs, types.CtxStatusImplementing)
 		case <-h.newTakerSub.Err():
 			return
 
+		case ev := <-h.newFinishCh:
+			h.writeCrossMessage(ev)
+
 		case ev := <-h.rmLogsCh:
-			h.reOrgLogs(ev.Logs)
+			h.reorgLogs(ev.Logs)
 		case <-h.rmLogsSub.Err():
 			return
 
-		case ev := <-h.makerFinishEventCh:
+		case ev := <-h.confirmedFinishCh:
 			h.clearStore(ev.FinishIds)
-		case <-h.makerFinishEventSub.Err():
+		case <-h.confirmedFinishSub.Err():
 			return
 
 		case ev := <-h.updateAnchorCh:
@@ -250,10 +258,9 @@ func (h *Handler) readCrossMessage() {
 				cws := ev.Tws
 				if cws.DestinationId().Uint64() == h.pm.NetworkId() {
 					if err := h.ctxStore.AddFromRemoteChain(cws, ev.CallBack); err != nil {
-						log.Warn("readCrossMessage failed", "error", err.Error())
+						log.Warn("add remote cross transaction failed", "error", err.Error())
 					}
 				}
-				//log.Info("cross message SignedCtx", "ID", cws.ID().String())
 
 			case core.ConfirmedTakerEvent:
 				txs, err := h.getTxForLockOut(ev.Txs)
@@ -263,7 +270,17 @@ func (h *Handler) readCrossMessage() {
 				if len(txs) > 0 {
 					h.pm.AddLocals(txs)
 				}
-				//log.Info("cross message ConfirmedTaker", "length", len(ev.Txs))
+			//log.Info("cross message ConfirmedTaker", "length", len(ev.Txs))
+
+			case core.NewFinishEvent:
+				txs := make([]*types.ReceptTransaction, len(ev.FinishIds))
+				for i, txId := range ev.FinishIds {
+					txs[i] = &types.ReceptTransaction{
+						CTxId:         txId,
+						DestinationId: ev.ChainID,
+					}
+				}
+				h.ctxStore.MarkStatus(txs, types.CtxStatusFinishing)
 
 			case core.NewCrossChainEvent:
 				if ev.ChainID.Uint64() != h.pm.NetworkId() {
@@ -328,7 +345,7 @@ func (h *Handler) getCrossContractAddr() common.Address {
 	return crossAddr
 }
 
-func (h *Handler) reOrgLogs(logs []*types.Log) {
+func (h *Handler) reorgLogs(logs []*types.Log) {
 	var takerLogs []*types.ReceptTransaction
 	for _, l := range logs {
 		if h.blockChain.IsCtxAddress(l.Address) {
@@ -341,7 +358,7 @@ func (h *Handler) reOrgLogs(logs []*types.Log) {
 		}
 	}
 	if len(takerLogs) > 0 {
-		h.ctxStore.MarkStatus(takerLogs, types.RtxStatusWaiting)
+		h.ctxStore.MarkStatus(takerLogs, types.CtxStatusWaiting)
 	}
 }
 
@@ -413,7 +430,7 @@ type SyncResp struct {
 }
 
 func (h *Handler) GetSyncCrossTransaction(startTxID common.Hash, syncSize int) []*types.CrossTransactionWithSignatures {
-	return h.ctxStore.ListCrossTransactionsByChainIDAndTxID(h.pm.NetworkId(), startTxID, syncSize)
+	return h.ctxStore.GetSyncCrossTransactions(h.pm.NetworkId(), startTxID, syncSize)
 }
 
 func (h *Handler) SyncCrossTransaction(ctx []*types.CrossTransactionWithSignatures) int {

@@ -74,6 +74,11 @@ type SignedCtxEvent struct {
 	CallBack func(cws *types.CrossTransactionWithSignatures, invalidSigIndex ...int)
 }
 
+type NewFinishEvent struct {
+	ChainID   *big.Int
+	FinishIds []common.Hash
+}
+
 type ConfirmedFinishEvent struct {
 	FinishIds []common.Hash
 }

@@ -98,7 +98,7 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 					if tx != nil && blockHash == v.BlockHash && blockNumber == v.BlockNumber &&
 						set.chain.IsCtxAddress(v.Address) {
 
-						if v.Topics[0] == params.MakerTopic && len(v.Topics) >= 3 && len(v.Data) >= common.HashLength*5 {
+						if len(v.Topics) >= 3 && v.Topics[0] == params.MakerTopic && len(v.Data) >= common.HashLength*5 {
 							var from common.Address
 							copy(from[:], v.Topics[2][common.HashLength-common.AddressLength:])
 							ctxId := v.Topics[1]
@@ -116,7 +116,7 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 							continue
 						}
 
-						if v.Topics[0] == params.TakerTopic && len(v.Topics) >= 3 && len(v.Data) >= common.HashLength*4 {
+						if len(v.Topics) >= 3 && v.Topics[0] == params.TakerTopic && len(v.Data) >= common.HashLength*4 {
 							var to, from common.Address
 							copy(to[:], v.Topics[2][common.HashLength-common.AddressLength:])
 							from = common.BytesToAddress(v.Data[common.HashLength*2-common.AddressLength : common.HashLength*2])
@@ -128,11 +128,9 @@ func (set *UnconfirmedBlockLogs) Shift(height uint64) {
 						}
 
 						// delete statement
-						if v.Topics[0] == params.MakerFinishTopic && len(v.Topics) >= 3 {
-							if len(v.Topics) >= 2 {
-								ctxId := v.Topics[1]
-								finishes = append(finishes, ctxId)
-							}
+						if len(v.Topics) >= 3 && v.Topics[0] == params.MakerFinishTopic {
+							ctxId := v.Topics[1]
+							finishes = append(finishes, ctxId)
 						}
 					}
 				}

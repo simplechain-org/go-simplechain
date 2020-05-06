@@ -150,6 +150,7 @@ type BlockChain struct {
 	confirmedTakerFeed  event.Feed
 	takerFeed           event.Feed //
 	confirmedFinishFeed event.Feed
+	finishFeed          event.Feed
 	updateAnchorFeed    event.Feed
 	scope               event.SubscriptionScope
 	genesisBlock        *types.Block
@@ -2259,6 +2260,7 @@ func (bc *BlockChain) StoreCrossContractLog(blockNumber uint64, hash common.Hash
 	if logs != nil {
 		var rtxs []*types.ReceptTransaction
 		var updates []*types.RemoteChainInfo
+		var finishes []common.Hash
 		for _, v := range logs {
 			if len(v.Topics) > 0 && bc.IsCtxAddress(v.Address) {
 
@@ -2276,12 +2278,17 @@ func (bc *BlockChain) StoreCrossContractLog(blockNumber uint64, hash common.Hash
 					continue
 				}
 
-				if v.Topics[0] == params.TakerTopic && len(v.Topics) >= 3 && len(v.Data) >= common.HashLength*4 {
+				if len(v.Topics) >= 3 && v.Topics[0] == params.TakerTopic && len(v.Data) >= common.HashLength*4 {
 					rtxs = append(rtxs, &types.ReceptTransaction{
 						DestinationId: common.BytesToHash(v.Data[:common.HashLength]).Big(),
 						CTxId:         v.Topics[1],
 					})
 					blockLogs = append(blockLogs, v)
+				}
+
+				if len(v.Topics) >= 3 && v.Topics[0] == params.MakerFinishTopic {
+					ctxId := v.Topics[1]
+					finishes = append(finishes, ctxId)
 				}
 			}
 		}
@@ -2290,6 +2297,9 @@ func (bc *BlockChain) StoreCrossContractLog(blockNumber uint64, hash common.Hash
 		}
 		if len(updates) > 0 {
 			go bc.updateAnchorFeed.Send(AnchorEvent{updates})
+		}
+		if len(finishes) > 0 {
+			go bc.finishFeed.Send(NewFinishEvent{bc.chainConfig.ChainID, finishes})
 		}
 	}
 	if len(blockLogs) > 0 {
@@ -2335,6 +2345,10 @@ func (bc *BlockChain) SubscribeConfirmedTakerEvent(ch chan<- ConfirmedTakerEvent
 
 func (bc *BlockChain) SubscribeNewTakerEvent(ch chan<- NewTakerEvent) event.Subscription {
 	return bc.scope.Track(bc.takerFeed.Subscribe(ch))
+}
+
+func (bc *BlockChain) SubscribeNewFinishEvent(ch chan<- NewFinishEvent) event.Subscription {
+	return bc.scope.Track(bc.finishFeed.Subscribe(ch))
 }
 
 func (bc *BlockChain) ConfirmedFinishFeedSend(tx ConfirmedFinishEvent) int {

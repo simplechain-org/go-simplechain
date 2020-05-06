@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 
 	"github.com/simplechain-org/go-simplechain/common"
+	"github.com/simplechain-org/go-simplechain/common/math"
 	"github.com/simplechain-org/go-simplechain/crypto/sha3"
 	"github.com/simplechain-org/go-simplechain/rlp"
 )
@@ -160,18 +161,37 @@ func (s *CTxByPrice) Pop() interface{} {
 	return x
 }
 
-type RtxStatus = uint64
+type CtxStatus uint8
 
 const (
-	// RtxStatusWaiting is the status code of a rtx transaction if waiting for orders.
-	RtxStatusWaiting = RtxStatus(0)
-	// RtxStatusImplementing is the status code of a rtx transaction if execution implementing.
-	RtxStatusImplementing = RtxStatus(1)
+	// CtxStatusWaiting is the status code of a rtx transaction if waiting for orders.
+	CtxStatusWaiting CtxStatus = iota
+	// CtxStatusImplementing is the status code of a rtx transaction if execution implementing.
+	CtxStatusImplementing
+	// CtxStatusFinished is the status code of a rtx transaction if execution finishing.
+	CtxStatusFinishing
+	// CtxStatusFinished is the status code of a rtx transaction if make finish confirmed.
+	CtxStatusFinished
 )
 
+var ctxStatusToString = map[CtxStatus]string{
+	CtxStatusWaiting:      "waiting",
+	CtxStatusImplementing: "executing",
+	CtxStatusFinishing:    "finishing",
+	CtxStatusFinished:     "finished",
+}
+
+func (s CtxStatus) String() string {
+	str, ok := ctxStatusToString[s]
+	if !ok {
+		return "unknown"
+	}
+	return str
+}
+
 type CrossTransactionWithSignatures struct {
-	Data   ctxdatas
-	Status RtxStatus `json:"status" gencodec:"required"` // Status tx
+	Data   CtxDatas
+	Status CtxStatus `json:"status" gencodec:"required"`
 
 	// caches
 	hash atomic.Value
@@ -179,7 +199,7 @@ type CrossTransactionWithSignatures struct {
 	from atomic.Value
 }
 
-type ctxdatas struct {
+type CtxDatas struct {
 	Value            *big.Int       `json:"value" gencodec:"required"` //Token for sell
 	CTxId            common.Hash    `json:"ctxId" gencodec:"required"` //cross_transaction ID
 	TxHash           common.Hash    `json:"txHash" gencodec:"required"`
@@ -196,7 +216,7 @@ type ctxdatas struct {
 }
 
 func NewCrossTransactionWithSignatures(ctx *CrossTransaction) *CrossTransactionWithSignatures {
-	d := ctxdatas{
+	d := CtxDatas{
 		Value:            ctx.Data.Value,
 		CTxId:            ctx.Data.CTxId,
 		TxHash:           ctx.Data.TxHash,
@@ -211,10 +231,7 @@ func NewCrossTransactionWithSignatures(ctx *CrossTransaction) *CrossTransactionW
 	d.R = append(d.R, ctx.Data.R)
 	d.S = append(d.S, ctx.Data.S)
 
-	return &CrossTransactionWithSignatures{
-		Data:   d,
-		Status: RtxStatusWaiting,
-	}
+	return &CrossTransactionWithSignatures{Data: d}
 }
 
 func (cws *CrossTransactionWithSignatures) ID() common.Hash {
@@ -314,7 +331,7 @@ func (cws *CrossTransactionWithSignatures) Resolution() []*CrossTransaction {
 
 func (cws *CrossTransactionWithSignatures) Price() *big.Rat {
 	if cws.Data.Value.Cmp(common.Big0) == 0 {
-		return nil
+		return new(big.Rat).SetUint64(math.MaxUint64) // set a max rat
 	}
 	return new(big.Rat).SetFrac(cws.Data.DestinationValue, cws.Data.Value)
 }
