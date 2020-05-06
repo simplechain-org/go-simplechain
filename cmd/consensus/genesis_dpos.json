@@ -1,12 +1,7 @@
 {
   "config": {
     "chainId": 10388,
-    "homesteadBlock": 1,
-    "eip150Block": 2,
-    "eip150Hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-    "eip155Block": 3,
-    "eip158Block": 3,
-    "byzantiumBlock": 4,
+    "SingularityBlock": 0,
     "dpos": {
       "period": 3,
       "epoch": 300,

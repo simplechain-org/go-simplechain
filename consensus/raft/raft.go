@@ -40,6 +40,13 @@ type ExtraSeal struct {
 	Signature []byte // Signature of the block RaftMinter
 }
 
+func (r *Raft) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, _ []*types.Receipt) error {
+	// Accumulate any block and uncle rewards and commit the final state root
+	accumulateRewards(state, header)
+	header.Root = state.IntermediateRoot(true)
+	return nil
+}
+
 func (r *Raft) FinalizeAndAssemble(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction,
 	uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
 	// commit state root after all state transitions.
