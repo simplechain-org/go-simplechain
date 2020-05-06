@@ -31,7 +31,6 @@ import (
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/forkid"
 	"github.com/simplechain-org/go-simplechain/core/types"
-	"github.com/simplechain-org/go-simplechain/cross"
 	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/eth/downloader"
 	"github.com/simplechain-org/go-simplechain/eth/fetcher"
@@ -102,7 +101,7 @@ type ProtocolManager struct {
 
 	serverPool *serverPool
 
-	msgHandler *cross.Handler
+	//msgHandler *cross.Handler TODO-D
 
 	raftMode bool
 	engine   consensus.Engine // used for istanbul consensus
@@ -289,9 +288,10 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 	go pm.syncer()
 	go pm.txsyncLoop()
 
-	if pm.msgHandler != nil {
-		pm.msgHandler.Start()
-	}
+	//TODO-D
+	//if pm.msgHandler != nil {
+	//	pm.msgHandler.Start()
+	//}
 }
 
 func (pm *ProtocolManager) Stop() {
@@ -316,9 +316,10 @@ func (pm *ProtocolManager) Stop() {
 	// will exit when they try to register.
 	pm.peers.Close()
 
-	if pm.msgHandler != nil {
-		pm.msgHandler.Stop()
-	}
+	//TODO-D
+	//if pm.msgHandler != nil {
+	//	pm.msgHandler.Stop()
+	//}
 
 	// Wait for all peer handler goroutines and the loops to come down.
 	pm.wg.Wait()
@@ -816,9 +817,10 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		p.MarkCrossTransaction(ctx.SignHash())
 		pm.BroadcastCtx([]*types.CrossTransaction{ctx}, false)
 
-		if pm.msgHandler != nil {
-			pm.msgHandler.AddRemoteCtx(ctx)
-		}
+		//TODO-D
+		//if pm.msgHandler != nil {
+		//	pm.msgHandler.AddRemoteCtx(ctx)
+		//}
 	default:
 		return errResp(ErrInvalidMsgCode, "%v", msg.Code)
 
@@ -980,9 +982,10 @@ func (pm *ProtocolManager) BroadcastCtx(ctxs []*types.CrossTransaction, local bo
 	}
 }
 
-func (pm *ProtocolManager) SetMsgHandler(msgHandler *cross.Handler) {
-	pm.msgHandler = msgHandler
-}
+//TODO-D
+//func (pm *ProtocolManager) SetMsgHandler(msgHandler *cross.Handler) {
+//	pm.msgHandler = msgHandler
+//}
 
 func (pm *ProtocolManager) AddRemotes(txs []*types.Transaction) {
 	for _, v := range txs {

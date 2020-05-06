@@ -11,6 +11,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/cross"
 	"github.com/simplechain-org/go-simplechain/eth"
 	"github.com/simplechain-org/go-simplechain/log"
+	"github.com/simplechain-org/go-simplechain/node"
 	"github.com/simplechain-org/go-simplechain/p2p"
 	"github.com/simplechain-org/go-simplechain/p2p/enode"
 	"github.com/simplechain-org/go-simplechain/params"
@@ -31,11 +32,6 @@ const (
 	defaultMaxSyncSize = 100
 )
 
-type simpleChain interface {
-	BlockChain() *core.BlockChain
-	CrossHandler() *cross.Handler
-}
-
 type CrossService struct {
 	main crossCommons
 	sub  crossCommons
@@ -53,27 +49,59 @@ type crossCommons struct {
 
 	bc      *core.BlockChain
 	handler *cross.Handler
+	store   *CrossStore
 }
 
-func NewCrossService(main, sub simpleChain, cfg *eth.Config) *CrossService {
+func NewCrossService(ctx *node.ServiceContext, main, sub cross.SimpleChain, config *eth.Config) (*CrossService, error) {
+	mainStore, err := NewCrossStore(ctx, config.CtxStore, main.ChainConfig(), main.BlockChain(), common.MainMakerData, config.MainChainCtxAddress, main.SignHash)
+	if err != nil {
+		return nil, err
+	}
+	subStore, err := NewCrossStore(ctx, config.CtxStore, sub.ChainConfig(), sub.BlockChain(), common.SubMakerData, config.SubChainCtxAddress, sub.SignHash)
+	if err != nil {
+		return nil, err
+	}
+
+	mainHandler := cross.NewCrossHandler(main, cross.RoleMainHandler, config.Role, mainStore, main.BlockChain(), ctx.MainCh, ctx.SubCh, config.MainChainCtxAddress, config.SubChainCtxAddress, main.SignHash, config.AnchorSigner)
+	subHandler := cross.NewCrossHandler(main, cross.RoleSubHandler, config.Role, subStore, sub.BlockChain(), ctx.SubCh, ctx.MainCh, config.MainChainCtxAddress, config.SubChainCtxAddress, main.SignHash, config.AnchorSigner)
+
+	main.RegisterAPIs([]rpc.API{
+		{
+			Namespace: "eth",
+			Version:   "1.0",
+			Service:   NewPublicCrossChainAPI(mainStore),
+			Public:    true,
+		},
+	})
+	sub.RegisterAPIs([]rpc.API{
+		{
+			Namespace: "eth",
+			Version:   "1.0",
+			Service:   NewPublicCrossChainAPI(subStore),
+			Public:    true,
+		},
+	})
+
 	return &CrossService{
 		main: crossCommons{
 			bc:          main.BlockChain(),
 			genesis:     main.BlockChain().Genesis().Hash(),
 			chainConfig: main.BlockChain().Config(),
 			networkID:   main.BlockChain().Config().ChainID.Uint64(),
-			handler:     main.CrossHandler(),
+			handler:     mainHandler,
+			store:       mainStore,
 		},
 		sub: crossCommons{
 			bc:          sub.BlockChain(),
 			genesis:     sub.BlockChain().Genesis().Hash(),
 			chainConfig: sub.BlockChain().Config(),
 			networkID:   sub.BlockChain().Config().ChainID.Uint64(),
-			handler:     sub.CrossHandler(),
+			handler:     subHandler,
+			store:       subStore,
 		},
-		config: cfg,
+		config: config,
 		peers:  newAnchorSet(),
-	}
+	}, nil
 }
 
 func (srv *CrossService) Protocols() []p2p.Protocol {
@@ -229,6 +257,9 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 			Chain:   resp.Chain,
 			StartID: ctxList[len(ctxList)-1].ID(),
 		})
+
+	case msg.Code == CtxSignMsg:
+
 
 	default:
 		return eth.ErrResp(eth.ErrInvalidMsgCode, "%v", msg.Code)

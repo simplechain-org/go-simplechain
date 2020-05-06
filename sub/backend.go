@@ -40,7 +40,6 @@ import (
 	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/core/vm"
-	"github.com/simplechain-org/go-simplechain/cross"
 	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/eth"
 	"github.com/simplechain-org/go-simplechain/eth/downloader"
@@ -104,10 +103,10 @@ type Ethereum struct {
 
 	serverPool *serverPool
 
-	msgHandler *cross.Handler
-
 	chainConfig *params.ChainConfig
-	ctxStore    *core.CtxStore
+	apis        []rpc.API
+	//msgHandler *cross.Handler TODO-D
+	//ctxStore    *core.CtxStore TODO-D
 }
 
 func (s *Ethereum) AddLesServer(ls LesServer) {
@@ -121,10 +120,6 @@ func (s *Ethereum) SetContractBackend(backend bind.ContractBackend) {
 	if s.lesServer != nil {
 		s.lesServer.SetContractBackend(backend)
 	}
-}
-
-func (s *Ethereum) CrossHandler() *cross.Handler {
-	return s.msgHandler
 }
 
 // New creates a new Ethereum object (including the
@@ -226,11 +221,11 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*Ethereum, error) {
 		config.TxPool.Journal = ctx.ResolvePath(fmt.Sprintf("subChain_%s", config.TxPool.Journal))
 	}
 	eth.txPool = core.NewTxPool(config.TxPool, chainConfig, eth.blockchain)
-
-	eth.ctxStore, err = core.NewCtxStore(ctx, config.CtxStore, eth.chainConfig, eth.blockchain, common.SubMakerData, config.SubChainCtxAddress, eth.SignHash)
-	if err != nil {
-		return nil, err
-	}
+	//TODO-D
+	//eth.ctxStore, err = core.NewCtxStore(ctx, config.CtxStore, eth.chainConfig, eth.blockchain, common.SubMakerData, config.SubChainCtxAddress, eth.SignHash)
+	//if err != nil {
+	//	return nil, err
+	//}
 	// Permit the downloader to use the trie cache allowance during fast sync
 	cacheLimit := cacheConfig.TrieCleanLimit + cacheConfig.TrieDirtyLimit
 	checkpoint := config.Checkpoint
@@ -240,14 +235,15 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*Ethereum, error) {
 	if eth.protocolManager, err = NewProtocolManager(chainConfig, checkpoint, config.SyncMode, chainConfig.ChainID.Uint64(), eth.eventMux, eth.txPool, eth.engine, eth.blockchain, chainDb, cacheLimit, config.Whitelist, eth.serverPool); err != nil {
 		return nil, err
 	}
-	if config.Role == common.RoleAnchor {
-		eth.msgHandler = cross.NewCrossHandler(eth, cross.RoleSubHandler, config.Role, eth.ctxStore, eth.blockchain, ctx.SubCh, ctx.MainCh, config.MainChainCtxAddress, config.SubChainCtxAddress, eth.SignHash, config.AnchorSigner)
-
-		eth.msgHandler.SetProtocolManager(eth.protocolManager)
-		eth.msgHandler.RegisterCrossChain(chainConfig.ChainID)
-
-		eth.protocolManager.SetMsgHandler(eth.msgHandler)
-	}
+	//TODO-D
+	//if config.Role == common.RoleAnchor {
+	//	eth.msgHandler = cross.NewCrossHandler(eth, cross.RoleSubHandler, config.Role, eth.ctxStore, eth.blockchain, ctx.SubCh, ctx.MainCh, config.MainChainCtxAddress, config.SubChainCtxAddress, eth.SignHash, config.AnchorSigner)
+	//
+	//	eth.msgHandler.SetProtocolManager(eth.protocolManager)
+	//	eth.msgHandler.RegisterCrossChain(chainConfig.ChainID)
+	//
+	//	eth.protocolManager.SetMsgHandler(eth.msgHandler)
+	//}
 
 	eth.miner = miner.New(eth, &config.Miner, chainConfig, eth.EventMux(), eth.engine, eth.isLocalBlock)
 	eth.miner.SetExtra(makeExtraData(config.Miner.ExtraData))
@@ -258,21 +254,22 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*Ethereum, error) {
 		gpoParams.Default = config.Miner.GasPrice
 	}
 	eth.APIBackend.gpo = gasprice.NewOracle(eth.APIBackend, gpoParams)
-	if eth.msgHandler != nil {
-		eth.msgHandler.SetGasPriceOracle(eth.APIBackend.gpo)
-	}
+	//TODO-D
+	//if eth.msgHandler != nil {
+	//	eth.msgHandler.SetGasPriceOracle(eth.APIBackend.gpo)
+	//}
 
 	return eth, nil
 }
 
-// CreateDB creates the chain database.
-func CreateDB(ctx *node.ServiceContext, config *eth.Config, name string) (ethdb.Database, error) {
-	db, err := ctx.OpenDatabase(name, config.DatabaseCache, config.DatabaseHandles, "")
-	if err != nil {
-		return nil, err
-	}
-	return db, nil
-}
+// CreateDB creates the chain database. TODO-D
+//func CreateDB(ctx *node.ServiceContext, config *eth.Config, name string) (ethdb.Database, error) {
+//	db, err := ctx.OpenDatabase(name, config.DatabaseCache, config.DatabaseHandles, "")
+//	if err != nil {
+//		return nil, err
+//	}
+//	return db, nil
+//}
 func makeExtraData(extra []byte) []byte {
 	if len(extra) == 0 {
 		// create default extradata
@@ -288,6 +285,10 @@ func makeExtraData(extra []byte) []byte {
 		extra = nil
 	}
 	return extra
+}
+
+func (s *Ethereum) RegisterAPIs(apis []rpc.API) {
+	s.apis = append(s.apis, apis...)
 }
 
 // APIs return the collection of RPC services the ethereum package offers.
@@ -530,8 +531,8 @@ func (s *Ethereum) Downloader() *downloader.Downloader { return s.protocolManage
 func (s *Ethereum) Synced() bool                       { return atomic.LoadUint32(&s.protocolManager.acceptTxs) == 1 }
 func (s *Ethereum) ArchiveMode() bool                  { return s.config.NoPruning }
 func (s *Ethereum) GetSynced() func() bool             { return s.Synced }
-func (s *Ethereum) GetCtxStore() *core.CtxStore {
-	return s.ctxStore
+func (s *Ethereum) GasOracle() *gasprice.Oracle {
+	return s.APIBackend.gpo
 }
 
 // Protocols implements node.Service, returning all the currently configured
@@ -583,7 +584,7 @@ func (s *Ethereum) Stop() error {
 	s.bloomIndexer.Close()
 	s.blockchain.Stop()
 	s.engine.Close()
-	s.ctxStore.Stop()
+	//s.ctxStore.Stop()
 	//s.rtxStore.Stop()
 	s.protocolManager.Stop()
 	if s.lesServer != nil {

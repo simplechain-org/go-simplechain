@@ -85,11 +85,11 @@ type Backend interface {
 	ChainConfig() *params.ChainConfig
 	CurrentBlock() *types.Block
 
-	CtxStats() (pending int)
-	CtxStatus() (pending, queue int)
-
-	CtxPoolContent() (map[uint64][]*types.CrossTransactionWithSignatures, map[uint64][]*types.CrossTransactionWithSignatures)
-	GetSelfCtx(from common.Address) (map[uint64][]*types.CrossTransactionWithSignatures, map[uint64][]*types.CrossTransactionWithSignatures)
+	//CtxStats() (pending int)
+	//CtxStatus() (pending, queue int)
+	//
+	//CtxPoolContent() (map[uint64][]*types.CrossTransactionWithSignatures, map[uint64][]*types.CrossTransactionWithSignatures)
+	//GetSelfCtx(from common.Address) (map[uint64][]*types.CrossTransactionWithSignatures, map[uint64][]*types.CrossTransactionWithSignatures)
 }
 
 func GetAPIs(apiBackend Backend) []rpc.API {
@@ -134,11 +134,13 @@ func GetAPIs(apiBackend Backend) []rpc.API {
 			Version:   "1.0",
 			Service:   NewPrivateAccountAPI(apiBackend, nonceLock),
 			Public:    false,
-		}, {
-			Namespace: "eth",
-			Version:   "1.0",
-			Service:   NewPublicCtxPoolAPI(apiBackend),
-			Public:    true,
 		},
+		//TODO-D
+		//{
+		//	Namespace: "eth",
+		//	Version:   "1.0",
+		//	Service:   NewPublicCtxPoolAPI(apiBackend),
+		//	Public:    true,
+		//},
 	}
 }

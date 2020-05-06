@@ -2,6 +2,8 @@ package cross
 
 import (
 	"context"
+	"github.com/simplechain-org/go-simplechain/eth/gasprice"
+	"github.com/simplechain-org/go-simplechain/params"
 	"math/big"
 
 	"github.com/simplechain-org/go-simplechain/common"
@@ -33,7 +35,13 @@ type CtxStore interface {
 	GetSyncCrossTransactions(chainID uint64, txID common.Hash, pageSize int) []*types.CrossTransactionWithSignatures
 }
 
-type simplechain interface {
+type SimpleChain interface {
+	BlockChain() *core.BlockChain
+	ChainConfig() *params.ChainConfig
+	SignHash(hash []byte) ([]byte, error)
+	GasOracle() *gasprice.Oracle
+	RegisterAPIs([]rpc.API)
+
 	GetEVM(ctx context.Context, msg core.Message, state *state.StateDB, header *types.Header, vmCfg vm.Config) (*vm.EVM, func() error, error)
 	BlockByNumber(ctx context.Context, blockNr rpc.BlockNumber) (*types.Block, error)
 	HeaderByNumber(ctx context.Context, blockNr rpc.BlockNumber) (*types.Header, error)

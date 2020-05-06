@@ -45,7 +45,6 @@ import (
 	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/core/vm"
-	"github.com/simplechain-org/go-simplechain/cross"
 	"github.com/simplechain-org/go-simplechain/eth/downloader"
 	"github.com/simplechain-org/go-simplechain/eth/filters"
 	"github.com/simplechain-org/go-simplechain/eth/gasprice"
@@ -107,8 +106,9 @@ type Ethereum struct {
 	lock sync.RWMutex // Protects the variadic fields (e.g. gas price and etherbase)
 
 	genesisHash common.Hash
-	ctxStore    *core.CtxStore
-	msgHandler  *cross.Handler
+	apis        []rpc.API
+	//ctxStore    *core.CtxStore TODO-D
+	//msgHandler *cross.Handler TODO-D
 }
 
 func (s *Ethereum) AddLesServer(ls LesServer) {
@@ -124,13 +124,9 @@ func (s *Ethereum) SetContractBackend(backend bind.ContractBackend) {
 	}
 }
 
-func (s *Ethereum) CrossHandler() *cross.Handler {
-	return s.msgHandler
-}
-
 // New creates a new Ethereum object (including the
 // initialisation of the common Ethereum object)
-func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
+func New(ctx *node.ServiceContext, /**/ config *Config) (*Ethereum, error) {
 	// Ensure configuration values are compatible and sane
 	if config.SyncMode == downloader.LightSync {
 		return nil, errors.New("can't run eth.Ethereum in light sync mode, use les.LightEthereum")
@@ -232,10 +228,11 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 	}
 	eth.txPool = core.NewTxPool(config.TxPool, chainConfig, eth.blockchain)
 
-	eth.ctxStore, err = core.NewCtxStore(ctx, config.CtxStore, eth.chainConfig, eth.blockchain, common.MainMakerData, config.MainChainCtxAddress, eth.SignHash)
-	if err != nil {
-		return nil, err
-	}
+	//TODO-D
+	//eth.ctxStore, err = core.NewCtxStore(ctx, config.CtxStore, eth.chainConfig, eth.blockchain, common.MainMakerData, config.MainChainCtxAddress, eth.SignHash)
+	//if err != nil {
+	//	return nil, err
+	//}
 	// Permit the downloader to use the trie cache allowance during fast sync
 	cacheLimit := cacheConfig.TrieCleanLimit + cacheConfig.TrieDirtyLimit
 	checkpoint := config.Checkpoint
@@ -246,12 +243,13 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 		return nil, err
 	}
 
-	if config.Role == common.RoleAnchor {
-		eth.msgHandler = cross.NewCrossHandler(eth, cross.RoleMainHandler, config.Role, eth.ctxStore, eth.blockchain, ctx.MainCh, ctx.SubCh, config.MainChainCtxAddress, config.SubChainCtxAddress, eth.SignHash, config.AnchorSigner)
-		eth.msgHandler.SetProtocolManager(eth.protocolManager)
-		eth.msgHandler.RegisterCrossChain(chainConfig.ChainID)
-		eth.protocolManager.SetMsgHandler(eth.msgHandler)
-	}
+	//TODO-D
+	//if config.Role == common.RoleAnchor {
+	//	eth.msgHandler = cross.NewCrossHandler(eth, cross.RoleMainHandler, config.Role, eth.ctxStore, eth.blockchain, ctx.MainCh, ctx.SubCh, config.MainChainCtxAddress, config.SubChainCtxAddress, eth.SignHash, config.AnchorSigner)
+	//	eth.msgHandler.SetProtocolManager(eth.protocolManager)
+	//	eth.msgHandler.RegisterCrossChain(chainConfig.ChainID)
+	//	eth.protocolManager.SetMsgHandler(eth.msgHandler)
+	//}
 
 	eth.miner = miner.New(eth, &config.Miner, chainConfig, eth.EventMux(), eth.engine, eth.isLocalBlock)
 	eth.miner.SetExtra(makeExtraData(config.Miner.ExtraData))
@@ -262,9 +260,10 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 		gpoParams.Default = config.Miner.GasPrice
 	}
 	eth.APIBackend.gpo = gasprice.NewOracle(eth.APIBackend, gpoParams)
-	if eth.msgHandler != nil {
-		eth.msgHandler.SetGasPriceOracle(eth.APIBackend.gpo)
-	}
+	//TODO-D
+	//if eth.msgHandler != nil {
+	//	eth.msgHandler.SetGasPriceOracle(eth.APIBackend.gpo)
+	//}
 
 	return eth, nil
 }
@@ -358,6 +357,10 @@ func CreateConsensusEngine(ctx *node.ServiceContext, chainConfig *params.ChainCo
 		engine.SetThreads(-1) // Disable CPU mining
 		return engine
 	}
+}
+
+func (s *Ethereum) RegisterAPIs(apis []rpc.API) {
+	s.apis = append(s.apis, apis...)
 }
 
 // APIs return the collection of RPC services the ethereum package offers.
@@ -603,6 +606,10 @@ func (s *Ethereum) Downloader() *downloader.Downloader { return s.protocolManage
 func (s *Ethereum) Synced() bool                       { return atomic.LoadUint32(&s.protocolManager.acceptTxs) == 1 }
 func (s *Ethereum) ArchiveMode() bool                  { return s.config.NoPruning }
 func (s *Ethereum) GetSynced() func() bool             { return s.Synced }
+func (s *Ethereum) ChainConfig() *params.ChainConfig   { return s.chainConfig }
+func (s *Ethereum) GasOracle() *gasprice.Oracle {
+	return s.APIBackend.gpo
+}
 
 // Protocols implements node.Service, returning all the currently configured
 // network protocols to start.
@@ -651,7 +658,7 @@ func (s *Ethereum) Stop() error {
 	s.bloomIndexer.Close()
 	s.blockchain.Stop()
 	s.engine.Close()
-	s.ctxStore.Stop()
+	//s.ctxStore.Stop()
 	s.protocolManager.Stop()
 	if s.lesServer != nil {
 		s.lesServer.Stop()

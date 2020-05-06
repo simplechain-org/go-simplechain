@@ -27,6 +27,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/consensus/ethash"
 	"github.com/simplechain-org/go-simplechain/core"
+	"github.com/simplechain-org/go-simplechain/cross"
 	"github.com/simplechain-org/go-simplechain/eth"
 	"github.com/simplechain-org/go-simplechain/eth/downloader"
 	"github.com/simplechain-org/go-simplechain/eth/gasprice"
@@ -62,7 +63,7 @@ var DefaultConfig = eth.Config{
 		Blocks:     20,
 		Percentile: 60,
 	},
-	CtxStore: core.DefaultCtxStoreConfig,
+	CtxStore: cross.DefaultCtxStoreConfig,
 	Role:     common.RoleSubChain,
 }
 

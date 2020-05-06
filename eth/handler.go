@@ -35,7 +35,6 @@ import (
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/forkid"
 	"github.com/simplechain-org/go-simplechain/core/types"
-	"github.com/simplechain-org/go-simplechain/cross"
 	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/eth/downloader"
 	"github.com/simplechain-org/go-simplechain/eth/fetcher"
@@ -104,9 +103,9 @@ type ProtocolManager struct {
 	// and processing
 	wg sync.WaitGroup
 
-	msgHandler *cross.Handler
-	raftMode   bool
-	engine     consensus.Engine // used for istanbul consensus
+	//msgHandler *cross.Handler
+	raftMode bool
+	engine   consensus.Engine // used for istanbul consensus
 }
 
 // NewProtocolManager returns a new Ethereum sub protocol manager. The Ethereum sub protocol manages peers capable
@@ -280,19 +279,20 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 	// start sync handlers
 	go pm.syncer()
 	go pm.txsyncLoop()
-	//node is anchor
-	if pm.msgHandler != nil {
-		pm.msgHandler.Start()
-	}
+	//node is anchor TODO-D
+	//if pm.msgHandler != nil {
+	//	pm.msgHandler.Start()
+	//}
 }
 
 func (pm *ProtocolManager) Stop() {
 
 	log.Info("Stopping Simplechain protocol")
 
-	if pm.msgHandler != nil {
-		pm.msgHandler.Stop()
-	}
+	//TODO-D
+	//if pm.msgHandler != nil {
+	//	pm.msgHandler.Stop()
+	//}
 	pm.txsSub.Unsubscribe() // quits txBroadcastLoop
 	if !pm.raftMode {
 		pm.minedBlockSub.Unsubscribe() // quits blockBroadcastLoop
@@ -803,9 +803,9 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		p.MarkCrossTransaction(ctx.SignHash())
 		pm.BroadcastCtx([]*types.CrossTransaction{ctx}, false)
 
-		if pm.msgHandler != nil {
-			pm.msgHandler.AddRemoteCtx(ctx)
-		}
+		//if pm.msgHandler != nil { TODO-D
+		//	pm.msgHandler.AddRemoteCtx(ctx)
+		//}
 	default:
 
 		return ErrResp(ErrInvalidMsgCode, "%v", msg.Code)
@@ -988,9 +988,10 @@ func (pm *ProtocolManager) BroadcastCtx(ctxs []*types.CrossTransaction, local bo
 	}
 }
 
-func (pm *ProtocolManager) SetMsgHandler(msgHandler *cross.Handler) {
-	pm.msgHandler = msgHandler
-}
+//TODO-D
+//func (pm *ProtocolManager) SetMsgHandler(msgHandler *cross.Handler) {
+//	pm.msgHandler = msgHandler
+//}
 func (pm *ProtocolManager) AddLocals(txs []*types.Transaction) {
 	for _, v := range txs {
 		pm.txpool.AddLocal(v)

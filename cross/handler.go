@@ -66,9 +66,9 @@ type Handler struct {
 	updateAnchorCh  chan core.AnchorEvent
 	updateAnchorSub event.Subscription
 
-	chain               simplechain
+	chain               SimpleChain
 	gpo                 GasPriceOracle
-	gasHelper           *GasHelper
+	//gasHelper           *GasHelper
 	MainChainCtxAddress common.Address
 	SubChainCtxAddress  common.Address
 	anchorSigner        common.Address
@@ -76,12 +76,12 @@ type Handler struct {
 	crossABI            abi.ABI
 }
 
-func NewCrossHandler(chain simplechain, roleHandler RoleHandler, role common.ChainRole, ctxPool CtxStore,
+func NewCrossHandler(chain SimpleChain, roleHandler RoleHandler, role common.ChainRole, ctxPool CtxStore,
 	blockChain *core.BlockChain, crossMsgReader <-chan interface{},
 	crossMsgWriter chan<- interface{}, mainAddr common.Address, subAddr common.Address,
 	signHash types.SignHash, anchorSigner common.Address) *Handler {
 
-	gasHelper := NewGasHelper(blockChain, chain)
+	//gasHelper := NewGasHelper(blockChain, chain)
 	data, err := hexutil.Decode(params.CrossDemoAbi)
 	if err != nil {
 		log.Error("Parse crossABI", "err", err)
@@ -102,7 +102,7 @@ func NewCrossHandler(chain simplechain, roleHandler RoleHandler, role common.Cha
 		blockChain:          blockChain,
 		crossMsgReader:      crossMsgReader,
 		crossMsgWriter:      crossMsgWriter,
-		gasHelper:           gasHelper,
+		//gasHelper:           gasHelper,
 		MainChainCtxAddress: mainAddr,
 		SubChainCtxAddress:  subAddr,
 		signHash:            signHash,

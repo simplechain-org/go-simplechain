@@ -32,10 +32,10 @@ type CallArgs struct {
 
 type GasHelper struct {
 	blockChain *core.BlockChain
-	chain      simplechain
+	chain      SimpleChain
 }
 
-func NewGasHelper(blockChain *core.BlockChain, chain simplechain) *GasHelper {
+func NewGasHelper(blockChain *core.BlockChain, chain SimpleChain) *GasHelper {
 	return &GasHelper{blockChain: blockChain, chain: chain}
 }
 
