@@ -267,6 +267,12 @@ func (c *ChainConfig) String() string {
 		engine = c.Clique
 	case c.Scrypt != nil:
 		engine = c.Scrypt
+	case c.DPoS != nil:
+		engine = c.DPoS
+	case c.Istanbul != nil:
+		engine = c.Istanbul
+	case c.Raft:
+		engine = "raft"
 	default:
 		engine = "unknown"
 	}

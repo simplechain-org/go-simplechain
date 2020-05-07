@@ -171,7 +171,7 @@ func (w *worker) commitRaftWork() {
 		return
 	}
 
-	log.Info("Generated next block", "block num", block.Number(), "num txs", w.current.tcount)
+	log.Info("Generated next block", "num", block.Number(), "txs", w.current.tcount)
 
 	w.raftCtx.speculativeChain.Extend(block)
 

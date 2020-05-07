@@ -2,6 +2,7 @@ package raft
 
 import (
 	"crypto/ecdsa"
+	"math/big"
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
@@ -11,6 +12,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/log"
+	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/rlp"
 )
 
@@ -38,11 +40,17 @@ type ExtraSeal struct {
 	Signature []byte // Signature of the block RaftMinter
 }
 
+func (r *Raft) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, _ []*types.Receipt) error {
+	// Accumulate any block and uncle rewards and commit the final state root
+	accumulateRewards(state, header)
+	header.Root = state.IntermediateRoot(true)
+	return nil
+}
+
 func (r *Raft) FinalizeAndAssemble(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction,
 	uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
-	config := chain.Config()
 	// commit state root after all state transitions.
-	ethash.AccumulateRewards(config, state, header, nil)
+	accumulateRewards(state, header)
 	header.Root = state.IntermediateRoot(true)
 	header.Bloom = types.CreateBloom(receipts)
 
@@ -94,4 +102,46 @@ func (r *Raft) buildExtraSeal(headerHash common.Hash) []byte {
 	}
 
 	return extraDataBytes
+}
+
+var (
+	BlockReward      *big.Int = new(big.Int).Mul(big.NewInt(1e+18), big.NewInt(20))
+	BlockAttenuation *big.Int = big.NewInt(2500000)
+	big5             *big.Int = big.NewInt(5)
+	big100           *big.Int = big.NewInt(100)
+)
+
+// accumulateRewards credits the coinbase of the given block with the mining reward.
+func accumulateRewards(state *state.StateDB, header *types.Header) {
+	blockReward := calculateFixedRewards(header.Number)
+	foundation := calculateFoundationRewards(header.Number, blockReward)
+	blockReward.Sub(blockReward, foundation)
+	state.AddBalance(header.Coinbase, blockReward)
+	state.AddBalance(params.FoundationAddress, foundation)
+}
+
+func calculateFixedRewards(blockNumber *big.Int) *big.Int {
+	reward := new(big.Int).Set(BlockReward)
+	number := new(big.Int).Set(blockNumber)
+	if number.Sign() == 1 {
+		number.Div(number, BlockAttenuation)
+		base := big.NewInt(0)
+		base.Exp(big.NewInt(2), number, big.NewInt(0))
+		reward.Div(reward, base)
+	}
+	return reward
+}
+
+func calculateFoundationRewards(blockNumber *big.Int, blockReward *big.Int) *big.Int {
+	foundation := new(big.Int).Set(blockReward)
+	foundation.Mul(foundation, big5)
+	number := new(big.Int).Set(blockNumber)
+	if number.Sign() == 1 {
+		number.Div(number, BlockAttenuation)
+		base := big.NewInt(0)
+		base.Exp(big.NewInt(2), number, big.NewInt(0))
+		foundation.Div(foundation, base)
+	}
+	foundation.Div(foundation, big100)
+	return foundation
 }

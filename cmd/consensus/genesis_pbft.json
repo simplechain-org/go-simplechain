@@ -1,6 +1,7 @@
 {
   "config": {
     "chainId": 10388,
+    "SingularityBlock": 0,
     "istanbul": {
       "epoch": 30000,
       "policy": 0
