@@ -25,7 +25,7 @@ const (
 	CtxSignMsg        = 0x31
 	GetCtxSyncMsg     = 0x32
 	CtxSyncMsg        = 0x33
-	GetPendingSyncMsg = 0x34 //TODO: sync pending ctx when anchor restart
+	GetPendingSyncMsg = 0x34 //TODO: sync pending-sign ctx when anchor restart
 	PendingSyncMsg    = 0x35
 
 	protocolVersion    = 1
@@ -52,6 +52,16 @@ type crossCommons struct {
 
 	bc      *core.BlockChain
 	handler *Handler
+}
+
+type SyncReq struct {
+	Chain   uint64
+	StartID common.Hash
+}
+
+type SyncResp struct {
+	Chain uint64
+	Data  [][]byte
 }
 
 func NewCrossService(ctx *node.ServiceContext, main, sub cross.SimpleChain, config *eth.Config) (*CrossService, error) {
@@ -163,7 +173,7 @@ func (srv *CrossService) Protocols() []p2p.Protocol {
 }
 
 func (srv *CrossService) APIs() []rpc.API {
-	// APIs are added to SimpleChain service
+	// APIs are registered to SimpleChain service
 	return nil
 }
 

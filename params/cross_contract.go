@@ -15,7 +15,4 @@ var (
 	GetAnchorFn, _     = hexutil.Decode("0xe2ca8462")
 	GetMakerTxFn, _    = hexutil.Decode("0x9624005b")
 	GetTakerTxFn, _    = hexutil.Decode("0x356139f2")
-	FinishFn, _        = hexutil.Decode("0xaff64dae")
-	TakerFn, _         = hexutil.Decode("0x48741a9d")
-	StartFn, _         = hexutil.Decode("0xf56339a8")
 )

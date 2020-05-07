@@ -73,6 +73,7 @@ func (t *CrossTrigger) StoreCrossContractLog(blockNumber uint64, hash common.Has
 				}
 			}
 		}
+		// send event immediately for newTaker, newFinish, anchorUpdate
 		if len(rtxs) > 0 {
 			go t.takerFeed.Send(NewTakerEvent{Txs: rtxs})
 		}

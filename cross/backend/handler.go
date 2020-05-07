@@ -417,16 +417,6 @@ func newSignedTransaction(nonce uint64, to common.Address, gasLimit uint64, gasP
 	return signedTx, nil
 }
 
-type SyncReq struct {
-	Chain   uint64
-	StartID common.Hash
-}
-
-type SyncResp struct {
-	Chain uint64
-	Data  [][]byte
-}
-
 func (h *Handler) GetSyncCrossTransaction(startTxID common.Hash, syncSize int) []*cc.CrossTransactionWithSignatures {
 	return h.store.GetSyncCrossTransactions(h.pm.NetworkId(), startTxID, syncSize)
 }
