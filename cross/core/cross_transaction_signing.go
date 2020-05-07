@@ -1,13 +1,16 @@
-package types
+package core
 
 import (
 	"fmt"
 	"math/big"
 
 	"github.com/simplechain-org/go-simplechain/common"
+	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/crypto/sha3"
 	"github.com/simplechain-org/go-simplechain/params"
 )
+
+var big8 = big.NewInt(8)
 
 // sigCache is used to cache the derived sender and contains
 // the signer used to derive it.
@@ -93,11 +96,11 @@ func (s EIP155CtxSigner) Equal(s2 CtxSigner) bool {
 
 func (s EIP155CtxSigner) Sender(tx *CrossTransaction) (common.Address, error) {
 	if tx.ChainId().Cmp(s.chainId) != 0 {
-		return common.Address{}, ErrInvalidChainId
+		return common.Address{}, types.ErrInvalidChainId
 	}
 	V := new(big.Int).Sub(tx.Data.V, s.chainIdMul)
 	V.Sub(V, big8)
-	return recoverPlain(s.Hash(tx), tx.Data.R, tx.Data.S, V, true)
+	return types.RecoverPlain(s.Hash(tx), tx.Data.R, tx.Data.S, V, true)
 }
 
 // WithSignature returns a new transaction with the given signature. This signature

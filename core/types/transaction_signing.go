@@ -124,7 +124,7 @@ func (s EIP155Signer) Sender(tx *Transaction) (common.Address, error) {
 	}
 	V := new(big.Int).Sub(tx.data.V, s.chainIdMul)
 	V.Sub(V, big8)
-	return recoverPlain(s.Hash(tx), tx.data.R, tx.data.S, V, true)
+	return RecoverPlain(s.Hash(tx), tx.data.R, tx.data.S, V, true)
 }
 
 // SignatureValues returns signature values. This signature
@@ -171,7 +171,7 @@ func (hs HomesteadSigner) SignatureValues(tx *Transaction, sig []byte) (r, s, v 
 }
 
 func (hs HomesteadSigner) Sender(tx *Transaction) (common.Address, error) {
-	return recoverPlain(hs.Hash(tx), tx.data.R, tx.data.S, tx.data.V, true)
+	return RecoverPlain(hs.Hash(tx), tx.data.R, tx.data.S, tx.data.V, true)
 }
 
 type FrontierSigner struct{}
@@ -207,10 +207,10 @@ func (fs FrontierSigner) Hash(tx *Transaction) common.Hash {
 }
 
 func (fs FrontierSigner) Sender(tx *Transaction) (common.Address, error) {
-	return recoverPlain(fs.Hash(tx), tx.data.R, tx.data.S, tx.data.V, false)
+	return RecoverPlain(fs.Hash(tx), tx.data.R, tx.data.S, tx.data.V, false)
 }
 
-func recoverPlain(sighash common.Hash, R, S, Vb *big.Int, homestead bool) (common.Address, error) {
+func RecoverPlain(sighash common.Hash, R, S, Vb *big.Int, homestead bool) (common.Address, error) {
 	if Vb.BitLen() > 8 {
 		log.Info("recoverPlain", "hash", sighash.String())
 		return common.Address{}, ErrInvalidSig
@@ -240,7 +240,7 @@ func recoverPlain(sighash common.Hash, R, S, Vb *big.Int, homestead bool) (commo
 }
 
 // deriveChainId derives the chain id from the given v parameter
-func deriveChainId(v *big.Int) *big.Int {
+func DeriveChainId(v *big.Int) *big.Int {
 	if v.BitLen() <= 64 {
 		v := v.Uint64()
 		if v == 27 || v == 28 {

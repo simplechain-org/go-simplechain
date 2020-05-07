@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/simplechain-org/go-simplechain/common"
-	"github.com/simplechain-org/go-simplechain/core/types"
+	cc "github.com/simplechain-org/go-simplechain/cross/core"
 
 	"github.com/asdine/storm/v3"
 	"github.com/asdine/storm/v3/q"
@@ -22,12 +22,12 @@ func setupIndexDB(t *testing.T) *storm.DB {
 	return rootDB
 }
 
-func generateCtx(n int) []*types.CrossTransactionWithSignatures {
-	ctxList := make([]*types.CrossTransactionWithSignatures, n)
+func generateCtx(n int) []*cc.CrossTransactionWithSignatures {
+	ctxList := make([]*cc.CrossTransactionWithSignatures, n)
 	for i := 0; i < n; i++ {
 		bigI := big.NewInt(int64(i + 1))
-		ctxList[i] = &types.CrossTransactionWithSignatures{
-			Data: types.CtxDatas{
+		ctxList[i] = &cc.CrossTransactionWithSignatures{
+			Data: cc.CtxDatas{
 				CTxId:            common.BigToHash(bigI),
 				TxHash:           common.BigToHash(bigI),
 				Value:            big.NewInt(rand.Int63n(1e18)),
@@ -147,9 +147,9 @@ func TestIndexDB_Query(t *testing.T) {
 	// query with status filter after delete
 	{
 		assert.NoError(t, db.Delete(ctxList[0].ID()))
-		list := db.QueryByPrice(100, 0, q.Eq(StatusField, types.CtxStatusFinished))
+		list := db.QueryByPrice(100, 0, q.Eq(StatusField, cc.CtxStatusFinished))
 		assert.Equal(t, 1, len(list))
-		list = db.QueryByPrice(100, 0, q.Not(q.Eq(StatusField, types.CtxStatusFinished)))
+		list = db.QueryByPrice(100, 0, q.Not(q.Eq(StatusField, cc.CtxStatusFinished)))
 		assert.Equal(t, 19, len(list))
 	}
 }

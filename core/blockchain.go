@@ -37,6 +37,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/core/vm"
+	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	"github.com/simplechain-org/go-simplechain/ethdb"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/log"
@@ -139,21 +140,15 @@ type BlockChain struct {
 	triegc *prque.Prque   // Priority queue mapping block numbers to tries to gc
 	gcproc time.Duration  // Accumulates canonical block processing for trie dumping
 
-	hc                  *HeaderChain
-	rmLogsFeed          event.Feed
-	chainFeed           event.Feed
-	chainSideFeed       event.Feed
-	chainHeadFeed       event.Feed
-	logsFeed            event.Feed
-	blockProcFeed       event.Feed
-	confirmedMakerFeed  event.Feed
-	confirmedTakerFeed  event.Feed
-	takerFeed           event.Feed //
-	confirmedFinishFeed event.Feed
-	finishFeed          event.Feed
-	updateAnchorFeed    event.Feed
-	scope               event.SubscriptionScope
-	genesisBlock        *types.Block
+	hc            *HeaderChain
+	rmLogsFeed    event.Feed
+	chainFeed     event.Feed
+	chainSideFeed event.Feed
+	chainHeadFeed event.Feed
+	logsFeed      event.Feed
+	blockProcFeed event.Feed
+	scope         event.SubscriptionScope
+	genesisBlock  *types.Block
 
 	chainmu sync.RWMutex // blockchain insertion lock
 
@@ -180,11 +175,10 @@ type BlockChain struct {
 	processor  Processor  // Block transaction processor interface
 	vmConfig   vm.Config
 
-	badBlocks         *lru.Cache                     // Bad block cache
-	shouldPreserve    func(*types.Block) bool        // Function used to determine whether should preserve the given block.
-	terminateInsert   func(common.Hash, uint64) bool // Testing hook used to terminate ancient receipt chain insertion.
-	trigger           *UnconfirmedBlockLogs
-	CrossContractAddr common.Address
+	badBlocks       *lru.Cache                     // Bad block cache
+	shouldPreserve  func(*types.Block) bool        // Function used to determine whether should preserve the given block.
+	terminateInsert func(common.Hash, uint64) bool // Testing hook used to terminate ancient receipt chain insertion.
+	crossTrigger    *cc.CrossTrigger
 }
 
 // NewBlockChain returns a fully initialised block chain using information
@@ -207,23 +201,22 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 	badBlocks, _ := lru.New(badBlockLimit)
 
 	bc := &BlockChain{
-		chainConfig:       chainConfig,
-		cacheConfig:       cacheConfig,
-		db:                db,
-		triegc:            prque.New(nil),
-		stateCache:        state.NewDatabaseWithCache(db, cacheConfig.TrieCleanLimit),
-		quit:              make(chan struct{}),
-		shouldPreserve:    shouldPreserve,
-		bodyCache:         bodyCache,
-		bodyRLPCache:      bodyRLPCache,
-		receiptsCache:     receiptsCache,
-		blockCache:        blockCache,
-		txLookupCache:     txLookupCache,
-		futureBlocks:      futureBlocks,
-		engine:            engine,
-		vmConfig:          vmConfig,
-		badBlocks:         badBlocks,
-		CrossContractAddr: contract,
+		chainConfig:    chainConfig,
+		cacheConfig:    cacheConfig,
+		db:             db,
+		triegc:         prque.New(nil),
+		stateCache:     state.NewDatabaseWithCache(db, cacheConfig.TrieCleanLimit),
+		quit:           make(chan struct{}),
+		shouldPreserve: shouldPreserve,
+		bodyCache:      bodyCache,
+		bodyRLPCache:   bodyRLPCache,
+		receiptsCache:  receiptsCache,
+		blockCache:     blockCache,
+		txLookupCache:  txLookupCache,
+		futureBlocks:   futureBlocks,
+		engine:         engine,
+		vmConfig:       vmConfig,
+		badBlocks:      badBlocks,
 	}
 	bc.validator = NewBlockValidator(chainConfig, bc, engine)
 	bc.prefetcher = newStatePrefetcher(chainConfig, bc, engine)
@@ -305,7 +298,10 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 	// Take ownership of this particular state
 	go bc.update()
 
-	bc.trigger = NewUnconfirmedBlockLogs(bc, 12) //todo 日志确认高度设置成参数配置
+	if contract != (common.Address{}) {
+		bc.crossTrigger = cc.NewCrossTrigger(contract, bc)
+	}
+
 	return bc, nil
 }
 
@@ -835,6 +831,10 @@ func (bc *BlockChain) Stop() {
 	atomic.StoreInt32(&bc.procInterrupt, 1)
 
 	bc.wg.Wait()
+
+	if bc.crossTrigger != nil {
+		bc.crossTrigger.Stop()
+	}
 
 	// Ensure the state of a recent block is also stored to disk before exiting.
 	// We're writing three different states to catch different restart scenarios:
@@ -1417,8 +1417,8 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 			bc.logsFeed.Send(logs)
 		}
 
-		if bc.chainConfig.IsSingularity(currentBlock.Number()) && bc.CrossContractAddr != (common.Address{}) {
-			bc.StoreCrossContractLog(block.NumberU64(), block.Hash(), logs)
+		if bc.chainConfig.IsSingularity(currentBlock.Number()) && bc.crossTrigger != nil {
+			bc.crossTrigger.StoreCrossContractLog(block.NumberU64(), block.Hash(), logs)
 		}
 
 		// In theory we should fire a ChainHeadEvent when we inject
@@ -1745,7 +1745,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		stats.usedGas += usedGas
 
 		dirty, _ := bc.stateCache.TrieDB().Size()
-		if bc.CrossContractAddr != (common.Address{}) { // report chain info for anchor node
+		if bc.crossTrigger != nil { // report chain info for anchor node
 			stats.report(chain, it.index, dirty, "chainID", bc.chainConfig.ChainID)
 			continue
 		}
@@ -2255,61 +2255,6 @@ func (bc *BlockChain) SubscribeBlockProcessingEvent(ch chan<- bool) event.Subscr
 	return bc.scope.Track(bc.blockProcFeed.Subscribe(ch))
 }
 
-func (bc *BlockChain) StoreCrossContractLog(blockNumber uint64, hash common.Hash, logs []*types.Log) {
-	var blockLogs []*types.Log
-	if logs != nil {
-		var rtxs []*types.ReceptTransaction
-		var updates []*types.RemoteChainInfo
-		var finishes []common.Hash
-		for _, v := range logs {
-			if len(v.Topics) > 0 && bc.IsCtxAddress(v.Address) {
-
-				if v.Topics[0] == params.MakerTopic || v.Topics[0] == params.MakerFinishTopic {
-					blockLogs = append(blockLogs, v)
-					continue
-				}
-
-				if v.Topics[0] == params.AddAnchorsTopic || v.Topics[0] == params.RemoveAnchorsTopic {
-					updates = append(updates,
-						&types.RemoteChainInfo{
-							RemoteChainId: common.BytesToHash(v.Data[:common.HashLength]).Big().Uint64(),
-							BlockNumber:   v.BlockNumber,
-						})
-					continue
-				}
-
-				if len(v.Topics) >= 3 && v.Topics[0] == params.TakerTopic && len(v.Data) >= common.HashLength*4 {
-					rtxs = append(rtxs, &types.ReceptTransaction{
-						DestinationId: common.BytesToHash(v.Data[:common.HashLength]).Big(),
-						CTxId:         v.Topics[1],
-					})
-					blockLogs = append(blockLogs, v)
-				}
-
-				if len(v.Topics) >= 3 && v.Topics[0] == params.MakerFinishTopic {
-					ctxId := v.Topics[1]
-					finishes = append(finishes, ctxId)
-				}
-			}
-		}
-		if len(rtxs) > 0 {
-			go bc.takerFeed.Send(NewTakerEvent{rtxs})
-		}
-		if len(updates) > 0 {
-			go bc.updateAnchorFeed.Send(AnchorEvent{updates})
-		}
-		if len(finishes) > 0 {
-			go bc.finishFeed.Send(NewFinishEvent{bc.chainConfig.ChainID, finishes})
-		}
-	}
-	if len(blockLogs) > 0 {
-		bc.trigger.Insert(blockNumber, hash, blockLogs)
-	} else {
-		bc.trigger.Insert(blockNumber, hash, nil)
-	}
-
-}
-
 // GetReceiptsByHash retrieves the receipts for all transactions in a given block.
 func (bc *BlockChain) GetReceiptsByTxHash(hash common.Hash) *types.Receipt {
 	rep, _, _, _ := rawdb.ReadReceipt(bc.db, hash, bc.chainConfig)
@@ -2327,50 +2272,12 @@ func (bc *BlockChain) GetTransactionByTxHash(hash common.Hash) (*types.Transacti
 	return tx, blockHash, blockNumber
 }
 
-func (bc *BlockChain) ConfirmedMakerFeedSend(ctx ConfirmedMakerEvent) int {
-	return bc.confirmedMakerFeed.Send(ctx)
-}
-
-func (bc *BlockChain) SubscribeConfirmedMakerEvent(ch chan<- ConfirmedMakerEvent) event.Subscription {
-	return bc.scope.Track(bc.confirmedMakerFeed.Subscribe(ch))
-}
-
-func (bc *BlockChain) ConfirmedTakerSend(transaction ConfirmedTakerEvent) int {
-	return bc.confirmedTakerFeed.Send(transaction)
-}
-
-func (bc *BlockChain) SubscribeConfirmedTakerEvent(ch chan<- ConfirmedTakerEvent) event.Subscription {
-	return bc.scope.Track(bc.confirmedTakerFeed.Subscribe(ch))
-}
-
-func (bc *BlockChain) SubscribeNewTakerEvent(ch chan<- NewTakerEvent) event.Subscription {
-	return bc.scope.Track(bc.takerFeed.Subscribe(ch))
-}
-
-func (bc *BlockChain) SubscribeNewFinishEvent(ch chan<- NewFinishEvent) event.Subscription {
-	return bc.scope.Track(bc.finishFeed.Subscribe(ch))
-}
-
-func (bc *BlockChain) ConfirmedFinishFeedSend(tx ConfirmedFinishEvent) int {
-	return bc.confirmedFinishFeed.Send(tx)
-}
-
-func (bc *BlockChain) SubscribeConfirmedFinishEvent(ch chan<- ConfirmedFinishEvent) event.Subscription {
-	return bc.scope.Track(bc.confirmedFinishFeed.Subscribe(ch))
-}
-
-func (bc *BlockChain) IsCtxAddress(addr common.Address) bool {
-	return addr == bc.CrossContractAddr
-}
-
 func (bc *BlockChain) GetBlockNumber(hash common.Hash) *uint64 {
 	return bc.hc.GetBlockNumber(hash)
-}
-
-func (bc *BlockChain) SubscribeUpdateAnchorEvent(ch chan<- AnchorEvent) event.Subscription {
-	return bc.scope.Track(bc.updateAnchorFeed.Subscribe(ch))
 }
 
 func (bc *BlockChain) GetChainConfig() *params.ChainConfig {
 	return bc.chainConfig
 }
+
+func (bc *BlockChain) GetCrossTrigger() *cc.CrossTrigger { return bc.crossTrigger }

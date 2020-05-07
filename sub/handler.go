@@ -101,8 +101,6 @@ type ProtocolManager struct {
 
 	serverPool *serverPool
 
-	//msgHandler *cross.Handler TODO-D
-
 	raftMode bool
 	engine   consensus.Engine // used for istanbul consensus
 }
@@ -287,11 +285,6 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 	// start sync handlers
 	go pm.syncer()
 	go pm.txsyncLoop()
-
-	//TODO-D
-	//if pm.msgHandler != nil {
-	//	pm.msgHandler.Start()
-	//}
 }
 
 func (pm *ProtocolManager) Stop() {
@@ -315,11 +308,6 @@ func (pm *ProtocolManager) Stop() {
 	// sessions which are already established but not added to pm.peers yet
 	// will exit when they try to register.
 	pm.peers.Close()
-
-	//TODO-D
-	//if pm.msgHandler != nil {
-	//	pm.msgHandler.Stop()
-	//}
 
 	// Wait for all peer handler goroutines and the loops to come down.
 	pm.wg.Wait()
@@ -800,59 +788,10 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 		pm.AddRemotes(txs)
 
-		//msg for crossChain
-	case msg.Code == CtxSignMsg:
-		// Transactions arrived, make sure we have a valid and fresh chain to handle them
-		if atomic.LoadUint32(&pm.acceptTxs) == 0 {
-			break
-		}
-		var ctx *types.CrossTransaction
-		if err := msg.Decode(&ctx); err != nil {
-			return errResp(ErrDecode, "msg %v: %v", msg, err)
-		}
-		if err := pm.verifySigner(ctx); err != nil {
-			return errResp(ErrVerifyCtx, "msg %v: %v", ctx.ID(), err)
-		}
-
-		p.MarkCrossTransaction(ctx.SignHash())
-		pm.BroadcastCtx([]*types.CrossTransaction{ctx}, false)
-
-		//TODO-D
-		//if pm.msgHandler != nil {
-		//	pm.msgHandler.AddRemoteCtx(ctx)
-		//}
 	default:
 		return errResp(ErrInvalidMsgCode, "%v", msg.Code)
 
 	}
-	return nil
-}
-
-func (pm *ProtocolManager) verifySigner(ctx *types.CrossTransaction) error {
-	receipt := pm.blockchain.GetReceiptsByTxHash(ctx.Data.TxHash)
-	if receipt == nil || receipt.Status == 0 {
-		return fmt.Errorf("get maker tx receipt false")
-	}
-	tx, _, _ := pm.blockchain.GetTransactionByTxHash(ctx.Data.TxHash)
-	if tx == nil {
-		return fmt.Errorf("get maker tx false")
-	}
-
-	newHead := pm.blockchain.CurrentBlock().Header() // Special case during testing
-	stateDB, err := pm.blockchain.StateAt(newHead.Root)
-	if err != nil {
-		return fmt.Errorf("stateAt err:%s", err.Error())
-	}
-	anchors, _ := core.QueryAnchor(pm.blockchain.GetChainConfig(), pm.blockchain, stateDB, newHead,
-		*tx.To(), ctx.DestinationId().Uint64())
-	if len(anchors) == 0 {
-		return fmt.Errorf("query anchor err")
-	}
-	anchorSet := core.NewAnchorSet(anchors)
-	if !anchorSet.IsAnchorSignedCtx(ctx, types.NewEIP155CtxSigner(ctx.ChainId())) {
-		return fmt.Errorf("invalid signature of ctx:%s", ctx.ID().String())
-	}
-
 	return nil
 }
 
@@ -960,32 +899,6 @@ func (pm *ProtocolManager) NodeInfo() *NodeInfo {
 		Head:       currentBlock.Hash(),
 	}
 }
-
-//锚定节点广播签名Ctx
-func (pm *ProtocolManager) BroadcastCtx(ctxs []*types.CrossTransaction, local bool) {
-	for _, ctx := range ctxs {
-		var txset = make(map[*peer]*types.CrossTransaction)
-
-		// Broadcast ctx to a batch of peers not knowing about it
-
-		peers := pm.peers.PeersWithoutCTx(ctx.SignHash())
-		for _, peer := range peers {
-			txset[peer] = ctx
-		}
-		//log.Trace("Broadcast transaction", "hash", ctx.Hash(), "recipients", len(peers))
-
-		// FIXME include this again: peers = peers[:int(math.Sqrt(float64(len(peers))))]
-		for peer, rt := range txset {
-			peer.AsyncSendCrossTransaction(rt, local)
-			log.Debug("Broadcast CrossTransaction", "hash", ctx.SignHash(), "peer", peer.id)
-		}
-	}
-}
-
-//TODO-D
-//func (pm *ProtocolManager) SetMsgHandler(msgHandler *cross.Handler) {
-//	pm.msgHandler = msgHandler
-//}
 
 func (pm *ProtocolManager) AddRemotes(txs []*types.Transaction) {
 	for _, v := range txs {

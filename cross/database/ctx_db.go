@@ -7,7 +7,7 @@ import (
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/rawdb"
-	"github.com/simplechain-org/go-simplechain/core/types"
+	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	"github.com/simplechain-org/go-simplechain/ethdb"
 
 	"github.com/asdine/storm/v3"
@@ -31,15 +31,15 @@ type CtxDB interface {
 	io.Closer
 	Size() int
 	Load() error
-	Write(ctx *types.CrossTransactionWithSignatures) error
-	Read(ctxId common.Hash) (*types.CrossTransactionWithSignatures, error)
+	Write(ctx *cc.CrossTransactionWithSignatures) error
+	Read(ctxId common.Hash) (*cc.CrossTransactionWithSignatures, error)
 	ReadAll(ctxId common.Hash) (common.Hash, error)
 	Delete(ctxId common.Hash) error
 	Update(id common.Hash, updater func(ctx *CrossTransactionIndexed)) error
 	Has(id common.Hash) bool
-	QueryByPK(pageSize int, startPage int, filter ...interface{}) []*types.CrossTransactionWithSignatures
-	QueryByPrice(pageSize int, startPage int, filter ...interface{}) []*types.CrossTransactionWithSignatures
-	Range(pageSize int, startCtxID *common.Hash, endCtxID *common.Hash) []*types.CrossTransactionWithSignatures
+	QueryByPK(pageSize int, startPage int, filter ...interface{}) []*cc.CrossTransactionWithSignatures
+	QueryByPrice(pageSize int, startPage int, filter ...interface{}) []*cc.CrossTransactionWithSignatures
+	Range(pageSize int, startCtxID *common.Hash, endCtxID *common.Hash) []*cc.CrossTransactionWithSignatures
 }
 
 func OpenStormDB(ctx ServiceContext, name string) (*storm.DB, error) {

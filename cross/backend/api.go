@@ -5,7 +5,7 @@ import (
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
-	"github.com/simplechain-org/go-simplechain/core/types"
+	cc "github.com/simplechain-org/go-simplechain/cross/core"
 )
 
 // PublicTxPoolAPI offers and API for the transaction pool. It only operates on data that is non confidential.
@@ -115,7 +115,7 @@ type RPCCrossTransaction struct {
 
 // newRPCTransaction returns a transaction that will serialize to the RPC
 // representation, with the given location metadata set (if available).
-func newRPCCrossTransaction(tx *types.CrossTransactionWithSignatures) *RPCCrossTransaction {
+func newRPCCrossTransaction(tx *cc.CrossTransactionWithSignatures) *RPCCrossTransaction {
 	result := &RPCCrossTransaction{
 		Value:            (*hexutil.Big)(tx.Data.Value),
 		CTxId:            tx.ID(),

@@ -21,29 +21,29 @@ import (
 	"math/big"
 
 	"github.com/simplechain-org/go-simplechain/common"
-	"github.com/simplechain-org/go-simplechain/core/types"
+	cc "github.com/simplechain-org/go-simplechain/cross/core"
 
 	"github.com/Beyond-simplechain/foundation/container/redblacktree"
 	lru "github.com/hashicorp/golang-lru"
 )
 
-func ComparePrice(hi, hj *types.CrossTransactionWithSignatures) bool {
+func ComparePrice(hi, hj *cc.CrossTransactionWithSignatures) bool {
 	ri := hi.Price()
 	rj := hj.Price()
 	return ri != nil && rj != nil && ri.Cmp(rj) < 0
 }
 
 type CtxSortedByPrice struct {
-	all      map[common.Hash]*types.CrossTransactionWithSignatures
+	all      map[common.Hash]*cc.CrossTransactionWithSignatures
 	list     *redblacktree.Tree
 	capacity uint64
 }
 
 func NewCtxSortedByPrice(cap uint64) *CtxSortedByPrice {
 	return &CtxSortedByPrice{
-		all: make(map[common.Hash]*types.CrossTransactionWithSignatures),
+		all: make(map[common.Hash]*cc.CrossTransactionWithSignatures),
 		list: redblacktree.NewWith(func(a, b interface{}) int {
-			if ComparePrice(a.(*types.CrossTransactionWithSignatures), b.(*types.CrossTransactionWithSignatures)) {
+			if ComparePrice(a.(*cc.CrossTransactionWithSignatures), b.(*cc.CrossTransactionWithSignatures)) {
 				return -1
 			}
 			return 0
@@ -52,7 +52,7 @@ func NewCtxSortedByPrice(cap uint64) *CtxSortedByPrice {
 	}
 }
 
-func (t *CtxSortedByPrice) Get(id common.Hash) *types.CrossTransactionWithSignatures {
+func (t *CtxSortedByPrice) Get(id common.Hash) *cc.CrossTransactionWithSignatures {
 	return t.all[id]
 }
 
@@ -65,7 +65,7 @@ func (t *CtxSortedByPrice) Cap() uint64 {
 	return t.capacity
 }
 
-func (t *CtxSortedByPrice) Add(tx *types.CrossTransactionWithSignatures) {
+func (t *CtxSortedByPrice) Add(tx *cc.CrossTransactionWithSignatures) {
 	if _, ok := t.all[tx.ID()]; ok {
 		return
 	}
@@ -74,7 +74,7 @@ func (t *CtxSortedByPrice) Add(tx *types.CrossTransactionWithSignatures) {
 	if t.capacity > 0 && uint64(len(t.all)) == t.capacity {
 		last := t.list.End()
 		if last.Prev() {
-			id := last.Key().(*types.CrossTransactionWithSignatures).ID()
+			id := last.Key().(*cc.CrossTransactionWithSignatures).ID()
 			t.list.RemoveOne(last)
 			delete(t.all, id)
 		}
@@ -88,7 +88,7 @@ func (t *CtxSortedByPrice) Add(tx *types.CrossTransactionWithSignatures) {
 func (t *CtxSortedByPrice) Remove(id common.Hash) bool {
 	if tx, ok := t.all[id]; ok {
 		for itr := t.list.LowerBound(tx); itr != t.list.UpperBound(tx); itr.Next() {
-			if itr.Key().(*types.CrossTransactionWithSignatures).ID() == id {
+			if itr.Key().(*cc.CrossTransactionWithSignatures).ID() == id {
 				t.list.RemoveOne(itr)
 				delete(t.all, id)
 				return true
@@ -99,11 +99,11 @@ func (t *CtxSortedByPrice) Remove(id common.Hash) bool {
 }
 
 // Update
-func (t *CtxSortedByPrice) Update(id common.Hash, updater func(*types.CrossTransactionWithSignatures)) {
+func (t *CtxSortedByPrice) Update(id common.Hash, updater func(*cc.CrossTransactionWithSignatures)) {
 	if tx, ok := t.all[id]; ok {
 		for itr := t.list.LowerBound(tx); itr != t.list.UpperBound(tx); itr.Next() {
-			if itr.Key().(*types.CrossTransactionWithSignatures).ID() == id {
-				updater(itr.Key().(*types.CrossTransactionWithSignatures))
+			if itr.Key().(*cc.CrossTransactionWithSignatures).ID() == id {
+				updater(itr.Key().(*cc.CrossTransactionWithSignatures))
 				updater(t.all[id])
 				return
 			}
@@ -111,10 +111,10 @@ func (t *CtxSortedByPrice) Update(id common.Hash, updater func(*types.CrossTrans
 	}
 }
 
-func (t *CtxSortedByPrice) GetList(filter func(*types.CrossTransactionWithSignatures) bool, pageSize int) []*types.CrossTransactionWithSignatures {
-	res := make([]*types.CrossTransactionWithSignatures, 0, t.list.Size())
+func (t *CtxSortedByPrice) GetList(filter func(*cc.CrossTransactionWithSignatures) bool, pageSize int) []*cc.CrossTransactionWithSignatures {
+	res := make([]*cc.CrossTransactionWithSignatures, 0, t.list.Size())
 	for itr := t.list.Iterator(); itr.Next(); {
-		if ctx := itr.Key().(*types.CrossTransactionWithSignatures); filter == nil || filter(ctx) {
+		if ctx := itr.Key().(*cc.CrossTransactionWithSignatures); filter == nil || filter(ctx) {
 			res = append(res, ctx)
 			if pageSize > 0 && len(res) >= pageSize {
 				break
@@ -124,7 +124,7 @@ func (t *CtxSortedByPrice) GetList(filter func(*types.CrossTransactionWithSignat
 	return res
 }
 
-func (t *CtxSortedByPrice) GetAll() map[common.Hash]*types.CrossTransactionWithSignatures {
+func (t *CtxSortedByPrice) GetAll() map[common.Hash]*cc.CrossTransactionWithSignatures {
 	return t.all
 }
 
@@ -152,22 +152,22 @@ func (h *byBlockNumHeap) Pop() interface{} {
 }
 
 type CtxSortedByBlockNum struct {
-	items map[common.Hash]*types.CrossTransactionWithSignatures
+	items map[common.Hash]*cc.CrossTransactionWithSignatures
 	index *byBlockNumHeap
 }
 
 func NewCtxSortedMap() *CtxSortedByBlockNum {
 	return &CtxSortedByBlockNum{
-		items: make(map[common.Hash]*types.CrossTransactionWithSignatures),
+		items: make(map[common.Hash]*cc.CrossTransactionWithSignatures),
 		index: new(byBlockNumHeap),
 	}
 }
 
-func (m *CtxSortedByBlockNum) Get(txId common.Hash) *types.CrossTransactionWithSignatures {
+func (m *CtxSortedByBlockNum) Get(txId common.Hash) *cc.CrossTransactionWithSignatures {
 	return m.items[txId]
 }
 
-func (m *CtxSortedByBlockNum) Put(ctx *types.CrossTransactionWithSignatures, number uint64) {
+func (m *CtxSortedByBlockNum) Put(ctx *cc.CrossTransactionWithSignatures, number uint64) {
 	id := ctx.ID()
 	if m.items[id] != nil {
 		return
@@ -232,7 +232,7 @@ type CrossTransactionIndexed struct {
 	Price *big.Float     `storm:"index"`
 
 	// normal field
-	Status types.CtxStatus
+	Status cc.CtxStatus
 
 	Value            *big.Int
 	TxHash           common.Hash
@@ -246,7 +246,7 @@ type CrossTransactionIndexed struct {
 	S []*big.Int
 }
 
-func NewCrossTransactionIndexed(ctx *types.CrossTransactionWithSignatures) *CrossTransactionIndexed {
+func NewCrossTransactionIndexed(ctx *cc.CrossTransactionWithSignatures) *CrossTransactionIndexed {
 	return &CrossTransactionIndexed{
 		CtxId:            ctx.ID(),
 		Status:           ctx.Status,
@@ -265,10 +265,10 @@ func NewCrossTransactionIndexed(ctx *types.CrossTransactionWithSignatures) *Cros
 
 }
 
-func (c CrossTransactionIndexed) ToCrossTransaction() *types.CrossTransactionWithSignatures {
-	return &types.CrossTransactionWithSignatures{
+func (c CrossTransactionIndexed) ToCrossTransaction() *cc.CrossTransactionWithSignatures {
+	return &cc.CrossTransactionWithSignatures{
 		Status: c.Status,
-		Data: types.CtxDatas{
+		Data: cc.CtxDatas{
 			Value:            c.Value,
 			CTxId:            c.CtxId,
 			TxHash:           c.TxHash,

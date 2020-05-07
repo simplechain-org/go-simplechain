@@ -135,12 +135,5 @@ func GetAPIs(apiBackend Backend) []rpc.API {
 			Service:   NewPrivateAccountAPI(apiBackend, nonceLock),
 			Public:    false,
 		},
-		//TODO-D
-		//{
-		//	Namespace: "eth",
-		//	Version:   "1.0",
-		//	Service:   NewPublicCtxPoolAPI(apiBackend),
-		//	Public:    true,
-		//},
 	}
 }

@@ -314,6 +314,7 @@ func (b *EthAPIBackend) ServiceFilter(ctx context.Context, session *bloombits.Ma
 		go session.Multiplex(bloomRetrievalBatch, bloomRetrievalWait, b.eth.bloomRequests)
 	}
 }
+
 //func (b *EthAPIBackend) CtxStats() (pending int) {
 //	return b.eth.ctxStore.StoreStats()
 //}

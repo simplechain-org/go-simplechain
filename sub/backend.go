@@ -40,6 +40,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/core/vm"
+	"github.com/simplechain-org/go-simplechain/cross"
 	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/eth"
 	"github.com/simplechain-org/go-simplechain/eth/downloader"
@@ -105,8 +106,6 @@ type Ethereum struct {
 
 	chainConfig *params.ChainConfig
 	apis        []rpc.API
-	//msgHandler *cross.Handler TODO-D
-	//ctxStore    *core.CtxStore TODO-D
 }
 
 func (s *Ethereum) AddLesServer(ls LesServer) {
@@ -221,12 +220,6 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*Ethereum, error) {
 		config.TxPool.Journal = ctx.ResolvePath(fmt.Sprintf("subChain_%s", config.TxPool.Journal))
 	}
 	eth.txPool = core.NewTxPool(config.TxPool, chainConfig, eth.blockchain)
-	//TODO-D
-	//eth.ctxStore, err = core.NewCtxStore(ctx, config.CtxStore, eth.chainConfig, eth.blockchain, common.SubMakerData, config.SubChainCtxAddress, eth.SignHash)
-	//if err != nil {
-	//	return nil, err
-	//}
-	// Permit the downloader to use the trie cache allowance during fast sync
 	cacheLimit := cacheConfig.TrieCleanLimit + cacheConfig.TrieDirtyLimit
 	checkpoint := config.Checkpoint
 	if checkpoint == nil {
@@ -235,15 +228,6 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*Ethereum, error) {
 	if eth.protocolManager, err = NewProtocolManager(chainConfig, checkpoint, config.SyncMode, chainConfig.ChainID.Uint64(), eth.eventMux, eth.txPool, eth.engine, eth.blockchain, chainDb, cacheLimit, config.Whitelist, eth.serverPool); err != nil {
 		return nil, err
 	}
-	//TODO-D
-	//if config.Role == common.RoleAnchor {
-	//	eth.msgHandler = cross.NewCrossHandler(eth, cross.RoleSubHandler, config.Role, eth.ctxStore, eth.blockchain, ctx.SubCh, ctx.MainCh, config.MainChainCtxAddress, config.SubChainCtxAddress, eth.SignHash, config.AnchorSigner)
-	//
-	//	eth.msgHandler.SetProtocolManager(eth.protocolManager)
-	//	eth.msgHandler.RegisterCrossChain(chainConfig.ChainID)
-	//
-	//	eth.protocolManager.SetMsgHandler(eth.msgHandler)
-	//}
 
 	eth.miner = miner.New(eth, &config.Miner, chainConfig, eth.EventMux(), eth.engine, eth.isLocalBlock)
 	eth.miner.SetExtra(makeExtraData(config.Miner.ExtraData))
@@ -254,22 +238,10 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*Ethereum, error) {
 		gpoParams.Default = config.Miner.GasPrice
 	}
 	eth.APIBackend.gpo = gasprice.NewOracle(eth.APIBackend, gpoParams)
-	//TODO-D
-	//if eth.msgHandler != nil {
-	//	eth.msgHandler.SetGasPriceOracle(eth.APIBackend.gpo)
-	//}
 
 	return eth, nil
 }
 
-// CreateDB creates the chain database. TODO-D
-//func CreateDB(ctx *node.ServiceContext, config *eth.Config, name string) (ethdb.Database, error) {
-//	db, err := ctx.OpenDatabase(name, config.DatabaseCache, config.DatabaseHandles, "")
-//	if err != nil {
-//		return nil, err
-//	}
-//	return db, nil
-//}
 func makeExtraData(extra []byte) []byte {
 	if len(extra) == 0 {
 		// create default extradata
@@ -307,6 +279,9 @@ func (s *Ethereum) APIs() []rpc.API {
 	if s.lesServer != nil {
 		apis = append(apis, s.lesServer.APIs()...)
 	}
+
+	// Append Register APIs
+	apis = append(apis, s.apis...)
 
 	// Append all the local APIs and return
 	return append(apis, []rpc.API{
@@ -518,19 +493,20 @@ func (s *Ethereum) StopMining() {
 func (s *Ethereum) IsMining() bool      { return s.miner.Mining() }
 func (s *Ethereum) Miner() *miner.Miner { return s.miner }
 
-func (s *Ethereum) AccountManager() *accounts.Manager  { return s.accountManager }
-func (s *Ethereum) BlockChain() *core.BlockChain       { return s.blockchain }
-func (s *Ethereum) TxPool() *core.TxPool               { return s.txPool }
-func (s *Ethereum) EventMux() *event.TypeMux           { return s.eventMux }
-func (s *Ethereum) Engine() consensus.Engine           { return s.engine }
-func (s *Ethereum) ChainDb() ethdb.Database            { return s.chainDb }
-func (s *Ethereum) IsListening() bool                  { return true } // Always listening
-func (s *Ethereum) EthVersion() int                    { return int(ProtocolVersions[0]) }
-func (s *Ethereum) NetVersion() uint64                 { return s.networkID }
-func (s *Ethereum) Downloader() *downloader.Downloader { return s.protocolManager.downloader }
-func (s *Ethereum) Synced() bool                       { return atomic.LoadUint32(&s.protocolManager.acceptTxs) == 1 }
-func (s *Ethereum) ArchiveMode() bool                  { return s.config.NoPruning }
-func (s *Ethereum) GetSynced() func() bool             { return s.Synced }
+func (s *Ethereum) ProtocolManager() cross.ProtocolManager { return s.protocolManager }
+func (s *Ethereum) AccountManager() *accounts.Manager      { return s.accountManager }
+func (s *Ethereum) BlockChain() *core.BlockChain           { return s.blockchain }
+func (s *Ethereum) TxPool() *core.TxPool                   { return s.txPool }
+func (s *Ethereum) EventMux() *event.TypeMux               { return s.eventMux }
+func (s *Ethereum) Engine() consensus.Engine               { return s.engine }
+func (s *Ethereum) ChainDb() ethdb.Database                { return s.chainDb }
+func (s *Ethereum) IsListening() bool                      { return true } // Always listening
+func (s *Ethereum) EthVersion() int                        { return int(ProtocolVersions[0]) }
+func (s *Ethereum) NetVersion() uint64                     { return s.networkID }
+func (s *Ethereum) Downloader() *downloader.Downloader     { return s.protocolManager.downloader }
+func (s *Ethereum) Synced() bool                           { return atomic.LoadUint32(&s.protocolManager.acceptTxs) == 1 }
+func (s *Ethereum) ArchiveMode() bool                      { return s.config.NoPruning }
+func (s *Ethereum) GetSynced() func() bool                 { return s.Synced }
 func (s *Ethereum) GasOracle() *gasprice.Oracle {
 	return s.APIBackend.gpo
 }

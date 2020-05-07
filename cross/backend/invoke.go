@@ -1,4 +1,4 @@
-package core
+package backend
 
 import (
 	"context"
@@ -7,31 +7,26 @@ import (
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/math"
+	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/core/vm"
+	"github.com/simplechain-org/go-simplechain/cross"
+	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	"github.com/simplechain-org/go-simplechain/params"
 )
 
-type CrossTransactionInvoke interface {
-	ID() common.Hash
-	ChainId() *big.Int
-	DestinationId() *big.Int
-	Hash() common.Hash
-	BlockHash() common.Hash
-}
-
-type CrossValidator func(cws *types.CrossTransactionWithSignatures) error
+type Validator func(cws *cc.CrossTransactionWithSignatures) error
 
 type ChainInvoke struct {
-	bc blockChain
+	bc cross.BlockChain
 }
 
-func NewChainInvoke(chain blockChain) *ChainInvoke {
+func NewChainInvoke(chain cross.BlockChain) *ChainInvoke {
 	return &ChainInvoke{bc: chain}
 }
 
-func (c ChainInvoke) GetTransactionNumberOnChain(tx CrossTransactionInvoke) uint64 {
+func (c ChainInvoke) GetTransactionNumberOnChain(tx cross.Transaction) uint64 {
 	if num := c.bc.GetBlockNumber(tx.BlockHash()); num != nil {
 		return *num
 	}
@@ -39,12 +34,12 @@ func (c ChainInvoke) GetTransactionNumberOnChain(tx CrossTransactionInvoke) uint
 	return c.bc.CurrentBlock().NumberU64()
 }
 
-func (c ChainInvoke) IsTransactionInExpiredBlock(tx CrossTransactionInvoke, expiredHeight uint64) bool {
+func (c ChainInvoke) IsTransactionInExpiredBlock(tx cross.Transaction, expiredHeight uint64) bool {
 	return c.bc.CurrentBlock().NumberU64()-c.GetTransactionNumberOnChain(tx) > expiredHeight
 }
 
 type EvmInvoke struct {
-	bc      ChainContext
+	bc      core.ChainContext
 	header  *types.Header
 	stateDB *state.StateDB
 
@@ -52,7 +47,7 @@ type EvmInvoke struct {
 	vmConfig    vm.Config
 }
 
-func NewEvmInvoke(bc ChainContext, header *types.Header, stateDB *state.StateDB, config *params.ChainConfig, vmCfg vm.Config) *EvmInvoke {
+func NewEvmInvoke(bc core.ChainContext, header *types.Header, stateDB *state.StateDB, config *params.ChainConfig, vmCfg vm.Config) *EvmInvoke {
 	return &EvmInvoke{bc: bc, header: header, stateDB: stateDB, chainConfig: config, vmConfig: vmCfg}
 }
 
@@ -74,7 +69,7 @@ func (e EvmInvoke) CallContract(from common.Address, to *common.Address, functio
 
 	// Get a new instance of the EVM.
 	// Create a new context to be used in the EVM environment
-	vmContext := NewEVMContext(checkMsg, e.header, e.bc, nil)
+	vmContext := core.NewEVMContext(checkMsg, e.header, e.bc, nil)
 	// Create a new environment which holds all relevant information
 	// about the transaction and calling mechanisms.
 	tempState := e.stateDB.Copy()
@@ -89,8 +84,8 @@ func (e EvmInvoke) CallContract(from common.Address, to *common.Address, functio
 
 	// Setup the gas pool (also for unmetered requests)
 	// and apply the messages
-	gp := new(GasPool).AddGas(math.MaxUint64)
-	res, _, _, err := ApplyMessage(evm, checkMsg, gp)
+	gp := new(core.GasPool).AddGas(math.MaxUint64)
+	res, _, _, err := core.ApplyMessage(evm, checkMsg, gp)
 	if err != nil {
 		return nil, err
 	}
