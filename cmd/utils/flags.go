@@ -1707,10 +1707,9 @@ func RegisterEthService(stack *node.Node, cfg *eth.Config) <-chan *sub.Ethereum 
 			err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
 				mainNode := <-crossMainChan
 				subNode := <-crossSubChan
-				crossNode := crossBackend.NewCrossService(mainNode, subNode, cfg)
-				close(crossMainChan)
-				close(crossSubChan)
-				return crossNode, nil
+				defer close(crossMainChan)
+				defer close(crossSubChan)
+				return crossBackend.NewCrossService(ctx, mainNode, subNode, cfg)
 			})
 			if err != nil {
 				Fatalf("Failed to register the CrossChain service: %v", err)

@@ -1,11 +1,13 @@
-package types
+package core
 
 import (
 	"bytes"
+	"crypto/ecdsa"
 	"math/big"
 	"testing"
 
 	"github.com/simplechain-org/go-simplechain/common"
+	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/rlp"
 )
 
@@ -62,6 +64,12 @@ func decodeCtx(data []byte) (*CrossTransaction, error) {
 	t, err := &tx, rlp.Decode(bytes.NewReader(data), &tx)
 
 	return t, err
+}
+
+func defaultTestKey() (*ecdsa.PrivateKey, common.Address) {
+	key, _ := crypto.HexToECDSA("45a915e4d060149eb4365960e6a7a45f334393093061116b197e3240065ff2d8")
+	addr := crypto.PubkeyToAddress(key.PublicKey)
+	return key, addr
 }
 
 func TestCtxRecipientEmpty(t *testing.T) {

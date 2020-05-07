@@ -21,6 +21,7 @@ import (
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/types"
+	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	"github.com/simplechain-org/go-simplechain/params"
 )
 
@@ -29,7 +30,7 @@ type CtxPool struct {
 	signer  types.Signer
 	mu      sync.RWMutex
 	chain   *LightChain
-	pending map[common.Hash]*types.CrossTransactionWithSignatures
+	pending map[common.Hash]*cc.CrossTransactionWithSignatures
 }
 
 // NewCtxPool creates a new light cross transaction pool
@@ -38,13 +39,13 @@ func NewCtxPool(config *params.ChainConfig, chain *LightChain) *CtxPool {
 		config:  config,
 		signer:  types.NewEIP155Signer(config.ChainID),
 		chain:   chain,
-		pending: make(map[common.Hash]*types.CrossTransactionWithSignatures),
+		pending: make(map[common.Hash]*cc.CrossTransactionWithSignatures),
 	}
 	return pool
 }
 
 // addTx enqueues a single transaction into the pool if it is valid.
-func (pool *CtxPool) addTx(cws *types.CrossTransactionWithSignatures, local bool) error {
+func (pool *CtxPool) addTx(cws *cc.CrossTransactionWithSignatures, local bool) error {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 	if _, ok := pool.pending[cws.Hash()]; !ok {
@@ -59,7 +60,7 @@ func (pool *CtxPool) Stats() int {
 	return len(pool.pending)
 }
 
-func (pool *CtxPool) Pending() (map[common.Hash]*types.CrossTransactionWithSignatures, error) {
+func (pool *CtxPool) Pending() (map[common.Hash]*cc.CrossTransactionWithSignatures, error) {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 	return pool.pending, nil

@@ -17,8 +17,6 @@
 package core
 
 import (
-	"math/big"
-
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/types"
 )
@@ -57,36 +55,36 @@ type ChainHeadEvent struct {
 	Block *types.Block
 }
 
-type ConfirmedMakerEvent struct {
-	Txs []*types.CrossTransaction
-}
-
-type NewTakerEvent struct {
-	Txs []*types.ReceptTransaction
-}
-
-type ConfirmedTakerEvent struct {
-	Txs []*types.ReceptTransaction
-}
-
-type SignedCtxEvent struct {
-	Tws      *types.CrossTransactionWithSignatures
-	CallBack func(cws *types.CrossTransactionWithSignatures, invalidSigIndex ...int)
-}
-
-type NewFinishEvent struct {
-	ChainID   *big.Int
-	FinishIds []common.Hash
-}
-
-type ConfirmedFinishEvent struct {
-	FinishIds []common.Hash
-}
-
-type AnchorEvent struct {
-	ChainInfo []*types.RemoteChainInfo
-}
-
-type NewCrossChainEvent struct {
-	ChainID *big.Int
-}
+//type ConfirmedMakerEvent struct {
+//	Txs []*types.CrossTransaction
+//}
+//
+//type NewTakerEvent struct {
+//	Txs []*types.ReceptTransaction
+//}
+//
+//type ConfirmedTakerEvent struct {
+//	Txs []*types.ReceptTransaction
+//}
+//
+//type SignedCtxEvent struct {
+//	Tws      *types.CrossTransactionWithSignatures
+//	CallBack func(cws *types.CrossTransactionWithSignatures, invalidSigIndex ...int)
+//}
+//
+//type NewFinishEvent struct {
+//	ChainID   *big.Int
+//	FinishIds []common.Hash
+//}
+//
+//type ConfirmedFinishEvent struct {
+//	FinishIds []common.Hash
+//}
+//
+//type AnchorEvent struct {
+//	ChainInfo []*types.RemoteChainInfo
+//}
+//
+//type NewCrossChainEvent struct {
+//	ChainID *big.Int
+//}

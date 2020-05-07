@@ -9,45 +9,45 @@ import (
 	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/core/vm"
-	"github.com/simplechain-org/go-simplechain/event"
+	"github.com/simplechain-org/go-simplechain/eth/gasprice"
+	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/rpc"
 )
 
-type CtxStore interface {
-	AddLocal(*types.CrossTransaction) error
-	AddRemote(*types.CrossTransaction) error
-	AddFromRemoteChain(*types.CrossTransactionWithSignatures, func(*types.CrossTransactionWithSignatures, ...int)) error
+type SimpleChain interface {
+	BlockChain() *core.BlockChain
+	ChainConfig() *params.ChainConfig
+	SignHash(hash []byte) ([]byte, error)
+	GasOracle() *gasprice.Oracle
+	ProtocolManager() ProtocolManager
+	RegisterAPIs([]rpc.API)
 
-	RemoveLocals([]common.Hash) []error
-	RemoveRemotes([]*types.ReceptTransaction) []error
-
-	VerifyCtx(*types.CrossTransaction) error
-
-	MarkStatus([]*types.ReceptTransaction, types.CtxStatus)
-
-	SubscribeSignedCtxEvent(chan<- core.SignedCtxEvent) event.Subscription
-
-	UpdateAnchors(*types.RemoteChainInfo) error
-	RegisterChain(*big.Int)
-	SyncCrossTransactions([]*types.CrossTransactionWithSignatures) int
-	GetSyncCrossTransactions(chainID uint64, txID common.Hash, pageSize int) []*types.CrossTransactionWithSignatures
-}
-
-type simplechain interface {
 	GetEVM(ctx context.Context, msg core.Message, state *state.StateDB, header *types.Header, vmCfg vm.Config) (*vm.EVM, func() error, error)
 	BlockByNumber(ctx context.Context, blockNr rpc.BlockNumber) (*types.Block, error)
 	HeaderByNumber(ctx context.Context, blockNr rpc.BlockNumber) (*types.Header, error)
 	StateAndHeaderByNumber(ctx context.Context, blockNr rpc.BlockNumber) (*state.StateDB, *types.Header, error)
 }
 
+type Transaction interface {
+	ID() common.Hash
+	ChainId() *big.Int
+	DestinationId() *big.Int
+	Hash() common.Hash
+	BlockHash() common.Hash
+}
+
+type BlockChain interface {
+	core.ChainContext
+	GetBlockNumber(hash common.Hash) *uint64
+	GetBlockByHash(hash common.Hash) *types.Block
+	CurrentBlock() *types.Block
+	StateAt(root common.Hash) (*state.StateDB, error)
+}
+
 type ProtocolManager interface {
-	BroadcastCtx(ctx []*types.CrossTransaction, local bool)
-	CanAcceptTxs() bool
 	NetworkId() uint64
 	GetNonce(address common.Address) uint64
 	AddLocals([]*types.Transaction)
-	AddRemotes([]*types.Transaction)
-	SetMsgHandler(msgHandler *Handler)
 	Pending() (map[common.Address]types.Transactions, error)
 }
 

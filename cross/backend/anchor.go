@@ -1,12 +1,14 @@
-package core
+package backend
 
 import (
 	"math/big"
 
 	"github.com/simplechain-org/go-simplechain/common"
+	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/core/vm"
+	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/params"
 )
@@ -28,14 +30,14 @@ func (as AnchorSet) IsAnchor(address common.Address) bool {
 	return exist
 }
 
-func (as AnchorSet) IsAnchorSignedCtx(tx *types.CrossTransaction, signer types.CtxSigner) bool {
+func (as AnchorSet) IsAnchorSignedCtx(tx *cc.CrossTransaction, signer cc.CtxSigner) bool {
 	if addr, err := signer.Sender(tx); err == nil {
 		return as.IsAnchor(addr)
 	}
 	return false
 }
 
-func QueryAnchor(config *params.ChainConfig, bc ChainContext, statedb *state.StateDB, header *types.Header,
+func QueryAnchor(config *params.ChainConfig, bc core.ChainContext, statedb *state.StateDB, header *types.Header,
 	address common.Address, remoteChainId uint64) ([]common.Address, int) {
 	res, err := NewEvmInvoke(bc, header, statedb, config, vm.Config{}).
 		CallContract(common.Address{}, &address, params.GetAnchorFn, common.LeftPadBytes(big.NewInt(int64(remoteChainId)).Bytes(), 32))
@@ -44,7 +46,6 @@ func QueryAnchor(config *params.ChainConfig, bc ChainContext, statedb *state.Sta
 	}
 	var anchors []common.Address
 	if len(res) > 64 {
-		//log.Info("anchor query", "result", hexutil.Encode(res), "gas", gas, "suc", suc)
 		signConfirmCount := new(big.Int).SetBytes(res[common.HashLength : common.HashLength*2]).Uint64()
 		anchorLen := new(big.Int).SetBytes(res[common.HashLength*2 : common.HashLength*3]).Uint64()
 
@@ -56,5 +57,4 @@ func QueryAnchor(config *params.ChainConfig, bc ChainContext, statedb *state.Sta
 		return anchors, int(signConfirmCount)
 	}
 	return anchors, 2
-
 }

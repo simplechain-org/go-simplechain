@@ -7,9 +7,17 @@ import (
 	"time"
 
 	"github.com/simplechain-org/go-simplechain/common"
-	"github.com/simplechain-org/go-simplechain/cross"
+	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	"github.com/simplechain-org/go-simplechain/eth"
 	"github.com/simplechain-org/go-simplechain/p2p"
+
+	mapset "github.com/deckarep/golang-set"
+)
+
+const (
+	maxKnownCtx        = 32768 // Maximum cross transactions hashes to keep in the known list (prevent DOS)
+	maxQueuedLocalCtx  = 4096
+	maxQueuedRemoteCtx = 128
 )
 
 type anchorPeer struct {
@@ -19,15 +27,22 @@ type anchorPeer struct {
 	rw          p2p.MsgReadWriter
 	term        chan struct{} // Termination channel to stop the broadcaster
 	crossStatus crossStatusData
+
+	knownCTxs           mapset.Set
+	queuedLocalCtxSign  chan *cc.CrossTransaction // ctx signed by local anchor
+	queuedRemoteCtxSign chan *cc.CrossTransaction // signed ctx received by others
 }
 
 func newAnchorPeer(p *p2p.Peer, rw p2p.MsgReadWriter) *anchorPeer {
 	return &anchorPeer{
-		Peer:    p,
-		version: protocolVersion,
-		id:      fmt.Sprintf("%x", p.ID().Bytes()[:8]),
-		rw:      rw,
-		term:    make(chan struct{}),
+		Peer:                p,
+		version:             protocolVersion,
+		id:                  fmt.Sprintf("%x", p.ID().Bytes()[:8]),
+		rw:                  rw,
+		term:                make(chan struct{}),
+		queuedLocalCtxSign:  make(chan *cc.CrossTransaction, maxQueuedLocalCtx),
+		queuedRemoteCtxSign: make(chan *cc.CrossTransaction, maxQueuedRemoteCtx),
+		knownCTxs:           mapset.NewSet(),
 	}
 }
 
@@ -104,12 +119,61 @@ func (p *anchorPeer) readStatus(mainNetwork, subNetwork uint64, mainGenesis, sub
 	return nil
 }
 
-func (p *anchorPeer) SendSyncRequest(req *cross.SyncReq) error {
+func (p *anchorPeer) SendSyncRequest(req *SyncReq) error {
 	return p2p.Send(p.rw, GetCtxSyncMsg, req)
 }
 
-func (p *anchorPeer) SendSyncResponse(resp *cross.SyncResp) error {
+func (p *anchorPeer) SendSyncResponse(resp *SyncResp) error {
 	return p2p.Send(p.rw, CtxSyncMsg, resp)
+}
+
+func (p *anchorPeer) MarkCrossTransaction(hash common.Hash) {
+	// If we reached the memory allowance, drop a previously known transaction hash
+	for p.knownCTxs.Cardinality() >= maxKnownCtx {
+		p.knownCTxs.Pop()
+	}
+	p.knownCTxs.Add(hash)
+}
+
+func (p *anchorPeer) SendCrossTransaction(ctx *cc.CrossTransaction) error {
+	return p2p.Send(p.rw, CtxSignMsg, ctx)
+}
+
+func (p *anchorPeer) AsyncSendCrossTransaction(ctx *cc.CrossTransaction, local bool) {
+	if local {
+		// local signed ctx, wait until sent to queuedLocalCtxSign
+		p.queuedLocalCtxSign <- ctx
+		p.knownCTxs.Add(ctx.SignHash())
+		return
+	}
+
+	// received from p2p
+	select {
+	case p.queuedRemoteCtxSign <- ctx:
+		p.knownCTxs.Add(ctx.SignHash())
+	default:
+		p.Log().Debug("Dropping ctx propagation", "hash", ctx.SignHash())
+	}
+}
+
+func (p *anchorPeer) broadcast() {
+	for {
+		select {
+		case <-p.term:
+			return
+
+		case ctx := <-p.queuedLocalCtxSign:
+			if err := p.SendCrossTransaction(ctx); err != nil {
+				p.Log().Trace("SendCrossTransaction", "err", err)
+				return
+			}
+		case ctx := <-p.queuedRemoteCtxSign:
+			if err := p.SendCrossTransaction(ctx); err != nil {
+				p.Log().Trace("SendCrossTransaction", "err", err)
+				return
+			}
+		}
+	}
 }
 
 type CrossPeerInfo struct {
@@ -150,59 +214,73 @@ func newAnchorSet() *anchorSet {
 	}
 }
 
-func (as *anchorSet) Peer(id string) *anchorPeer {
-	as.lock.RLock()
-	defer as.lock.RUnlock()
-	return as.peers[id]
+func (ps *anchorSet) Len() int {
+	ps.lock.RLock()
+	defer ps.lock.RUnlock()
+	return len(ps.peers)
 }
 
-func (as *anchorSet) Len() int {
-	as.lock.RLock()
-	defer as.lock.RUnlock()
-	return len(as.peers)
+func (ps *anchorSet) Close() {
+	ps.lock.Lock()
+	defer ps.lock.Unlock()
+
+	for _, p := range ps.peers {
+		p.Disconnect(p2p.DiscQuitting)
+	}
+	ps.closed = true
 }
 
 // Register injects a new peer into the working set, or returns an error if the
 // peer is already known. If a new peer it registered, its broadcast loop is also
 // started.
-func (as *anchorSet) Register(p *anchorPeer) error {
-	as.lock.Lock()
-	defer as.lock.Unlock()
+func (ps *anchorSet) Register(p *anchorPeer) error {
+	ps.lock.Lock()
+	defer ps.lock.Unlock()
 
-	if as.closed {
+	if ps.closed {
 		return eth.ErrClosed
 	}
-	if _, ok := as.peers[p.id]; ok {
+	if _, ok := ps.peers[p.id]; ok {
 		return eth.ErrAlreadyRegistered
 	}
-	as.peers[p.id] = p
+	ps.peers[p.id] = p
+	go p.broadcast()
 	return nil
 }
 
 // Unregister removes a remote peer from the active set, disabling any further
 // actions to/from that particular entity.
-func (as *anchorSet) Unregister(id string) error {
-	as.lock.Lock()
-	defer as.lock.Unlock()
+func (ps *anchorSet) Unregister(id string) error {
+	ps.lock.Lock()
+	defer ps.lock.Unlock()
 
-	p, ok := as.peers[id]
+	p, ok := ps.peers[id]
 	if !ok {
 		return eth.ErrNotRegistered
 	}
-	delete(as.peers, id)
+	delete(ps.peers, id)
 	p.close()
 
 	return nil
 }
 
-func (as *anchorSet) Close() {
-	as.lock.Lock()
-	defer as.lock.Unlock()
+func (ps *anchorSet) Peer(id string) *anchorPeer {
+	ps.lock.RLock()
+	defer ps.lock.RUnlock()
+	return ps.peers[id]
+}
 
-	for _, p := range as.peers {
-		p.Disconnect(p2p.DiscQuitting)
+func (ps *anchorSet) PeersWithoutCtx(hash common.Hash) []*anchorPeer {
+	ps.lock.RLock()
+	defer ps.lock.RUnlock()
+
+	list := make([]*anchorPeer, 0, len(ps.peers))
+	for _, p := range ps.peers {
+		if !p.knownCTxs.Contains(hash) {
+			list = append(list, p)
+		}
 	}
-	as.closed = true
+	return list
 }
 
 // statusData is the network packet for the status message for eth/64 and later.

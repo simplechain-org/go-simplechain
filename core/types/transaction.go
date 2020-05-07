@@ -106,7 +106,7 @@ func newTransaction(nonce uint64, to *common.Address, amount *big.Int, gasLimit 
 
 // ChainId returns which chain id this transaction was signed for (if at all)
 func (tx *Transaction) ChainId() *big.Int {
-	return deriveChainId(tx.data.V)
+	return DeriveChainId(tx.data.V)
 }
 
 // Protected returns whether the transaction is protected from replay protection.
@@ -158,7 +158,7 @@ func (tx *Transaction) UnmarshalJSON(input []byte) error {
 	if withSignature {
 		var V byte
 		if isProtectedV(dec.V) {
-			chainID := deriveChainId(dec.V).Uint64()
+			chainID := DeriveChainId(dec.V).Uint64()
 			V = byte(dec.V.Uint64() - 35 - 2*chainID)
 		} else {
 			V = byte(dec.V.Uint64() - 27)
@@ -206,7 +206,7 @@ func (tx *Transaction) Size() common.StorageSize {
 	if size := tx.size.Load(); size != nil {
 		return size.(common.StorageSize)
 	}
-	c := writeCounter(0)
+	c := WriteCounter(0)
 	rlp.Encode(&c, &tx.data)
 	tx.size.Store(common.StorageSize(c))
 	return common.StorageSize(c)

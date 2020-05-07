@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/simplechain-org/go-simplechain/common"
-	"github.com/simplechain-org/go-simplechain/core/types"
+	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	"github.com/simplechain-org/go-simplechain/ethdb/memorydb"
 )
 
@@ -17,7 +17,7 @@ func TestCtxDb(t *testing.T) {
 	)
 	var i int64
 	for i = 0; i < 1024; i++ {
-		ctx := types.NewCrossTransactionWithSignatures(types.NewCrossTransaction(big.NewInt(17),
+		ctx := cc.NewCrossTransactionWithSignatures(cc.NewCrossTransaction(big.NewInt(17),
 			big.NewInt(rand.Int63n(110)),
 			big.NewInt(1),
 			common.BigToHash(big.NewInt(i)),

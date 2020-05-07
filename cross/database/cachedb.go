@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	"github.com/simplechain-org/go-simplechain/common"
-	"github.com/simplechain-org/go-simplechain/core/types"
+	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	"github.com/simplechain-org/go-simplechain/ethdb"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/rlp"
@@ -48,7 +48,7 @@ func (d *cacheDB) Close() error {
 }
 
 // Write ctx into db and cache
-func (d *cacheDB) Write(ctx *types.CrossTransactionWithSignatures) error {
+func (d *cacheDB) Write(ctx *cc.CrossTransactionWithSignatures) error {
 	if ctx == nil {
 		return ErrCtxDbFailure{err: errors.New("ctx is nil")}
 	}
@@ -74,7 +74,7 @@ func (d *cacheDB) Write(ctx *types.CrossTransactionWithSignatures) error {
 }
 
 // writeDB write ctx to db
-func (d *cacheDB) writeDB(ctx *types.CrossTransactionWithSignatures) error {
+func (d *cacheDB) writeDB(ctx *cc.CrossTransactionWithSignatures) error {
 	key := d.chainMakerKey(ctx.ID())
 	enc, err := rlp.EncodeToBytes(ctx)
 	if err != nil {
@@ -95,7 +95,7 @@ func (d *cacheDB) writeDB(ctx *types.CrossTransactionWithSignatures) error {
 	return nil
 }
 
-func (d *cacheDB) writeAll(ctx *types.CrossTransactionWithSignatures) error {
+func (d *cacheDB) writeAll(ctx *cc.CrossTransactionWithSignatures) error {
 	key := d.makerKey(ctx.ID())
 	if has, _ := d.db.Has(key); has { // check exist ctx equals new
 		hash, err := d.db.Get(key)
@@ -132,7 +132,7 @@ func (d *cacheDB) Load() error {
 		total   int
 	)
 	for it := d.db.NewIteratorWithPrefix(append(d.chainID.Bytes(), makerPrefix...)); it.Next(); {
-		tx := new(types.CrossTransactionWithSignatures)
+		tx := new(cc.CrossTransactionWithSignatures)
 		if err := rlp.Decode(bytes.NewReader(it.Value()), tx); err != nil {
 			failure = err
 			break
@@ -161,7 +161,7 @@ func (d *cacheDB) Delete(ctxId common.Hash) error {
 }
 
 // Update ctx in cache and db
-func (d *cacheDB) Update(id common.Hash, updater func(ctx *types.CrossTransactionWithSignatures)) error {
+func (d *cacheDB) Update(id common.Hash, updater func(ctx *cc.CrossTransactionWithSignatures)) error {
 	ctx, err := d.Read(id)
 	if err != nil {
 		return err
@@ -174,7 +174,7 @@ func (d *cacheDB) Update(id common.Hash, updater func(ctx *types.CrossTransactio
 }
 
 // Read ctx from cache or db, error if not exist
-func (d *cacheDB) Read(ctxId common.Hash) (*types.CrossTransactionWithSignatures, error) {
+func (d *cacheDB) Read(ctxId common.Hash) (*cc.CrossTransactionWithSignatures, error) {
 	// read in cache
 	d.mux.RLock()
 	if ctx := d.cache.Get(ctxId); ctx != nil {
@@ -191,7 +191,7 @@ func (d *cacheDB) Read(ctxId common.Hash) (*types.CrossTransactionWithSignatures
 	if err != nil {
 		return nil, ErrCtxDbFailure{err: err}
 	}
-	ctx := new(types.CrossTransactionWithSignatures)
+	ctx := new(cc.CrossTransactionWithSignatures)
 	err = rlp.Decode(bytes.NewReader(data), ctx)
 	if err != nil {
 		return nil, ErrCtxDbFailure{err: err}
@@ -242,10 +242,10 @@ func (d *cacheDB) Has(txID common.Hash) bool {
 	return false
 }
 
-type Filter func(ctx *types.CrossTransactionWithSignatures) bool
+type Filter func(ctx *cc.CrossTransactionWithSignatures) bool
 
 func (d *cacheDB) sanitize(filter ...interface{}) Filter {
-	return func(ctx *types.CrossTransactionWithSignatures) bool {
+	return func(ctx *cc.CrossTransactionWithSignatures) bool {
 		for _, f := range filter {
 			if !f.(Filter)(ctx) { // static-assert: type switch must success
 				return false
@@ -255,7 +255,7 @@ func (d *cacheDB) sanitize(filter ...interface{}) Filter {
 	}
 }
 
-func (d *cacheDB) Query(pageSize int, _ int, filter ...interface{}) []*types.CrossTransactionWithSignatures {
+func (d *cacheDB) Query(pageSize int, _ int, filter ...interface{}) []*cc.CrossTransactionWithSignatures {
 	d.mux.RLock()
 	defer d.mux.RUnlock()
 

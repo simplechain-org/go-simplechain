@@ -1,10 +1,11 @@
-package types
+package core
 
 import (
 	"math/big"
 	"testing"
 
 	"github.com/simplechain-org/go-simplechain/common"
+	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/crypto"
 )
 
@@ -128,8 +129,8 @@ func TestCtxChainId(t *testing.T) {
 	}
 
 	_, err = CtxSender(NewEIP155CtxSigner(big.NewInt(2)), tx)
-	if err != ErrInvalidChainId {
-		t.Error("expected error:", ErrInvalidChainId)
+	if err != types.ErrInvalidChainId {
+		t.Error("expected error:", types.ErrInvalidChainId)
 	}
 
 	_, err = CtxSender(NewEIP155CtxSigner(big.NewInt(1)), tx)

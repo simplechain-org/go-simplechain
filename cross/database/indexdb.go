@@ -7,7 +7,7 @@ import (
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/math"
-	"github.com/simplechain-org/go-simplechain/core/types"
+	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	"github.com/simplechain-org/go-simplechain/log"
 
 	"github.com/asdine/storm/v3"
@@ -50,7 +50,7 @@ func (d *indexDB) Size() int {
 }
 
 func (d *indexDB) Load() (err error) {
-	query := d.db.Select(q.Not(q.Eq(StatusField, types.CtxStatusFinished)))
+	query := d.db.Select(q.Not(q.Eq(StatusField, cc.CtxStatusFinished)))
 	d.total, err = query.Count(&CrossTransactionIndexed{})
 	return err
 }
@@ -59,7 +59,7 @@ func (d *indexDB) Close() error {
 	return d.root.Close()
 }
 
-func (d *indexDB) Write(ctx *types.CrossTransactionWithSignatures) error {
+func (d *indexDB) Write(ctx *cc.CrossTransactionWithSignatures) error {
 	old, err := d.get(ctx.ID())
 	exist := old != nil && err == nil
 	if exist && old.BlockHash != ctx.BlockHash() {
@@ -83,7 +83,7 @@ func (d *indexDB) Write(ctx *types.CrossTransactionWithSignatures) error {
 	return nil
 }
 
-func (d *indexDB) Read(ctxId common.Hash) (*types.CrossTransactionWithSignatures, error) {
+func (d *indexDB) Read(ctxId common.Hash) (*cc.CrossTransactionWithSignatures, error) {
 	ctx, err := d.get(ctxId)
 	if err != nil {
 		return nil, err
@@ -122,7 +122,7 @@ func (d *indexDB) Delete(ctxId common.Hash) error {
 		return err
 	}
 	// set finished status, dont remove
-	err = d.db.UpdateField(ctx, StatusField, types.CtxStatusFinished)
+	err = d.db.UpdateField(ctx, StatusField, cc.CtxStatusFinished)
 	if err != nil {
 		return ErrCtxDbFailure{fmt.Sprintf("Delete:%s Update fail", ctxId.String()), err}
 	}
@@ -157,18 +157,18 @@ func (d *indexDB) Has(id common.Hash) bool {
 	return err == nil
 }
 
-func (d *indexDB) QueryByPK(pageSize int, startPage int, filter ...interface{}) []*types.CrossTransactionWithSignatures {
+func (d *indexDB) QueryByPK(pageSize int, startPage int, filter ...interface{}) []*cc.CrossTransactionWithSignatures {
 	return d.query(pageSize, startPage, PK, d.sanitize(filter...)...)
 }
 
-func (d *indexDB) QueryByPrice(pageSize int, startPage int, filter ...interface{}) []*types.CrossTransactionWithSignatures {
+func (d *indexDB) QueryByPrice(pageSize int, startPage int, filter ...interface{}) []*cc.CrossTransactionWithSignatures {
 	return d.query(pageSize, startPage, PriceIndex, d.sanitize(filter...)...)
 }
 
-func (d *indexDB) Range(pageSize int, startCtxID, endCtxID *common.Hash) []*types.CrossTransactionWithSignatures {
+func (d *indexDB) Range(pageSize int, startCtxID, endCtxID *common.Hash) []*cc.CrossTransactionWithSignatures {
 	var (
 		min, max uint64 = 0, math.MaxUint64
-		results  []*types.CrossTransactionWithSignatures
+		results  []*cc.CrossTransactionWithSignatures
 		list     []*CrossTransactionIndexed
 	)
 
@@ -192,14 +192,14 @@ func (d *indexDB) Range(pageSize int, startCtxID, endCtxID *common.Hash) []*type
 		return nil
 	}
 
-	results = make([]*types.CrossTransactionWithSignatures, len(list))
+	results = make([]*cc.CrossTransactionWithSignatures, len(list))
 	for i, ctx := range list {
 		results[i] = ctx.ToCrossTransaction()
 	}
 	return results
 }
 
-func (d *indexDB) query(pageSize int, startPage int, order string, filter ...q.Matcher) []*types.CrossTransactionWithSignatures {
+func (d *indexDB) query(pageSize int, startPage int, order string, filter ...q.Matcher) []*cc.CrossTransactionWithSignatures {
 	var ctxs []*CrossTransactionIndexed
 	query := d.db.Select(filter...).OrderBy(PriceIndex)
 	if pageSize > 0 {
@@ -207,7 +207,7 @@ func (d *indexDB) query(pageSize int, startPage int, order string, filter ...q.M
 	}
 	query.Find(&ctxs)
 
-	results := make([]*types.CrossTransactionWithSignatures, len(ctxs))
+	results := make([]*cc.CrossTransactionWithSignatures, len(ctxs))
 	for i, ctx := range ctxs {
 		results[i] = ctx.ToCrossTransaction()
 	}

@@ -1,4 +1,4 @@
-package types
+package core
 
 import (
 	"errors"
@@ -7,11 +7,15 @@ import (
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/math"
+	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/crypto/sha3"
 	"github.com/simplechain-org/go-simplechain/rlp"
 )
 
 type SignHash func(hash []byte) ([]byte, error)
+
+var ErrDuplicateSign = errors.New("signatures already exist")
+var ErrInvalidSign = errors.New("not same ctx")
 
 type CrossTransaction struct {
 	Data ctxdata
@@ -70,7 +74,7 @@ func (tx *CrossTransaction) ID() common.Hash {
 }
 
 func (tx *CrossTransaction) ChainId() *big.Int {
-	return deriveChainId(tx.Data.V)
+	return types.DeriveChainId(tx.Data.V)
 }
 
 func (tx CrossTransaction) DestinationId() *big.Int {
@@ -240,7 +244,7 @@ func (cws *CrossTransactionWithSignatures) ID() common.Hash {
 
 func (cws *CrossTransactionWithSignatures) ChainId() *big.Int {
 	if cws.SignaturesLength() > 0 {
-		return deriveChainId(cws.Data.V[0])
+		return types.DeriveChainId(cws.Data.V[0])
 	}
 	return nil
 }
@@ -286,9 +290,9 @@ func (cws *CrossTransactionWithSignatures) AddSignature(ctx *CrossTransaction) e
 			cws.Data.S = append(cws.Data.S, ctx.Data.S)
 			return nil
 		}
-		return errors.New("already exist")
+		return ErrDuplicateSign
 	}
-	return errors.New("not same Ctx")
+	return ErrInvalidSign
 }
 func (cws *CrossTransactionWithSignatures) RemoveSignature(index int) {
 	if index < cws.SignaturesLength() {
@@ -340,7 +344,7 @@ func (cws *CrossTransactionWithSignatures) Size() common.StorageSize {
 	if size := cws.size.Load(); size != nil {
 		return size.(common.StorageSize)
 	}
-	c := writeCounter(0)
+	c := types.WriteCounter(0)
 	rlp.Encode(&c, &cws.Data)
 	cws.size.Store(common.StorageSize(c))
 	return common.StorageSize(c)
