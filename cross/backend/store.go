@@ -166,7 +166,7 @@ func (store *CrossStore) AddFromRemoteChain(ctx *cc.CrossTransactionWithSignatur
 		}
 	}
 	if callback != nil {
-		callback(ctx, invalidSigIndex...) //call callback with signer checking results
+		go callback(ctx, invalidSigIndex...) //call callback with signer checking results
 	}
 
 	if invalidSigIndex != nil {
