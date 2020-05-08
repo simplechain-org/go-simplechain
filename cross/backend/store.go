@@ -401,18 +401,31 @@ func (store *CrossStore) StoreStats() int {
 	return count
 }
 
+func (store *CrossStore) Height() int {
+	store.mu.RLock()
+	defer store.mu.RUnlock()
+	return store.localStore.Height()
+}
+
 func (store *CrossStore) MarkStatus(rtxs []*cc.ReceptTransaction, status cc.CtxStatus) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 
-	for _, v := range rtxs {
-		if s, ok := store.remoteStore[v.DestinationId.Uint64()]; ok {
-			err := s.Update(v.CTxId, func(ctx *crossdb.CrossTransactionIndexed) {
-				ctx.Status = status
-			})
-			if err != nil {
-				store.logger.Warn("MarkStatus failed ", "err", err)
-			}
+	mark := func(tx *cc.ReceptTransaction, s crossdb.CtxDB) {
+		err := s.Update(tx.CTxId, func(ctx *crossdb.CrossTransactionIndexed) {
+			ctx.Status = status
+		})
+		if err != nil {
+			store.logger.Warn("MarkStatus failed ", "err", err)
+		}
+	}
+
+	for _, tx := range rtxs {
+		if tx.ChainId != nil && tx.ChainId.Cmp(store.config.ChainId) == 0 {
+			mark(tx, store.localStore)
+		}
+		if tx.DestinationId != nil && store.remoteStore[tx.DestinationId.Uint64()] != nil {
+			mark(tx, store.remoteStore[tx.DestinationId.Uint64()])
 		}
 	}
 }
@@ -438,6 +451,8 @@ func (store *CrossStore) Query() (map[uint64][]*cc.CrossTransactionWithSignature
 }
 
 func (store *CrossStore) GetSyncCrossTransactions(chainID uint64, txID common.Hash, pageSize int) []*cc.CrossTransactionWithSignatures {
+	store.mu.RLock()
+	defer store.mu.RUnlock()
 	var startID *common.Hash
 	if txID != (common.Hash{}) {
 		startID = &txID

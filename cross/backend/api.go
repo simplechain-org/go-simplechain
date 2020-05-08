@@ -10,12 +10,12 @@ import (
 
 // PublicTxPoolAPI offers and API for the transaction pool. It only operates on data that is non confidential.
 type PublicCrossChainAPI struct {
-	store *CrossStore
+	handler *Handler
 }
 
 // NewPublicTxPoolAPI creates a new tx pool service that gives information about the transaction pool.
-func NewPublicCrossChainAPI(store *CrossStore) *PublicCrossChainAPI {
-	return &PublicCrossChainAPI{store}
+func NewPublicCrossChainAPI(handler *Handler) *PublicCrossChainAPI {
+	return &PublicCrossChainAPI{handler}
 }
 
 func (s *PublicCrossChainAPI) CtxContent() map[string]map[uint64][]*RPCCrossTransaction {
@@ -23,7 +23,7 @@ func (s *PublicCrossChainAPI) CtxContent() map[string]map[uint64][]*RPCCrossTran
 		"remote": make(map[uint64][]*RPCCrossTransaction),
 		"local":  make(map[uint64][]*RPCCrossTransaction),
 	}
-	remotes, locals := s.store.Query()
+	remotes, locals := s.handler.Query()
 	for k, txs := range remotes {
 		for _, tx := range txs {
 			content["remote"][k] = append(content["remote"][k], newRPCCrossTransaction(tx))
@@ -40,7 +40,7 @@ func (s *PublicCrossChainAPI) CtxContent() map[string]map[uint64][]*RPCCrossTran
 func (s *PublicCrossChainAPI) GetRemoteCtx(count uint64) map[uint64][]*RPCCrossTransaction {
 	content := make(map[uint64][]*RPCCrossTransaction)
 
-	remotes, _ := s.store.Query()
+	remotes, _ := s.handler.Query()
 	for k, txs := range remotes {
 		ctxCount := uint64(0)
 		for _, tx := range txs {
@@ -56,7 +56,7 @@ func (s *PublicCrossChainAPI) GetRemoteCtx(count uint64) map[uint64][]*RPCCrossT
 func (s *PublicCrossChainAPI) GetLocalCtx(count uint64) map[uint64][]*RPCCrossTransaction {
 	content := make(map[uint64][]*RPCCrossTransaction)
 
-	_, locals := s.store.Query()
+	_, locals := s.handler.Query()
 	for k, txs := range locals {
 		ctxCount := uint64(0)
 		for _, tx := range txs {
@@ -71,16 +71,16 @@ func (s *PublicCrossChainAPI) GetLocalCtx(count uint64) map[uint64][]*RPCCrossTr
 }
 
 func (s *PublicCrossChainAPI) CtxStats() int {
-	return s.store.StoreStats()
+	return s.handler.Stats()
 }
 
 func (s *PublicCrossChainAPI) CtxStatus() map[string]int {
-	pending, queue := s.store.Stats()
+	pending, queue := s.handler.Status()
 	return map[string]int{"pending": pending, "queue": queue}
 }
 
 func (s *PublicCrossChainAPI) CtxQuery(ctx context.Context, hash common.Hash) *RPCCrossTransaction {
-	remotes, locals := s.store.Query()
+	remotes, locals := s.handler.Query()
 	for _, txs := range remotes {
 		for _, tx := range txs {
 			if tx.Data.TxHash == hash {
@@ -96,6 +96,26 @@ func (s *PublicCrossChainAPI) CtxQuery(ctx context.Context, hash common.Hash) *R
 		}
 	}
 	return nil
+}
+
+func (s *PublicCrossChainAPI) CtxOwner(ctx context.Context, from common.Address) map[string]map[uint64][]*RPCCrossTransaction {
+	remotes, locals := s.handler.ListCrossTransactionBySender(from)
+	content := map[string]map[uint64][]*RPCCrossTransaction{
+		"remote": make(map[uint64][]*RPCCrossTransaction),
+		"local":  make(map[uint64][]*RPCCrossTransaction),
+	}
+	for k, txs := range remotes {
+		for _, tx := range txs {
+			content["remote"][k] = append(content["remote"][k], newRPCCrossTransaction(tx))
+		}
+
+	}
+	for s, txs := range locals {
+		for _, tx := range txs {
+			content["local"][s] = append(content["local"][s], newRPCCrossTransaction(tx))
+		}
+	}
+	return content
 }
 
 // RPCTransaction represents a transaction that will serialize to the RPC representation of a transaction
@@ -137,24 +157,4 @@ func newRPCCrossTransaction(tx *cc.CrossTransactionWithSignatures) *RPCCrossTran
 	}
 
 	return result
-}
-
-func (s *PublicCrossChainAPI) CtxOwner(ctx context.Context, from common.Address) map[string]map[uint64][]*RPCCrossTransaction {
-	remotes, locals := s.store.ListCrossTransactionBySender(from)
-	content := map[string]map[uint64][]*RPCCrossTransaction{
-		"remote": make(map[uint64][]*RPCCrossTransaction),
-		"local":  make(map[uint64][]*RPCCrossTransaction),
-	}
-	for k, txs := range remotes {
-		for _, tx := range txs {
-			content["remote"][k] = append(content["remote"][k], newRPCCrossTransaction(tx))
-		}
-
-	}
-	for s, txs := range locals {
-		for _, tx := range txs {
-			content["local"][s] = append(content["local"][s], newRPCCrossTransaction(tx))
-		}
-	}
-	return content
 }

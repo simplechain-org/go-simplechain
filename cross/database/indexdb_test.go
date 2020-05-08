@@ -53,7 +53,7 @@ func TestIndexDB_ReadWrite(t *testing.T) {
 	testFunction1 := func(t *testing.T, db *indexDB) {
 		assert.NoError(t, db.Write(ctxList[0]))
 		assert.Error(t, db.Write(ctxList[0]))
-		assert.Equal(t, db.total, 1)
+		assert.EqualValues(t, db.total, 1)
 
 		assert.NoError(t, db.Write(ctxList[1]))
 		ctx, err := db.Read(ctxList[1].ID())

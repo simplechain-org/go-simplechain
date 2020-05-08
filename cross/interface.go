@@ -8,7 +8,6 @@ import (
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"
-	"github.com/simplechain-org/go-simplechain/core/vm"
 	"github.com/simplechain-org/go-simplechain/eth/gasprice"
 	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/rpc"
@@ -21,18 +20,9 @@ type SimpleChain interface {
 	GasOracle() *gasprice.Oracle
 	ProtocolManager() ProtocolManager
 	RegisterAPIs([]rpc.API)
-
-	GetEVM(ctx context.Context, msg core.Message, state *state.StateDB, header *types.Header, vmCfg vm.Config) (*vm.EVM, func() error, error)
-	BlockByNumber(ctx context.Context, blockNr rpc.BlockNumber) (*types.Block, error)
-	HeaderByNumber(ctx context.Context, blockNr rpc.BlockNumber) (*types.Header, error)
-	StateAndHeaderByNumber(ctx context.Context, blockNr rpc.BlockNumber) (*state.StateDB, *types.Header, error)
 }
 
 type Transaction interface {
-	ID() common.Hash
-	ChainId() *big.Int
-	DestinationId() *big.Int
-	Hash() common.Hash
 	BlockHash() common.Hash
 }
 
@@ -49,6 +39,7 @@ type ProtocolManager interface {
 	GetNonce(address common.Address) uint64
 	AddLocals([]*types.Transaction)
 	Pending() (map[common.Address]types.Transactions, error)
+	CanAcceptTxs() bool
 }
 
 type GasPriceOracle interface {

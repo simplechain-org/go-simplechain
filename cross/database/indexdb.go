@@ -3,7 +3,7 @@ package db
 import (
 	"fmt"
 	"math/big"
-	"sync"
+	"sync/atomic"
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/math"
@@ -19,8 +19,7 @@ type indexDB struct {
 	root    *storm.DB // root db of stormDB
 	db      storm.Node
 	cache   *IndexDbCache
-	total   int // size of unfinished ctx
-	mux     sync.RWMutex
+	total   int64 // size of unfinished ctx
 }
 
 const (
@@ -44,15 +43,22 @@ func NewIndexDB(chainID *big.Int, rootDB *storm.DB, cacheSize uint64) *indexDB {
 }
 
 func (d *indexDB) Size() int {
-	d.mux.RLock()
-	defer d.mux.RUnlock()
-	return d.total
+	return int(d.total)
 }
 
-func (d *indexDB) Load() (err error) {
+func (d *indexDB) Height() int {
+	h, _ := d.db.Count(&CrossTransactionIndexed{})
+	return h
+}
+
+func (d *indexDB) Load() error {
 	query := d.db.Select(q.Not(q.Eq(StatusField, cc.CtxStatusFinished)))
-	d.total, err = query.Count(&CrossTransactionIndexed{})
-	return err
+	total, err := query.Count(&CrossTransactionIndexed{})
+	if err != nil {
+		return ErrCtxDbFailure{msg: "Load failed", err: err}
+	}
+	atomic.StoreInt64(&d.total, int64(total))
+	return nil
 }
 
 func (d *indexDB) Close() error {
@@ -73,9 +79,7 @@ func (d *indexDB) Write(ctx *cc.CrossTransactionWithSignatures) error {
 		return ErrCtxDbFailure{fmt.Sprintf("Write:%s save fail", ctx.ID().String()), err}
 	}
 	if !exist {
-		d.mux.Lock()
-		d.total++
-		d.mux.Unlock()
+		atomic.AddInt64(&d.total, 1)
 	}
 	if d.cache != nil {
 		d.cache.Put(ctx.ID(), persist)
@@ -126,9 +130,7 @@ func (d *indexDB) Delete(ctxId common.Hash) error {
 	if err != nil {
 		return ErrCtxDbFailure{fmt.Sprintf("Delete:%s Update fail", ctxId.String()), err}
 	}
-	d.mux.Lock()
-	d.total--
-	d.mux.Unlock()
+	atomic.AddInt64(&d.total, -1)
 
 	if d.cache != nil {
 		d.cache.Remove(ctxId)

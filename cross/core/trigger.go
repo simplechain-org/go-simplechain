@@ -43,7 +43,7 @@ func (t *CrossTrigger) StoreCrossContractLog(blockNumber uint64, hash common.Has
 		var updates []*RemoteChainInfo
 		var finishes []common.Hash
 		for _, v := range logs {
-			if len(v.Topics) > 0 && t.contract == v.Address {
+			if t.contract == v.Address && len(v.Topics) > 0 {
 				switch v.Topics[0] {
 				case params.MakerTopic:
 					unconfirmedLogs = append(unconfirmedLogs, v)
