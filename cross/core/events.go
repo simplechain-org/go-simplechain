@@ -35,7 +35,3 @@ type ConfirmedFinishEvent struct {
 type AnchorEvent struct {
 	ChainInfo []*RemoteChainInfo
 }
-
-type NewCrossChainEvent struct {
-	ChainID *big.Int
-}

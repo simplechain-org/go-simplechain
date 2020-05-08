@@ -174,7 +174,7 @@ func (m *CtxSortedByBlockNum) Put(ctx *cc.CrossTransactionWithSignatures, number
 	}
 
 	m.items[id] = ctx
-	m.index.Push(byBlockNum{id, number})
+	heap.Push(m.index, byBlockNum{id, number})
 }
 
 func (m *CtxSortedByBlockNum) Len() int {
@@ -182,18 +182,17 @@ func (m *CtxSortedByBlockNum) Len() int {
 }
 
 func (m *CtxSortedByBlockNum) RemoveByHash(hash common.Hash) {
-	delete(m.items, hash)
+	delete(m.items, hash) // only remove from items, dont delete index
 }
 
 func (m *CtxSortedByBlockNum) RemoveUnderNum(num uint64) {
-	for i := 0; i < m.index.Len(); i++ {
-		if (*m.index)[i].blockNum <= num {
-			deleteId := (*m.index)[i].txId
-			delete(m.items, deleteId)
-			heap.Remove(m.index, i)
-			continue
+	for m.index.Len() > 0 {
+		item := heap.Pop(m.index)
+		if item.(byBlockNum).blockNum > num {
+			heap.Push(m.index, item)
+			break
 		}
-		break
+		delete(m.items, item.(byBlockNum).txId)
 	}
 }
 

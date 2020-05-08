@@ -96,15 +96,15 @@ func NewCrossService(ctx *node.ServiceContext, main, sub cross.SimpleChain, conf
 	)
 
 	// register crosschain
-	mainHandler.RegisterCrossChain(sub.ChainConfig().ChainID)
-	subHandler.RegisterCrossChain(main.ChainConfig().ChainID)
+	mainStore.RegisterChain(sub.ChainConfig().ChainID)
+	subStore.RegisterChain(main.ChainConfig().ChainID)
 
 	// register apis
 	main.RegisterAPIs([]rpc.API{
 		{
 			Namespace: "eth",
 			Version:   "1.0",
-			Service:   NewPublicCrossChainAPI(mainStore),
+			Service:   NewPublicCrossChainAPI(mainHandler),
 			Public:    true,
 		},
 	})
@@ -112,7 +112,7 @@ func NewCrossService(ctx *node.ServiceContext, main, sub cross.SimpleChain, conf
 		{
 			Namespace: "eth",
 			Version:   "1.0",
-			Service:   NewPublicCrossChainAPI(subStore),
+			Service:   NewPublicCrossChainAPI(subHandler),
 			Public:    true,
 		},
 	})
@@ -136,15 +136,15 @@ func NewCrossService(ctx *node.ServiceContext, main, sub cross.SimpleChain, conf
 	return srv, nil
 }
 
-func (srv *CrossService) getCross(chainID *big.Int) *crossCommons {
+func (srv *CrossService) getCrossHandler(chainID *big.Int) *Handler {
 	if chainID == nil {
 		return nil
 	}
 	if chainID.Uint64() == srv.main.networkID {
-		return &srv.main
+		return srv.main.handler
 	}
 	if chainID.Uint64() == srv.sub.networkID {
-		return &srv.sub
+		return srv.sub.handler
 	}
 	return nil
 }
@@ -225,7 +225,7 @@ func (srv *CrossService) handle(p *anchorPeer) error {
 	defer srv.removePeer(p.id)
 
 	// sync ctx
-	go p.SendSyncRequest(&SyncReq{Chain: mainNetworkID})
+	go p.SendSyncRequest(&SyncReq{Chain: mainNetworkID}) //TODO: 用增量同步取代全量同步
 	go p.SendSyncRequest(&SyncReq{Chain: subNetworkID})
 
 	// Handle incoming messages until the connection is torn down
@@ -237,7 +237,6 @@ func (srv *CrossService) handle(p *anchorPeer) error {
 }
 
 func (srv *CrossService) handleMsg(p *anchorPeer) error {
-	logger := log.New("main", srv.main.networkID, "sub", srv.sub.networkID, "anchor", p.ID())
 	// Read the next message from the remote peer, and ensure it's fully consumed
 	msg, err := p.rw.ReadMsg()
 	if err != nil {
@@ -258,13 +257,13 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 		if err := msg.Decode(&req); err != nil {
 			return eth.ErrResp(eth.ErrDecode, "msg %v: %v", msg, err)
 		}
-		logger.Info("receive ctx sync request", "chain", req.Chain, "startID", req.StartID)
+		p.log.Info("receive ctx sync request", "chain", req.Chain, "startID", req.StartID)
 
-		c := srv.getCross(new(big.Int).SetUint64(req.Chain))
-		if c == nil {
+		h := srv.getCrossHandler(new(big.Int).SetUint64(req.Chain))
+		if h == nil {
 			break
 		}
-		ctxList := c.handler.GetSyncCrossTransaction(req.StartID, defaultMaxSyncSize)
+		ctxList := h.GetSyncCrossTransaction(req.StartID, defaultMaxSyncSize)
 		var data [][]byte
 		for _, ctx := range ctxList {
 			b, err := rlp.EncodeToBytes(ctx)
@@ -285,7 +284,7 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 		if err := msg.Decode(&resp); err != nil {
 			return eth.ErrResp(eth.ErrDecode, "msg %v: %v", msg, err)
 		}
-		logger.Info("receive ctx sync response", "chain", resp.Chain, "len(data)", len(resp.Data))
+		p.log.Info("receive ctx sync response", "chain", resp.Chain, "len(data)", len(resp.Data))
 
 		var ctxList []*cc.CrossTransactionWithSignatures
 		for _, b := range resp.Data {
@@ -315,12 +314,12 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 			return eth.ErrResp(eth.ErrDecode, "msg %v: %v", msg, err)
 		}
 
-		c := srv.getCross(ctx.ChainId())
-		if c == nil {
+		h := srv.getCrossHandler(ctx.ChainId())
+		if h == nil {
 			break
 		}
 
-		err := c.handler.AddRemoteCtx(ctx)
+		err := h.AddRemoteCtx(ctx)
 		if err != ErrVerifyCtx {
 			p.MarkCrossTransaction(ctx.SignHash())
 			srv.BroadcastCrossTx([]*cc.CrossTransaction{ctx}, false)

@@ -2,6 +2,7 @@ package backend
 
 import (
 	"fmt"
+	"github.com/simplechain-org/go-simplechain/log"
 	"math/big"
 	"sync"
 	"time"
@@ -31,6 +32,8 @@ type anchorPeer struct {
 	knownCTxs           mapset.Set
 	queuedLocalCtxSign  chan *cc.CrossTransaction // ctx signed by local anchor
 	queuedRemoteCtxSign chan *cc.CrossTransaction // signed ctx received by others
+
+	log log.Logger
 }
 
 func newAnchorPeer(p *p2p.Peer, rw p2p.MsgReadWriter) *anchorPeer {
@@ -87,6 +90,7 @@ func (p *anchorPeer) Handshake(
 		}
 	}
 	p.crossStatus = status
+	p.log = log.New("main", mainNetwork, "sub", subNetwork, "anchor", p.ID())
 	return nil
 }
 

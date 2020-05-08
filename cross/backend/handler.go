@@ -74,7 +74,7 @@ type Handler struct {
 
 	chain cross.SimpleChain
 	gpo   cross.GasPriceOracle
-	//gasHelper           *GasHelper
+
 	MainChainCtxAddress common.Address
 	SubChainCtxAddress  common.Address
 	anchorSigner        common.Address
@@ -119,10 +119,6 @@ func NewCrossHandler(chain cross.SimpleChain, roleHandler RoleHandler, role comm
 	}
 }
 
-func (h *Handler) RegisterCrossChain(chainID *big.Int) {
-	h.writeCrossMessage(cc.NewCrossChainEvent{ChainID: chainID})
-}
-
 func (h *Handler) Start() {
 	h.confirmedMakerCh = make(chan cc.ConfirmedMakerEvent, txChanSize)
 	h.confirmedMakerSub = h.blockChain.GetCrossTrigger().SubscribeConfirmedMakerEvent(h.confirmedMakerCh)
@@ -149,16 +145,6 @@ func (h *Handler) Start() {
 
 	go h.loop()
 	go h.readCrossMessage()
-}
-
-func (h *Handler) AddRemoteCtx(ctx *cc.CrossTransaction) error {
-	if err := h.store.VerifyCtx(ctx); err != nil {
-		return ErrVerifyCtx
-	}
-	if err := h.store.AddRemote(ctx); err != nil && err != cc.ErrDuplicateSign {
-		log.Error("Add remote ctx", "id", ctx.ID().String(), "err", err)
-	}
-	return nil
 }
 
 func (h *Handler) Stop() {
@@ -220,7 +206,7 @@ func (h *Handler) loop() {
 			return
 
 		case ev := <-h.confirmedFinishCh:
-			h.clearStore(ev.FinishIds)
+			h.makeFinish(ev.FinishIds)
 		case <-h.confirmedFinishSub.Err():
 			return
 
@@ -279,17 +265,22 @@ func (h *Handler) readCrossMessage() {
 					}
 				}
 				h.store.MarkStatus(txs, cc.CtxStatusFinishing)
-
-			case cc.NewCrossChainEvent:
-				if ev.ChainID.Uint64() != h.pm.NetworkId() {
-					h.store.RegisterChain(ev.ChainID)
-				}
 			}
 
 		case <-h.quitSync:
 			return
 		}
 	}
+}
+
+func (h *Handler) AddRemoteCtx(ctx *cc.CrossTransaction) error {
+	if err := h.store.VerifyCtx(ctx); err != nil {
+		return ErrVerifyCtx
+	}
+	if err := h.store.AddRemote(ctx); err != nil && err != cc.ErrDuplicateSign {
+		log.Error("Add remote ctx", "id", ctx.ID().String(), "err", err)
+	}
+	return nil
 }
 
 func (h *Handler) getTxForLockOut(rwss []*cc.ReceptTransaction) ([]*types.Transaction, error) {
@@ -323,7 +314,7 @@ func (h *Handler) getTxForLockOut(rwss []*cc.ReceptTransaction) ([]*types.Transa
 	return txs, nil
 }
 
-func (h *Handler) clearStore(finishes []common.Hash) {
+func (h *Handler) makeFinish(finishes []common.Hash) {
 	for _, id := range finishes {
 		log.Info("cross transaction finished", "txId", id.String())
 	}
@@ -345,18 +336,35 @@ func (h *Handler) getCrossContractAddr() common.Address {
 
 func (h *Handler) reorgLogs(logs []*types.Log) {
 	var takerLogs []*cc.ReceptTransaction
+	var finishLogs []*cc.ReceptTransaction
 	for _, l := range logs {
-		if h.getCrossContractAddr() == l.Address {
-			if l.Topics[0] == params.TakerTopic && len(l.Topics) >= 3 && len(l.Data) >= common.HashLength*4 {
-				takerLogs = append(takerLogs, &cc.ReceptTransaction{
-					DestinationId: common.BytesToHash(l.Data[:common.HashLength]).Big(),
-					CTxId:         l.Topics[1],
-				})
+		if h.getCrossContractAddr() == l.Address && len(l.Topics) > 0 {
+			switch l.Topics[0] {
+			case params.TakerTopic: // remote ctx taken
+				if len(l.Topics) >= 3 && len(l.Data) >= common.HashLength {
+					takerLogs = append(takerLogs, &cc.ReceptTransaction{
+						DestinationId: common.BytesToHash(l.Data[:common.HashLength]).Big(),
+						CTxId:         l.Topics[1],
+					})
+				}
+
+			case params.MakerFinishTopic: // local ctx finished
+				if len(l.Topics) >= 3 {
+					finishLogs = append(finishLogs, &cc.ReceptTransaction{
+						ChainId: new(big.Int).SetUint64(h.pm.NetworkId()),
+						CTxId:   l.Topics[1],
+					})
+				}
 			}
+
 		}
 	}
 	if len(takerLogs) > 0 {
 		h.store.MarkStatus(takerLogs, cc.CtxStatusWaiting)
+	}
+
+	if len(finishLogs) > 0 {
+		h.store.MarkStatus(finishLogs, cc.CtxStatusFinishing)
 	}
 }
 
@@ -423,4 +431,32 @@ func (h *Handler) GetSyncCrossTransaction(startTxID common.Hash, syncSize int) [
 
 func (h *Handler) SyncCrossTransaction(ctx []*cc.CrossTransactionWithSignatures) int {
 	return h.store.SyncCrossTransactions(ctx)
+}
+
+func (h *Handler) Query() (map[uint64][]*cc.CrossTransactionWithSignatures, map[uint64][]*cc.CrossTransactionWithSignatures) {
+	if !h.pm.CanAcceptTxs() {
+		return nil, nil
+	}
+	return h.store.Query()
+}
+
+func (h *Handler) Status() (int, int) {
+	if !h.pm.CanAcceptTxs() {
+		return 0, 0
+	}
+	return h.store.Stats()
+}
+
+func (h *Handler) Stats() int {
+	if !h.pm.CanAcceptTxs() {
+		return 0
+	}
+	return h.store.StoreStats()
+}
+
+func (h *Handler) ListCrossTransactionBySender(from common.Address) (map[uint64][]*cc.CrossTransactionWithSignatures, map[uint64][]*cc.CrossTransactionWithSignatures) {
+	if !h.pm.CanAcceptTxs() {
+		return nil, nil
+	}
+	return h.store.ListCrossTransactionBySender(from)
 }
