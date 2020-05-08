@@ -46,6 +46,11 @@ func (d *indexDB) Size() int {
 	return int(d.total)
 }
 
+func (d *indexDB) Height() int {
+	h, _ := d.db.Count(&CrossTransactionIndexed{})
+	return h
+}
+
 func (d *indexDB) Load() error {
 	query := d.db.Select(q.Not(q.Eq(StatusField, cc.CtxStatusFinished)))
 	total, err := query.Count(&CrossTransactionIndexed{})

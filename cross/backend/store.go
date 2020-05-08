@@ -401,6 +401,12 @@ func (store *CrossStore) StoreStats() int {
 	return count
 }
 
+func (store *CrossStore) Height() int {
+	store.mu.RLock()
+	defer store.mu.RUnlock()
+	return store.localStore.Height()
+}
+
 func (store *CrossStore) MarkStatus(rtxs []*cc.ReceptTransaction, status cc.CtxStatus) {
 	store.mu.Lock()
 	defer store.mu.Unlock()

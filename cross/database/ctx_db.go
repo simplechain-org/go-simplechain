@@ -30,6 +30,7 @@ type ServiceContext interface {
 type CtxDB interface {
 	io.Closer
 	Size() int
+	Height() int
 	Load() error
 	Write(ctx *cc.CrossTransactionWithSignatures) error
 	Read(ctxId common.Hash) (*cc.CrossTransactionWithSignatures, error)

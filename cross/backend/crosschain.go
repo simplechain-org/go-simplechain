@@ -42,7 +42,9 @@ type CrossService struct {
 	config *eth.Config
 	peers  *anchorSet
 
-	wg sync.WaitGroup
+	newPeerCh chan *anchorPeer
+	quitSync  chan struct{}
+	wg        sync.WaitGroup
 }
 
 type crossCommons struct {
@@ -66,8 +68,10 @@ type SyncResp struct {
 
 func NewCrossService(ctx *node.ServiceContext, main, sub cross.SimpleChain, config *eth.Config) (*CrossService, error) {
 	srv := &CrossService{
-		config: config,
-		peers:  newAnchorSet(),
+		config:    config,
+		peers:     newAnchorSet(),
+		newPeerCh: make(chan *anchorPeer),
+		quitSync:  make(chan struct{}),
 	}
 
 	// construct cross store
@@ -181,22 +185,53 @@ func (srv *CrossService) Start(server *p2p.Server) error {
 	if srv.main.handler == nil {
 		return errors.New("main handler is not exist")
 	}
+	srv.main.handler.Start()
+
 	if srv.sub.handler == nil {
 		return errors.New("sub handler is not exist")
 	}
-
-	srv.main.handler.Start()
 	srv.sub.handler.Start()
 
+	// start sync handlers
+	go srv.syncer()
 	return nil
 }
 
 func (srv *CrossService) Stop() error {
 	log.Info("Stopping CrossChain Service")
+	close(srv.quitSync)
 	srv.peers.Close()
 	srv.wg.Wait()
 	log.Info("CrossChain Service Stopped")
 	return nil
+}
+
+func (srv *CrossService) syncer() {
+	for {
+		select {
+		case <-srv.newPeerCh:
+			if srv.peers.Len() > 0 {
+				go srv.synchronise(srv.peers.BestPeer())
+			}
+
+		case <-srv.quitSync:
+			return
+		}
+	}
+}
+
+func (srv *CrossService) synchronise(main, sub *anchorPeer) {
+	//TODO: 用增量同步取代全量同步
+	if main != nil {
+		if srv.main.handler.GetHeight().Cmp(main.crossStatus.MainHeight) < 0 {
+			go main.SendSyncRequest(&SyncReq{Chain: srv.main.networkID})
+		}
+	}
+	if sub != nil {
+		if srv.sub.handler.GetHeight().Cmp(sub.crossStatus.SubHeight) < 0 {
+			go sub.SendSyncRequest(&SyncReq{Chain: srv.sub.networkID})
+		}
+	}
 }
 
 func (srv *CrossService) handle(p *anchorPeer) error {
@@ -209,10 +244,15 @@ func (srv *CrossService) handle(p *anchorPeer) error {
 		subTD         = srv.sub.bc.GetTd(subHead.Hash(), subHead.Number.Uint64())
 		mainGenesis   = srv.main.genesis
 		subGenesis    = srv.sub.genesis
+		mainHeight    = srv.main.handler.GetHeight()
+		subHeight     = srv.sub.handler.GetHeight()
 		main          = srv.config.MainChainCtxAddress
 		sub           = srv.config.SubChainCtxAddress
 	)
-	if err := p.Handshake(mainNetworkID, subNetworkID, mainTD, subTD, mainHead.Hash(), subHead.Hash(), mainGenesis, subGenesis, main, sub); err != nil {
+	if err := p.Handshake(mainNetworkID, subNetworkID,
+		mainTD, subTD, mainHead.Hash(), subHead.Hash(),
+		mainGenesis, subGenesis, mainHeight, subHeight, main, sub,
+	); err != nil {
 		log.Debug("anchor handshake failed", "err", err)
 		return err
 	}
@@ -224,9 +264,11 @@ func (srv *CrossService) handle(p *anchorPeer) error {
 	}
 	defer srv.removePeer(p.id)
 
-	// sync ctx
-	go p.SendSyncRequest(&SyncReq{Chain: mainNetworkID}) //TODO: 用增量同步取代全量同步
-	go p.SendSyncRequest(&SyncReq{Chain: subNetworkID})
+	select {
+	case srv.newPeerCh <- p:
+	case <-srv.quitSync:
+		return p2p.DiscQuitting
+	}
 
 	// Handle incoming messages until the connection is torn down
 	for {

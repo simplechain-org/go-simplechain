@@ -460,3 +460,7 @@ func (h *Handler) ListCrossTransactionBySender(from common.Address) (map[uint64]
 	}
 	return h.store.ListCrossTransactionBySender(from)
 }
+
+func (h *Handler) GetHeight() *big.Int {
+	return big.NewInt(int64(h.store.Height()))
+}

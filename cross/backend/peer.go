@@ -2,7 +2,6 @@ package backend
 
 import (
 	"fmt"
-	"github.com/simplechain-org/go-simplechain/log"
 	"math/big"
 	"sync"
 	"time"
@@ -10,6 +9,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/common"
 	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	"github.com/simplechain-org/go-simplechain/eth"
+	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/p2p"
 
 	mapset "github.com/deckarep/golang-set"
@@ -54,6 +54,7 @@ func (p *anchorPeer) Handshake(
 	mainTD, subTD *big.Int,
 	mainHead, subHead common.Hash,
 	mainGenesis, subGenesis common.Hash,
+	mainHeight, subHeight *big.Int,
 	mainContract, subContract common.Address,
 ) error {
 	errc := make(chan error, 2)
@@ -67,6 +68,8 @@ func (p *anchorPeer) Handshake(
 			SubHead:       subHead,
 			MainGenesis:   mainGenesis,
 			SubGenesis:    subGenesis,
+			MainHeight:    mainHeight,
+			SubHeight:     subHeight,
 			MainContract:  mainContract,
 			SubContract:   subContract,
 		})
@@ -274,6 +277,29 @@ func (ps *anchorSet) Peer(id string) *anchorPeer {
 	return ps.peers[id]
 }
 
+func (ps *anchorSet) BestPeer() (main, sub *anchorPeer) {
+	ps.lock.RLock()
+	defer ps.lock.RUnlock()
+
+	var (
+		bestMainPeer, bestSubPeer     *anchorPeer
+		bestMainTd, bestSubTd         *big.Int
+		bestMainHeight, bestSubHeight *big.Int
+	)
+	for _, p := range ps.peers {
+		status := p.crossStatus
+		//分别找出mainHeight和subHeight最大的peer
+		if bestMainPeer == nil || status.MainHeight.Cmp(bestMainHeight) > 0 || (status.MainHeight.Cmp(bestMainHeight) == 0 && status.MainTD.Cmp(bestMainTd) > 0) {
+			bestMainPeer, bestMainHeight, bestMainTd = p, status.MainHeight, status.MainTD
+		}
+
+		if bestSubPeer == nil || status.SubHeight.Cmp(bestSubHeight) > 0 || (status.SubHeight.Cmp(bestSubHeight) == 0 && status.SubTD.Cmp(bestSubTd) > 0) {
+			bestSubPeer, bestSubHeight, bestSubTd = p, status.SubHeight, status.SubTD
+		}
+	}
+	return bestMainPeer, bestSubPeer
+}
+
 func (ps *anchorSet) PeersWithoutCtx(hash common.Hash) []*anchorPeer {
 	ps.lock.RLock()
 	defer ps.lock.RUnlock()
@@ -289,14 +315,10 @@ func (ps *anchorSet) PeersWithoutCtx(hash common.Hash) []*anchorPeer {
 
 // statusData is the network packet for the status message for eth/64 and later.
 type crossStatusData struct {
-	MainNetworkID uint64
-	SubNetworkID  uint64
-	MainTD        *big.Int
-	SubTD         *big.Int
-	MainHead      common.Hash
-	SubHead       common.Hash
-	MainGenesis   common.Hash
-	SubGenesis    common.Hash
-	MainContract  common.Address
-	SubContract   common.Address
+	MainNetworkID, SubNetworkID uint64
+	MainTD, SubTD               *big.Int
+	MainHead, SubHead           common.Hash
+	MainGenesis, SubGenesis     common.Hash
+	MainHeight, SubHeight       *big.Int
+	MainContract, SubContract   common.Address
 }
