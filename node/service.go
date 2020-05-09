@@ -17,6 +17,7 @@
 package node
 
 import (
+	"crypto/ecdsa"
 	"path/filepath"
 	"reflect"
 
@@ -36,6 +37,8 @@ type ServiceContext struct {
 	services       map[reflect.Type]Service // Index of the already constructed services
 	EventMux       *event.TypeMux           // Event multiplexer used for decoupled notifications
 	AccountManager *accounts.Manager        // Account manager created by the node.
+	MainCh         chan interface{}
+	SubCh          chan interface{}
 }
 
 // OpenDatabase opens an existing database with the given name (or creates one
@@ -83,6 +86,11 @@ func (ctx *ServiceContext) Service(service interface{}) error {
 		return nil
 	}
 	return ErrServiceUnknown
+}
+
+// NodeKey returns node key from config
+func (ctx *ServiceContext) NodeKey() *ecdsa.PrivateKey {
+	return ctx.config.NodeKey()
 }
 
 // ExtRPCEnabled returns the indicator whether node enables the external

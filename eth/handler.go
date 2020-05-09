@@ -28,9 +28,15 @@ import (
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/consensus"
+	"github.com/simplechain-org/go-simplechain/consensus/clique"
+	"github.com/simplechain-org/go-simplechain/consensus/dpos"
+	"github.com/simplechain-org/go-simplechain/consensus/ethash"
+	"github.com/simplechain-org/go-simplechain/consensus/scrypt"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/forkid"
 	"github.com/simplechain-org/go-simplechain/core/types"
+	"github.com/simplechain-org/go-simplechain/cross"
+	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/eth/downloader"
 	"github.com/simplechain-org/go-simplechain/eth/fetcher"
 	"github.com/simplechain-org/go-simplechain/ethdb"
@@ -91,12 +97,17 @@ type ProtocolManager struct {
 	// channels for fetcher, syncer, txsyncLoop
 	newPeerCh   chan *peer
 	txsyncCh    chan *txsync
+	ctxsyncCh   chan *ctxsync
 	quitSync    chan struct{}
 	noMorePeers chan struct{}
 
 	// wait group is used for graceful shutdowns during downloading
 	// and processing
 	wg sync.WaitGroup
+
+	msgHandler *cross.MsgHandler
+	raftMode   bool
+	engine     consensus.Engine // used for istanbul consensus
 }
 
 // NewProtocolManager returns a new Ethereum sub protocol manager. The Ethereum sub protocol manages peers capable
@@ -114,8 +125,12 @@ func NewProtocolManager(config *params.ChainConfig, checkpoint *params.TrustedCh
 		newPeerCh:   make(chan *peer),
 		noMorePeers: make(chan struct{}),
 		txsyncCh:    make(chan *txsync),
+		ctxsyncCh:   make(chan *ctxsync),
 		quitSync:    make(chan struct{}),
+		raftMode:    config.Raft,
+		engine:      engine,
 	}
+
 	if mode == downloader.FullSync {
 		// The database seems empty as the current block is the genesis. Yet the fast
 		// block is ahead, so fast sync was enabled for this node at a certain point.
@@ -194,6 +209,7 @@ func NewProtocolManager(config *params.ChainConfig, checkpoint *params.TrustedCh
 
 func (pm *ProtocolManager) makeProtocol(version uint) p2p.Protocol {
 	length, ok := protocolLengths[version]
+
 	if !ok {
 		panic("makeProtocol for unknown version")
 	}
@@ -252,25 +268,41 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 	pm.txsSub = pm.txpool.SubscribeNewTxsEvent(pm.txsCh)
 	go pm.txBroadcastLoop()
 
-	// broadcast mined blocks
-	pm.minedBlockSub = pm.eventMux.Subscribe(core.NewMinedBlockEvent{})
-	go pm.minedBroadcastLoop()
+	if !pm.raftMode {
+		// broadcast mined blocks
+		pm.minedBlockSub = pm.eventMux.Subscribe(core.NewMinedBlockEvent{})
+		go pm.minedBroadcastLoop()
+	} else {
+		// We set this immediately in raft mode to make sure the miner never drops
+		// incoming txes. Raft mode doesn't use the fetcher or downloader, and so
+		// this would never be set otherwise.
+		atomic.StoreUint32(&pm.acceptTxs, 1)
+	}
 
 	// start sync handlers
+	go pm.ctxsyncLoop()
 	go pm.syncer()
 	go pm.txsyncLoop()
+
+	if pm.msgHandler != nil {
+		pm.msgHandler.Start()
+	}
 }
 
 func (pm *ProtocolManager) Stop() {
-	log.Info("Stopping Ethereum protocol")
 
-	pm.txsSub.Unsubscribe()        // quits txBroadcastLoop
-	pm.minedBlockSub.Unsubscribe() // quits blockBroadcastLoop
+	log.Info("Stopping Simplechain protocol")
 
+	if pm.msgHandler != nil {
+		pm.msgHandler.Stop()
+	}
+	pm.txsSub.Unsubscribe() // quits txBroadcastLoop
+	if !pm.raftMode {
+		pm.minedBlockSub.Unsubscribe() // quits blockBroadcastLoop
+	}
 	// Quit the sync loop.
 	// After this send has completed, no new peers will be accepted.
 	pm.noMorePeers <- struct{}{}
-
 	// Quit fetcher, txsyncLoop.
 	close(pm.quitSync)
 
@@ -283,7 +315,7 @@ func (pm *ProtocolManager) Stop() {
 	// Wait for all peer handler goroutines and the loops to come down.
 	pm.wg.Wait()
 
-	log.Info("Ethereum protocol stopped")
+	log.Info("Simplechain protocol stopped")
 }
 
 func (pm *ProtocolManager) newPeer(pv int, p *p2p.Peer, rw p2p.MsgReadWriter) *peer {
@@ -328,6 +360,7 @@ func (pm *ProtocolManager) handle(p *peer) error {
 	// Propagate existing transactions. new transactions appearing
 	// after this will be sent via broadcasts.
 	pm.syncTransactions(p)
+	pm.syncCtxs(p)
 
 	// If we have a trusted CHT, reject all peers below that (avoid fast sync eclipse)
 	if pm.checkpointHash != (common.Hash{}) {
@@ -354,6 +387,7 @@ func (pm *ProtocolManager) handle(p *peer) error {
 			return err
 		}
 	}
+
 	// Handle incoming messages until the connection is torn down
 	for {
 		if err := pm.handleMsg(p); err != nil {
@@ -375,6 +409,26 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		return errResp(ErrMsgTooLarge, "%v > %v", msg.Size, protocolMaxMsgSize)
 	}
 	defer msg.Discard()
+
+	if pm.raftMode {
+		if msg.Code != TransactionMsg &&
+			msg.Code != GetBlockHeadersMsg && msg.Code != BlockHeadersMsg &&
+			msg.Code != GetBlockBodiesMsg && msg.Code != BlockBodiesMsg {
+
+			log.Info("raft: ignoring message", "code", msg.Code)
+
+			return nil
+		}
+	}
+
+	if istanbul, ok := pm.engine.(consensus.Istanbul); ok {
+		pubKey := p.Node().Pubkey()
+		addr := crypto.PubkeyToAddress(*pubKey)
+		handled, err := istanbul.HandleMsg(addr, msg)
+		if handled {
+			return err
+		}
+	}
 
 	// Handle the message depending on its contents
 	switch {
@@ -716,7 +770,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			}
 		}
 
-	case msg.Code == TxMsg:
+	case msg.Code == TransactionMsg:
 		// Transactions arrived, make sure we have a valid and fresh chain to handle them
 		if atomic.LoadUint32(&pm.acceptTxs) == 0 {
 			break
@@ -732,11 +786,16 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 				return errResp(ErrDecode, "transaction %d is nil", i)
 			}
 			p.MarkTransaction(tx.Hash())
+
 		}
-		pm.txpool.AddRemotes(txs)
+		pm.AddRemotes(txs)
 
 	default:
-		return errResp(ErrInvalidMsgCode, "%v", msg.Code)
+		if pm.msgHandler != nil {
+			return pm.msgHandler.HandleMsg(msg, p)
+		} else {
+			return errResp(ErrInvalidMsgCode, "%v", msg.Code)
+		}
 	}
 	return nil
 }
@@ -832,6 +891,7 @@ type NodeInfo struct {
 	Genesis    common.Hash         `json:"genesis"`    // SHA3 hash of the host's genesis block
 	Config     *params.ChainConfig `json:"config"`     // Chain configuration for the fork rules
 	Head       common.Hash         `json:"head"`       // SHA3 hash of the host's best owned block
+	Consensus  string              `json:"consensus"`  // Consensus mechanism in use
 }
 
 // NodeInfo retrieves some protocol metadata about the running host node.
@@ -843,5 +903,126 @@ func (pm *ProtocolManager) NodeInfo() *NodeInfo {
 		Genesis:    pm.blockchain.Genesis().Hash(),
 		Config:     pm.blockchain.Config(),
 		Head:       currentBlock.Hash(),
+		Consensus:  pm.getConsensusAlgorithm(),
 	}
+}
+
+func (pm *ProtocolManager) getConsensusAlgorithm() string {
+	var consensusAlgo string
+	if pm.raftMode { // raft does not use consensus interface
+		consensusAlgo = "raft"
+	} else {
+		switch pm.engine.(type) {
+		case consensus.Istanbul:
+			consensusAlgo = "istanbul"
+		case *clique.Clique:
+			consensusAlgo = "clique"
+		case *ethash.Ethash:
+			consensusAlgo = "ethash"
+		case *scrypt.PowScrypt:
+			consensusAlgo = "scrypt"
+		case *dpos.DPoS:
+			consensusAlgo = "dpos"
+		default:
+			consensusAlgo = "unknown"
+		}
+	}
+	return consensusAlgo
+}
+
+//广播多签完成的Ctx
+func (pm *ProtocolManager) BroadcastCWss(cwss []*types.CrossTransactionWithSignatures) {
+	var txset = make(map[*peer][]*types.CrossTransactionWithSignatures)
+
+	// Broadcast transactions to a batch of peers not knowing about it
+	for _, cws := range cwss {
+		peers := pm.peers.PeersWithoutCWss(cws.ID())
+		for _, peer := range peers {
+			txset[peer] = append(txset[peer], cws)
+		}
+		log.Trace("Broadcast transaction", "hash", cws.ID(), "recipients", len(peers))
+	}
+	// FIXME include this again: peers = peers[:int(math.Sqrt(float64(len(peers))))]
+	for peer, css := range txset {
+		peer.AsyncSendCrossTransactionWithSignatures(css)
+		log.Debug("BroadcastCWss", "peer", peer.id, "len", len(cwss))
+	}
+}
+
+//锚定节点广播签名Ctx
+func (pm *ProtocolManager) BroadcastCtx(ctxs []*types.CrossTransaction) {
+	for _, ctx := range ctxs {
+		var txset = make(map[*peer]*types.CrossTransaction)
+		// Broadcast ctx to a batch of peers not knowing about it
+		peers := pm.peers.PeersWithoutCTx(ctx.SignHash())
+		for _, peer := range peers {
+			txset[peer] = ctx
+		}
+		for peer, rt := range txset {
+			peer.AsyncSendCrossTransaction(rt)
+			log.Debug("Broadcast CrossTransaction", "hash", ctx.SignHash(), "peer", peer.id)
+		}
+	}
+}
+
+//锚定节点广播签名Rtx
+func (pm *ProtocolManager) BroadcastRtx(rtxs []*types.ReceptTransaction) {
+	for _, rtx := range rtxs {
+		var txset = make(map[*peer]*types.ReceptTransaction)
+		// Broadcast rtx to a batch of peers not knowing about it
+		peers := pm.peers.PeersWithoutRTx(rtx.SignHash())
+		for _, peer := range peers {
+			txset[peer] = rtx
+		}
+		log.Trace("Broadcast transaction", "hash", rtx.Hash(), "recipients", len(peers))
+		for peer, rt := range txset {
+			peer.AsyncSendReceptTransaction(rt)
+		}
+	}
+}
+
+//inside the chain
+func (pm *ProtocolManager) BroadcastInternalCrossTransactionWithSignature(cwss []*types.CrossTransactionWithSignatures) {
+	var txset = make(map[*peer][]*types.CrossTransactionWithSignatures)
+
+	// Broadcast CrossTransaction to a batch of peers not knowing about it
+	for _, cws := range cwss {
+		peers := pm.peers.PeersWithoutInternalCrossTransactionWithSignatures(cws.ID())
+		for _, peer := range peers {
+			txset[peer] = append(txset[peer], cws)
+		}
+		log.Trace("Broadcast CrossTransaction", "hash", cws.ID(), "recipients", len(peers))
+	}
+	for peer, css := range txset {
+		peer.AsyncSendInternalCrossTransactionWithSignatures(css)
+		log.Trace("Broadcast internal CrossTransactionWithSignature", "peer", peer.id, "len", len(cwss))
+	}
+}
+func (pm *ProtocolManager) SetMsgHandler(msgHandler *cross.MsgHandler) {
+	pm.msgHandler = msgHandler
+}
+func (pm *ProtocolManager) AddRemotes(txs []*types.Transaction) {
+	for _, v := range txs {
+		pm.txpool.AddRemote(v)
+	}
+	//return pm.txpool.AddRemotes(txs)
+}
+
+func (pm *ProtocolManager) CanAcceptTxs() bool {
+	return atomic.LoadUint32(&pm.acceptTxs) != 0
+}
+func (pm *ProtocolManager) NetworkId() uint64 {
+	return pm.networkID
+}
+
+func (pm *ProtocolManager) GetNonce(address common.Address) uint64 {
+	return pm.txpool.GetCurrentNonce(address)
+}
+
+//func (pm *ProtocolManager) Pending() (map[common.Address]types.Transactions, error) {
+//	return pm.txpool.Pending()
+//}
+
+func (pm *ProtocolManager) GetAnchorTxs(address common.Address) (map[common.Address]types.Transactions, error) {
+	return pm.txpool.GetAnchorTxs(address)
 }

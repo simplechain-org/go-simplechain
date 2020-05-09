@@ -116,6 +116,11 @@ func (v *IP) DecodeRLP(s *rlp.Stream) error {
 	return nil
 }
 
+// RaftPort is the "raftport" key, which holds the raftport of the node
+type RaftPort uint16
+
+func (v RaftPort) ENRKey() string { return "raftport" }
+
 // IPv4 is the "ip" key, which holds the IP address of the node.
 type IPv4 net.IP
 

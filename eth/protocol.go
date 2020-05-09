@@ -33,7 +33,10 @@ import (
 const (
 	eth63 = 63
 	eth64 = 64
+	//istanbul65 = 65
 )
+
+// move to consensus/protocol
 
 // protocolName is the official short name of the protocol used during capability negotiation.
 const protocolName = "eth"
@@ -42,7 +45,7 @@ const protocolName = "eth"
 var ProtocolVersions = []uint{eth64, eth63}
 
 // protocolLengths are the number of implemented message corresponding to different protocol versions.
-var protocolLengths = map[uint]uint64{eth64: 17, eth63: 17}
+var protocolLengths = map[uint]uint64{eth64: 53, eth63: 17}
 
 const protocolMaxMsgSize = 10 * 1024 * 1024 // Maximum cap on the size of a protocol message
 
@@ -50,7 +53,7 @@ const protocolMaxMsgSize = 10 * 1024 * 1024 // Maximum cap on the size of a prot
 const (
 	StatusMsg          = 0x00
 	NewBlockHashesMsg  = 0x01
-	TxMsg              = 0x02
+	TransactionMsg     = 0x02
 	GetBlockHeadersMsg = 0x03
 	BlockHeadersMsg    = 0x04
 	GetBlockBodiesMsg  = 0x05
@@ -60,6 +63,12 @@ const (
 	NodeDataMsg        = 0x0e
 	GetReceiptsMsg     = 0x0f
 	ReceiptsMsg        = 0x10
+
+	//for eth64
+	CtxSignMsg          = 0x31
+	CtxSignsMsg         = 0x32
+	RtxSignMsg          = 0x33
+	CtxSignsInternalMsg = 0x34
 )
 
 type errCode int
@@ -95,15 +104,18 @@ var errorToString = map[int]string{
 
 type txPool interface {
 	// AddRemotes should add the given transactions to the pool.
-	AddRemotes([]*types.Transaction) []error
+	AddRemote(*types.Transaction) error
 
 	// Pending should return pending transactions.
 	// The slice should be modifiable by the caller.
 	Pending() (map[common.Address]types.Transactions, error)
-
+	GetAnchorTxs(common.Address) (map[common.Address]types.Transactions, error)
 	// SubscribeNewTxsEvent should return an event subscription of
 	// NewTxsEvent and send events to the given channel.
 	SubscribeNewTxsEvent(chan<- core.NewTxsEvent) event.Subscription
+
+	// GetLatestNonceFromQueueAndPending.
+	GetCurrentNonce(address common.Address) uint64
 }
 
 // statusData63 is the network packet for the status message for eth/63.

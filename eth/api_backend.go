@@ -96,6 +96,10 @@ func (b *EthAPIBackend) HeaderByHash(ctx context.Context, hash common.Hash) (*ty
 func (b *EthAPIBackend) BlockByNumber(ctx context.Context, number rpc.BlockNumber) (*types.Block, error) {
 	// Pending block is only known by the miner
 	if number == rpc.PendingBlockNumber {
+		if b.eth.protocolManager.raftMode {
+			// Use latest instead.
+			return b.eth.blockchain.CurrentBlock(), nil
+		}
 		block := b.eth.miner.PendingBlock()
 		return block, nil
 	}
@@ -134,6 +138,15 @@ func (b *EthAPIBackend) BlockByNumberOrHash(ctx context.Context, blockNrOrHash r
 func (b *EthAPIBackend) StateAndHeaderByNumber(ctx context.Context, number rpc.BlockNumber) (*state.StateDB, *types.Header, error) {
 	// Pending state is only known by the miner
 	if number == rpc.PendingBlockNumber {
+		if b.eth.protocolManager.raftMode {
+			// Use latest instead.
+			header, err := b.HeaderByNumber(ctx, rpc.LatestBlockNumber)
+			if header == nil || err != nil {
+				return nil, nil, err
+			}
+			state, err := b.eth.BlockChain().StateAt(header.Root)
+			return state, header, err
+		}
 		block, state := b.eth.miner.Pending()
 		return state, block.Header(), nil
 	}
@@ -300,4 +313,11 @@ func (b *EthAPIBackend) ServiceFilter(ctx context.Context, session *bloombits.Ma
 	for i := 0; i < bloomFilterThreads; i++ {
 		go session.Multiplex(bloomRetrievalBatch, bloomRetrievalWait, b.eth.bloomRequests)
 	}
+}
+func (b *EthAPIBackend) CtxStats() (pending int) {
+	return b.eth.ctxStore.Stats()
+}
+
+func (b *EthAPIBackend) CtxPoolContent() (map[uint64][]*types.CrossTransactionWithSignatures, map[uint64][]*types.CrossTransactionWithSignatures) {
+	return b.eth.ctxStore.Query()
 }

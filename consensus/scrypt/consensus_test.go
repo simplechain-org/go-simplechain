@@ -76,20 +76,6 @@ var testData string = `
 }`
 
 func TestCalcDifficulty(t *testing.T) {
-	//TODO add tests file
-
-	//file, err := os.Open(filepath.Join("..", "..", "tests", "testdata", "BasicTests", "difficulty.json"))
-	//if err != nil {
-	//	t.Skip(err)
-	//}
-	//defer file.Close()
-	//
-	//tests := make(map[string]diffTest)
-	//err = json.NewDecoder(file).Decode(&tests)
-	//if err != nil {
-	//	t.Fatal(err)
-	//}
-
 	tests := make(map[string]diffTest)
 	strRead := strings.NewReader(testData)
 	err := json.NewDecoder(strRead).Decode(&tests)
@@ -97,7 +83,7 @@ func TestCalcDifficulty(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	config := &params.ChainConfig{HomesteadBlock: big.NewInt(1150000)}
+	config := &params.ChainConfig{SingularityBlock: big.NewInt(1150000)}
 	for name, test := range tests {
 		number := new(big.Int).Sub(test.CurrentBlocknumber, big.NewInt(1))
 		diff := CalcDifficulty(config, test.CurrentTimestamp, &types.Header{

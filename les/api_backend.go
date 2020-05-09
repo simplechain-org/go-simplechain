@@ -274,3 +274,11 @@ func (b *LesApiBackend) ServiceFilter(ctx context.Context, session *bloombits.Ma
 		go session.Multiplex(bloomRetrievalBatch, bloomRetrievalWait, b.eth.bloomRequests)
 	}
 }
+func (b *LesApiBackend) CtxStats() (pending int) {
+	return b.eth.ctxPool.Stats()
+}
+
+func (b *LesApiBackend) CtxPoolContent() (map[uint64][]*types.CrossTransactionWithSignatures, map[uint64][]*types.CrossTransactionWithSignatures) {
+	//pending, _ := b.eth.ctxPool.Pending()
+	return nil, nil
+}

@@ -62,7 +62,7 @@ func newTestProtocolManager(mode downloader.SyncMode, blocks int, generator func
 			Alloc:  core.GenesisAlloc{testBank: {Balance: big.NewInt(1000000)}},
 		}
 		genesis       = gspec.MustCommit(db)
-		blockchain, _ = core.NewBlockChain(db, nil, gspec.Config, engine, vm.Config{}, nil)
+		blockchain, _ = core.NewBlockChain(db, nil, gspec.Config, engine, vm.Config{}, common.Address{}, nil)
 	)
 	chain, _ := core.GenerateChain(gspec.Config, genesis, ethash.NewFaker(), db, blocks, generator)
 	if _, err := blockchain.InsertChain(chain); err != nil {
@@ -129,6 +129,14 @@ func (p *testTxPool) Pending() (map[common.Address]types.Transactions, error) {
 func (p *testTxPool) SubscribeNewTxsEvent(ch chan<- core.NewTxsEvent) event.Subscription {
 	return p.txFeed.Subscribe(ch)
 }
+func (p *testTxPool) GetCurrentNonce(address common.Address) uint64 {
+	return 0
+}
+
+func (pool *testTxPool) GetAnchorTxs(anchor common.Address) (map[common.Address]types.Transactions, error) {
+	pending := make(map[common.Address]types.Transactions)
+	return pending, nil
+}
 
 // newTestTransaction create a new dummy transaction.
 func newTestTransaction(from *ecdsa.PrivateKey, nonce uint64, datasize int) *types.Transaction {
@@ -191,7 +199,7 @@ func (p *testPeer) handshake(t *testing.T, td *big.Int, head common.Hash, genesi
 			CurrentBlock:    head,
 			GenesisBlock:    genesis,
 		}
-	case p.version == eth64:
+	case p.version == eth64: //p.version == istanbul65
 		msg = &statusData{
 			ProtocolVersion: uint32(p.version),
 			NetworkID:       DefaultConfig.NetworkId,
@@ -215,4 +223,8 @@ func (p *testPeer) handshake(t *testing.T, td *big.Int, head common.Hash, genesi
 // manager of termination.
 func (p *testPeer) close() {
 	p.app.Close()
+}
+func (p *testTxPool) AddRemote(tx *types.Transaction) error {
+	errs := p.AddRemotes([]*types.Transaction{tx})
+	return errs[0]
 }

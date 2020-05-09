@@ -63,6 +63,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/p2p/netutil"
 	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/rpc"
+	"github.com/simplechain-org/go-simplechain/sub"
 	whisper "github.com/simplechain-org/go-simplechain/whisper/whisperv6"
 	cli "gopkg.in/urfave/cli.v1"
 )
@@ -226,13 +227,9 @@ var (
 		Name:  "whitelist",
 		Usage: "Comma separated block number-to-hash mappings to enforce (<number>=<hash>)",
 	}
-	OverrideIstanbulFlag = cli.Uint64Flag{
-		Name:  "override.istanbul",
-		Usage: "Manually specify Istanbul fork-block, overriding the bundled setting",
-	}
-	OverrideMuirGlacierFlag = cli.Uint64Flag{
-		Name:  "override.muirglacier",
-		Usage: "Manually specify Muir Glacier fork-block, overriding the bundled setting",
+	OverrideSingularityFlag = cli.Uint64Flag{
+		Name:  "override.singularity",
+		Usage: "Manually specify singularity fork-block, overriding the bundled setting",
 	}
 	// Light server and client settings
 	LightLegacyServFlag = cli.IntFlag{ // Deprecated in favor of light.serve, remove in 2021
@@ -594,6 +591,67 @@ var (
 		Usage: "Origins from which to accept websockets requests",
 		Value: "",
 	}
+	SUBRPCEnabledFlag = cli.BoolFlag{
+		Name:  "sub.rpc",
+		Usage: "Enable the HTTP-RPC server for subchain",
+	}
+	SUBRPCListenAddrFlag = cli.StringFlag{
+		Name:  "sub.rpcaddr",
+		Usage: "HTTP-RPC server listening interface for subchain",
+		Value: node.DefaultSubHTTPHost,
+	}
+	SUBRPCPortFlag = cli.IntFlag{
+		Name:  "sub.rpcport",
+		Usage: "HTTP-RPC server listening port for subchain",
+		Value: node.DefaultSubHTTPPort,
+	}
+	SUBRPCApiFlag = cli.StringFlag{
+		Name:  "sub.rpcapi",
+		Usage: "API's offered over the HTTP-RPC interface for subchain",
+		Value: "",
+	}
+	SUBIPCDisabledFlag = cli.BoolFlag{
+		Name:  "sub.ipcdisable",
+		Usage: "Disable the IPC-RPC server for subchain",
+	}
+	SUBIPCPathFlag = DirectoryFlag{
+		Name:  "sub.ipcpath",
+		Usage: "Filename for IPC socket/pipe within the datadir (explicit paths escape it) for subchain",
+	}
+	SUBWSEnabledFlag = cli.BoolFlag{
+		Name:  "sub.ws",
+		Usage: "Enable the WS-RPC server for subchain",
+	}
+	SUBWSListenAddrFlag = cli.StringFlag{
+		Name:  "sub.wsaddr",
+		Usage: "WS-RPC server listening interface for subchain",
+		Value: node.DefaultSubWSHost,
+	}
+	SUBWSPortFlag = cli.IntFlag{
+		Name:  "sub.wsport",
+		Usage: "WS-RPC server listening port for subchain",
+		Value: node.DefaultSubWSPort,
+	}
+	SUBWSApiFlag = cli.StringFlag{
+		Name:  "sub.wsapi",
+		Usage: "API's offered over the WS-RPC interface for subchain",
+		Value: "",
+	}
+	SUBWSAllowedOriginsFlag = cli.StringFlag{
+		Name:  "sub.wsorigins",
+		Usage: "Origins from which to accept websockets requests for subchain",
+		Value: "",
+	}
+	SUBRPCCORSDomainFlag = cli.StringFlag{
+		Name:  "sub.rpccorsdomain",
+		Usage: "Comma separated list of domains from which to accept cross origin requests (browser enforced) for subchain",
+		Value: "",
+	}
+	SUBRPCVirtualHostsFlag = cli.StringFlag{
+		Name:  "sub.rpcvhosts",
+		Usage: "Comma separated list of virtual hostnames from which to accept requests (server enforced). Accepts '*' wildcard.for subchain",
+		Value: strings.Join(node.DefaultConfig.HTTPVirtualHosts, ","),
+	}
 	GraphQLEnabledFlag = cli.BoolFlag{
 		Name:  "graphql",
 		Usage: "Enable the GraphQL server",
@@ -641,7 +699,7 @@ var (
 	ListenPortFlag = cli.IntFlag{
 		Name:  "port",
 		Usage: "Network listening port",
-		Value: 30303,
+		Value: 30312,
 	}
 	BootnodesFlag = cli.StringFlag{
 		Name:  "bootnodes",
@@ -721,6 +779,34 @@ var (
 		Usage: "Restrict connection between two whisper light clients",
 	}
 
+	// Raft flags
+	RaftModeFlag = cli.BoolFlag{
+		Name:  "raft",
+		Usage: "If enabled, uses Raft consensus",
+	}
+	RaftJoinExistingFlag = cli.IntFlag{
+		Name:  "raftjoinexisting",
+		Usage: "The raft ID to assume when joining an pre-existing cluster",
+		Value: 0,
+	}
+	RaftPortFlag = cli.IntFlag{
+		Name:  "raftport",
+		Usage: "The port to bind for the raft transport",
+		Value: 50400,
+	}
+
+	// Istanbul settings
+	IstanbulRequestTimeoutFlag = cli.Uint64Flag{
+		Name:  "istanbul.requesttimeout",
+		Usage: "Timeout for each Istanbul round in milliseconds",
+		Value: eth.DefaultConfig.Istanbul.RequestTimeout,
+	}
+	IstanbulBlockPeriodFlag = cli.Uint64Flag{
+		Name:  "istanbul.blockperiod",
+		Usage: "Default minimum difference between two consecutive block's timestamps in seconds",
+		Value: eth.DefaultConfig.Istanbul.BlockPeriod,
+	}
+
 	// Metrics flags
 	MetricsEnabledFlag = cli.BoolFlag{
 		Name:  "metrics",
@@ -773,6 +859,38 @@ var (
 		Name:  "vm.evm",
 		Usage: "External EVM configuration (default = built-in interpreter)",
 		Value: "",
+	}
+	role = eth.DefaultConfig.Role
+
+	RoleFlag = TextMarshalerFlag{
+		Name:  "role",
+		Usage: "it can be one of (mainchain,subchain,anchor)",
+		Value: &role,
+	}
+	AnchorAccountsFlag = cli.StringFlag{
+		Name:  "anchors",
+		Usage: "Comma separated list of accounts to anchors",
+		Value: "",
+	}
+	ContractMainFlag = cli.StringFlag{
+		Name:  "contract.main",
+		Usage: "The address of main contract",
+		Value: params.MainChainCtxAddress.String(),
+	}
+	ContractSubFlag = cli.StringFlag{
+		Name:  "contract.sub",
+		Usage: "The address of sub contract",
+		Value: params.SubChainCtxAddress.String(),
+	}
+	AnchorPriKeyFlag = cli.StringFlag{
+		Name:  "anchor.pri",
+		Usage: "define anchor's private key",
+		Value: "0x86840df867b8eb3ee29001f5878a494c38c3a5ed733f220e05b24111667780b5",
+	}
+	AnchorSignerFlag = cli.StringFlag{
+		Name:  "anchor.signer",
+		Usage: "public address of anchor signer",
+		Value: "0",
 	}
 )
 
@@ -931,6 +1049,7 @@ func setHTTP(ctx *cli.Context, cfg *node.Config) {
 	if ctx.GlobalIsSet(RPCVirtualHostsFlag.Name) {
 		cfg.HTTPVirtualHosts = splitAndTrim(ctx.GlobalString(RPCVirtualHostsFlag.Name))
 	}
+	setSubHTTP(ctx, cfg)
 }
 
 // setGraphQL creates the GraphQL listener interface string from the set
@@ -969,6 +1088,7 @@ func setWS(ctx *cli.Context, cfg *node.Config) {
 	if ctx.GlobalIsSet(WSApiFlag.Name) {
 		cfg.WSModules = splitAndTrim(ctx.GlobalString(WSApiFlag.Name))
 	}
+	setSubWS(ctx, cfg)
 }
 
 // setIPC creates an IPC path configuration from the set command line flags,
@@ -981,6 +1101,7 @@ func setIPC(ctx *cli.Context, cfg *node.Config) {
 	case ctx.GlobalIsSet(IPCPathFlag.Name):
 		cfg.IPCPath = ctx.GlobalString(IPCPathFlag.Name)
 	}
+	setSubIPC(ctx, cfg)
 }
 
 // setLes configures the les server and ultra light client settings from the command line flags.
@@ -1202,6 +1323,9 @@ func SetNodeConfig(ctx *cli.Context, cfg *node.Config) {
 	if ctx.GlobalIsSet(InsecureUnlockAllowedFlag.Name) {
 		cfg.InsecureUnlockAllowed = ctx.GlobalBool(InsecureUnlockAllowedFlag.Name)
 	}
+	if ctx.GlobalIsSet(RoleFlag.Name) {
+		cfg.Role = *GlobalTextMarshaler(ctx, RoleFlag.Name).(*common.ChainRole)
+	}
 }
 
 func setSmartCard(ctx *cli.Context, cfg *node.Config) {
@@ -1341,6 +1465,15 @@ func setMiner(ctx *cli.Context, cfg *miner.Config) {
 	}
 }
 
+func setIstanbul(ctx *cli.Context, cfg *eth.Config) {
+	if ctx.GlobalIsSet(IstanbulRequestTimeoutFlag.Name) {
+		cfg.Istanbul.RequestTimeout = ctx.GlobalUint64(IstanbulRequestTimeoutFlag.Name)
+	}
+	if ctx.GlobalIsSet(IstanbulBlockPeriodFlag.Name) {
+		cfg.Istanbul.BlockPeriod = ctx.GlobalUint64(IstanbulBlockPeriodFlag.Name)
+	}
+}
+
 func setWhitelist(ctx *cli.Context, cfg *eth.Config) {
 	whitelist := ctx.GlobalString(WhitelistFlag.Name)
 	if whitelist == "" {
@@ -1434,8 +1567,10 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 	setTxPool(ctx, &cfg.TxPool)
 	setEthash(ctx, cfg)
 	setMiner(ctx, &cfg.Miner)
+	setIstanbul(ctx, cfg)
 	setWhitelist(ctx, cfg)
 	setLes(ctx, cfg)
+	setAnchorSign(ctx, ks, cfg)
 
 	if ctx.GlobalIsSet(SyncModeFlag.Name) {
 		cfg.SyncMode = *GlobalTextMarshaler(ctx, SyncModeFlag.Name).(*downloader.SyncMode)
@@ -1522,25 +1657,63 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 }
 
 // RegisterEthService adds an Ethereum client to the stack.
-func RegisterEthService(stack *node.Node, cfg *eth.Config) {
-	var err error
+func RegisterEthService(stack *node.Node, cfg *eth.Config) <-chan *sub.Ethereum {
+	var (
+		err     error
+		subChan = make(chan *sub.Ethereum, 1)
+	)
 	if cfg.SyncMode == downloader.LightSync {
 		err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
 			return les.New(ctx, cfg)
 		})
 	} else {
-		err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
-			fullNode, err := eth.New(ctx, cfg)
-			if fullNode != nil && cfg.LightServ > 0 {
-				ls, _ := les.NewLesServer(fullNode, cfg)
-				fullNode.AddLesServer(ls)
+		log.Info("RegisterEthService", "Role", cfg.Role)
+		if cfg.Role.IsMainChain() {
+			//mainchain
+			err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
+				fullNode, err := eth.New(ctx, cfg)
+				if fullNode != nil && cfg.LightServ > 0 {
+					ls, _ := les.NewLesServer(fullNode, cfg)
+					fullNode.AddLesServer(ls)
+				}
+				return fullNode, err
+			})
+		} else if cfg.Role.IsSubChain() {
+			//subchain
+			err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
+				//subConfig := ToSubChainConfig(cfg)
+				fullNode, err := sub.New(ctx, cfg)
+				if fullNode != nil && cfg.LightServ > 0 {
+					ls, _ := les.NewLesServer(fullNode, cfg)
+					fullNode.AddLesServer(ls)
+				}
+				subChan <- fullNode
+				return fullNode, err
+			})
+		} else if cfg.Role.IsAnchor() {
+			subConfig := *cfg
+			//mainchain
+			err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
+				fullNode, err := eth.New(ctx, cfg)
+				return fullNode, err
+			})
+			if err != nil {
+				Fatalf("Failed to register the Ethereum service: %v", err)
+				return nil
 			}
-			return fullNode, err
-		})
+			//subchain
+			err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
+				//subConfig := ToSubChainConfig(cfg)
+				fullNode, err := sub.New(ctx, &subConfig)
+				subChan <- fullNode
+				return fullNode, err
+			})
+		}
 	}
 	if err != nil {
 		Fatalf("Failed to register the Ethereum service: %v", err)
 	}
+	return subChan
 }
 
 // RegisterShhService configures Whisper and adds it to the given node.
@@ -1699,7 +1872,7 @@ func MakeChain(ctx *cli.Context, stack *node.Node) (chain *core.BlockChain, chai
 		cache.TrieDirtyLimit = ctx.GlobalInt(CacheFlag.Name) * ctx.GlobalInt(CacheGCFlag.Name) / 100
 	}
 	vmcfg := vm.Config{EnablePreimageRecording: ctx.GlobalBool(VMEnableDebugFlag.Name)}
-	chain, err = core.NewBlockChain(chainDb, cache, config, engine, vmcfg, nil)
+	chain, err = core.NewBlockChain(chainDb, cache, config, engine, vmcfg, common.Address{}, nil)
 	if err != nil {
 		Fatalf("Can't create BlockChain: %v", err)
 	}
@@ -1744,5 +1917,79 @@ func MigrateFlags(action func(ctx *cli.Context) error) func(*cli.Context) error 
 			}
 		}
 		return action(ctx)
+	}
+}
+
+// setHTTP creates the HTTP RPC listener interface string from the set
+// command line flags, returning empty if the HTTP endpoint is disabled.
+func setSubHTTP(ctx *cli.Context, cfg *node.Config) {
+	if ctx.GlobalBool(SUBRPCEnabledFlag.Name) && cfg.SubHTTPHost == "" {
+		cfg.SubHTTPHost = "127.0.0.1"
+		if ctx.GlobalIsSet(SUBRPCListenAddrFlag.Name) {
+			cfg.SubHTTPHost = ctx.GlobalString(SUBRPCListenAddrFlag.Name)
+		}
+	}
+	if ctx.GlobalIsSet(SUBRPCPortFlag.Name) {
+		cfg.SubHTTPPort = ctx.GlobalInt(SUBRPCPortFlag.Name)
+	}
+	if ctx.GlobalIsSet(SUBRPCCORSDomainFlag.Name) {
+		cfg.SubHTTPCors = splitAndTrim(ctx.GlobalString(SUBRPCCORSDomainFlag.Name))
+	}
+	if ctx.GlobalIsSet(SUBRPCApiFlag.Name) {
+		cfg.SubHTTPModules = splitAndTrim(ctx.GlobalString(SUBRPCApiFlag.Name))
+	}
+	if ctx.GlobalIsSet(SUBRPCVirtualHostsFlag.Name) {
+		cfg.SubHTTPVirtualHosts = splitAndTrim(ctx.GlobalString(SUBRPCVirtualHostsFlag.Name))
+	}
+}
+
+// setWS creates the WebSocket RPC listener interface string from the set
+// command line flags, returning empty if the HTTP endpoint is disabled.
+func setSubWS(ctx *cli.Context, cfg *node.Config) {
+	if ctx.GlobalBool(SUBWSEnabledFlag.Name) && cfg.SubWSHost == "" {
+		cfg.SubWSHost = "127.0.0.1"
+		if ctx.GlobalIsSet(SUBWSListenAddrFlag.Name) {
+			cfg.SubWSHost = ctx.GlobalString(SUBWSListenAddrFlag.Name)
+		}
+	}
+	if ctx.GlobalIsSet(SUBWSPortFlag.Name) {
+		cfg.SubWSPort = ctx.GlobalInt(SUBWSPortFlag.Name)
+	}
+	if ctx.GlobalIsSet(SUBWSAllowedOriginsFlag.Name) {
+		cfg.SubWSOrigins = splitAndTrim(ctx.GlobalString(SUBWSAllowedOriginsFlag.Name))
+	}
+	if ctx.GlobalIsSet(SUBWSApiFlag.Name) {
+		cfg.SubWSModules = splitAndTrim(ctx.GlobalString(SUBWSApiFlag.Name))
+	}
+}
+
+// setIPC creates an IPC path configuration from the set command line flags,
+// returning an empty string if IPC was explicitly disabled, or the set path.
+func setSubIPC(ctx *cli.Context, cfg *node.Config) {
+	CheckExclusive(ctx, SUBIPCDisabledFlag, SUBIPCPathFlag)
+	switch {
+	case ctx.GlobalBool(SUBIPCDisabledFlag.Name):
+		cfg.SubIPCPath = ""
+	case ctx.GlobalIsSet(SUBIPCPathFlag.Name):
+		cfg.SubIPCPath = ctx.GlobalString(SUBIPCPathFlag.Name)
+	}
+}
+func setAnchorSign(ctx *cli.Context, ks *keystore.KeyStore, cfg *eth.Config) {
+	// Extract the current etherbase, new flag overriding legacy one
+	var anchorSign string
+	if ctx.GlobalIsSet(AnchorSignerFlag.Name) {
+		anchorSign = ctx.GlobalString(AnchorSignerFlag.Name)
+	}
+	// Convert the etherbase into an address and configure it
+	if anchorSign != "" {
+		if ks != nil {
+			account, err := MakeAddress(ks, anchorSign)
+			if err != nil {
+				Fatalf("Invalid anchorSigner: %v", err)
+			}
+			cfg.AnchorSigner = account.Address
+		} else {
+			Fatalf("No anchorSigner configured")
+		}
 	}
 }

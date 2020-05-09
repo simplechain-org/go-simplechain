@@ -1,6 +1,5 @@
 language: go
 go_import_path: github.com/simplechain-org/go-simplechain
-sudo: false
 jobs:
   include:
         # This builder only tests code linters on latest version of Go
@@ -21,8 +20,6 @@ jobs:
       go: 1.11.x
       env:
         - GO111MODULE=on
-      git:
-        submodules: true # cloning simplechain-org/tests
       script:
         - go run build/ci.go install
         - go run build/ci.go test -coverage $TEST_PACKAGES
@@ -33,8 +30,6 @@ jobs:
       go: 1.12.x
       env:
         - GO111MODULE=on
-      git:
-        submodules: true # cloning simplechain-org/tests
       script:
         - go run build/ci.go install
         - go run build/ci.go test -coverage $TEST_PACKAGES
@@ -45,8 +40,6 @@ jobs:
       arch: amd64
       dist: xenial
       go: 1.13.x
-      git:
-        submodules: true # cloning simplechain-org/tests
       script:
         - go run build/ci.go install
         - go run build/ci.go test -coverage $TEST_PACKAGES
@@ -57,8 +50,6 @@ jobs:
       arch: arm64
       dist: xenial
       go: 1.13.x
-      git:
-        submodules: true # cloning simplechain-org/tests
       script:
         - go run build/ci.go install
         - go run build/ci.go test -coverage $TEST_PACKAGES
@@ -67,11 +58,9 @@ jobs:
       os: osx
       osx_image: xcode11.3
       go: 1.13.x
-      git:
-        submodules: true # cloning simplechain-org/tests
       script:
         - echo "Increase the maximum number of open file descriptors on macOS"
-        - NOFILE=40960
+        - NOFILE=20480
         - sudo sysctl -w kern.maxfiles=$NOFILE
         - sudo sysctl -w kern.maxfilesperproc=$NOFILE
         - sudo launchctl limit maxfiles $NOFILE $NOFILE
