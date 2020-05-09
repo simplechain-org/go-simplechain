@@ -46,6 +46,8 @@ github.com/aristanetworks/glog v0.0.0-20180419172825-c15b03b3054f/go.mod h1:KASm
 github.com/aristanetworks/goarista v0.0.0-20190924011532-60b7b74727fd h1:2gXWYquahfk3RfmyLuMk47NCaf+1FFQ95FNM+HZN3Oo=
 github.com/aristanetworks/goarista v0.0.0-20190924011532-60b7b74727fd/go.mod h1:Z4RTxGAuYhPzcq8+EdRM+R8M48Ssle2TsWtwRKa+vns=
 github.com/aristanetworks/splunk-hec-go v0.3.3/go.mod h1:1VHO9r17b0K7WmOlLb9nTk/2YanvOEnLMUgsFrxBROc=
+github.com/asdine/storm v2.1.2+incompatible h1:dczuIkyqwY2LrtXPz8ixMrU/OFgZp71kbKTHGrXYt/Q=
+github.com/asdine/storm v2.1.2+incompatible/go.mod h1:RarYDc9hq1UPLImuiXK3BIWPJLdIygvV3PsInK0FbVQ=
 github.com/asdine/storm/v3 v3.1.1 h1:5ESJvmcNhQQOFcvpxkIHcZs7mp8Z6XGdBqEoAgf+11g=
 github.com/asdine/storm/v3 v3.1.1/go.mod h1:LEpXwGt4pIqrE/XcTvCnZHT5MgZCV6Ub9q7yQzOFWr0=
 github.com/beorn7/perks v0.0.0-20160804104726-4c0e84591b9a/go.mod h1:Dwedo/Wpr24TaqPxmxbtue+5NUziq4I4S80YR8gNf3Q=

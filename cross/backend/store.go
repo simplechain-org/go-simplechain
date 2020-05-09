@@ -467,20 +467,20 @@ func (store *CrossStore) GetSyncCrossTransactions(chainID uint64, txID common.Ha
 	return nil
 }
 
-func (store *CrossStore) ListCrossTransactionBySender(from common.Address) (map[uint64][]*cc.CrossTransactionWithSignatures, map[uint64][]*cc.CrossTransactionWithSignatures) {
-	store.mu.RLock()
-	defer store.mu.RUnlock()
-
-	remotes := make(map[uint64][]*cc.CrossTransactionWithSignatures)
-	locals := make(map[uint64][]*cc.CrossTransactionWithSignatures)
-	//filter := func(cws *cc.CrossTransactionWithSignatures) bool { return cws.Data.From == from }
-	filter := q.Eq(crossdb.FromField, from)
-	for chainID, s := range store.remoteStore {
-		remotes[chainID] = append(remotes[chainID], s.QueryByPrice(int(store.config.GlobalSlots), 0, filter)...)
-	}
-	locals[store.config.ChainId.Uint64()] = append(locals[store.config.ChainId.Uint64()], store.localStore.QueryByPrice(int(store.config.GlobalSlots), 0, filter)...)
-	return remotes, locals
-}
+//func (store *CrossStore) ListCrossTransactionBySender(from common.Address) (map[uint64][]*cc.CrossTransactionWithSignatures, map[uint64][]*cc.CrossTransactionWithSignatures) {
+//	store.mu.RLock()
+//	defer store.mu.RUnlock()
+//
+//	remotes := make(map[uint64][]*cc.CrossTransactionWithSignatures)
+//	locals := make(map[uint64][]*cc.CrossTransactionWithSignatures)
+//	//filter := func(cws *cc.CrossTransactionWithSignatures) bool { return cws.Data.From == from }
+//	filter := q.Eq(crossdb.FromField, from)
+//	for chainID, s := range store.remoteStore {
+//		remotes[chainID] = append(remotes[chainID], s.QueryByPrice(int(store.config.GlobalSlots), 0, filter)...)
+//	}
+//	locals[store.config.ChainId.Uint64()] = append(locals[store.config.ChainId.Uint64()], store.localStore.QueryByPrice(int(store.config.GlobalSlots), 0, filter)...)
+//	return remotes, locals
+//}
 
 func (store *CrossStore) SubscribeSignedCtxEvent(ch chan<- cc.SignedCtxEvent) event.Subscription {
 	store.mu.Lock()
@@ -561,4 +561,28 @@ func (store *CrossStore) SyncCrossTransactions(ctxList []*cc.CrossTransactionWit
 
 	store.logger.Info("sync cross transactions", "success", success, "ignore", ignore, "fail", len(ctxList)-success-ignore)
 	return success
+}
+
+func (store *CrossStore) ListLocalCrossTransactionBySender(from common.Address) map[uint64][]*cc.OwnerCrossTransactionWithSignatures {
+	store.mu.RLock()
+	defer store.mu.RUnlock()
+
+	//remotes := make(map[uint64][]*cc.CrossTransactionWithSignatures)
+	locals := make(map[uint64][]*cc.OwnerCrossTransactionWithSignatures)
+	//filter := func(cws *cc.CrossTransactionWithSignatures) bool { return cws.Data.From == from }
+	filter := q.Eq(crossdb.FromField, from)
+	//for chainID, s := range store.remoteStore {
+	//	remotes[chainID] = append(remotes[chainID], s.QueryByPrice(int(store.config.GlobalSlots), 0, filter)...)
+	//}
+	txs := store.localStore.QueryByPrice(int(store.config.GlobalSlots), 0, filter)
+	for _,v := range txs {
+		if store.chain.GetBlockByHash(v.BlockHash()) != nil {
+			locals[store.config.ChainId.Uint64()] = append(locals[store.config.ChainId.Uint64()],&cc.OwnerCrossTransactionWithSignatures{
+				v,
+				store.chain.GetBlockByHash(v.BlockHash()).Time(),
+			})
+		}
+	}
+
+	return locals
 }
