@@ -34,6 +34,13 @@ func (c ChainInvoke) GetTransactionNumberOnChain(tx cross.Transaction) uint64 {
 	return c.bc.CurrentBlock().NumberU64()
 }
 
+func (c ChainInvoke) GetTransactionTimeOnChain(tx cross.Transaction) uint64 {
+	if header := c.bc.GetHeaderByHash(tx.BlockHash()); header != nil {
+		return header.Time
+	}
+	return 0
+}
+
 func (c ChainInvoke) IsTransactionInExpiredBlock(tx cross.Transaction, expiredHeight uint64) bool {
 	return c.bc.CurrentBlock().NumberU64()-c.GetTransactionNumberOnChain(tx) > expiredHeight
 }

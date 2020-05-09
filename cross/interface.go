@@ -8,10 +8,10 @@ import (
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"
+	"github.com/simplechain-org/go-simplechain/core/vm"
 	"github.com/simplechain-org/go-simplechain/eth/gasprice"
 	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/rpc"
-	"github.com/simplechain-org/go-simplechain/core/vm"
 )
 
 type SimpleChain interface {
@@ -34,6 +34,7 @@ type Transaction interface {
 type BlockChain interface {
 	core.ChainContext
 	GetBlockNumber(hash common.Hash) *uint64
+	GetHeaderByHash(hash common.Hash) *types.Header
 	GetBlockByHash(hash common.Hash) *types.Block
 	CurrentBlock() *types.Block
 	StateAt(root common.Hash) (*state.StateDB, error)

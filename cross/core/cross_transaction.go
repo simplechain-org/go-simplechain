@@ -361,6 +361,6 @@ type RemoteChainInfo struct {
 }
 
 type OwnerCrossTransactionWithSignatures struct {
-	Cws *CrossTransactionWithSignatures
+	Cws  *CrossTransactionWithSignatures
 	Time uint64
 }
