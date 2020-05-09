@@ -72,9 +72,9 @@ type Handler struct {
 	updateAnchorCh  chan cc.AnchorEvent
 	updateAnchorSub event.Subscription
 
-	chain cross.SimpleChain
-	gpo   cross.GasPriceOracle
-	gasHelper  *GasHelper
+	chain     cross.SimpleChain
+	gpo       cross.GasPriceOracle
+	gasHelper *GasHelper
 
 	MainChainCtxAddress common.Address
 	SubChainCtxAddress  common.Address
@@ -302,7 +302,7 @@ func (h *Handler) getTxForLockOut(rwss []*cc.ReceptTransaction) ([]*types.Transa
 				log.Error("GetTxForLockOut CreateTransaction", "err", err)
 				continue
 			}
-			if ok,_ := h.checkTransaction(h.anchorSigner, tokenAddress, nonce+count, param.gasLimit, param.gasPrice, param.data); !ok {
+			if ok, _ := h.checkTransaction(h.anchorSigner, tokenAddress, nonce+count, param.gasLimit, param.gasPrice, param.data); !ok {
 				log.Info("already finish the cross Transaction")
 				continue
 			}
@@ -400,7 +400,7 @@ func (h *Handler) updateSelfTx() {
 					if count == 0 {
 						nonceBegin = v.Nonce()
 					}
-					if ok,_ := h.checkTransaction(h.anchorSigner, *v.To(), nonceBegin+count, v.Gas(), v.GasPrice(), v.Data()); !ok {
+					if ok, _ := h.checkTransaction(h.anchorSigner, *v.To(), nonceBegin+count, v.Gas(), v.GasPrice(), v.Data()); !ok {
 						log.Info("already finish the cross Transaction")
 						continue
 					}
@@ -487,7 +487,7 @@ func (h *Handler) GetHeight() *big.Int {
 	return big.NewInt(int64(h.store.Height()))
 }
 
-func (h *Handler) checkTransaction(address,tokenAddress common.Address, nonce,gasLimit uint64,gasPrice *big.Int,data []byte) (bool, error) {
+func (h *Handler) checkTransaction(address, tokenAddress common.Address, nonce, gasLimit uint64, gasPrice *big.Int, data []byte) (bool, error) {
 	callArgs := CallArgs{
 		From:     address,
 		To:       &tokenAddress,

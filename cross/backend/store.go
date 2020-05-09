@@ -233,7 +233,7 @@ func (store *CrossStore) addTxLocked(ctx *cc.CrossTransaction, local bool) error
 						for _, invalid := range invalidSigIndex {
 							cws.RemoveSignature(invalid)
 						}
-						store.pending.Put(cws, store.chain.GetBlockByHash(ctx.Data.BlockHash).NumberU64())
+						store.pending.Put(cws, NewChainInvoke(store.chain).GetTransactionNumberOnChain(ctx))
 					}
 				}},
 			)
@@ -251,9 +251,9 @@ func (store *CrossStore) addTxLocked(ctx *cc.CrossTransaction, local bool) error
 
 	// add new local ctx, move queued signatures of this ctx to pending
 	if local {
+		bNumber := NewChainInvoke(store.chain).GetTransactionNumberOnChain(ctx)
 		pendingRws := cc.NewCrossTransactionWithSignatures(ctx)
 		// promote queued ctx to pending, update to number received by local
-		bNumber := store.chain.GetBlockByHash(ctx.Data.BlockHash).NumberU64()
 		// move cws from queued to pending
 		if queuedRws := store.queued.Get(id); queuedRws != nil {
 			if err := queuedRws.AddSignature(ctx); err != nil {
@@ -567,22 +567,14 @@ func (store *CrossStore) ListLocalCrossTransactionBySender(from common.Address) 
 	store.mu.RLock()
 	defer store.mu.RUnlock()
 
-	//remotes := make(map[uint64][]*cc.CrossTransactionWithSignatures)
 	locals := make(map[uint64][]*cc.OwnerCrossTransactionWithSignatures)
-	//filter := func(cws *cc.CrossTransactionWithSignatures) bool { return cws.Data.From == from }
-	filter := q.Eq(crossdb.FromField, from)
-	//for chainID, s := range store.remoteStore {
-	//	remotes[chainID] = append(remotes[chainID], s.QueryByPrice(int(store.config.GlobalSlots), 0, filter)...)
-	//}
+	filter := q.And(q.Eq(crossdb.FromField, from), q.Eq(crossdb.StatusField, cc.CtxStatusWaiting))
 	txs := store.localStore.QueryByPrice(int(store.config.GlobalSlots), 0, filter)
-	for _,v := range txs {
-		if store.chain.GetBlockByHash(v.BlockHash()) != nil {
-			locals[store.config.ChainId.Uint64()] = append(locals[store.config.ChainId.Uint64()],&cc.OwnerCrossTransactionWithSignatures{
-				v,
-				store.chain.GetBlockByHash(v.BlockHash()).Time(),
-			})
-		}
+	for _, v := range txs {
+		locals[store.config.ChainId.Uint64()] = append(locals[store.config.ChainId.Uint64()], &cc.OwnerCrossTransactionWithSignatures{
+			Cws:  v,
+			Time: NewChainInvoke(store.chain).GetTransactionTimeOnChain(v),
+		})
 	}
-
 	return locals
 }

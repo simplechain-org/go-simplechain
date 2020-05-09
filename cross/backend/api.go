@@ -101,7 +101,7 @@ func (s *PublicCrossChainAPI) CtxQuery(ctx context.Context, hash common.Hash) *R
 func (s *PublicCrossChainAPI) CtxOwner(ctx context.Context, from common.Address) map[string]map[uint64][]*RPCOwnerCrossTransaction {
 	locals := s.handler.ListLocalCrossTransactionBySender(from)
 	content := map[string]map[uint64][]*RPCOwnerCrossTransaction{
-		"local":  make(map[uint64][]*RPCOwnerCrossTransaction),
+		"local": make(map[uint64][]*RPCOwnerCrossTransaction),
 	}
 	for s, txs := range locals {
 		for _, tx := range txs {
@@ -177,7 +177,7 @@ func newOwnerRPCCrossTransaction(tx *cc.OwnerCrossTransactionWithSignatures) *RP
 		DestinationId:    (*hexutil.Big)(tx.Cws.Data.DestinationId),
 		DestinationValue: (*hexutil.Big)(tx.Cws.Data.DestinationValue),
 		Input:            tx.Cws.Data.Input,
-		Time:             hexutil.Uint64(tx.Time) ,
+		Time:             hexutil.Uint64(tx.Time),
 	}
 	for _, v := range tx.Cws.Data.V {
 		result.V = append(result.V, (*hexutil.Big)(v))

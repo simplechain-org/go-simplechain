@@ -141,6 +141,10 @@ func (bc *testBlockChain) GetHeader(common.Hash, uint64) *types.Header {
 	return nil
 }
 
+func (bc *testBlockChain) GetHeaderByHash(common.Hash) *types.Header {
+	return nil
+}
+
 func (bc *testBlockChain) Engine() consensus.Engine {
 	return nil
 }
