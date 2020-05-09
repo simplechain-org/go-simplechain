@@ -359,3 +359,8 @@ type RemoteChainInfo struct {
 	RemoteChainId uint64
 	BlockNumber   uint64
 }
+
+type OwnerCrossTransactionWithSignatures struct {
+	Cws *CrossTransactionWithSignatures
+	Time uint64
+}

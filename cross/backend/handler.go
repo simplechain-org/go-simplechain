@@ -74,6 +74,7 @@ type Handler struct {
 
 	chain cross.SimpleChain
 	gpo   cross.GasPriceOracle
+	gasHelper  *GasHelper
 
 	MainChainCtxAddress common.Address
 	SubChainCtxAddress  common.Address
@@ -87,7 +88,7 @@ func NewCrossHandler(chain cross.SimpleChain, roleHandler RoleHandler, role comm
 	crossMsgReader <-chan interface{}, crossMsgWriter chan<- interface{},
 	mainAddr common.Address, subAddr common.Address,
 	signHash cc.SignHash, anchorSigner common.Address) *Handler {
-
+	gasHelper := NewGasHelper(blockChain, chain)
 	data, err := hexutil.Decode(params.CrossDemoAbi)
 	if err != nil {
 		log.Error("Parse crossABI", "err", err)
@@ -116,6 +117,7 @@ func NewCrossHandler(chain cross.SimpleChain, roleHandler RoleHandler, role comm
 		gpo:                 chain.GasOracle(),
 		pm:                  chain.ProtocolManager(),
 		service:             service,
+		gasHelper:           gasHelper,
 	}
 }
 
@@ -300,6 +302,11 @@ func (h *Handler) getTxForLockOut(rwss []*cc.ReceptTransaction) ([]*types.Transa
 				log.Error("GetTxForLockOut CreateTransaction", "err", err)
 				continue
 			}
+			if ok,_ := h.checkTransaction(h.anchorSigner, tokenAddress, nonce+count, param.gasLimit, param.gasPrice, param.data); !ok {
+				log.Info("already finish the cross Transaction")
+				continue
+			}
+
 			tx, err = newSignedTransaction(nonce+count, tokenAddress, param.gasLimit, param.gasPrice, param.data,
 				h.pm.NetworkId(), h.signHash)
 			if err != nil {
@@ -387,12 +394,20 @@ func (h *Handler) updateSelfTx() {
 		if txs, ok := pending[h.anchorSigner]; ok {
 			var count uint64
 			var newTxs []*types.Transaction
+			var nonceBegin uint64
 			for _, v := range txs {
 				if count < core.DefaultTxPoolConfig.AccountSlots {
+					if count == 0 {
+						nonceBegin = v.Nonce()
+					}
+					if ok,_ := h.checkTransaction(h.anchorSigner, *v.To(), nonceBegin+count, v.Gas(), v.GasPrice(), v.Data()); !ok {
+						log.Info("already finish the cross Transaction")
+						continue
+					}
 					gasPrice := new(big.Int).Div(new(big.Int).Mul(
 						v.GasPrice(), big.NewInt(100+int64(core.DefaultTxPoolConfig.PriceBump))), big.NewInt(100))
 
-					tx, err := newSignedTransaction(v.Nonce(), h.getCrossContractAddr(), v.Gas(), gasPrice, v.Data(), h.pm.NetworkId(), h.signHash)
+					tx, err := newSignedTransaction(nonceBegin+count, *v.To(), v.Gas(), gasPrice, v.Data(), h.pm.NetworkId(), h.signHash)
 					if err != nil {
 						log.Info("UpdateSelfTx", "err", err)
 					}
@@ -454,13 +469,31 @@ func (h *Handler) Stats() int {
 	return h.store.StoreStats()
 }
 
-func (h *Handler) ListCrossTransactionBySender(from common.Address) (map[uint64][]*cc.CrossTransactionWithSignatures, map[uint64][]*cc.CrossTransactionWithSignatures) {
+//func (h *Handler) ListCrossTransactionBySender(from common.Address) (map[uint64][]*cc.CrossTransactionWithSignatures, map[uint64][]*cc.CrossTransactionWithSignatures) {
+//	if !h.pm.CanAcceptTxs() {
+//		return nil, nil
+//	}
+//	return h.store.ListCrossTransactionBySender(from)
+//}
+
+func (h *Handler) ListLocalCrossTransactionBySender(from common.Address) map[uint64][]*cc.OwnerCrossTransactionWithSignatures {
 	if !h.pm.CanAcceptTxs() {
-		return nil, nil
+		return nil
 	}
-	return h.store.ListCrossTransactionBySender(from)
+	return h.store.ListLocalCrossTransactionBySender(from)
 }
 
 func (h *Handler) GetHeight() *big.Int {
 	return big.NewInt(int64(h.store.Height()))
+}
+
+func (h *Handler) checkTransaction(address,tokenAddress common.Address, nonce,gasLimit uint64,gasPrice *big.Int,data []byte) (bool, error) {
+	callArgs := CallArgs{
+		From:     address,
+		To:       &tokenAddress,
+		Data:     data,
+		GasPrice: hexutil.Big(*gasPrice),
+		Gas:      hexutil.Uint64(gasLimit),
+	}
+	return h.gasHelper.checkExec(context.Background(), callArgs)
 }

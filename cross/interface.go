@@ -11,6 +11,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/eth/gasprice"
 	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/rpc"
+	"github.com/simplechain-org/go-simplechain/core/vm"
 )
 
 type SimpleChain interface {
@@ -20,6 +21,10 @@ type SimpleChain interface {
 	GasOracle() *gasprice.Oracle
 	ProtocolManager() ProtocolManager
 	RegisterAPIs([]rpc.API)
+	GetEVM(ctx context.Context, msg core.Message, state *state.StateDB, header *types.Header, vmCfg vm.Config) (*vm.EVM, func() error, error)
+	BlockByNumber(ctx context.Context, blockNr rpc.BlockNumber) (*types.Block, error)
+	HeaderByNumber(ctx context.Context, blockNr rpc.BlockNumber) (*types.Header, error)
+	StateAndHeaderByNumber(ctx context.Context, blockNr rpc.BlockNumber) (*state.StateDB, *types.Header, error)
 }
 
 type Transaction interface {

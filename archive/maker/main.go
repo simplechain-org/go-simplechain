@@ -30,7 +30,7 @@ var chainId *uint64 = flag.Uint64("chainId", 512, "目的链id")
 //var fromVar *string=flag.String("from", "0x8029fcfc954ff7be80afd4db9f77f18c8aa1ecbc", "发起人地址")
 var fromVar *string = flag.String("from", "0x7964576407c299ec0e65991ba74019d622316a0d", "发起人地址")
 
-var gaslimitVar *uint64 = flag.Uint64("gaslimit", 60000, "gas最大值")
+var gaslimitVar *uint64 = flag.Uint64("gaslimit", 100000, "gas最大值")
 
 var countTx *int = flag.Int("count", 500, "交易数")
 

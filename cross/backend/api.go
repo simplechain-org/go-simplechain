@@ -98,21 +98,14 @@ func (s *PublicCrossChainAPI) CtxQuery(ctx context.Context, hash common.Hash) *R
 	return nil
 }
 
-func (s *PublicCrossChainAPI) CtxOwner(ctx context.Context, from common.Address) map[string]map[uint64][]*RPCCrossTransaction {
-	remotes, locals := s.handler.ListCrossTransactionBySender(from)
-	content := map[string]map[uint64][]*RPCCrossTransaction{
-		"remote": make(map[uint64][]*RPCCrossTransaction),
-		"local":  make(map[uint64][]*RPCCrossTransaction),
-	}
-	for k, txs := range remotes {
-		for _, tx := range txs {
-			content["remote"][k] = append(content["remote"][k], newRPCCrossTransaction(tx))
-		}
-
+func (s *PublicCrossChainAPI) CtxOwner(ctx context.Context, from common.Address) map[string]map[uint64][]*RPCOwnerCrossTransaction {
+	locals := s.handler.ListLocalCrossTransactionBySender(from)
+	content := map[string]map[uint64][]*RPCOwnerCrossTransaction{
+		"local":  make(map[uint64][]*RPCOwnerCrossTransaction),
 	}
 	for s, txs := range locals {
 		for _, tx := range txs {
-			content["local"][s] = append(content["local"][s], newRPCCrossTransaction(tx))
+			content["local"][s] = append(content["local"][s], newOwnerRPCCrossTransaction(tx))
 		}
 	}
 	return content
@@ -157,4 +150,66 @@ func newRPCCrossTransaction(tx *cc.CrossTransactionWithSignatures) *RPCCrossTran
 	}
 
 	return result
+}
+
+type RPCOwnerCrossTransaction struct {
+	Value            *hexutil.Big   `json:"value"`
+	CTxId            common.Hash    `json:"ctxId"`
+	TxHash           common.Hash    `json:"txHash"`
+	From             common.Address `json:"from"`
+	BlockHash        common.Hash    `json:"blockHash"`
+	DestinationId    *hexutil.Big   `json:"destinationId"`
+	DestinationValue *hexutil.Big   `json:"destinationValue"`
+	Input            hexutil.Bytes  `json:"input"`
+	Time             hexutil.Uint64 `json:"time"`
+	V                []*hexutil.Big `json:"v"`
+	R                []*hexutil.Big `json:"r"`
+	S                []*hexutil.Big `json:"s"`
+}
+
+func newOwnerRPCCrossTransaction(tx *cc.OwnerCrossTransactionWithSignatures) *RPCOwnerCrossTransaction {
+	result := &RPCOwnerCrossTransaction{
+		Value:            (*hexutil.Big)(tx.Cws.Data.Value),
+		CTxId:            tx.Cws.Data.CTxId,
+		TxHash:           tx.Cws.Data.TxHash,
+		From:             tx.Cws.Data.From,
+		BlockHash:        tx.Cws.Data.BlockHash,
+		DestinationId:    (*hexutil.Big)(tx.Cws.Data.DestinationId),
+		DestinationValue: (*hexutil.Big)(tx.Cws.Data.DestinationValue),
+		Input:            tx.Cws.Data.Input,
+		Time:             hexutil.Uint64(tx.Time) ,
+	}
+	for _, v := range tx.Cws.Data.V {
+		result.V = append(result.V, (*hexutil.Big)(v))
+	}
+	for _, r := range tx.Cws.Data.R {
+		result.R = append(result.R, (*hexutil.Big)(r))
+	}
+	for _, s := range tx.Cws.Data.S {
+		result.S = append(result.S, (*hexutil.Big)(s))
+	}
+
+	return result
+}
+
+func (s *PublicCrossChainAPI) CtxList(ctx context.Context, from common.Address) map[string]map[uint64][]*RPCCrossTransaction {
+	content := map[string]map[uint64][]*RPCCrossTransaction{
+		"remote": make(map[uint64][]*RPCCrossTransaction),
+		"local":  make(map[uint64][]*RPCCrossTransaction),
+	}
+	remotes, locals := s.handler.Query()
+	for k, txs := range remotes {
+		for _, tx := range txs {
+			if tx.Data.From != from {
+				content["remote"][k] = append(content["remote"][k], newRPCCrossTransaction(tx))
+			}
+		}
+
+	}
+	for s, txs := range locals {
+		for _, tx := range txs {
+			content["local"][s] = append(content["local"][s], newRPCCrossTransaction(tx))
+		}
+	}
+	return content
 }
