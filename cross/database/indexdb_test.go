@@ -53,7 +53,7 @@ func TestIndexDB_ReadWrite(t *testing.T) {
 	testFunction1 := func(t *testing.T, db *indexDB) {
 		assert.NoError(t, db.Write(ctxList[0]))
 		assert.Error(t, db.Write(ctxList[0]))
-		assert.EqualValues(t, db.total, 1)
+		assert.EqualValues(t, db.Count(q.Eq(StatusField, cc.CtxStatusWaiting)), 1)
 
 		assert.NoError(t, db.Write(ctxList[1]))
 		ctx, err := db.Read(ctxList[1].ID())
@@ -81,7 +81,7 @@ func TestIndexDB_ReadWrite(t *testing.T) {
 		db := NewIndexDB(big.NewInt(2), root, 10)
 
 		assert.NoError(t, db.Load(), "load occurs an error")
-		assert.Equal(t, 2, db.Size())
+		assert.Equal(t, 2, db.Count(q.Eq(StatusField, cc.CtxStatusWaiting)))
 		db.db.Drop(&CrossTransactionIndexed{})
 	}
 
@@ -105,7 +105,7 @@ func TestIndexDB_ReadWrite(t *testing.T) {
 			}
 		}()
 		wg.Wait()
-		assert.Equal(t, 40, db.Size())
+		assert.Equal(t, 40, db.Count(q.Eq(StatusField, cc.CtxStatusWaiting)))
 		count, err := db.db.Count(&CrossTransactionIndexed{})
 		assert.NoError(t, err)
 		assert.Equal(t, 40, count)
@@ -127,7 +127,7 @@ func TestIndexDB_Query(t *testing.T) {
 
 	// query without filter
 	{
-		list := db.QueryByPrice(10, 0)
+		list := db.Query(10, 0, PriceIndex)
 		assert.Equal(t, 10, len(list))
 		for i := 1; i < 10; i++ {
 			price1, _ := list[i-1].Price().Float64()
@@ -138,18 +138,18 @@ func TestIndexDB_Query(t *testing.T) {
 
 	// query last 5
 	{
-		list := db.QueryByPrice(5, 3)
+		list := db.Query(5, 3, PriceIndex)
 		assert.Equal(t, 5, len(list))
-		list = db.QueryByPrice(5, 4)
+		list = db.Query(5, 4, PriceIndex)
 		assert.Equal(t, 0, len(list))
 	}
 
 	// query with status filter after delete
 	{
 		assert.NoError(t, db.Delete(ctxList[0].ID()))
-		list := db.QueryByPrice(100, 0, q.Eq(StatusField, cc.CtxStatusFinished))
+		list := db.Query(100, 0, PriceIndex, q.Eq(StatusField, cc.CtxStatusFinished))
 		assert.Equal(t, 1, len(list))
-		list = db.QueryByPrice(100, 0, q.Not(q.Eq(StatusField, cc.CtxStatusFinished)))
+		list = db.Query(100, 0, PriceIndex, q.Not(q.Eq(StatusField, cc.CtxStatusFinished)))
 		assert.Equal(t, 19, len(list))
 	}
 }

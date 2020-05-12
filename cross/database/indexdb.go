@@ -3,7 +3,6 @@ package db
 import (
 	"fmt"
 	"math/big"
-	"sync/atomic"
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/math"
@@ -19,17 +18,17 @@ type indexDB struct {
 	root    *storm.DB // root db of stormDB
 	db      storm.Node
 	cache   *IndexDbCache
-	total   int64 // size of unfinished ctx
 }
 
+type FieldName = string
+
 const (
-	//index
-	PK         = "PK"
-	CtxIdIndex = "CtxId"
-	PriceIndex = "Price"
-	//field
-	StatusField = "Status"
-	FromField   = "From"
+	PK          FieldName = "PK"
+	CtxIdIndex  FieldName = "CtxId"
+	TxHashIndex FieldName = "CtxId"
+	PriceIndex  FieldName = "Price"
+	StatusField FieldName = "Status"
+	FromField   FieldName = "From"
 )
 
 func NewIndexDB(chainID *big.Int, rootDB *storm.DB, cacheSize uint64) *indexDB {
@@ -42,22 +41,17 @@ func NewIndexDB(chainID *big.Int, rootDB *storm.DB, cacheSize uint64) *indexDB {
 	}
 }
 
-func (d *indexDB) Size() int {
-	return int(d.total)
+func (d *indexDB) ChainID() *big.Int {
+	return d.chainID
 }
 
-func (d *indexDB) Height() int {
-	h, _ := d.db.Count(&CrossTransactionIndexed{})
-	return h
+func (d *indexDB) Count(filter ...q.Matcher) int {
+	count, _ := d.db.Select(filter...).Count(&CrossTransactionIndexed{})
+	return count
 }
 
 func (d *indexDB) Load() error {
-	query := d.db.Select(q.Not(q.Eq(StatusField, cc.CtxStatusFinished)))
-	total, err := query.Count(&CrossTransactionIndexed{})
-	if err != nil {
-		return ErrCtxDbFailure{msg: "Load failed", err: err}
-	}
-	atomic.StoreInt64(&d.total, int64(total))
+	//TODO: use cache
 	return nil
 }
 
@@ -67,8 +61,7 @@ func (d *indexDB) Close() error {
 
 func (d *indexDB) Write(ctx *cc.CrossTransactionWithSignatures) error {
 	old, err := d.get(ctx.ID())
-	exist := old != nil && err == nil
-	if exist && old.BlockHash != ctx.BlockHash() {
+	if old != nil && old.BlockHash != ctx.BlockHash() {
 		return ErrCtxDbFailure{err: fmt.Errorf("blockchain reorg, txID:%s, old:%s, new:%s",
 			ctx.ID(), old.BlockHash.String(), ctx.BlockHash().String())}
 	}
@@ -78,11 +71,11 @@ func (d *indexDB) Write(ctx *cc.CrossTransactionWithSignatures) error {
 	if err != nil {
 		return ErrCtxDbFailure{fmt.Sprintf("Write:%s save fail", ctx.ID().String()), err}
 	}
-	if !exist {
-		atomic.AddInt64(&d.total, 1)
-	}
+	//if old == nil {
+	//	atomic.AddInt64(&d.total, 1)
+	//}
 	if d.cache != nil {
-		d.cache.Put(ctx.ID(), persist)
+		d.cache.Put(CtxIdIndex, ctx.ID(), persist)
 	}
 	return nil
 }
@@ -95,9 +88,23 @@ func (d *indexDB) Read(ctxId common.Hash) (*cc.CrossTransactionWithSignatures, e
 	return ctx.ToCrossTransaction(), nil
 }
 
+func (d *indexDB) One(field FieldName, key interface{}) *cc.CrossTransactionWithSignatures {
+	if d.cache != nil && d.cache.Has(field, key) {
+		return d.cache.Get(field, key).ToCrossTransaction()
+	}
+	var ctx *CrossTransactionIndexed
+	if err := d.db.One(field, key, ctx); err != nil || ctx == nil {
+		return nil
+	}
+	if d.cache != nil {
+		d.cache.Put(field, key, ctx)
+	}
+	return ctx.ToCrossTransaction()
+}
+
 func (d *indexDB) get(ctxId common.Hash) (*CrossTransactionIndexed, error) {
-	if d.cache != nil && d.cache.Has(ctxId) {
-		return d.cache.Get(ctxId), nil
+	if d.cache != nil && d.cache.Has(CtxIdIndex, ctxId) {
+		return d.cache.Get(CtxIdIndex, ctxId), nil
 	}
 
 	var ctx CrossTransactionIndexed
@@ -106,18 +113,10 @@ func (d *indexDB) get(ctxId common.Hash) (*CrossTransactionIndexed, error) {
 	}
 
 	if d.cache != nil {
-		d.cache.Put(ctxId, &ctx)
+		d.cache.Put(CtxIdIndex, ctxId, &ctx)
 	}
 
 	return &ctx, nil
-}
-
-func (d *indexDB) ReadAll(ctxId common.Hash) (common.Hash, error) {
-	ctx, err := d.Read(ctxId)
-	if err != nil {
-		return common.Hash{}, err
-	}
-	return ctx.BlockHash(), nil
 }
 
 func (d *indexDB) Delete(ctxId common.Hash) error {
@@ -130,10 +129,10 @@ func (d *indexDB) Delete(ctxId common.Hash) error {
 	if err != nil {
 		return ErrCtxDbFailure{fmt.Sprintf("Delete:%s Update fail", ctxId.String()), err}
 	}
-	atomic.AddInt64(&d.total, -1)
+	//atomic.AddInt64(&d.total, -1)
 
 	if d.cache != nil {
-		d.cache.Remove(ctxId)
+		d.cache.Remove(CtxIdIndex, ctxId)
 	}
 
 	return nil
@@ -149,7 +148,7 @@ func (d *indexDB) Update(id common.Hash, updater func(ctx *CrossTransactionIndex
 		return ErrCtxDbFailure{"Update save fail", err}
 	}
 	if d.cache != nil {
-		d.cache.Put(id, ctx)
+		d.cache.Put(CtxIdIndex, id, ctx)
 	}
 	return nil
 }
@@ -159,12 +158,8 @@ func (d *indexDB) Has(id common.Hash) bool {
 	return err == nil
 }
 
-func (d *indexDB) QueryByPK(pageSize int, startPage int, filter ...interface{}) []*cc.CrossTransactionWithSignatures {
-	return d.query(pageSize, startPage, PK, d.sanitize(filter...)...)
-}
-
-func (d *indexDB) QueryByPrice(pageSize int, startPage int, filter ...interface{}) []*cc.CrossTransactionWithSignatures {
-	return d.query(pageSize, startPage, PriceIndex, d.sanitize(filter...)...)
+func (d *indexDB) Query(pageSize int, startPage int, orderBy FieldName, filter ...q.Matcher) []*cc.CrossTransactionWithSignatures {
+	return d.query(pageSize, startPage, orderBy, filter...)
 }
 
 func (d *indexDB) Range(pageSize int, startCtxID, endCtxID *common.Hash) []*cc.CrossTransactionWithSignatures {
@@ -201,9 +196,9 @@ func (d *indexDB) Range(pageSize int, startCtxID, endCtxID *common.Hash) []*cc.C
 	return results
 }
 
-func (d *indexDB) query(pageSize int, startPage int, order string, filter ...q.Matcher) []*cc.CrossTransactionWithSignatures {
+func (d *indexDB) query(pageSize int, startPage int, orderBy string, filter ...q.Matcher) []*cc.CrossTransactionWithSignatures {
 	var ctxs []*CrossTransactionIndexed
-	query := d.db.Select(filter...).OrderBy(PriceIndex)
+	query := d.db.Select(filter...).OrderBy(orderBy)
 	if pageSize > 0 {
 		query.Limit(pageSize).Skip(pageSize * startPage)
 	}
@@ -214,11 +209,4 @@ func (d *indexDB) query(pageSize int, startPage int, order string, filter ...q.M
 		results[i] = ctx.ToCrossTransaction()
 	}
 	return results
-}
-
-func (d *indexDB) sanitize(filter ...interface{}) (matchers []q.Matcher) {
-	for _, f := range filter {
-		matchers = append(matchers, f.(q.Matcher)) // static-assert: type switch must success
-	}
-	return matchers
 }

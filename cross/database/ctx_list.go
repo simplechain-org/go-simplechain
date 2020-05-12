@@ -293,22 +293,29 @@ func newIndexDbCache(cap int) *IndexDbCache {
 	return (*IndexDbCache)(cache)
 }
 
-func (m *IndexDbCache) Has(ctxID common.Hash) bool {
-	return (*lru.ARCCache)(m).Contains(ctxID)
+func indexCacheKey(index FieldName, value interface{}) interface{} {
+	return struct {
+		Index FieldName
+		Value interface{}
+	}{index, value}
 }
 
-func (m *IndexDbCache) Get(ctxID common.Hash) *CrossTransactionIndexed {
-	item, ok := (*lru.ARCCache)(m).Get(ctxID)
+func (m *IndexDbCache) Has(index FieldName, key interface{}) bool {
+	return (*lru.ARCCache)(m).Contains(indexCacheKey(index, key))
+}
+
+func (m *IndexDbCache) Get(index FieldName, key interface{}) *CrossTransactionIndexed {
+	item, ok := (*lru.ARCCache)(m).Get(indexCacheKey(index, key))
 	if !ok {
 		return nil
 	}
 	return item.(*CrossTransactionIndexed)
 }
 
-func (m *IndexDbCache) Put(ctxID common.Hash, ctx *CrossTransactionIndexed) {
-	(*lru.ARCCache)(m).Add(ctxID, ctx)
+func (m *IndexDbCache) Put(index FieldName, key interface{}, ctx *CrossTransactionIndexed) {
+	(*lru.ARCCache)(m).Add(indexCacheKey(index, key), ctx)
 }
 
-func (m *IndexDbCache) Remove(ctxID common.Hash) {
-	(*lru.ARCCache)(m).Remove(ctxID)
+func (m *IndexDbCache) Remove(index FieldName, key interface{}) {
+	(*lru.ARCCache)(m).Remove(indexCacheKey(index, key))
 }
