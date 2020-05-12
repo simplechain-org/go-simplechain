@@ -1,0 +1,19 @@
+{
+  "Anchor": "0x8e422d5Aff496974f7FaE17F6848a40C59F8b2E9",
+  "AnchorKey": "0a0da1758e569d1c85e11058106804310bced2f8a66cafe5460920052d1d224b",
+  "Main": {
+    "Url": "http://127.0.0.1:8547",
+    "ChainID": 8,
+    "ContractAddr": "0xc6e80d9a45ce121497e4ea6cb0ff6c32653d0fc5",
+    "FromBlock": 0,
+    "EndBlock": 2050
+  },
+  "Sub": {
+    "Url": "http://127.0.0.1:8557",
+    "ChainID": 808,
+    "ContractAddr": "0x8eefa4bfea64f2a89f3064d48646415168662a1e",
+    "FromBlock": 0,
+    "EndBlock": 0
+  }
+}
+

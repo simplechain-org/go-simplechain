@@ -2,11 +2,53 @@ package backend
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	cc "github.com/simplechain-org/go-simplechain/cross/core"
+	"github.com/simplechain-org/go-simplechain/log"
+	"github.com/simplechain-org/go-simplechain/rlp"
 )
+
+type PrivateCrossChainAPI struct {
+	mainHandler *Handler
+	subHandler  *Handler
+}
+
+func NewPrivateCrossChainAPI(mainHandler, subHandler *Handler) *PrivateCrossChainAPI {
+	return &PrivateCrossChainAPI{mainHandler, subHandler}
+}
+func (s *PrivateCrossChainAPI) ImportCtx(ctxWithSignsSArgs hexutil.Bytes) error {
+	ctx := new(cc.CrossTransactionWithSignatures)
+	if err := rlp.DecodeBytes(ctxWithSignsSArgs, ctx); err != nil {
+		return err
+	}
+
+	if len(ctx.Resolution()) < requireSignatureCount {
+		return fmt.Errorf("invalid signture length ctx: %d,want: %d", len(ctx.Resolution()), requireSignatureCount)
+	}
+
+	chainId := ctx.ChainId()
+	var invalidSigIndex []int
+	for i, ctx := range ctx.Resolution() {
+		if s.subHandler.store.verifySigner(ctx, chainId, chainId) != nil {
+			invalidSigIndex = append(invalidSigIndex, i)
+		}
+	}
+	if invalidSigIndex != nil {
+		return fmt.Errorf("invalid signature of ctx:%s for signature:%v\n", ctx.ID().String(), invalidSigIndex)
+	}
+	if err := s.mainHandler.store.localStore.Write(ctx); err != nil {
+		return err
+	}
+	if err := s.subHandler.store.remoteStore.Write(ctx); err != nil {
+		return err
+	}
+	log.Info("rpc ImportCtx", "ctxID", ctx.ID().String())
+
+	return nil
+}
 
 // PublicTxPoolAPI offers and API for the transaction pool. It only operates on data that is non confidential.
 type PublicCrossChainAPI struct {
