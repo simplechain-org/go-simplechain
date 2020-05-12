@@ -81,8 +81,8 @@ func TestNewCtxStoreAdd(t *testing.T) {
 	ev := <-signedCh
 	ev.CallBack(ev.Tws)
 
-	if ctxStore.StoreStats() != 1 {
-		t.Errorf("add failed,stats:%d (!= %d)", ctxStore.StoreStats(), 1)
+	if ctxStore.LocalStats() != 1 {
+		t.Errorf("add failed,stats:%d (!= %d)", ctxStore.LocalStats(), 1)
 	}
 
 	ctxStore.Stop()

@@ -3,6 +3,7 @@ package db
 import (
 	"fmt"
 	"io"
+	"math/big"
 	"os"
 
 	"github.com/simplechain-org/go-simplechain/common"
@@ -11,6 +12,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/ethdb"
 
 	"github.com/asdine/storm/v3"
+	"github.com/asdine/storm/v3/q"
 )
 
 type ErrCtxDbFailure struct {
@@ -29,17 +31,16 @@ type ServiceContext interface {
 
 type CtxDB interface {
 	io.Closer
-	Size() int
-	Height() int
+	ChainID() *big.Int
 	Load() error
 	Write(ctx *cc.CrossTransactionWithSignatures) error
 	Read(ctxId common.Hash) (*cc.CrossTransactionWithSignatures, error)
-	ReadAll(ctxId common.Hash) (common.Hash, error)
+	One(field FieldName, key interface{}) *cc.CrossTransactionWithSignatures
 	Delete(ctxId common.Hash) error
 	Update(id common.Hash, updater func(ctx *CrossTransactionIndexed)) error
 	Has(id common.Hash) bool
-	QueryByPK(pageSize int, startPage int, filter ...interface{}) []*cc.CrossTransactionWithSignatures
-	QueryByPrice(pageSize int, startPage int, filter ...interface{}) []*cc.CrossTransactionWithSignatures
+	Query(pageSize int, startPage int, orderBy FieldName, filter ...q.Matcher) []*cc.CrossTransactionWithSignatures
+	Count(filter ...q.Matcher) int
 	Range(pageSize int, startCtxID *common.Hash, endCtxID *common.Hash) []*cc.CrossTransactionWithSignatures
 }
 
