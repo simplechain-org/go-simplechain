@@ -25,7 +25,7 @@ type FieldName = string
 const (
 	PK          FieldName = "PK"
 	CtxIdIndex  FieldName = "CtxId"
-	TxHashIndex FieldName = "CtxId"
+	TxHashIndex FieldName = "TxHash"
 	PriceIndex  FieldName = "Price"
 	StatusField FieldName = "Status"
 	FromField   FieldName = "From"
@@ -92,12 +92,12 @@ func (d *indexDB) One(field FieldName, key interface{}) *cc.CrossTransactionWith
 	if d.cache != nil && d.cache.Has(field, key) {
 		return d.cache.Get(field, key).ToCrossTransaction()
 	}
-	var ctx *CrossTransactionIndexed
-	if err := d.db.One(field, key, ctx); err != nil || ctx == nil {
+	var ctx CrossTransactionIndexed
+	if err := d.db.One(field, key, &ctx); err != nil {
 		return nil
 	}
 	if d.cache != nil {
-		d.cache.Put(field, key, ctx)
+		d.cache.Put(field, key, &ctx)
 	}
 	return ctx.ToCrossTransaction()
 }
