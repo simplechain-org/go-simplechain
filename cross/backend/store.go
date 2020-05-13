@@ -422,7 +422,7 @@ func (store *CrossStore) MarkStatus(rtxs []*cc.ReceptTransaction, status cc.CtxS
 }
 
 func (store *CrossStore) Query(localPageSize, localPage, remotePageSize, remotePage int) (map[uint64][]*cc.CrossTransactionWithSignatures, map[uint64][]*cc.CrossTransactionWithSignatures) {
-	return map[uint64][]*cc.CrossTransactionWithSignatures{store.remoteStore.ChainID().Uint64(): store.query(store.localStore, localPageSize, localPage)},
+	return map[uint64][]*cc.CrossTransactionWithSignatures{store.remoteStore.ChainID().Uint64(): store.query(store.localStore, localPageSize, localPage)}, //TODO: 适配前端，key使用remoteID
 		map[uint64][]*cc.CrossTransactionWithSignatures{store.remoteStore.ChainID().Uint64(): store.query(store.remoteStore, remotePageSize, remotePage)}
 }
 
@@ -431,14 +431,15 @@ func (store *CrossStore) QueryRemote(remotePageSize, remotePage int) map[uint64]
 }
 
 func (store *CrossStore) QueryLocal(localPageSize, localPage int) map[uint64][]*cc.CrossTransactionWithSignatures {
-	return map[uint64][]*cc.CrossTransactionWithSignatures{store.remoteStore.ChainID().Uint64(): store.query(store.localStore, localPageSize, localPage)}
+	return map[uint64][]*cc.CrossTransactionWithSignatures{store.remoteStore.ChainID().Uint64(): store.query(store.localStore, localPageSize, localPage)} //TODO: 适配前端，key使用remoteID
 }
 
 func (store *CrossStore) QueryLocalBySender(from common.Address, pageSize, startPage int) map[uint64][]*cc.OwnerCrossTransactionWithSignatures {
 	locals := make(map[uint64][]*cc.OwnerCrossTransactionWithSignatures, 1)
 	txs := store.query(store.localStore, pageSize, startPage, q.Eq(crossdb.FromField, from))
 	for _, v := range txs {
-		locals[store.config.ChainId.Uint64()] = append(locals[store.config.ChainId.Uint64()], &cc.OwnerCrossTransactionWithSignatures{
+		//TODO: 适配前端，key使用remoteID
+		locals[store.remoteStore.ChainID().Uint64()] = append(locals[store.remoteStore.ChainID().Uint64()], &cc.OwnerCrossTransactionWithSignatures{
 			Cws:  v,
 			Time: NewChainInvoke(store.chain).GetTransactionTimeOnChain(v),
 		})
