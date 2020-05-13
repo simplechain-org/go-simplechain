@@ -139,7 +139,7 @@ func TestIndexDB_Query(t *testing.T) {
 
 	// query without filter
 	{
-		list := db.Query(10, 0, PriceIndex)
+		list := db.Query(10, 1, PriceIndex)
 		assert.Equal(t, 10, len(list))
 		for i := 1; i < 10; i++ {
 			price1, _ := list[i-1].Price().Float64()
@@ -150,18 +150,18 @@ func TestIndexDB_Query(t *testing.T) {
 
 	// query last 5
 	{
-		list := db.Query(5, 3, PriceIndex)
+		list := db.Query(5, 4, PriceIndex)
 		assert.Equal(t, 5, len(list))
-		list = db.Query(5, 4, PriceIndex)
+		list = db.Query(5, 5, PriceIndex)
 		assert.Equal(t, 0, len(list))
 	}
 
 	// query with status filter after delete
 	{
 		assert.NoError(t, db.Delete(ctxList[0].ID()))
-		list := db.Query(100, 0, PriceIndex, q.Eq(StatusField, cc.CtxStatusFinished))
+		list := db.Query(100, 1, PriceIndex, q.Eq(StatusField, cc.CtxStatusFinished))
 		assert.Equal(t, 1, len(list))
-		list = db.Query(100, 0, PriceIndex, q.Not(q.Eq(StatusField, cc.CtxStatusFinished)))
+		list = db.Query(100, 1, PriceIndex, q.Not(q.Eq(StatusField, cc.CtxStatusFinished)))
 		assert.Equal(t, 19, len(list))
 	}
 }
