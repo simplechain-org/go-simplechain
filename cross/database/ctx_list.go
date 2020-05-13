@@ -225,16 +225,16 @@ func (m *CtxToBlockHash) Put(txID common.Hash, blockHash common.Hash) bool {
 }
 
 type CrossTransactionIndexed struct {
-	PK    uint64         `storm:"id,increment"`
-	CtxId common.Hash    `storm:"unique"`
-	From  common.Address `storm:"index"`
-	Price *big.Float     `storm:"index"`
+	PK     uint64         `storm:"id,increment"`
+	CtxId  common.Hash    `storm:"unique"`
+	From   common.Address `storm:"index"`
+	TxHash common.Hash    `storm:"index"`
+	Price  *big.Float     `storm:"index"`
 
 	// normal field
 	Status cc.CtxStatus
 
 	Value            *big.Int
-	TxHash           common.Hash
 	BlockHash        common.Hash
 	DestinationId    *big.Int
 	DestinationValue *big.Int
