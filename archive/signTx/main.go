@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"math/big"
 	"os"
+	"time"
 
 	"github.com/simplechain-org/go-simplechain/accounts/abi"
 	"github.com/simplechain-org/go-simplechain/common"
@@ -26,6 +27,7 @@ import (
 var configPath = flag.String("conf", "./config", "config path")
 var makerHash = flag.String("hash", "", "maker tx hash on main chain")
 var addCrossTx = flag.String("data", "", "crossTransactionWithSignatures rlp data")
+var parseCrossChain = flag.Bool("p", false, "parse events from blocks")
 
 type ChainConfig struct {
 	Url          string
@@ -80,6 +82,11 @@ func main() {
 	ctx := context.Background()
 	h := NewHandler(config)
 
+	if *parseCrossChain {
+		h.parseEvents(ctx, config.Main.FromBlock, config.Main.EndBlock)
+		return
+	}
+
 	receipt, err := h.MainChain.Client.TransactionReceipt(ctx, common.HexToHash(*makerHash))
 	if err != nil {
 		log.Error("get receipt", "err", err)
@@ -88,64 +95,63 @@ func main() {
 	for _, v := range receipt.Logs {
 		if len(v.Topics) > 0 {
 			if v.Topics[0] == params.MakerTopic {
-				log.Info("tx event MakerTopic")
+				log.Info("tx event MakerTopic", "ctxID", v.Topics[1].String())
 				addCrossTxBytes, _ := hexutil.Decode(*addCrossTx)
-				h.NewCrossTxWithSigns(v, addCrossTxBytes)
-				continue
+				h.MakeEvent(v, addCrossTxBytes)
 			}
 
 			if len(v.Topics) >= 3 && v.Topics[0] == params.TakerTopic && len(v.Data) >= common.HashLength*4 {
-				ctxId := v.Topics[1]
-				h.SubChain.TakerEvents[ctxId] = v
-				log.Info("tx event TakerTopic")
-				continue
+				log.Info("tx event TakerTopic", "ctxID", v.Topics[1].String())
+				h.TakerEvent(ctx, v)
 			}
 		}
 	}
-
-	h.TakerEvents(ctx)
-
 }
 
-func (h *Handler) TakerEvents(ctx context.Context) {
+func (h *Handler) TakerEvent(ctx context.Context, event *types.Log) {
 	//主链上有takerEvent，需要在子链上发 makerFinish交易
 	nonce, err := h.SubChain.Client.NonceAt(ctx, h.AnchorAddr, nil)
-	count := uint64(0)
 	if err != nil {
 		log.Error("get nonce", "err", err)
 		panic(err)
 	}
-	for _, event := range h.MainChain.TakerEvents {
-		var to, from common.Address
-		copy(to[:], event.Topics[2][common.HashLength-common.AddressLength:])
-		from = common.BytesToAddress(event.Data[common.HashLength*2-common.AddressLength : common.HashLength*2])
-		ctxId := event.Topics[1]
 
-		rtx := cc.NewReceptTransaction(ctxId, from, to, common.BytesToHash(event.Data[:common.HashLength]).Big(), h.MainChain.ChainID)
+	var to, from common.Address
+	copy(to[:], event.Topics[2][common.HashLength-common.AddressLength:])
+	from = common.BytesToAddress(event.Data[common.HashLength*2-common.AddressLength : common.HashLength*2])
 
-		if rtx.DestinationId.Uint64() == h.SubChain.ChainID.Uint64() {
-			param, err := h.createTransaction(rtx)
-			if err != nil {
-				log.Error("GetTxForLockOut CreateTransaction", "err", err)
-				continue
-			}
-			tx, err := h.newSignedTransaction(nonce+count, h.SubChain.ContractAddr, param.gasLimit, param.gasPrice, param.data,
-				h.MainChain.ChainID.Uint64())
-			if err != nil {
-				log.Error("GetTxForLockOut newSignedTransaction", "err", err)
-				panic(err)
-			}
-
-			if err = h.SubChain.Client.SendTransaction(ctx, tx); err != nil {
-				log.Error("sub chain SendTransaction failed", "err", err, "hash", tx.Hash()) //TODO
-			}
-			count++
+	rtx := &cc.ReceptTransaction{
+		CTxId:         event.Topics[1],
+		From:          from,
+		To:            to,
+		DestinationId: common.BytesToHash(event.Data[:common.HashLength]).Big(),
+		ChainId:       h.MainChain.ChainID,
+	}
+	if rtx.DestinationId.Uint64() == h.SubChain.ChainID.Uint64() {
+		param, err := h.createTransaction(rtx)
+		if err != nil {
+			log.Error("GetTxForLockOut CreateTransaction", "err", err)
 		}
+		tx, err := h.newSignedTransaction(nonce, h.SubChain.ContractAddr, param.gasLimit, param.gasPrice, param.data,
+			h.SubChain.ChainID.Uint64())
+		if err != nil {
+			log.Error("GetTxForLockOut newSignedTransaction", "err", err)
+			panic(err)
+		}
+
+		if err = h.SubChain.Client.SendTransaction(ctx, tx); err != nil {
+			log.Error("sub chain SendTransaction failed", "err", err, "hash", tx.Hash()) //TODO
+			return
+		}
+		log.Info("SendTransaction sub", "txHash", tx.Hash().String(), "ctxID", rtx.CTxId.String())
+
+		//from,_:=types.Sender(types.NewEIP155Signer(h.SubChain.ChainID),tx)
+		//fmt.Println("from:  ",from.String())
 	}
 }
 
 //主链的maker event的处理，打印出签名的交易，通过rpc来插入到跨链DB
-func (h *Handler) NewCrossTxWithSigns(event *types.Log, crossTxBytes hexutil.Bytes) {
+func (h *Handler) MakeEvent(event *types.Log, crossTxBytes hexutil.Bytes) {
 	signer := cc.NewEIP155CtxSigner(h.MainChain.ChainID)
 
 	var from common.Address
@@ -292,7 +298,7 @@ type TranParam struct {
 }
 
 func (h *Handler) createTransaction(rws *cc.ReceptTransaction) (*TranParam, error) {
-	gasPrice, err := h.MainChain.Client.SuggestGasPrice(context.Background())
+	gasPrice, err := h.SubChain.Client.SuggestGasPrice(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -323,4 +329,74 @@ func (h *Handler) isMainContractAddr(addr common.Address) bool {
 
 func (h *Handler) isSubContractAddr(addr common.Address) bool {
 	return addr == h.SubChain.ContractAddr
+}
+
+func (h *Handler) parseEvents(ctx context.Context, from, end uint64) {
+	//for main chain
+	for i := from; i < end; i++ {
+		block, err := h.MainChain.Client.BlockByNumber(ctx, new(big.Int).SetUint64(i))
+		if err != nil {
+			log.Error("new block", "err", err)
+			panic(err)
+		}
+		if block.NumberU64()%100 == 0 {
+			log.Info("new block", "num", block.Number().String())
+		}
+		for _, tx := range block.Transactions() {
+
+			if tx.To() != nil && h.isMainContractAddr(*(tx.To())) {
+				receipt, err := h.MainChain.Client.TransactionReceipt(ctx, tx.Hash())
+				if err != nil {
+					log.Error("tx", "err", err)
+					time.Sleep(10 * time.Second) //retry once
+					receipt, err = h.MainChain.Client.TransactionReceipt(ctx, tx.Hash())
+					if err != nil {
+						log.Error("tx", "second err", err)
+						panic(err)
+					}
+				}
+
+				finishes := h.parseMainContractLogs(receipt.Logs)
+				for _, finish := range finishes {
+					delete(h.MainChain.MakerEvents, finish) //local
+				}
+			}
+		} //transactions
+	} //blocks
+
+	log.Info("MainChain.MakerEvents", "length", len(h.MainChain.MakerEvents))
+	log.Info("MainChain.TakerEvents", "length", len(h.MainChain.TakerEvents))
+
+	for _, event := range h.MainChain.MakerEvents {
+		log.Info("MainChain.MakerEvents", "tx hash", event.TxHash.String())
+	}
+	for _, event := range h.MainChain.TakerEvents {
+		log.Info("MainChain.TakerEvents", "tx hash", event.TxHash.String())
+	}
+}
+
+func (h *Handler) parseMainContractLogs(logs []*types.Log) (finishes []common.Hash) {
+	for _, v := range logs {
+		if len(v.Topics) > 0 {
+			if v.Topics[0] == params.MakerTopic && len(v.Topics) >= 3 && len(v.Data) >= common.HashLength*5 {
+				ctxId := v.Topics[1]
+				h.MainChain.MakerEvents[ctxId] = v
+				log.Info("make event", "tx hash", v.TxHash)
+				continue
+			}
+			if len(v.Topics) >= 3 && v.Topics[0] == params.TakerTopic && len(v.Data) >= common.HashLength*4 {
+				ctxId := v.Topics[1]
+				h.MainChain.TakerEvents[ctxId] = v
+				log.Info("taker event", "tx hash", v.TxHash)
+
+				continue
+			}
+			if len(v.Topics) >= 3 && v.Topics[0] == params.MakerFinishTopic {
+				ctxId := v.Topics[1]
+				finishes = append(finishes, ctxId)
+				log.Info("MakerFinish event", "tx hash", v.TxHash)
+			}
+		}
+	}
+	return finishes
 }
