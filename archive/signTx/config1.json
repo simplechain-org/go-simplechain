@@ -6,14 +6,14 @@
     "ChainID": 8,
     "ContractAddr": "0xc6e80d9a45ce121497e4ea6cb0ff6c32653d0fc5",
     "FromBlock": 0,
-    "EndBlock": 2050
+    "EndBlock": 1000
   },
   "Sub": {
     "Url": "http://127.0.0.1:8556",
     "ChainID": 808,
     "ContractAddr": "0x8eefa4bfea64f2a89f3064d48646415168662a1e",
     "FromBlock": 0,
-    "EndBlock": 0
+    "EndBlock": 1000
   }
 }
 

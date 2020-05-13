@@ -70,7 +70,6 @@ func ParseConfig(path string) (*Config, error) {
 2.second anchor get rlp data of CrossTransactionWithSign from anchor1(--data):  ./signTx --conf ./config2.json --hash 0xd3fe39c07bdbf88bd53bf86cd0333f1b32e1424826183a42545964bdfd96c917 --data 0xf8d9f8d7880de0b6b3a7640000a0bc065635f2e1b4f3dc4c79d777b8c67060cc38a3ad382e5d6595a898af65a6cfa0d3fe39c07bdbf88bd53bf86cd0333f1b32e1424826183a42545964bdfd96c917943db32cdacb1ba339786403b50568f4915892938aa09c720d351587ba0a2f3e703505a030b5f1fa2ca17eabfe17880463c5a5f1fd63820328880de0b6b3a76400008677616c6b657234a027387d29a32fd6d85564ac15168b35bf5e11fe5dcba066241171e65058bebeb7a031fb6b9b981b61615beae82ff8051242f817e7cb847e63bd8389a220c6ef5d77
   this method would send CrossTransaction by RPC
 */
-
 func main() {
 	flag.Parse()
 	config, err := ParseConfig(*configPath)
@@ -83,7 +82,7 @@ func main() {
 	h := NewHandler(config)
 
 	if *parseCrossChain {
-		h.parseEvents(ctx, config.Main.FromBlock, config.Main.EndBlock)
+		h.parseCrossChainEvents(ctx, config.Main, config.Sub)
 		return
 	}
 
@@ -105,6 +104,74 @@ func main() {
 				h.TakerEvent(ctx, v)
 			}
 		}
+	}
+}
+
+type Chain struct {
+	Url          string
+	Client       *ethclient.Client
+	ChainID      *big.Int
+	ContractAddr common.Address
+
+	MakerEvents map[common.Hash]*types.Log
+	TakerEvents map[common.Hash]*types.Log
+}
+
+type Handler struct {
+	abi        abi.ABI
+	AnchorAddr common.Address
+	AnchorKey  *ecdsa.PrivateKey
+	MainCtxDB  crossdb.CtxDB
+	SubCtxDB   crossdb.CtxDB
+	MainChain  Chain
+	SubChain   Chain
+}
+
+func NewHandler(config *Config) *Handler {
+	data, err := hexutil.Decode(params.CrossDemoAbi)
+	if err != nil {
+		panic(err)
+	}
+	abi, err := abi.JSON(bytes.NewReader(data))
+	if err != nil {
+		panic(err)
+	}
+
+	mainClient, err := ethclient.Dial(config.Main.Url)
+	if err != nil {
+		panic(err)
+	}
+	subClient, err := ethclient.Dial(config.Sub.Url)
+	if err != nil {
+		panic(err)
+	}
+
+	privateKey, err := crypto.HexToECDSA(config.AnchorKey)
+	if err != nil {
+		log.Error("failed to parse private key ", "err", err)
+		panic(err)
+	}
+
+	return &Handler{
+		abi:        abi,
+		AnchorAddr: common.HexToAddress(config.Anchor),
+		AnchorKey:  privateKey,
+		MainChain: Chain{
+			Url:          config.Main.Url,
+			Client:       mainClient,
+			ChainID:      new(big.Int).SetUint64(config.Main.ChainID),
+			ContractAddr: common.HexToAddress(config.Main.ContractAddr),
+			MakerEvents:  make(map[common.Hash]*types.Log),
+			TakerEvents:  make(map[common.Hash]*types.Log),
+		},
+		SubChain: Chain{
+			Url:          config.Sub.Url,
+			Client:       subClient,
+			ChainID:      new(big.Int).SetUint64(config.Sub.ChainID),
+			ContractAddr: common.HexToAddress(config.Sub.ContractAddr),
+			MakerEvents:  make(map[common.Hash]*types.Log),
+			TakerEvents:  make(map[common.Hash]*types.Log),
+		},
 	}
 }
 
@@ -213,74 +280,6 @@ func (h *Handler) MakeEvent(event *types.Log, crossTxBytes hexutil.Bytes) {
 
 }
 
-type Chain struct {
-	Url          string
-	Client       *ethclient.Client
-	ChainID      *big.Int
-	ContractAddr common.Address
-
-	MakerEvents map[common.Hash]*types.Log
-	TakerEvents map[common.Hash]*types.Log
-}
-
-type Handler struct {
-	abi        abi.ABI
-	AnchorAddr common.Address
-	AnchorKey  *ecdsa.PrivateKey
-	MainCtxDB  crossdb.CtxDB
-	SubCtxDB   crossdb.CtxDB
-	MainChain  Chain
-	SubChain   Chain
-}
-
-func NewHandler(config *Config) *Handler {
-	data, err := hexutil.Decode(params.CrossDemoAbi)
-	if err != nil {
-		panic(err)
-	}
-	abi, err := abi.JSON(bytes.NewReader(data))
-	if err != nil {
-		panic(err)
-	}
-
-	mainClient, err := ethclient.Dial(config.Main.Url)
-	if err != nil {
-		panic(err)
-	}
-	subClient, err := ethclient.Dial(config.Sub.Url)
-	if err != nil {
-		panic(err)
-	}
-
-	privateKey, err := crypto.HexToECDSA(config.AnchorKey)
-	if err != nil {
-		log.Error("failed to parse private key ", "err", err)
-		panic(err)
-	}
-
-	return &Handler{
-		abi:        abi,
-		AnchorAddr: common.HexToAddress(config.Anchor),
-		AnchorKey:  privateKey,
-		MainChain: Chain{
-			Url:          config.Main.Url,
-			Client:       mainClient,
-			ChainID:      new(big.Int).SetUint64(config.Main.ChainID),
-			ContractAddr: common.HexToAddress(config.Main.ContractAddr),
-			MakerEvents:  make(map[common.Hash]*types.Log),
-			TakerEvents:  make(map[common.Hash]*types.Log),
-		},
-		SubChain: Chain{
-			Url:          config.Sub.Url,
-			Client:       subClient,
-			ChainID:      new(big.Int).SetUint64(config.Sub.ChainID),
-			ContractAddr: common.HexToAddress(config.Sub.ContractAddr),
-			MakerEvents:  make(map[common.Hash]*types.Log),
-			TakerEvents:  make(map[common.Hash]*types.Log),
-		},
-	}
-}
-
 // SignCtx signs the transaction using the given signer and private key
 func (h *Handler) SignCtx(tx *cc.CrossTransaction, s cc.CtxSigner) (*cc.CrossTransaction, error) {
 	txHash := s.Hash(tx)
@@ -323,46 +322,16 @@ func (h *Handler) newSignedTransaction(nonce uint64, to common.Address, gasLimit
 	return signedTx, nil
 }
 
-func (h *Handler) isMainContractAddr(addr common.Address) bool {
-	return addr == h.MainChain.ContractAddr
-}
+func (h *Handler) parseCrossChainEvents(ctx context.Context, mainConfig, subConfig ChainConfig) {
+	mainFinish := h.parseContractLogs(ctx, &h.MainChain, mainConfig.FromBlock, mainConfig.EndBlock)
+	subFinish := h.parseContractLogs(ctx, &h.SubChain, subConfig.FromBlock, subConfig.EndBlock)
 
-func (h *Handler) isSubContractAddr(addr common.Address) bool {
-	return addr == h.SubChain.ContractAddr
-}
-
-func (h *Handler) parseEvents(ctx context.Context, from, end uint64) {
-	//for main chain
-	for i := from; i < end; i++ {
-		block, err := h.MainChain.Client.BlockByNumber(ctx, new(big.Int).SetUint64(i))
-		if err != nil {
-			log.Error("new block", "err", err)
-			panic(err)
-		}
-		if block.NumberU64()%100 == 0 {
-			log.Info("new block", "num", block.Number().String())
-		}
-		for _, tx := range block.Transactions() {
-
-			if tx.To() != nil && h.isMainContractAddr(*(tx.To())) {
-				receipt, err := h.MainChain.Client.TransactionReceipt(ctx, tx.Hash())
-				if err != nil {
-					log.Error("tx", "err", err)
-					time.Sleep(10 * time.Second) //retry once
-					receipt, err = h.MainChain.Client.TransactionReceipt(ctx, tx.Hash())
-					if err != nil {
-						log.Error("tx", "second err", err)
-						panic(err)
-					}
-				}
-
-				finishes := h.parseMainContractLogs(receipt.Logs)
-				for _, finish := range finishes {
-					delete(h.MainChain.MakerEvents, finish) //local
-				}
-			}
-		} //transactions
-	} //blocks
+	for _, finish := range mainFinish {
+		delete(h.SubChain.TakerEvents, finish)
+	}
+	for _, finish := range subFinish {
+		delete(h.MainChain.TakerEvents, finish)
+	}
 
 	log.Info("MainChain.MakerEvents", "length", len(h.MainChain.MakerEvents))
 	log.Info("MainChain.TakerEvents", "length", len(h.MainChain.TakerEvents))
@@ -373,30 +342,66 @@ func (h *Handler) parseEvents(ctx context.Context, from, end uint64) {
 	for _, event := range h.MainChain.TakerEvents {
 		log.Info("MainChain.TakerEvents", "tx hash", event.TxHash.String())
 	}
+	for _, event := range h.SubChain.MakerEvents {
+		log.Info("SubChain.MakerEvents", "tx hash", event.TxHash.String())
+	}
+	for _, event := range h.SubChain.TakerEvents {
+		log.Info("SubChain.TakerEvents", "tx hash", event.TxHash.String())
+	}
+
 }
 
-func (h *Handler) parseMainContractLogs(logs []*types.Log) (finishes []common.Hash) {
-	for _, v := range logs {
-		if len(v.Topics) > 0 {
-			if v.Topics[0] == params.MakerTopic && len(v.Topics) >= 3 && len(v.Data) >= common.HashLength*5 {
-				ctxId := v.Topics[1]
-				h.MainChain.MakerEvents[ctxId] = v
-				log.Info("make event", "tx hash", v.TxHash)
-				continue
-			}
-			if len(v.Topics) >= 3 && v.Topics[0] == params.TakerTopic && len(v.Data) >= common.HashLength*4 {
-				ctxId := v.Topics[1]
-				h.MainChain.TakerEvents[ctxId] = v
-				log.Info("taker event", "tx hash", v.TxHash)
-
-				continue
-			}
-			if len(v.Topics) >= 3 && v.Topics[0] == params.MakerFinishTopic {
-				ctxId := v.Topics[1]
-				finishes = append(finishes, ctxId)
-				log.Info("MakerFinish event", "tx hash", v.TxHash)
-			}
+func (h *Handler) parseContractLogs(ctx context.Context, chain *Chain, from, end uint64) (finishes []common.Hash) {
+	for i := from; i < end; i++ {
+		block, err := chain.Client.BlockByNumber(ctx, new(big.Int).SetUint64(i))
+		if err != nil {
+			log.Error("new block", "err", err)
+			panic(err)
 		}
-	}
+		if block.NumberU64()%500 == 0 {
+			log.Info("new block", "num", block.Number().String())
+		}
+		for _, tx := range block.Transactions() {
+
+			if tx.To() != nil && chain.isCrossChainContractAddr(*(tx.To())) {
+				receipt, err := chain.Client.TransactionReceipt(ctx, tx.Hash())
+				if err != nil {
+					log.Error("tx", "err", err)
+					time.Sleep(10 * time.Second) //retry once
+					receipt, err = chain.Client.TransactionReceipt(ctx, tx.Hash())
+					if err != nil {
+						log.Error("tx", "second err", err)
+						panic(err)
+					}
+				}
+
+				for _, v := range receipt.Logs {
+					if len(v.Topics) > 0 {
+						if v.Topics[0] == params.MakerTopic && len(v.Topics) >= 3 && len(v.Data) >= common.HashLength*5 {
+							ctxId := v.Topics[1]
+							chain.MakerEvents[ctxId] = v
+							continue
+						}
+						if len(v.Topics) >= 3 && v.Topics[0] == params.TakerTopic && len(v.Data) >= common.HashLength*4 {
+							ctxId := v.Topics[1]
+							chain.TakerEvents[ctxId] = v
+							continue
+						}
+						if len(v.Topics) >= 3 && v.Topics[0] == params.MakerFinishTopic {
+							ctxId := v.Topics[1]
+							finishes = append(finishes, ctxId)
+						}
+					}
+				}
+				for _, finish := range finishes {
+					delete(chain.MakerEvents, finish) //local
+				}
+			}
+		} //transactions
+	} //blocks
 	return finishes
+}
+
+func (c *Chain) isCrossChainContractAddr(addr common.Address) bool {
+	return addr == c.ContractAddr
 }
