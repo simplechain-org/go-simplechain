@@ -45,6 +45,18 @@ func generateCtx(n int) []*cc.CrossTransactionWithSignatures {
 	return ctxList
 }
 
+func TestIndexDB_One(t *testing.T) {
+	root := setupIndexDB(t)
+	defer root.Close()
+	ctxList := generateCtx(2)
+	db := NewIndexDB(big.NewInt(1), root, 0)
+	db.db.Drop(&CrossTransactionIndexed{})
+
+	assert.NoError(t, db.Write(ctxList[0]))
+	assert.Equal(t, db.One(TxHashIndex, ctxList[0].Data.TxHash), ctxList[0])
+	assert.Equal(t, db.One(CtxIdIndex, ctxList[0].Data.CTxId), ctxList[0])
+}
+
 func TestIndexDB_ReadWrite(t *testing.T) {
 	root := setupIndexDB(t)
 
