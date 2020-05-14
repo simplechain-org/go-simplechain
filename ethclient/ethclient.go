@@ -534,5 +534,8 @@ func toCallArg(msg simplechain.CallMsg) interface{} {
 	if msg.GasPrice != nil {
 		arg["gasPrice"] = (*hexutil.Big)(msg.GasPrice)
 	}
+	if msg.Nonce != 0 {
+		arg["gasPrice"] = hexutil.Uint64(msg.Nonce)
+	}
 	return arg
 }
