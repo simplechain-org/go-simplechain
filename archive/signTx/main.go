@@ -94,29 +94,6 @@ func main() {
 	}
 }
 
-func (h *Handler) handleTx(chain *Chain, txHash common.Hash) {
-	ctx := context.Background()
-	receipt, err := chain.Client.TransactionReceipt(ctx, txHash)
-	if err != nil {
-		log.Error("get receipt", "err", err)
-		panic(err)
-	}
-	for _, v := range receipt.Logs {
-		if len(v.Topics) > 0 {
-			if v.Topics[0] == params.MakerTopic {
-				log.Info("tx event MakerTopic", "ctxID", v.Topics[1].String())
-				addCrossTxBytes, _ := hexutil.Decode(*addCrossTx)
-				h.MakeEvent(chain, v, addCrossTxBytes)
-			}
-
-			if len(v.Topics) >= 3 && v.Topics[0] == params.TakerTopic && len(v.Data) >= common.HashLength*4 {
-				log.Info("tx event TakerTopic", "ctxID", v.Topics[1].String())
-				h.TakerEvent(chain, ctx, v)
-			}
-		}
-	}
-}
-
 type Chain struct {
 	Url          string
 	Client       *ethclient.Client
@@ -185,6 +162,29 @@ func NewHandler(config *Config) *Handler {
 			MakerEvents:  make(map[common.Hash]*types.Log),
 			TakerEvents:  make(map[common.Hash]*types.Log),
 		},
+	}
+}
+
+func (h *Handler) handleTx(chain *Chain, txHash common.Hash) {
+	ctx := context.Background()
+	receipt, err := chain.Client.TransactionReceipt(ctx, txHash)
+	if err != nil {
+		log.Error("get receipt", "err", err)
+		panic(err)
+	}
+	for _, v := range receipt.Logs {
+		if len(v.Topics) > 0 {
+			if v.Topics[0] == params.MakerTopic {
+				log.Info("tx event MakerTopic", "ctxID", v.Topics[1].String())
+				addCrossTxBytes, _ := hexutil.Decode(*addCrossTx)
+				h.MakeEvent(chain, v, addCrossTxBytes)
+			}
+
+			if len(v.Topics) >= 3 && v.Topics[0] == params.TakerTopic && len(v.Data) >= common.HashLength*4 {
+				log.Info("tx event TakerTopic", "ctxID", v.Topics[1].String())
+				h.TakerEvent(chain, ctx, v)
+			}
+		}
 	}
 }
 
