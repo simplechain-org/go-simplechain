@@ -125,6 +125,12 @@ func NewCrossService(ctx *node.ServiceContext, main, sub cross.SimpleChain, conf
 			Service:   NewPublicCrossChainAPI(subHandler),
 			Public:    true,
 		},
+		{
+			Namespace: "eth",
+			Version:   "1.0",
+			Service:   NewPrivateCrossChainAPI(mainHandler, subHandler),
+			Public:    true,
+		},
 	})
 
 	srv.main = crossCommons{

@@ -19,7 +19,7 @@ type PrivateCrossChainAPI struct {
 func NewPrivateCrossChainAPI(mainHandler, subHandler *Handler) *PrivateCrossChainAPI {
 	return &PrivateCrossChainAPI{mainHandler, subHandler}
 }
-func (s *PrivateCrossChainAPI) ImportCtx(ctxWithSignsSArgs hexutil.Bytes) error {
+func (s *PrivateCrossChainAPI) ImportMainCtx(ctxWithSignsSArgs hexutil.Bytes) error {
 	ctx := new(cc.CrossTransactionWithSignatures)
 	if err := rlp.DecodeBytes(ctxWithSignsSArgs, ctx); err != nil {
 		return err
@@ -45,6 +45,39 @@ func (s *PrivateCrossChainAPI) ImportCtx(ctxWithSignsSArgs hexutil.Bytes) error 
 	if err := s.subHandler.store.remoteStore.Write(ctx); err != nil {
 		return err
 	}
+	log.Info("rpc ImportCtx", "ctxID", ctx.ID().String())
+
+	return nil
+}
+
+func (s *PrivateCrossChainAPI) ImportSubCtx(ctxWithSignsSArgs hexutil.Bytes) error {
+	ctx := new(cc.CrossTransactionWithSignatures)
+	if err := rlp.DecodeBytes(ctxWithSignsSArgs, ctx); err != nil {
+		return err
+	}
+
+	if len(ctx.Resolution()) < requireSignatureCount {
+		return fmt.Errorf("invalid signture length ctx: %d,want: %d", len(ctx.Resolution()), requireSignatureCount)
+	}
+
+	chainId := ctx.ChainId()
+	var invalidSigIndex []int
+	for i, ctx := range ctx.Resolution() {
+		if s.mainHandler.store.verifySigner(ctx, chainId, chainId) != nil {
+			invalidSigIndex = append(invalidSigIndex, i)
+		}
+	}
+	if invalidSigIndex != nil {
+		return fmt.Errorf("invalid signature of ctx:%s for signature:%v\n", ctx.ID().String(), invalidSigIndex)
+	}
+
+	if err := s.subHandler.store.localStore.Write(ctx); err != nil {
+		return err
+	}
+	if err := s.mainHandler.store.remoteStore.Write(ctx); err != nil {
+		return err
+	}
+
 	log.Info("rpc ImportCtx", "ctxID", ctx.ID().String())
 
 	return nil

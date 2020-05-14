@@ -538,10 +538,18 @@ func toCallArg(msg simplechain.CallMsg) interface{} {
 	return arg
 }
 
-func (ec *Client) SendCrossTransaction(ctx context.Context, tx *cc.CrossTransactionWithSignatures) error {
+func (ec *Client) SendCrossTxMain(ctx context.Context, tx *cc.CrossTransactionWithSignatures) error {
 	data, err := rlp.EncodeToBytes(tx)
 	if err != nil {
 		return err
 	}
-	return ec.c.CallContext(ctx, nil, "eth_importCtx", hexutil.Encode(data))
+	return ec.c.CallContext(ctx, nil, "eth_importMainCtx", hexutil.Encode(data))
+}
+
+func (ec *Client) SendCrossTxSub(ctx context.Context, tx *cc.CrossTransactionWithSignatures) error {
+	data, err := rlp.EncodeToBytes(tx)
+	if err != nil {
+		return err
+	}
+	return ec.c.CallContext(ctx, nil, "eth_importSubCtx", hexutil.Encode(data))
 }
