@@ -197,10 +197,13 @@ func (d *indexDB) Range(pageSize int, startCtxID, endCtxID *common.Hash) []*cc.C
 }
 
 func (d *indexDB) query(pageSize int, startPage int, orderBy string, filter ...q.Matcher) []*cc.CrossTransactionWithSignatures {
+	if startPage <= 0 {
+		return nil
+	}
 	var ctxs []*CrossTransactionIndexed
 	query := d.db.Select(filter...).OrderBy(orderBy)
 	if pageSize > 0 {
-		query.Limit(pageSize).Skip(pageSize * startPage)
+		query.Limit(pageSize).Skip(pageSize * (startPage - 1))
 	}
 	query.Find(&ctxs)
 

@@ -742,6 +742,7 @@ type CallArgs struct {
 	GasPrice *hexutil.Big    `json:"gasPrice"`
 	Value    *hexutil.Big    `json:"value"`
 	Data     *hexutil.Bytes  `json:"data"`
+	Nonce    *hexutil.Uint64 `json:"nonce"`
 }
 
 // account indicates the overriding fields of account during the execution of
@@ -827,9 +828,13 @@ func DoCall(ctx context.Context, b Backend, args CallArgs, blockNrOrHash rpc.Blo
 	if args.Data != nil {
 		data = []byte(*args.Data)
 	}
+	var nonce uint64
+	if args.Nonce != nil {
+		nonce = uint64(*args.Nonce)
+	}
 
 	// Create new call message
-	msg := types.NewMessage(addr, args.To, 0, value, gas, gasPrice, data, false)
+	msg := types.NewMessage(addr, args.To, nonce, value, gas, gasPrice, data, false)
 
 	// Setup context so it may be cancelled the call has completed
 	// or, in case of unmetered gas, setup a context with a timeout.
