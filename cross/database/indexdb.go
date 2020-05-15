@@ -23,12 +23,13 @@ type indexDB struct {
 type FieldName = string
 
 const (
-	PK          FieldName = "PK"
-	CtxIdIndex  FieldName = "CtxId"
-	TxHashIndex FieldName = "TxHash"
-	PriceIndex  FieldName = "Price"
-	StatusField FieldName = "Status"
-	FromField   FieldName = "From"
+	PK               FieldName = "PK"
+	CtxIdIndex       FieldName = "CtxId"
+	TxHashIndex      FieldName = "TxHash"
+	PriceIndex       FieldName = "Price"
+	StatusField      FieldName = "Status"
+	FromField        FieldName = "From"
+	DestinationValue FieldName = "DestinationValue"
 )
 
 func NewIndexDB(chainID *big.Int, rootDB *storm.DB, cacheSize uint64) *indexDB {

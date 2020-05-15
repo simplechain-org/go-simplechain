@@ -237,7 +237,7 @@ type CrossTransactionIndexed struct {
 	Value            *big.Int
 	BlockHash        common.Hash
 	DestinationId    *big.Int
-	DestinationValue *big.Int
+	DestinationValue *big.Int //TODO-U: index
 	Input            []byte
 
 	V []*big.Int

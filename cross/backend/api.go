@@ -100,6 +100,20 @@ func (s *PublicCrossChainAPI) CtxQuery(ctx context.Context, hash common.Hash) *R
 	return newRPCCrossTransaction(s.handler.FindByTxHash(hash))
 }
 
+func (s *PublicCrossChainAPI) CtxQueryDestValue(ctx context.Context, value *hexutil.Big, pageSize, startPage int) *RPCPageCrossTransactions {
+	chainID, txs, total := s.handler.QueryRemoteByDestinationValueAndPage(value.ToInt(), pageSize, startPage)
+	list := make([]*RPCCrossTransaction, len(txs))
+	for i, tx := range txs {
+		list[i] = newRPCCrossTransaction(tx)
+	}
+	return &RPCPageCrossTransactions{
+		Data: map[uint64][]*RPCCrossTransaction{
+			chainID.Uint64(): list,
+		},
+		Total: total,
+	}
+}
+
 func (s *PublicCrossChainAPI) CtxOwner(ctx context.Context, from common.Address) map[string]map[uint64][]*RPCOwnerCrossTransaction {
 	locals, _ := s.handler.QueryLocalBySender(from)
 	content := map[string]map[uint64][]*RPCOwnerCrossTransaction{
