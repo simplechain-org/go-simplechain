@@ -223,6 +223,7 @@ func (h *Handler) loop() {
 
 		case <-expire.C:
 			h.updateSelfTx()
+			//TODO-D h.resend()
 		}
 	}
 }
@@ -422,6 +423,36 @@ func (h *Handler) updateSelfTx() {
 			h.pm.AddLocals(newTxs)
 		}
 	}
+}
+
+//func (h *Handler) resend() { TODO-D
+//	pending := h.store.Pending(h.blockChain.CurrentBlock().NumberU64())
+//	log.Info("resend pending", "count", len(pending))
+//	h.service.BroadcastCrossTx(pending, true)
+//}
+
+func (h *Handler) Pending(limit int, exclude map[common.Hash]bool) (ids []common.Hash) {
+	return h.store.Pending(h.blockChain.CurrentBlock().NumberU64(), limit, exclude)
+}
+
+func (h *Handler) GetSyncPending(ids []common.Hash) []*cc.CrossTransaction {
+	results := make([]*cc.CrossTransaction, 0, len(ids))
+	for _, id := range ids {
+		if ctx := h.store.GetLocal(id); ctx != nil {
+			results = append(results, ctx)
+		}
+	}
+	return results
+}
+
+func (h *Handler) SyncPending(ctxs []*cc.CrossTransaction) map[common.Hash]bool {
+	synced := make(map[common.Hash]bool)
+	for _, ctx := range ctxs {
+		if err := h.AddRemoteCtx(ctx); err == nil {
+			synced[ctx.ID()] = true
+		}
+	}
+	return synced
 }
 
 func newSignedTransaction(nonce uint64, to common.Address, gasLimit uint64, gasPrice *big.Int,

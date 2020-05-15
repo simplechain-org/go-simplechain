@@ -56,16 +56,6 @@ type crossCommons struct {
 	handler *Handler
 }
 
-type SyncReq struct {
-	Chain   uint64
-	StartID common.Hash
-}
-
-type SyncResp struct {
-	Chain uint64
-	Data  [][]byte
-}
-
 func NewCrossService(ctx *node.ServiceContext, main, sub cross.SimpleChain, config *eth.Config) (*CrossService, error) {
 	srv := &CrossService{
 		config:    config,
@@ -218,34 +208,6 @@ func (srv *CrossService) Stop() error {
 	return nil
 }
 
-func (srv *CrossService) syncer() {
-	for {
-		select {
-		case <-srv.newPeerCh:
-			if srv.peers.Len() > 0 {
-				go srv.synchronise(srv.peers.BestPeer())
-			}
-
-		case <-srv.quitSync:
-			return
-		}
-	}
-}
-
-func (srv *CrossService) synchronise(main, sub *anchorPeer) {
-	//TODO: 用增量同步取代全量同步
-	if main != nil {
-		if srv.main.handler.GetHeight().Cmp(main.crossStatus.MainHeight) < 0 {
-			go main.SendSyncRequest(&SyncReq{Chain: srv.main.networkID})
-		}
-	}
-	if sub != nil {
-		if srv.sub.handler.GetHeight().Cmp(sub.crossStatus.SubHeight) < 0 {
-			go sub.SendSyncRequest(&SyncReq{Chain: srv.sub.networkID})
-		}
-	}
-}
-
 func (srv *CrossService) handle(p *anchorPeer) error {
 	var (
 		mainNetworkID = srv.main.networkID
@@ -311,7 +273,7 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 		if err := msg.Decode(&req); err != nil {
 			return eth.ErrResp(eth.ErrDecode, "msg %v: %v", msg, err)
 		}
-		p.log.Info("receive ctx sync request", "chain", req.Chain, "startID", req.StartID)
+		p.Log().Info("receive ctx sync request", "chain", req.Chain, "startID", req.StartID)
 
 		h := srv.getCrossHandler(new(big.Int).SetUint64(req.Chain))
 		if h == nil {
@@ -338,15 +300,15 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 		if err := msg.Decode(&resp); err != nil {
 			return eth.ErrResp(eth.ErrDecode, "msg %v: %v", msg, err)
 		}
-		p.log.Info("receive ctx sync response", "chain", resp.Chain, "len(data)", len(resp.Data))
+		p.Log().Info("receive ctx sync response", "chain", resp.Chain, "len(data)", len(resp.Data))
 
 		var ctxList []*cc.CrossTransactionWithSignatures
 		for _, b := range resp.Data {
-			var ctx *cc.CrossTransactionWithSignatures
+			var ctx cc.CrossTransactionWithSignatures
 			if err := rlp.DecodeBytes(b, &ctx); err != nil {
 				return eth.ErrResp(eth.ErrDecode, "msg %v: %v", msg, err)
 			}
-			ctxList = append(ctxList, ctx)
+			ctxList = append(ctxList, &ctx)
 		}
 
 		if len(ctxList) == 0 {
@@ -360,6 +322,68 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 		return p.SendSyncRequest(&SyncReq{
 			Chain:   resp.Chain,
 			StartID: ctxList[len(ctxList)-1].ID(),
+		})
+
+	case msg.Code == GetPendingSyncMsg:
+		var req SyncPendingReq
+		if err := msg.Decode(&req); err != nil {
+			return eth.ErrResp(eth.ErrDecode, "msg %v: %v", msg, err)
+		}
+
+		h := srv.getCrossHandler(new(big.Int).SetUint64(req.Chain))
+		if h == nil {
+			break
+		}
+		ctxList := h.GetSyncPending(req.Ids)
+		var data [][]byte
+		for _, ctx := range ctxList {
+			b, err := rlp.EncodeToBytes(ctx)
+			if err != nil {
+				continue
+			}
+			data = append(data, b)
+		}
+		if len(data) > 0 {
+			return p.SendSyncPendingResponse(&SyncPendingResp{
+				Chain: req.Chain,
+				Data:  data,
+			})
+		}
+
+	case msg.Code == PendingSyncMsg:
+		var resp SyncPendingResp
+		if err := msg.Decode(&resp); err != nil {
+			return eth.ErrResp(eth.ErrDecode, "msg %v: %v", msg, err)
+		}
+		p.Log().Info("receive pending sync response", "chain", resp.Chain, "len(data)", len(resp.Data))
+
+		h := srv.getCrossHandler(new(big.Int).SetUint64(resp.Chain))
+		if h == nil {
+			break
+		}
+
+		var ctxList []*cc.CrossTransaction
+		for _, b := range resp.Data {
+			var ctx cc.CrossTransaction
+			if err := rlp.DecodeBytes(b, &ctx); err != nil {
+				return eth.ErrResp(eth.ErrDecode, "msg %v: %v", msg, err)
+			}
+			ctxList = append(ctxList, &ctx)
+		}
+
+		if len(ctxList) == 0 {
+			break
+		}
+
+		synced := h.SyncPending(ctxList)
+		p.Log().Info("sync pending cross transactions", "total", len(ctxList), "success", len(synced))
+
+		pending := h.Pending(defaultMaxSyncSize, synced)
+
+		// send next sync pending request
+		return p.SendSyncPendingRequest(&SyncPendingReq{
+			Chain: resp.Chain,
+			Ids:   pending,
 		})
 
 	case msg.Code == CtxSignMsg:

@@ -196,6 +196,14 @@ func (m *CtxSortedByBlockNum) RemoveUnderNum(num uint64) {
 	}
 }
 
+func (m *CtxSortedByBlockNum) Map(do func(*cc.CrossTransactionWithSignatures) bool) {
+	for _, ctx := range m.items {
+		if broke := do(ctx); broke {
+			return
+		}
+	}
+}
+
 type CtxToBlockHash lru.ARCCache
 
 func NewCtxToBlockHash(cap int) *CtxToBlockHash {

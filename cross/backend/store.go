@@ -147,10 +147,45 @@ func (store *CrossStore) restore() {
 	}
 }
 
+func (store *CrossStore) Pending(number uint64, limit int, exclude map[common.Hash]bool) (pending []common.Hash) {
+	store.mu.RLock()
+	defer store.mu.RUnlock()
+	store.pending.Map(func(ctx *cc.CrossTransactionWithSignatures) bool {
+		//if cws.BlockNum < number && cws.BlockNum+expireNumber > number {
+		//if ctx, err := cc.SignCtx(cws.CrossTransaction(), store.signer, store.signHash); err == nil {
+		if ctxID := ctx.ID(); exclude == nil || !exclude[ctxID] {
+			pending = append(pending, ctx.ID())
+		}
+		return len(pending) >= limit
+	})
+	return pending
+}
+
 func (store *CrossStore) AddLocal(ctx *cc.CrossTransaction) error {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	return store.addTx(ctx, true)
+}
+
+func (store *CrossStore) GetLocal(ctxID common.Hash) *cc.CrossTransaction {
+	store.mu.RLock()
+	defer store.mu.RUnlock()
+	resign := func(cws *cc.CrossTransactionWithSignatures) *cc.CrossTransaction {
+		ctx, err := cc.SignCtx(cws.CrossTransaction(), store.signer, store.signHash)
+		if err != nil {
+			return nil
+		}
+		return ctx
+	}
+	// find in pending
+	if cws := store.pending.Get(ctxID); cws != nil {
+		return resign(cws)
+	}
+	// find in localStore
+	if cws, _ := store.localStore.Read(ctxID); cws != nil {
+		return resign(cws)
+	}
+	return nil
 }
 
 func (store *CrossStore) AddRemote(ctx *cc.CrossTransaction) error {
@@ -198,6 +233,7 @@ func (store *CrossStore) addTx(ctx *cc.CrossTransaction, local bool) error {
 		if ctx.BlockHash() != old.BlockHash() {
 			return fmt.Errorf("blockchain Reorg,txId:%s,old:%s,new:%s", ctx.ID().String(), old.BlockHash().String(), ctx.BlockHash().String())
 		}
+		return nil
 	}
 	return store.addTxLocked(ctx, local)
 }
@@ -222,7 +258,7 @@ func (store *CrossStore) addTxLocked(ctx *cc.CrossTransaction, local bool) error
 					store.mu.Lock()
 					defer store.mu.Unlock()
 					if invalidSigIndex == nil { // check signer successfully, store ctx
-						if err := store.localStore.Write(cws); err != nil {
+						if err := store.localStore.Write(cws); err != nil && !store.localStore.Has(cws.ID()) {
 							store.logger.Warn("commit local ctx failed", "txID", cws.ID(), "err", err)
 							return
 						}

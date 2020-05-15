@@ -9,7 +9,6 @@ import (
 	"github.com/simplechain-org/go-simplechain/common"
 	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	"github.com/simplechain-org/go-simplechain/eth"
-	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/p2p"
 
 	mapset "github.com/deckarep/golang-set"
@@ -32,8 +31,6 @@ type anchorPeer struct {
 	knownCTxs           mapset.Set
 	queuedLocalCtxSign  chan *cc.CrossTransaction // ctx signed by local anchor
 	queuedRemoteCtxSign chan *cc.CrossTransaction // signed ctx received by others
-
-	log log.Logger
 }
 
 func newAnchorPeer(p *p2p.Peer, rw p2p.MsgReadWriter) *anchorPeer {
@@ -93,7 +90,6 @@ func (p *anchorPeer) Handshake(
 		}
 	}
 	p.crossStatus = status
-	p.log = log.New("main", mainNetwork, "sub", subNetwork, "anchor", p.ID())
 	return nil
 }
 
@@ -132,6 +128,14 @@ func (p *anchorPeer) SendSyncRequest(req *SyncReq) error {
 
 func (p *anchorPeer) SendSyncResponse(resp *SyncResp) error {
 	return p2p.Send(p.rw, CtxSyncMsg, resp)
+}
+
+func (p *anchorPeer) SendSyncPendingRequest(req *SyncPendingReq) error {
+	return p2p.Send(p.rw, GetPendingSyncMsg, req)
+}
+
+func (p *anchorPeer) SendSyncPendingResponse(resp *SyncPendingResp) error {
+	return p2p.Send(p.rw, PendingSyncMsg, resp)
 }
 
 func (p *anchorPeer) MarkCrossTransaction(hash common.Hash) {
