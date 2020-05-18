@@ -221,6 +221,8 @@ func (h *Handler) TakerEvent(chain *Chain, ctx context.Context, event *types.Log
 			log.Error("GetTxForLockOut newSignedTransaction", "err", err)
 			panic(err)
 		}
+		//data, _ := json.Marshal(tx)
+		//fmt.Println("crossTxWithSign second struct: ", string(data))
 
 		if err = otherChain.Client.SendTransaction(ctx, tx); err != nil {
 			log.Error("sub chain SendTransaction failed", "err", err, "hash", tx.Hash())
