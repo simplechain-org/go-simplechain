@@ -18,8 +18,8 @@ func (h *Handler) FindByTxHash(hash common.Hash) *cc.CrossTransactionWithSignatu
 }
 
 func (h *Handler) QueryRemoteByDestinationValueAndPage(value *big.Int, pageSize, startPage int) (*big.Int, []*cc.CrossTransactionWithSignatures, int) {
-	txs := h.store.query(h.store.localStore, pageSize, startPage, q.Eq(db.DestinationValue, value))
-	total := h.store.localStore.Count(q.Eq(db.DestinationValue, value))
+	txs := h.store.query(h.store.remoteStore, pageSize, startPage, q.Eq(db.DestinationValue, value))
+	total := h.store.remoteStore.Count(q.Eq(db.DestinationValue, value))
 	return h.store.remoteStore.ChainID(), txs, total
 }
 
