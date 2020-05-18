@@ -57,6 +57,7 @@ func NewCrossStore(ctx crossdb.ServiceContext, config cross.CtxStoreConfig, chai
 	config = (&config).Sanitize()
 	signer := cc.MakeCtxSigner(chainConfig)
 	config.ChainId = chainConfig.ChainID
+
 	store := &CrossStore{
 		config:        config,
 		chainConfig:   chainConfig,
@@ -154,7 +155,7 @@ func (store *CrossStore) Pending(number uint64, limit int, exclude map[common.Ha
 		//if cws.BlockNum < number && cws.BlockNum+expireNumber > number {
 		//if ctx, err := cc.SignCtx(cws.CrossTransaction(), store.signer, store.signHash); err == nil {
 		if ctxID := ctx.ID(); exclude == nil || !exclude[ctxID] {
-			pending = append(pending, ctx.ID())
+			pending = append(pending, ctxID)
 		}
 		return len(pending) >= limit
 	})
@@ -197,8 +198,6 @@ func (store *CrossStore) AddRemote(ctx *cc.CrossTransaction) error {
 // AddFromRemoteChain add remote-chain ctx with signatures
 func (store *CrossStore) AddFromRemoteChain(ctx *cc.CrossTransactionWithSignatures, callback func(*cc.CrossTransactionWithSignatures, ...int)) error {
 	store.mu.Lock()
-	defer store.mu.Unlock()
-
 	chainId := ctx.ChainId()
 	var invalidSigIndex []int
 	for i, ctx := range ctx.Resolution() {
@@ -206,8 +205,10 @@ func (store *CrossStore) AddFromRemoteChain(ctx *cc.CrossTransactionWithSignatur
 			invalidSigIndex = append(invalidSigIndex, i)
 		}
 	}
+	store.mu.Unlock()
+
 	if callback != nil {
-		go callback(ctx, invalidSigIndex...) //call callback with signer checking results
+		callback(ctx, invalidSigIndex...) //call callback with signer checking results
 	}
 
 	if invalidSigIndex != nil {
@@ -268,7 +269,7 @@ func (store *CrossStore) addTxLocked(ctx *cc.CrossTransaction, local bool) error
 						for _, invalid := range invalidSigIndex {
 							cws.RemoveSignature(invalid)
 						}
-						store.pending.Put(cws, NewChainInvoke(store.chain).GetTransactionNumberOnChain(ctx))
+						store.pending.Put(cws, cws.BlockNum)
 					}
 				}},
 			)
@@ -286,8 +287,7 @@ func (store *CrossStore) addTxLocked(ctx *cc.CrossTransaction, local bool) error
 
 	// add new local ctx, move queued signatures of this ctx to pending
 	if local {
-		bNumber := NewChainInvoke(store.chain).GetTransactionNumberOnChain(ctx)
-		pendingRws := cc.NewCrossTransactionWithSignatures(ctx)
+		pendingRws := cc.NewCrossTransactionWithSignatures(ctx, NewChainInvoke(store.chain).GetTransactionNumberOnChain(ctx))
 		// promote queued ctx to pending, update to number received by local
 		// move cws from queued to pending
 		if queuedRws := store.queued.Get(id); queuedRws != nil {
@@ -296,7 +296,7 @@ func (store *CrossStore) addTxLocked(ctx *cc.CrossTransaction, local bool) error
 			}
 			pendingRws = queuedRws
 		}
-		store.pending.Put(pendingRws, bNumber)
+		store.pending.Put(pendingRws, pendingRws.BlockNum)
 		store.queued.RemoveByHash(id)
 		return checkAndCommit(id)
 	}
@@ -307,7 +307,8 @@ func (store *CrossStore) addTxLocked(ctx *cc.CrossTransaction, local bool) error
 			return err
 		}
 	} else {
-		store.queued.Put(cc.NewCrossTransactionWithSignatures(ctx), NewChainInvoke(store.chain).GetTransactionNumberOnChain(ctx))
+		bNumber := NewChainInvoke(store.chain).GetTransactionNumberOnChain(ctx)
+		store.queued.Put(cc.NewCrossTransactionWithSignatures(ctx, bNumber), bNumber)
 	}
 	return nil
 }
@@ -392,115 +393,47 @@ func (store *CrossStore) verifyCwsInvoking(cws *cc.CrossTransactionWithSignature
 	return nil
 }
 
-func (store *CrossStore) RemoveRemotes(rtxs []*cc.ReceptTransaction) []error {
-	var errs []error
+func (store *CrossStore) RemoveRemotes(rtxs []*cc.ReceptTransaction) {
 	for _, v := range rtxs {
-		if err := store.remoteStore.Delete(v.CTxId); err != nil {
-			errs = append(errs, fmt.Errorf("id:%s, err:%s", v.CTxId.String(), err.Error()))
-		}
+		store.MarkStatus([]*cc.CrossTransactionModifier{
+			{
+				ID:      v.CTxId,
+				ChainId: v.DestinationId,
+				// update remote wouldn't modify blockNumber
+			},
+		}, cc.CtxStatusFinished)
 	}
-	return errs
-}
-
-func (store *CrossStore) RemoveLocals(finishes []common.Hash) []error {
-	var errs []error
-	for _, id := range finishes {
-		if err := store.localStore.Delete(id); err != nil {
-			errs = append(errs, fmt.Errorf("id:%s, err:%s", id.String(), err.Error()))
-		}
-	}
-	return errs
-}
-
-func (store *CrossStore) PoolStats() (int, int) {
-	return store.pending.Len(), store.queued.Len()
-}
-
-func (store *CrossStore) StoreStats() (int, int) {
-	condition := q.Eq(crossdb.StatusField, cc.CtxStatusWaiting)
-	return store.localStore.Count(condition), store.remoteStore.Count(condition)
-}
-
-func (store *CrossStore) LocalStats() int {
-	return store.localStore.Count(q.Eq(crossdb.StatusField, cc.CtxStatusWaiting))
-}
-
-func (store *CrossStore) SenderStats(from common.Address) int {
-	return store.localStore.Count(q.Eq(crossdb.StatusField, cc.CtxStatusWaiting), q.Eq(crossdb.FromField, from))
-}
-
-func (store *CrossStore) RemoteStats() int {
-	return store.remoteStore.Count(q.Eq(crossdb.StatusField, cc.CtxStatusWaiting))
 }
 
 func (store *CrossStore) Height() int {
 	return store.localStore.Count()
 }
 
-func (store *CrossStore) MarkStatus(rtxs []*cc.ReceptTransaction, status cc.CtxStatus) {
-	mark := func(tx *cc.ReceptTransaction, s crossdb.CtxDB) {
-		err := s.Update(tx.CTxId, func(ctx *crossdb.CrossTransactionIndexed) {
+func (store *CrossStore) MarkStatus(txms []*cc.CrossTransactionModifier, status cc.CtxStatus) {
+	mark := func(txm *cc.CrossTransactionModifier, s crossdb.CtxDB) {
+		err := s.Update(txm.ID, func(ctx *crossdb.CrossTransactionIndexed) {
 			ctx.Status = status
+			if txm.AtBlockNumber > ctx.BlockNum {
+				ctx.BlockNum = txm.AtBlockNumber
+			}
 		})
 		if err != nil {
 			store.logger.Warn("MarkStatus failed ", "err", err)
 		}
 	}
 
-	for _, tx := range rtxs {
+	for _, tx := range txms {
 		if tx.ChainId != nil && tx.ChainId.Cmp(store.localStore.ChainID()) == 0 {
 			mark(tx, store.localStore)
 		}
-		if tx.DestinationId != nil && tx.DestinationId.Cmp(store.remoteStore.ChainID()) == 0 {
+		if tx.ChainId != nil && tx.ChainId.Cmp(store.remoteStore.ChainID()) == 0 {
 			mark(tx, store.remoteStore)
 		}
 	}
 }
 
-func (store *CrossStore) Query(localPageSize, localPage, remotePageSize, remotePage int) (map[uint64][]*cc.CrossTransactionWithSignatures, map[uint64][]*cc.CrossTransactionWithSignatures) {
-	return map[uint64][]*cc.CrossTransactionWithSignatures{store.remoteStore.ChainID().Uint64(): store.query(store.localStore, localPageSize, localPage)}, //TODO: 适配前端，key使用remoteID
-		map[uint64][]*cc.CrossTransactionWithSignatures{store.remoteStore.ChainID().Uint64(): store.query(store.remoteStore, remotePageSize, remotePage)}
-}
-
-func (store *CrossStore) QueryRemote(remotePageSize, remotePage int) map[uint64][]*cc.CrossTransactionWithSignatures {
-	return map[uint64][]*cc.CrossTransactionWithSignatures{store.remoteStore.ChainID().Uint64(): store.query(store.remoteStore, remotePageSize, remotePage)}
-}
-
-func (store *CrossStore) QueryLocal(localPageSize, localPage int) map[uint64][]*cc.CrossTransactionWithSignatures {
-	return map[uint64][]*cc.CrossTransactionWithSignatures{store.remoteStore.ChainID().Uint64(): store.query(store.localStore, localPageSize, localPage)} //TODO: 适配前端，key使用remoteID
-}
-
-func (store *CrossStore) QueryLocalBySender(from common.Address, pageSize, startPage int) map[uint64][]*cc.OwnerCrossTransactionWithSignatures {
-	locals := make(map[uint64][]*cc.OwnerCrossTransactionWithSignatures, 1)
-	txs := store.query(store.localStore, pageSize, startPage, q.Eq(crossdb.FromField, from))
-	for _, v := range txs {
-		//TODO: 适配前端，key使用remoteID
-		locals[store.remoteStore.ChainID().Uint64()] = append(locals[store.remoteStore.ChainID().Uint64()], &cc.OwnerCrossTransactionWithSignatures{
-			Cws:  v,
-			Time: NewChainInvoke(store.chain).GetTransactionTimeOnChain(v),
-		})
-	}
-	return locals
-}
-
-func (store *CrossStore) query(db crossdb.CtxDB, pageSize, startPage int, condition ...q.Matcher) []*cc.CrossTransactionWithSignatures {
-	return db.Query(pageSize, startPage, crossdb.PriceIndex, append(condition, q.Eq(crossdb.StatusField, cc.CtxStatusWaiting))...)
-}
-
-func (store *CrossStore) GetSyncCrossTransactions(chainID uint64, txID common.Hash, pageSize int) []*cc.CrossTransactionWithSignatures {
-	store.mu.RLock()
-	defer store.mu.RUnlock()
-	var startID *common.Hash
-	if txID != (common.Hash{}) {
-		startID = &txID
-	}
-	if chainID == store.config.ChainId.Uint64() {
-		return store.localStore.Range(pageSize, startID, nil)
-	}
-	if chainID == store.remoteStore.ChainID().Uint64() {
-		return store.remoteStore.Range(pageSize, startID, nil)
-	}
-	return nil
+func (store *CrossStore) GetSyncCrossTransactions(reqHeight, maxHeight uint64, pageSize int) []*cc.CrossTransactionWithSignatures {
+	return store.localStore.RangeByNumber(reqHeight, maxHeight, pageSize)
 }
 
 func (store *CrossStore) SubscribeSignedCtxEvent(ch chan<- cc.SignedCtxEvent) event.Subscription {
@@ -532,30 +465,80 @@ func (store *CrossStore) SyncCrossTransactions(ctxList []*cc.CrossTransactionWit
 	var success, ignore int
 	for _, ctx := range ctxList {
 		chainID := ctx.ChainId()
-		if store.config.ChainId.Cmp(chainID) == 0 {
-			if store.localStore.Has(ctx.ID()) {
-				ignore++
-				continue
-			}
-			if err := store.localStore.Write(ctx); err != nil {
-				store.logger.Warn("SyncCrossTransactions failed", "txID", ctx.ID(), "err", err)
-				continue
-			}
-			success++
 
-		} else {
-			if store.remoteStore.Has(ctx.ID()) {
-				ignore++
-				continue
-			}
-			if err := store.remoteStore.Write(ctx); err != nil {
-				store.logger.Warn("SyncCrossTransactions failed", "txID", ctx.ID(), "err", err)
-				continue
-			}
-			success++
+		var db crossdb.CtxDB
+		switch {
+		case store.config.ChainId.Cmp(chainID) == 0:
+			db = store.localStore
+		case store.remoteStore.ChainID().Cmp(chainID) == 0:
+			db = store.remoteStore
+		default:
+			return 0
 		}
+
+		if db.Has(ctx.ID()) {
+			ignore++
+			continue
+		}
+		if err := db.Write(ctx); err != nil {
+			store.logger.Warn("SyncCrossTransactions failed", "txID", ctx.ID(), "err", err)
+			continue
+		}
+		success++
 	}
 
 	store.logger.Info("sync cross transactions", "success", success, "ignore", ignore, "fail", len(ctxList)-success-ignore)
 	return success
+}
+
+// for api
+func (store *CrossStore) PoolStats() (int, int) {
+	return store.pending.Len(), store.queued.Len()
+}
+
+func (store *CrossStore) StoreStats() (int, int) {
+	condition := q.Eq(crossdb.StatusField, cc.CtxStatusWaiting)
+	return store.localStore.Count(condition), store.remoteStore.Count(condition)
+}
+
+func (store *CrossStore) LocalStats() int {
+	return store.localStore.Count(q.Eq(crossdb.StatusField, cc.CtxStatusWaiting))
+}
+
+func (store *CrossStore) SenderStats(from common.Address) int {
+	return store.localStore.Count(q.Eq(crossdb.StatusField, cc.CtxStatusWaiting), q.Eq(crossdb.FromField, from))
+}
+
+func (store *CrossStore) RemoteStats() int {
+	return store.remoteStore.Count(q.Eq(crossdb.StatusField, cc.CtxStatusWaiting))
+}
+
+func (store *CrossStore) Query(localPageSize, localPage, remotePageSize, remotePage int) (map[uint64][]*cc.CrossTransactionWithSignatures, map[uint64][]*cc.CrossTransactionWithSignatures) {
+	return map[uint64][]*cc.CrossTransactionWithSignatures{store.remoteStore.ChainID().Uint64(): store.query(store.localStore, localPageSize, localPage)}, //TODO: 适配前端，key使用remoteID
+		map[uint64][]*cc.CrossTransactionWithSignatures{store.remoteStore.ChainID().Uint64(): store.query(store.remoteStore, remotePageSize, remotePage)}
+}
+
+func (store *CrossStore) QueryRemote(remotePageSize, remotePage int) map[uint64][]*cc.CrossTransactionWithSignatures {
+	return map[uint64][]*cc.CrossTransactionWithSignatures{store.remoteStore.ChainID().Uint64(): store.query(store.remoteStore, remotePageSize, remotePage)}
+}
+
+func (store *CrossStore) QueryLocal(localPageSize, localPage int) map[uint64][]*cc.CrossTransactionWithSignatures {
+	return map[uint64][]*cc.CrossTransactionWithSignatures{store.remoteStore.ChainID().Uint64(): store.query(store.localStore, localPageSize, localPage)} //TODO: 适配前端，key使用remoteID
+}
+
+func (store *CrossStore) QueryLocalBySender(from common.Address, pageSize, startPage int) map[uint64][]*cc.OwnerCrossTransactionWithSignatures {
+	locals := make(map[uint64][]*cc.OwnerCrossTransactionWithSignatures, 1)
+	txs := store.query(store.localStore, pageSize, startPage, q.Eq(crossdb.FromField, from))
+	for _, v := range txs {
+		//TODO: 适配前端，key使用remoteID
+		locals[store.remoteStore.ChainID().Uint64()] = append(locals[store.remoteStore.ChainID().Uint64()], &cc.OwnerCrossTransactionWithSignatures{
+			Cws:  v,
+			Time: NewChainInvoke(store.chain).GetTransactionTimeOnChain(v),
+		})
+	}
+	return locals
+}
+
+func (store *CrossStore) query(db crossdb.CtxDB, pageSize, startPage int, condition ...q.Matcher) []*cc.CrossTransactionWithSignatures {
+	return db.Query(pageSize, startPage, crossdb.PriceIndex, append(condition, q.Eq(crossdb.StatusField, cc.CtxStatusWaiting))...)
 }

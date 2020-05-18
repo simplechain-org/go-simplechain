@@ -212,8 +212,9 @@ func (s CtxStatus) String() string {
 }
 
 type CrossTransactionWithSignatures struct {
-	Data   CtxDatas
-	Status CtxStatus `json:"status" gencodec:"required"`
+	Data     CtxDatas
+	Status   CtxStatus `json:"status" gencodec:"required"`
+	BlockNum uint64    `json:"blockNum" gencodec:"required"`
 
 	// caches
 	hash atomic.Value
@@ -237,7 +238,7 @@ type CtxDatas struct {
 	S []*big.Int `json:"s" gencodec:"required"`
 }
 
-func NewCrossTransactionWithSignatures(ctx *CrossTransaction) *CrossTransactionWithSignatures {
+func NewCrossTransactionWithSignatures(ctx *CrossTransaction, num uint64) *CrossTransactionWithSignatures {
 	d := CtxDatas{
 		Value:            ctx.Data.Value,
 		CTxId:            ctx.Data.CTxId,
@@ -253,7 +254,7 @@ func NewCrossTransactionWithSignatures(ctx *CrossTransaction) *CrossTransactionW
 	d.R = append(d.R, ctx.Data.R)
 	d.S = append(d.S, ctx.Data.S)
 
-	return &CrossTransactionWithSignatures{Data: d}
+	return &CrossTransactionWithSignatures{Data: d, BlockNum: num}
 }
 
 func (cws *CrossTransactionWithSignatures) ID() common.Hash {

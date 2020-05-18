@@ -62,7 +62,6 @@ func (t *CrossTrigger) shift(height uint64) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	//TODO 重新同步区块时也会产生同样的日志，但跨链消息已经生成过，不能继续生成，造成重复接单
 	for t.blocks != nil {
 		// Retrieve the next trigger block and abort if too fresh
 		next := t.blocks.Value.(*unconfirmedBlockLog)
@@ -78,7 +77,7 @@ func (t *CrossTrigger) shift(height uint64) {
 			if next.logs != nil {
 				var ctxs []*CrossTransaction
 				var rtxs []*ReceptTransaction
-				var finishes []common.Hash
+				var finishModifiers []*CrossTransactionModifier
 
 				//todo add and del anchors
 				for _, v := range next.logs {
@@ -117,8 +116,11 @@ func (t *CrossTrigger) shift(height uint64) {
 
 						// delete statement
 						if len(v.Topics) >= 3 && v.Topics[0] == params.MakerFinishTopic {
-							ctxId := v.Topics[1]
-							finishes = append(finishes, ctxId)
+							finishModifiers = append(finishModifiers, &CrossTransactionModifier{
+								ID:            v.Topics[1],
+								ChainId:       t.chain.GetChainConfig().ChainID,
+								AtBlockNumber: v.BlockNumber,
+							})
 						}
 					}
 				}
@@ -128,8 +130,8 @@ func (t *CrossTrigger) shift(height uint64) {
 				if len(rtxs) > 0 {
 					t.ConfirmedTakerSend(ConfirmedTakerEvent{Txs: rtxs})
 				}
-				if len(finishes) > 0 {
-					t.ConfirmedFinishFeedSend(ConfirmedFinishEvent{FinishIds: finishes})
+				if len(finishModifiers) > 0 {
+					t.ConfirmedFinishFeedSend(ConfirmedFinishEvent{Finishes: finishModifiers})
 				}
 			}
 		default:

@@ -32,16 +32,21 @@ type ServiceContext interface {
 type CtxDB interface {
 	io.Closer
 	ChainID() *big.Int
+	//Size() int
+	Count(filter ...q.Matcher) int
 	Load() error
 	Write(ctx *cc.CrossTransactionWithSignatures) error
 	Read(ctxId common.Hash) (*cc.CrossTransactionWithSignatures, error)
 	One(field FieldName, key interface{}) *cc.CrossTransactionWithSignatures
-	Delete(ctxId common.Hash) error
+	//ReadAll(ctxId common.Hash) (common.Hash, error)
+	//Delete(ctxId common.Hash, atNumber uint64) error
 	Update(id common.Hash, updater func(ctx *CrossTransactionIndexed)) error
 	Has(id common.Hash) bool
 	Query(pageSize int, startPage int, orderBy FieldName, filter ...q.Matcher) []*cc.CrossTransactionWithSignatures
-	Count(filter ...q.Matcher) int
-	Range(pageSize int, startCtxID *common.Hash, endCtxID *common.Hash) []*cc.CrossTransactionWithSignatures
+	RangeByNumber(begin, end uint64, pageSize int) []*cc.CrossTransactionWithSignatures
+	//QueryByPK(pageSize int, startPage int, filter ...q.Matcher) []*cc.CrossTransactionWithSignatures
+	//QueryByPrice(pageSize int, startPage int, filter ...q.Matcher) []*cc.CrossTransactionWithSignatures
+	//Range(pageSize int, startCtxID *common.Hash, endCtxID *common.Hash) []*cc.CrossTransactionWithSignatures
 }
 
 func OpenStormDB(ctx ServiceContext, name string) (*storm.DB, error) {

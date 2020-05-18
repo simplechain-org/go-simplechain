@@ -233,11 +233,12 @@ func (m *CtxToBlockHash) Put(txID common.Hash, blockHash common.Hash) bool {
 }
 
 type CrossTransactionIndexed struct {
-	PK     uint64         `storm:"id,increment"`
-	CtxId  common.Hash    `storm:"unique"`
-	From   common.Address `storm:"index"`
-	TxHash common.Hash    `storm:"index"`
-	Price  *big.Float     `storm:"index"`
+	PK       uint64         `storm:"id,increment"`
+	CtxId    common.Hash    `storm:"unique"`
+	From     common.Address `storm:"index"`
+	TxHash   common.Hash    `storm:"index"`
+	Price    *big.Float     `storm:"index"`
+	BlockNum uint64         `storm:"index"`
 
 	// normal field
 	Status cc.CtxStatus
@@ -245,7 +246,7 @@ type CrossTransactionIndexed struct {
 	Value            *big.Int
 	BlockHash        common.Hash
 	DestinationId    *big.Int
-	DestinationValue *big.Int //TODO-U: index
+	DestinationValue *big.Int `storm:"index"`
 	Input            []byte
 
 	V []*big.Int
@@ -257,6 +258,7 @@ func NewCrossTransactionIndexed(ctx *cc.CrossTransactionWithSignatures) *CrossTr
 	return &CrossTransactionIndexed{
 		CtxId:            ctx.ID(),
 		Status:           ctx.Status,
+		BlockNum:         ctx.BlockNum,
 		From:             ctx.Data.From,
 		Price:            new(big.Float).SetRat(ctx.Price()),
 		Value:            ctx.Data.Value,
@@ -274,7 +276,8 @@ func NewCrossTransactionIndexed(ctx *cc.CrossTransactionWithSignatures) *CrossTr
 
 func (c CrossTransactionIndexed) ToCrossTransaction() *cc.CrossTransactionWithSignatures {
 	return &cc.CrossTransactionWithSignatures{
-		Status: c.Status,
+		Status:   c.Status,
+		BlockNum: c.BlockNum,
 		Data: cc.CtxDatas{
 			Value:            c.Value,
 			CTxId:            c.CtxId,

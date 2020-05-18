@@ -11,6 +11,9 @@ import (
 )
 
 func (h *Handler) FindByTxHash(hash common.Hash) *cc.CrossTransactionWithSignatures {
+	if !h.pm.CanAcceptTxs() {
+		return nil
+	}
 	if ctx := h.store.localStore.One(db.TxHashIndex, hash); ctx != nil {
 		return ctx
 	}
@@ -18,6 +21,9 @@ func (h *Handler) FindByTxHash(hash common.Hash) *cc.CrossTransactionWithSignatu
 }
 
 func (h *Handler) QueryRemoteByDestinationValueAndPage(value *big.Int, pageSize, startPage int) (*big.Int, []*cc.CrossTransactionWithSignatures, int) {
+	if !h.pm.CanAcceptTxs() {
+		return nil, nil, 0
+	}
 	txs := h.store.query(h.store.remoteStore, pageSize, startPage, q.Eq(db.DestinationValue, value))
 	total := h.store.remoteStore.Count(q.Eq(db.DestinationValue, value))
 	return h.store.remoteStore.ChainID(), txs, total

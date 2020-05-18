@@ -226,32 +226,10 @@ func (s *PublicCrossChainAPI) PoolStats() map[string]int {
 	return map[string]int{"pending": pending, "queue": queue}
 }
 
-//func (s *PublicCrossChainAPI) CtxList(ctx context.Context, from common.Address) map[string]map[uint64][]*RPCCrossTransaction {
-//	content := map[string]map[uint64][]*RPCCrossTransaction{
-//		"remote": make(map[uint64][]*RPCCrossTransaction),
-//		"local":  make(map[uint64][]*RPCCrossTransaction),
-//	}
-//	remotes, locals := s.handler.Query()
-//	for k, txs := range remotes {
-//		for _, tx := range txs {
-//			if tx.Data.From != from {
-//				content["remote"][k] = append(content["remote"][k], newRPCCrossTransaction(tx))
-//			}
-//		}
-//
-//	}
-//	for s, txs := range locals {
-//		for _, tx := range txs {
-//			content["local"][s] = append(content["local"][s], newRPCCrossTransaction(tx))
-//		}
-//	}
-//	return content
-//}
-// RPCTransaction represents a transaction that will serialize to the RPC representation of a transaction
-
 type RPCCrossTransaction struct {
 	Value            *hexutil.Big   `json:"value"`
 	CTxId            common.Hash    `json:"ctxId"`
+	Status           string         `json:"status"`
 	TxHash           common.Hash    `json:"txHash"`
 	From             common.Address `json:"from"`
 	BlockHash        common.Hash    `json:"blockHash"`
@@ -272,6 +250,7 @@ func newRPCCrossTransaction(tx *cc.CrossTransactionWithSignatures) *RPCCrossTran
 	result := &RPCCrossTransaction{
 		Value:            (*hexutil.Big)(tx.Data.Value),
 		CTxId:            tx.ID(),
+		Status:           tx.Status.String(),
 		TxHash:           tx.Data.TxHash,
 		From:             tx.Data.From,
 		BlockHash:        tx.Data.BlockHash,
@@ -294,7 +273,7 @@ func newRPCCrossTransaction(tx *cc.CrossTransactionWithSignatures) *RPCCrossTran
 
 type RPCOwnerCrossTransaction struct {
 	Value            *hexutil.Big   `json:"value"`
-	Status           cc.CtxStatus   `json:"status"`
+	Status           string         `json:"status"`
 	CTxId            common.Hash    `json:"ctxId"`
 	TxHash           common.Hash    `json:"txHash"`
 	From             common.Address `json:"from"`
@@ -311,7 +290,7 @@ type RPCOwnerCrossTransaction struct {
 func newOwnerRPCCrossTransaction(tx *cc.OwnerCrossTransactionWithSignatures) *RPCOwnerCrossTransaction {
 	result := &RPCOwnerCrossTransaction{
 		Value:            (*hexutil.Big)(tx.Cws.Data.Value),
-		Status:           tx.Cws.Status,
+		Status:           tx.Cws.Status.String(),
 		CTxId:            tx.Cws.Data.CTxId,
 		TxHash:           tx.Cws.Data.TxHash,
 		From:             tx.Cws.Data.From,

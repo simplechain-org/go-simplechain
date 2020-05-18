@@ -30,6 +30,7 @@ const (
 	StatusField      FieldName = "Status"
 	FromField        FieldName = "From"
 	DestinationValue FieldName = "DestinationValue"
+	BlockNumField    FieldName = "BlockNum"
 )
 
 func NewIndexDB(chainID *big.Int, rootDB *storm.DB, cacheSize uint64) *indexDB {
@@ -52,12 +53,11 @@ func (d *indexDB) Count(filter ...q.Matcher) int {
 }
 
 func (d *indexDB) Load() error {
-	//TODO: use cache
 	return nil
 }
 
 func (d *indexDB) Close() error {
-	return d.root.Close()
+	return d.db.Commit()
 }
 
 func (d *indexDB) Write(ctx *cc.CrossTransactionWithSignatures) error {
@@ -120,32 +120,13 @@ func (d *indexDB) get(ctxId common.Hash) (*CrossTransactionIndexed, error) {
 	return &ctx, nil
 }
 
-func (d *indexDB) Delete(ctxId common.Hash) error {
-	ctx, err := d.get(ctxId)
-	if err != nil {
-		return err
-	}
-	// set finished status, dont remove
-	err = d.db.UpdateField(ctx, StatusField, cc.CtxStatusFinished)
-	if err != nil {
-		return ErrCtxDbFailure{fmt.Sprintf("Delete:%s Update fail", ctxId.String()), err}
-	}
-	//atomic.AddInt64(&d.total, -1)
-
-	if d.cache != nil {
-		d.cache.Remove(CtxIdIndex, ctxId)
-	}
-
-	return nil
-}
-
 func (d *indexDB) Update(id common.Hash, updater func(ctx *CrossTransactionIndexed)) error {
 	ctx, err := d.get(id)
 	if err != nil {
 		return err
 	}
 	updater(ctx) // updater should never be allowed to modify PK or ctxID!
-	if err := d.db.Save(ctx); err != nil {
+	if err := d.db.Update(ctx); err != nil {
 		return ErrCtxDbFailure{"Update save fail", err}
 	}
 	if d.cache != nil {
@@ -207,6 +188,30 @@ func (d *indexDB) query(pageSize int, startPage int, orderBy string, filter ...q
 		query.Limit(pageSize).Skip(pageSize * (startPage - 1))
 	}
 	query.Find(&ctxs)
+
+	results := make([]*cc.CrossTransactionWithSignatures, len(ctxs))
+	for i, ctx := range ctxs {
+		results[i] = ctx.ToCrossTransaction()
+	}
+	return results
+}
+
+func (d *indexDB) RangeByNumber(begin, end uint64, pageSize int) []*cc.CrossTransactionWithSignatures {
+	var ctxs []*CrossTransactionIndexed
+	d.db.Range(BlockNumField, begin, end, &ctxs, storm.Limit(pageSize))
+	if ctxs == nil {
+		return nil
+	}
+	//把最后一笔ctx所在高度的所有ctx取出来
+	var lasts []*CrossTransactionIndexed
+	d.db.Find(BlockNumField, ctxs[len(ctxs)-1].BlockNum, &lasts)
+	for i, tx := range ctxs {
+		if tx.BlockNum == ctxs[len(ctxs)-1].BlockNum {
+			ctxs = ctxs[:i]
+			break
+		}
+	}
+	ctxs = append(ctxs, lasts...)
 
 	results := make([]*cc.CrossTransactionWithSignatures, len(ctxs))
 	for i, ctx := range ctxs {

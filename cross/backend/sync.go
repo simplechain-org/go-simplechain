@@ -1,10 +1,12 @@
 package backend
 
-import "github.com/simplechain-org/go-simplechain/common"
+import (
+	"github.com/simplechain-org/go-simplechain/common"
+)
 
 type SyncReq struct {
-	Chain   uint64
-	StartID common.Hash
+	Chain  uint64
+	Height uint64
 }
 
 type SyncResp struct {
@@ -29,7 +31,8 @@ func (srv *CrossService) syncer() {
 			if srv.peers.Len() > 0 {
 				go srv.synchronise(srv.peers.BestPeer())
 			}
-			go srv.syncPending(p)
+			go srv.syncPending(srv.main, p)
+			go srv.syncPending(srv.sub, p)
 
 		case <-srv.quitSync:
 			return
@@ -38,33 +41,25 @@ func (srv *CrossService) syncer() {
 }
 
 func (srv *CrossService) synchronise(main, sub *anchorPeer) {
-	//TODO: 用增量同步取代全量同步
 	if main != nil {
-		if srv.main.handler.GetHeight().Cmp(main.crossStatus.MainHeight) < 0 {
-			go main.SendSyncRequest(&SyncReq{Chain: srv.main.networkID})
+		if h := srv.main.handler.Height(); h.Cmp(main.crossStatus.MainHeight) <= 0 {
+			go main.SendSyncRequest(&SyncReq{Chain: srv.main.networkID, Height: h.Uint64()})
 		}
 	}
 	if sub != nil {
-		if srv.sub.handler.GetHeight().Cmp(sub.crossStatus.SubHeight) < 0 {
-			go sub.SendSyncRequest(&SyncReq{Chain: srv.sub.networkID})
+		if h := srv.sub.handler.Height(); h.Cmp(sub.crossStatus.SubHeight) <= 0 {
+			go sub.SendSyncRequest(&SyncReq{Chain: srv.sub.networkID, Height: h.Uint64()})
 		}
 	}
 }
 
-func (srv *CrossService) syncPending(p *anchorPeer) {
-	pendingMain := srv.main.handler.Pending(defaultMaxSyncSize, nil)
-	if pendingMain != nil {
+func (srv *CrossService) syncPending(cross crossCommons, p *anchorPeer) {
+	pending := cross.handler.Pending(defaultMaxSyncSize, nil)
+	if pending != nil {
 		go p.SendSyncPendingRequest(&SyncPendingReq{
-			Chain: srv.main.networkID,
-			Ids:   pendingMain,
+			Chain: cross.networkID,
+			Ids:   pending,
 		})
 	}
-	pendingSub := srv.sub.handler.Pending(defaultMaxSyncSize, nil)
-	if pendingSub != nil {
-		go p.SendSyncPendingRequest(&SyncPendingReq{
-			Chain: srv.sub.networkID,
-			Ids:   pendingSub,
-		})
-	}
-	p.Log().Info("start sync pending cross transaction", "main", len(pendingMain), "sub", len(pendingSub))
+	p.Log().Info("start sync pending cross transaction", "chainID", cross.networkID, "pending", len(pending))
 }

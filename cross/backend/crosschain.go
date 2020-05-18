@@ -25,7 +25,7 @@ const (
 	CtxSignMsg        = 0x31
 	GetCtxSyncMsg     = 0x32
 	CtxSyncMsg        = 0x33
-	GetPendingSyncMsg = 0x34 //TODO: sync pending-sign ctx when anchor restart
+	GetPendingSyncMsg = 0x34
 	PendingSyncMsg    = 0x35
 
 	protocolVersion    = 1
@@ -218,8 +218,8 @@ func (srv *CrossService) handle(p *anchorPeer) error {
 		subTD         = srv.sub.bc.GetTd(subHead.Hash(), subHead.Number.Uint64())
 		mainGenesis   = srv.main.genesis
 		subGenesis    = srv.sub.genesis
-		mainHeight    = srv.main.handler.GetHeight()
-		subHeight     = srv.sub.handler.GetHeight()
+		mainHeight    = srv.main.handler.Height()
+		subHeight     = srv.sub.handler.Height()
 		main          = srv.config.MainChainCtxAddress
 		sub           = srv.config.SubChainCtxAddress
 	)
@@ -273,13 +273,16 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 		if err := msg.Decode(&req); err != nil {
 			return eth.ErrResp(eth.ErrDecode, "msg %v: %v", msg, err)
 		}
-		p.Log().Info("receive ctx sync request", "chain", req.Chain, "startID", req.StartID)
+		p.Log().Info("receive ctx sync request", "chain", req.Chain, "height", req.Height)
 
 		h := srv.getCrossHandler(new(big.Int).SetUint64(req.Chain))
 		if h == nil {
 			break
 		}
-		ctxList := h.GetSyncCrossTransaction(req.StartID, defaultMaxSyncSize)
+		if h.chain.BlockChain().CurrentBlock().NumberU64() < req.Height {
+			break
+		}
+		ctxList := h.GetSyncCrossTransaction(req.Height, defaultMaxSyncSize)
 		var data [][]byte
 		for _, ctx := range ctxList {
 			b, err := rlp.EncodeToBytes(ctx)
@@ -288,6 +291,7 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 			}
 			data = append(data, b)
 		}
+
 		if len(data) > 0 {
 			return p.SendSyncResponse(&SyncResp{
 				Chain: req.Chain,
@@ -320,8 +324,8 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 
 		// send next sync request after last
 		return p.SendSyncRequest(&SyncReq{
-			Chain:   resp.Chain,
-			StartID: ctxList[len(ctxList)-1].ID(),
+			Chain:  resp.Chain,
+			Height: ctxList[len(ctxList)-1].BlockNum + 1, // require on next block
 		})
 
 	case msg.Code == GetPendingSyncMsg:
@@ -377,14 +381,14 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 
 		synced := h.SyncPending(ctxList)
 		p.Log().Info("sync pending cross transactions", "total", len(ctxList), "success", len(synced))
-
 		pending := h.Pending(defaultMaxSyncSize, synced)
-
-		// send next sync pending request
-		return p.SendSyncPendingRequest(&SyncPendingReq{
-			Chain: resp.Chain,
-			Ids:   pending,
-		})
+		if len(pending) > 0 {
+			// send next sync pending request
+			return p.SendSyncPendingRequest(&SyncPendingReq{
+				Chain: resp.Chain,
+				Ids:   pending,
+			})
+		}
 
 	case msg.Code == CtxSignMsg:
 		var ctx *cc.CrossTransaction

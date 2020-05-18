@@ -81,6 +81,8 @@ type Handler struct {
 	anchorSigner        common.Address
 	signHash            cc.SignHash
 	crossABI            abi.ABI
+
+	log log.Logger
 }
 
 func NewCrossHandler(chain cross.SimpleChain, roleHandler RoleHandler, role common.ChainRole,
@@ -118,6 +120,7 @@ func NewCrossHandler(chain cross.SimpleChain, roleHandler RoleHandler, role comm
 		pm:                  chain.ProtocolManager(),
 		service:             service,
 		gasHelper:           gasHelper,
+		log:                 log.New("chainID", chain.ChainConfig().ChainID),
 	}
 }
 
@@ -160,7 +163,7 @@ func (h *Handler) Stop() {
 
 	close(h.quitSync)
 
-	log.Info("SimpleChain MsgHandler stopped")
+	h.log.Info("SimpleChain MsgHandler stopped")
 }
 
 func (h *Handler) loop() {
@@ -172,7 +175,7 @@ func (h *Handler) loop() {
 		case ev := <-h.confirmedMakerCh:
 			for _, tx := range ev.Txs {
 				if err := h.store.AddLocal(tx); err != nil {
-					log.Warn("Add local ctx failed", "err", err)
+					h.log.Warn("Add local ctx failed", "err", err)
 				}
 			}
 			h.service.BroadcastCrossTx(ev.Txs, true)
@@ -187,20 +190,20 @@ func (h *Handler) loop() {
 
 		case ev := <-h.confirmedTakerCh:
 			h.writeCrossMessage(ev)
-			if errs := h.store.RemoveRemotes(ev.Txs); errs != nil {
-				log.Warn("RemoveRemotes failed", "error", errs)
-			}
+			h.store.RemoveRemotes(ev.Txs)
 
 		case <-h.confirmedTakerSub.Err():
 			return
 
 		case ev := <-h.newTakerCh:
-			h.store.MarkStatus(ev.Txs, cc.CtxStatusImplementing)
+			h.store.MarkStatus(ev.Takers, cc.CtxStatusImplementing)
 		case <-h.newTakerSub.Err():
 			return
 
 		case ev := <-h.newFinishCh:
-			h.writeCrossMessage(ev)
+			h.store.MarkStatus(ev.Finishes, cc.CtxStatusFinishing)
+		case <-h.newFinishSub.Err():
+			return
 
 		case ev := <-h.rmLogsCh:
 			h.reorgLogs(ev.Logs)
@@ -208,22 +211,21 @@ func (h *Handler) loop() {
 			return
 
 		case ev := <-h.confirmedFinishCh:
-			h.makeFinish(ev.FinishIds)
+			h.makeFinish(ev.Finishes)
 		case <-h.confirmedFinishSub.Err():
 			return
 
 		case ev := <-h.updateAnchorCh:
 			for _, v := range ev.ChainInfo {
 				if err := h.store.UpdateAnchors(v); err != nil {
-					log.Info("ctxStore UpdateAnchors failed", "err", err)
+					h.log.Info("ctxStore UpdateAnchors failed", "err", err)
 				}
 			}
 		case <-h.updateAnchorSub.Err():
 			return
 
 		case <-expire.C:
-			h.updateSelfTx()
-			//TODO-D h.resend()
+			h.promoteTransaction()
 		}
 	}
 }
@@ -245,29 +247,18 @@ func (h *Handler) readCrossMessage() {
 				cws := ev.Tws
 				if cws.DestinationId().Uint64() == h.pm.NetworkId() {
 					if err := h.store.AddFromRemoteChain(cws, ev.CallBack); err != nil {
-						log.Warn("add remote cross transaction failed", "error", err.Error())
+						h.log.Warn("add remote cross transaction failed", "error", err.Error())
 					}
 				}
 
 			case cc.ConfirmedTakerEvent:
 				txs, err := h.getTxForLockOut(ev.Txs)
 				if err != nil {
-					log.Error("GetTxForLockOut", "err", err)
+					h.log.Error("GetTxForLockOut", "err", err)
 				}
 				if len(txs) > 0 {
 					h.pm.AddLocals(txs)
 				}
-			//log.Info("cross message ConfirmedTaker", "length", len(ev.Txs))
-
-			case cc.NewFinishEvent:
-				txs := make([]*cc.ReceptTransaction, len(ev.FinishIds))
-				for i, txId := range ev.FinishIds {
-					txs[i] = &cc.ReceptTransaction{
-						CTxId:         txId,
-						DestinationId: ev.ChainID,
-					}
-				}
-				h.store.MarkStatus(txs, cc.CtxStatusFinishing)
 			}
 
 		case <-h.quitSync:
@@ -276,14 +267,68 @@ func (h *Handler) readCrossMessage() {
 	}
 }
 
+func (h *Handler) getCrossContractAddr() common.Address {
+	var crossAddr common.Address
+	switch h.roleHandler {
+	case RoleMainHandler:
+		crossAddr = h.MainChainCtxAddress
+	case RoleSubHandler:
+		crossAddr = h.SubChainCtxAddress
+	}
+	return crossAddr
+}
+
+func (h *Handler) reorgLogs(logs []*types.Log) {
+	var takerLogs []*cc.CrossTransactionModifier
+	var finishLogs []*cc.CrossTransactionModifier
+	for _, l := range logs {
+		if h.getCrossContractAddr() == l.Address && len(l.Topics) > 0 {
+			switch l.Topics[0] {
+			case params.TakerTopic: // remote ctx taken
+				if len(l.Topics) >= 3 && len(l.Data) >= common.HashLength {
+					takerLogs = append(takerLogs, &cc.CrossTransactionModifier{
+						ID:      l.Topics[1],
+						ChainId: common.BytesToHash(l.Data[:common.HashLength]).Big(),
+					})
+				}
+
+			case params.MakerFinishTopic: // local ctx finished
+				if len(l.Topics) >= 3 {
+					finishLogs = append(finishLogs, &cc.CrossTransactionModifier{
+						ID:      l.Topics[1],
+						ChainId: new(big.Int).SetUint64(h.pm.NetworkId()),
+					})
+				}
+			}
+
+		}
+	}
+	if len(takerLogs) > 0 {
+		h.store.MarkStatus(takerLogs, cc.CtxStatusWaiting)
+	}
+
+	if len(finishLogs) > 0 {
+		h.store.MarkStatus(finishLogs, cc.CtxStatusFinishing)
+	}
+}
+
 func (h *Handler) AddRemoteCtx(ctx *cc.CrossTransaction) error {
 	if err := h.store.VerifyCtx(ctx); err != nil {
 		return ErrVerifyCtx
 	}
 	if err := h.store.AddRemote(ctx); err != nil && err != cc.ErrDuplicateSign {
-		log.Error("Add remote ctx", "id", ctx.ID().String(), "err", err)
+		h.log.Error("Add remote ctx", "id", ctx.ID().String(), "err", err)
 	}
 	return nil
+}
+
+func (h *Handler) makeFinish(finishes []*cc.CrossTransactionModifier) {
+	transactions := make([]string, len(finishes))
+	for i, finish := range finishes {
+		transactions[i] = finish.ID.String()
+	}
+	h.log.Info("cross transaction finished", "transactions", transactions)
+	h.store.MarkStatus(finishes, cc.CtxStatusFinished)
 }
 
 func (h *Handler) getTxForLockOut(rwss []*cc.ReceptTransaction) ([]*types.Transaction, error) {
@@ -300,18 +345,18 @@ func (h *Handler) getTxForLockOut(rwss []*cc.ReceptTransaction) ([]*types.Transa
 		if rws.DestinationId.Uint64() == h.pm.NetworkId() {
 			param, err = h.createTransaction(rws)
 			if err != nil {
-				log.Error("GetTxForLockOut CreateTransaction", "err", err)
+				h.log.Warn("GetTxForLockOut CreateTransaction", "id", rws.CTxId, "err", err)
 				continue
 			}
 			if ok, _ := h.checkTransaction(h.anchorSigner, tokenAddress, nonce+count, param.gasLimit, param.gasPrice, param.data); !ok {
-				log.Info("already finish the cross Transaction")
+				h.log.Debug("already finish the cross Transaction", "id", rws.CTxId)
 				continue
 			}
 
 			tx, err = newSignedTransaction(nonce+count, tokenAddress, param.gasLimit, param.gasPrice, param.data,
 				h.pm.NetworkId(), h.signHash)
 			if err != nil {
-				log.Error("GetTxForLockOut newSignedTransaction", "err", err)
+				h.log.Warn("GetTxForLockOut newSignedTransaction", "id", rws.CTxId, "err", err)
 				return nil, err
 			}
 			txs = append(txs, tx)
@@ -322,60 +367,6 @@ func (h *Handler) getTxForLockOut(rwss []*cc.ReceptTransaction) ([]*types.Transa
 	return txs, nil
 }
 
-func (h *Handler) makeFinish(finishes []common.Hash) {
-	for _, id := range finishes {
-		log.Info("cross transaction finished", "txId", id.String())
-	}
-	if errs := h.store.RemoveLocals(finishes); errs != nil {
-		log.Warn("CleanUpDb RemoveLocals failed", "error", errs)
-	}
-}
-
-func (h *Handler) getCrossContractAddr() common.Address {
-	var crossAddr common.Address
-	switch h.roleHandler {
-	case RoleMainHandler:
-		crossAddr = h.MainChainCtxAddress
-	case RoleSubHandler:
-		crossAddr = h.SubChainCtxAddress
-	}
-	return crossAddr
-}
-
-func (h *Handler) reorgLogs(logs []*types.Log) {
-	var takerLogs []*cc.ReceptTransaction
-	var finishLogs []*cc.ReceptTransaction
-	for _, l := range logs {
-		if h.getCrossContractAddr() == l.Address && len(l.Topics) > 0 {
-			switch l.Topics[0] {
-			case params.TakerTopic: // remote ctx taken
-				if len(l.Topics) >= 3 && len(l.Data) >= common.HashLength {
-					takerLogs = append(takerLogs, &cc.ReceptTransaction{
-						DestinationId: common.BytesToHash(l.Data[:common.HashLength]).Big(),
-						CTxId:         l.Topics[1],
-					})
-				}
-
-			case params.MakerFinishTopic: // local ctx finished
-				if len(l.Topics) >= 3 {
-					finishLogs = append(finishLogs, &cc.ReceptTransaction{
-						ChainId: new(big.Int).SetUint64(h.pm.NetworkId()),
-						CTxId:   l.Topics[1],
-					})
-				}
-			}
-
-		}
-	}
-	if len(takerLogs) > 0 {
-		h.store.MarkStatus(takerLogs, cc.CtxStatusWaiting)
-	}
-
-	if len(finishLogs) > 0 {
-		h.store.MarkStatus(finishLogs, cc.CtxStatusFinishing)
-	}
-}
-
 func (h *Handler) createTransaction(rws *cc.ReceptTransaction) (*TranParam, error) {
 	gasPrice, err := h.gpo.SuggestPrice(context.Background())
 	if err != nil {
@@ -383,76 +374,22 @@ func (h *Handler) createTransaction(rws *cc.ReceptTransaction) (*TranParam, erro
 	}
 	data, err := rws.ConstructData(h.crossABI)
 	if err != nil {
-		log.Error("ConstructData", "err", err)
+		h.log.Error("ConstructData", "err", err)
 		return nil, err
 	}
 
 	return &TranParam{gasLimit: 250000, gasPrice: gasPrice, data: data}, nil
 }
 
-func (h *Handler) updateSelfTx() {
-	if pending, err := h.pm.Pending(); err == nil {
-		if txs, ok := pending[h.anchorSigner]; ok {
-			var count uint64
-			var newTxs []*types.Transaction
-			var nonceBegin uint64
-			for _, v := range txs {
-				if count < core.DefaultTxPoolConfig.AccountSlots {
-					if count == 0 {
-						nonceBegin = v.Nonce()
-					}
-					if ok, _ := h.checkTransaction(h.anchorSigner, *v.To(), nonceBegin+count, v.Gas(), v.GasPrice(), v.Data()); !ok {
-						log.Info("already finish the cross Transaction")
-						continue
-					}
-					gasPrice := new(big.Int).Div(new(big.Int).Mul(
-						v.GasPrice(), big.NewInt(100+int64(core.DefaultTxPoolConfig.PriceBump))), big.NewInt(100))
-
-					tx, err := newSignedTransaction(nonceBegin+count, *v.To(), v.Gas(), gasPrice, v.Data(), h.pm.NetworkId(), h.signHash)
-					if err != nil {
-						log.Info("UpdateSelfTx", "err", err)
-					}
-
-					newTxs = append(newTxs, tx)
-					count++
-				} else {
-					break
-				}
-			}
-			log.Info("UpdateSelfTx", "len", len(newTxs))
-			h.pm.AddLocals(newTxs)
-		}
+func (h *Handler) checkTransaction(address, tokenAddress common.Address, nonce, gasLimit uint64, gasPrice *big.Int, data []byte) (bool, error) {
+	callArgs := CallArgs{
+		From:     address,
+		To:       &tokenAddress,
+		Data:     data,
+		GasPrice: hexutil.Big(*gasPrice),
+		Gas:      hexutil.Uint64(gasLimit),
 	}
-}
-
-//func (h *Handler) resend() { TODO-D
-//	pending := h.store.Pending(h.blockChain.CurrentBlock().NumberU64())
-//	log.Info("resend pending", "count", len(pending))
-//	h.service.BroadcastCrossTx(pending, true)
-//}
-
-func (h *Handler) Pending(limit int, exclude map[common.Hash]bool) (ids []common.Hash) {
-	return h.store.Pending(h.blockChain.CurrentBlock().NumberU64(), limit, exclude)
-}
-
-func (h *Handler) GetSyncPending(ids []common.Hash) []*cc.CrossTransaction {
-	results := make([]*cc.CrossTransaction, 0, len(ids))
-	for _, id := range ids {
-		if ctx := h.store.GetLocal(id); ctx != nil {
-			results = append(results, ctx)
-		}
-	}
-	return results
-}
-
-func (h *Handler) SyncPending(ctxs []*cc.CrossTransaction) map[common.Hash]bool {
-	synced := make(map[common.Hash]bool)
-	for _, ctx := range ctxs {
-		if err := h.AddRemoteCtx(ctx); err == nil {
-			synced[ctx.ID()] = true
-		}
-	}
-	return synced
+	return h.gasHelper.checkExec(context.Background(), callArgs)
 }
 
 func newSignedTransaction(nonce uint64, to common.Address, gasLimit uint64, gasPrice *big.Int,
@@ -471,25 +408,78 @@ func newSignedTransaction(nonce uint64, to common.Address, gasLimit uint64, gasP
 	return signedTx, nil
 }
 
-func (h *Handler) GetSyncCrossTransaction(startTxID common.Hash, syncSize int) []*cc.CrossTransactionWithSignatures {
-	return h.store.GetSyncCrossTransactions(h.pm.NetworkId(), startTxID, syncSize)
+func (h *Handler) promoteTransaction() {
+	if pending, err := h.pm.Pending(); err == nil {
+		if txs, ok := pending[h.anchorSigner]; ok {
+			var count uint64
+			var newTxs []*types.Transaction
+			var nonceBegin uint64
+			for _, v := range txs {
+				if count < core.DefaultTxPoolConfig.AccountSlots {
+					if count == 0 {
+						nonceBegin = v.Nonce()
+					}
+					if ok, _ := h.checkTransaction(h.anchorSigner, *v.To(), nonceBegin+count, v.Gas(), v.GasPrice(), v.Data()); !ok {
+						h.log.Debug("already finish the cross Transaction", "tx", v.Hash())
+						continue
+					}
+					gasPrice := new(big.Int).Div(new(big.Int).Mul(
+						v.GasPrice(), big.NewInt(100+int64(core.DefaultTxPoolConfig.PriceBump))), big.NewInt(100))
+
+					tx, err := newSignedTransaction(nonceBegin+count, *v.To(), v.Gas(), gasPrice, v.Data(), h.pm.NetworkId(), h.signHash)
+					if err != nil {
+						h.log.Info("promoteTransaction", "err", err)
+					}
+
+					newTxs = append(newTxs, tx)
+					count++
+				} else {
+					break
+				}
+			}
+			h.log.Info("UpdateSelfTx", "len", len(newTxs))
+			h.pm.AddLocals(newTxs)
+		}
+	}
+}
+
+// for ctx pending sync
+func (h *Handler) Pending(limit int, exclude map[common.Hash]bool) (ids []common.Hash) {
+	return h.store.Pending(h.blockChain.CurrentBlock().NumberU64(), limit, exclude)
+}
+
+func (h *Handler) GetSyncPending(ids []common.Hash) []*cc.CrossTransaction {
+	results := make([]*cc.CrossTransaction, 0, len(ids))
+	for _, id := range ids {
+		if ctx := h.store.GetLocal(id); ctx != nil {
+			results = append(results, ctx)
+		}
+	}
+	h.log.Debug("GetSyncPending", "req", len(ids), "result", len(results))
+	return results
+}
+
+func (h *Handler) SyncPending(ctxs []*cc.CrossTransaction) map[common.Hash]bool {
+	synced := make(map[common.Hash]bool)
+	for _, ctx := range ctxs {
+		if err := h.AddRemoteCtx(ctx); err == nil {
+			synced[ctx.ID()] = true
+		} else {
+			h.log.Debug("SyncPending failed", "id", ctx.ID(), "err", err)
+		}
+	}
+	return synced
+}
+
+// for cross store sync
+func (h *Handler) Height() *big.Int {
+	return big.NewInt(int64(h.store.Height()))
+}
+
+func (h *Handler) GetSyncCrossTransaction(height uint64, syncSize int) []*cc.CrossTransactionWithSignatures {
+	return h.store.GetSyncCrossTransactions(height, h.chain.BlockChain().CurrentBlock().NumberU64(), syncSize)
 }
 
 func (h *Handler) SyncCrossTransaction(ctx []*cc.CrossTransactionWithSignatures) int {
 	return h.store.SyncCrossTransactions(ctx)
-}
-
-func (h *Handler) GetHeight() *big.Int {
-	return big.NewInt(int64(h.store.Height()))
-}
-
-func (h *Handler) checkTransaction(address, tokenAddress common.Address, nonce, gasLimit uint64, gasPrice *big.Int, data []byte) (bool, error) {
-	callArgs := CallArgs{
-		From:     address,
-		To:       &tokenAddress,
-		Data:     data,
-		GasPrice: hexutil.Big(*gasPrice),
-		Gas:      hexutil.Uint64(gasLimit),
-	}
-	return h.gasHelper.checkExec(context.Background(), callArgs)
 }

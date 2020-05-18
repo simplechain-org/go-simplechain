@@ -29,7 +29,8 @@ var txHash = flag.String("hash", "", "tx hash")
 var addCrossTx = flag.String("data", "", "crossTransactionWithSignatures rlp data")
 var parseCrossChain = flag.Bool("p", false, "parse events from blocks")
 var mainChain = flag.Bool("main", false, "tx on main chain")
-var subChain = flag.Bool("sub", false, "tx on sub chain")
+
+//var subChain = flag.Bool("sub", false, "tx on sub chain")
 
 type ChainConfig struct {
 	Url          string
@@ -67,11 +68,6 @@ func ParseConfig(path string) (*Config, error) {
 	return &cfg, nil
 }
 
-/*
-1.first anchor:   ./signTx --conf ./config1.json --hash 0xd3fe39c07bdbf88bd53bf86cd0333f1b32e1424826183a42545964bdfd96c917
-2.second anchor get rlp data of CrossTransactionWithSign from anchor1(--data):  ./signTx --conf ./config2.json --hash 0xd3fe39c07bdbf88bd53bf86cd0333f1b32e1424826183a42545964bdfd96c917 --data 0xf8d9f8d7880de0b6b3a7640000a0bc065635f2e1b4f3dc4c79d777b8c67060cc38a3ad382e5d6595a898af65a6cfa0d3fe39c07bdbf88bd53bf86cd0333f1b32e1424826183a42545964bdfd96c917943db32cdacb1ba339786403b50568f4915892938aa09c720d351587ba0a2f3e703505a030b5f1fa2ca17eabfe17880463c5a5f1fd63820328880de0b6b3a76400008677616c6b657234a027387d29a32fd6d85564ac15168b35bf5e11fe5dcba066241171e65058bebeb7a031fb6b9b981b61615beae82ff8051242f817e7cb847e63bd8389a220c6ef5d77
-  this method would send CrossTransaction by RPC
-*/
 func main() {
 	flag.Parse()
 	config, err := ParseConfig(*configPath)
@@ -264,7 +260,7 @@ func (h *Handler) MakeEvent(chain *Chain, event *types.Log, crossTxBytes hexutil
 	if len(crossTxBytes) > 0 {
 		var addTx cc.CrossTransaction
 
-		crossTxWithSign := cc.NewCrossTransactionWithSignatures(signedTx)
+		crossTxWithSign := cc.NewCrossTransactionWithSignatures(signedTx, event.BlockNumber)
 
 		if err := rlp.DecodeBytes(crossTxBytes, &addTx); err != nil {
 			panic(err)

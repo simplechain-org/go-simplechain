@@ -123,18 +123,22 @@ func (p *anchorPeer) readStatus(mainNetwork, subNetwork uint64, mainGenesis, sub
 }
 
 func (p *anchorPeer) SendSyncRequest(req *SyncReq) error {
+	p.Log().Debug("Sending batch of ctx sync request", "chain", req.Chain, "height", req.Height)
 	return p2p.Send(p.rw, GetCtxSyncMsg, req)
 }
 
 func (p *anchorPeer) SendSyncResponse(resp *SyncResp) error {
+	p.Log().Debug("Sending batch of ctx sync response", "chain", resp.Chain, "count", len(resp.Data))
 	return p2p.Send(p.rw, CtxSyncMsg, resp)
 }
 
 func (p *anchorPeer) SendSyncPendingRequest(req *SyncPendingReq) error {
+	p.Log().Debug("Sending batch of ctx pending sync request", "chain", req.Chain, "count", len(req.Ids))
 	return p2p.Send(p.rw, GetPendingSyncMsg, req)
 }
 
 func (p *anchorPeer) SendSyncPendingResponse(resp *SyncPendingResp) error {
+	p.Log().Debug("Sending batch of ctx pending sync response", "chain", resp.Chain, "count", len(resp.Data))
 	return p2p.Send(p.rw, PendingSyncMsg, resp)
 }
 

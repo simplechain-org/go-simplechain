@@ -24,7 +24,7 @@ func TestCtxDb(t *testing.T) {
 			common.Hash{},
 			common.Hash{},
 			common.Address{},
-			nil))
+			nil), 0)
 		err := ctxDb.Write(ctx)
 		if err != nil {
 			t.Error(err)
