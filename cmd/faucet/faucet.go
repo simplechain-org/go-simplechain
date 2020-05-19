@@ -81,6 +81,9 @@ var (
 
 	noauthFlag = flag.Bool("noauth", false, "Enables funding requests without authentication")
 	logFlag    = flag.Int("loglevel", 3, "Log level to use for Ethereum and the faucet")
+
+	mainRoleFlag = flag.Bool("main", false, "main chain")
+	subRoleFlag  = flag.Bool("sub", false, "main chain")
 )
 
 var (
@@ -174,8 +177,15 @@ func main() {
 	}
 	ks.Unlock(acc, pass)
 
+	var role common.ChainRole
+	if *mainRoleFlag {
+		role = common.RoleMainChain
+	}
+	if *subRoleFlag {
+		role = common.RoleSubChain
+	}
 	// Assemble and start the faucet light service
-	faucet, err := newFaucet(genesis, *ethPortFlag, enodes, *netFlag, *statsFlag, ks, website.Bytes())
+	faucet, err := newFaucet(genesis, *ethPortFlag, enodes, *netFlag, *statsFlag, ks, website.Bytes(), role)
 	if err != nil {
 		log.Crit("Failed to start faucet", "err", err)
 	}
@@ -216,13 +226,13 @@ type faucet struct {
 	lock sync.RWMutex // Lock protecting the faucet's internals
 }
 
-func newFaucet(genesis *core.Genesis, port int, enodes []*discv5.Node, network uint64, stats string, ks *keystore.KeyStore, index []byte) (*faucet, error) {
+func newFaucet(genesis *core.Genesis, port int, enodes []*discv5.Node, network uint64, stats string, ks *keystore.KeyStore, index []byte, role common.ChainRole) (*faucet, error) {
 	// Assemble the raw devp2p protocol stack
 	stack, err := node.New(&node.Config{
 		Name:    "geth",
 		Version: params.VersionWithCommit(gitCommit, gitDate),
 		DataDir: filepath.Join(os.Getenv("HOME"), ".faucet"),
-		Role:    common.RoleMainChain,
+		Role:    role,
 		P2P: p2p.Config{
 			NAT:              nat.Any(),
 			NoDiscovery:      true,
@@ -237,13 +247,8 @@ func newFaucet(genesis *core.Genesis, port int, enodes []*discv5.Node, network u
 	}
 	// Assemble the Ethereum light client protocol
 	if err := stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
-		//cfg := eth.DefaultConfig
-		//cfg.SyncMode = downloader.LightSync
-		//cfg.NetworkId = network
-		//cfg.Genesis = genesis
-		//return les.New(ctx, &cfg)
 		config := &eth.Config{Genesis: genesis,
-			Role: common.RoleMainChain,
+			Role: role,
 		}
 		return eth.New(ctx, config)
 	}); err != nil {
