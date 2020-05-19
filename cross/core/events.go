@@ -11,7 +11,7 @@ type ConfirmedMakerEvent struct {
 }
 
 type NewTakerEvent struct {
-	Txs []*ReceptTransaction
+	Takers []*CrossTransactionModifier
 }
 
 type ConfirmedTakerEvent struct {
@@ -24,14 +24,20 @@ type SignedCtxEvent struct {
 }
 
 type NewFinishEvent struct {
-	ChainID   *big.Int
-	FinishIds []common.Hash
+	Finishes []*CrossTransactionModifier
 }
 
 type ConfirmedFinishEvent struct {
-	FinishIds []common.Hash
+	Finishes []*CrossTransactionModifier
 }
 
 type AnchorEvent struct {
 	ChainInfo []*RemoteChainInfo
+}
+
+type CrossTransactionModifier struct {
+	ID            common.Hash
+	ChainId       *big.Int
+	Status        CtxStatus
+	AtBlockNumber uint64
 }

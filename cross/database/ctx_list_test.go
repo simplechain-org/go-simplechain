@@ -17,13 +17,13 @@ func TestCtxSortedByBlockNumAdd(t *testing.T) {
 		txs[i] = &core.CrossTransactionWithSignatures{
 			Data: core.CtxDatas{
 				CTxId: common.BigToHash(big.NewInt(int64(i))),
-				Value: big.NewInt(int64(rand.Intn(100))), // use random value for blockNum
 			},
+			BlockNum: rand.Uint64(),
 		}
 	}
 
 	for _, v := range rand.Perm(len(txs)) {
-		list.Put(txs[v], txs[v].Data.Value.Uint64())
+		list.Put(txs[v], txs[v].BlockNum)
 	}
 
 	// Verify internal state
@@ -36,6 +36,15 @@ func TestCtxSortedByBlockNumAdd(t *testing.T) {
 		}
 	}
 
+	var prev *core.CrossTransactionWithSignatures
+	list.Map(func(ctx *core.CrossTransactionWithSignatures) bool {
+		if prev != nil && prev.BlockNum > ctx.BlockNum {
+			t.Errorf("expect blockNum%d greaterEq than prev#%d", ctx.BlockNum, prev.BlockNum)
+		}
+		prev = ctx
+		return false
+	})
+
 	const limitNum = 50
 	list.RemoveUnderNum(limitNum)
 	if len(list.items) != list.index.Len() {
@@ -43,10 +52,10 @@ func TestCtxSortedByBlockNumAdd(t *testing.T) {
 	}
 
 	for i, tx := range txs {
-		if tx.Data.Value.Uint64() <= limitNum && list.Get(tx.ID()) != nil {
+		if tx.BlockNum <= limitNum && list.Get(tx.ID()) != nil {
 			t.Errorf("item %d: transaction should be removed but not: %v", i, tx)
 		}
-		if tx.Data.Value.Uint64() > limitNum && list.Get(tx.ID()) == nil {
+		if tx.BlockNum > limitNum && list.Get(tx.ID()) == nil {
 			t.Errorf("item %d: transaction is not exist: %v", i, tx)
 		}
 	}

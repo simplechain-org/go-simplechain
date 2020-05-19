@@ -39,9 +39,9 @@ func NewCrossTrigger(contract common.Address, chain chainRetriever) *CrossTrigge
 func (t *CrossTrigger) StoreCrossContractLog(blockNumber uint64, hash common.Hash, logs []*types.Log) {
 	var unconfirmedLogs []*types.Log
 	if logs != nil {
-		var rtxs []*ReceptTransaction
+		var takers []*CrossTransactionModifier
+		var finishes []*CrossTransactionModifier
 		var updates []*RemoteChainInfo
-		var finishes []common.Hash
 		for _, v := range logs {
 			if t.contract == v.Address && len(v.Topics) > 0 {
 				switch v.Topics[0] {
@@ -50,17 +50,21 @@ func (t *CrossTrigger) StoreCrossContractLog(blockNumber uint64, hash common.Has
 
 				case params.TakerTopic:
 					if len(v.Topics) >= 3 && len(v.Data) >= common.HashLength*4 {
-						rtxs = append(rtxs, &ReceptTransaction{
-							DestinationId: common.BytesToHash(v.Data[:common.HashLength]).Big(),
-							CTxId:         v.Topics[1],
+						takers = append(takers, &CrossTransactionModifier{
+							ID:            v.Topics[1],
+							ChainId:       common.BytesToHash(v.Data[:common.HashLength]).Big(), //get remote chainID from input data
+							AtBlockNumber: v.BlockNumber,
 						})
 						unconfirmedLogs = append(unconfirmedLogs, v)
 					}
 
 				case params.MakerFinishTopic:
 					if len(v.Topics) >= 3 {
-						ctxId := v.Topics[1]
-						finishes = append(finishes, ctxId)
+						finishes = append(finishes, &CrossTransactionModifier{
+							ID:            v.Topics[1],
+							ChainId:       t.chain.GetChainConfig().ChainID,
+							AtBlockNumber: v.BlockNumber,
+						})
 						unconfirmedLogs = append(unconfirmedLogs, v)
 					}
 
@@ -74,14 +78,14 @@ func (t *CrossTrigger) StoreCrossContractLog(blockNumber uint64, hash common.Has
 			}
 		}
 		// send event immediately for newTaker, newFinish, anchorUpdate
-		if len(rtxs) > 0 {
-			go t.takerFeed.Send(NewTakerEvent{Txs: rtxs})
+		if len(takers) > 0 {
+			go t.takerFeed.Send(NewTakerEvent{Takers: takers})
 		}
 		if len(updates) > 0 {
 			go t.updateAnchorFeed.Send(AnchorEvent{ChainInfo: updates})
 		}
 		if len(finishes) > 0 {
-			go t.finishFeed.Send(NewFinishEvent{ChainID: t.chain.GetChainConfig().ChainID, FinishIds: finishes})
+			go t.finishFeed.Send(NewFinishEvent{Finishes: finishes})
 		}
 	}
 

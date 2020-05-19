@@ -178,6 +178,24 @@ const (
 	CtxStatusFinished
 )
 
+/**
+  |------| <-new-- maker         |------|
+  |local | (waiting)			 |remote|
+  |      |						 |      |
+  |ctxdb |		   taker --mod-> |ctxdb |
+  |      |			 (executing) |      |
+  |status|						 |status|
+  |      |	confirmTaker --mod-> |      |
+  | mod  |            (finished) | only |
+  | with |                       | has  |
+  |number| <-new-- finish        |number|
+  |      | (finishing)           |  on  |
+  |      |                       |saving|
+  |      | <-mod-- confirmFinish |      |
+  |      | (finished)            |      |
+  |------|                       |------|
+*/
+
 var ctxStatusToString = map[CtxStatus]string{
 	CtxStatusWaiting:      "waiting",
 	CtxStatusImplementing: "executing",
@@ -194,8 +212,9 @@ func (s CtxStatus) String() string {
 }
 
 type CrossTransactionWithSignatures struct {
-	Data   CtxDatas
-	Status CtxStatus `json:"status" gencodec:"required"`
+	Data     CtxDatas
+	Status   CtxStatus `json:"status" gencodec:"required"`
+	BlockNum uint64    `json:"blockNum" gencodec:"required"`
 
 	// caches
 	hash atomic.Value
@@ -219,7 +238,7 @@ type CtxDatas struct {
 	S []*big.Int `json:"s" gencodec:"required"`
 }
 
-func NewCrossTransactionWithSignatures(ctx *CrossTransaction) *CrossTransactionWithSignatures {
+func NewCrossTransactionWithSignatures(ctx *CrossTransaction, num uint64) *CrossTransactionWithSignatures {
 	d := CtxDatas{
 		Value:            ctx.Data.Value,
 		CTxId:            ctx.Data.CTxId,
@@ -235,7 +254,7 @@ func NewCrossTransactionWithSignatures(ctx *CrossTransaction) *CrossTransactionW
 	d.R = append(d.R, ctx.Data.R)
 	d.S = append(d.S, ctx.Data.S)
 
-	return &CrossTransactionWithSignatures{Data: d}
+	return &CrossTransactionWithSignatures{Data: d, BlockNum: num}
 }
 
 func (cws *CrossTransactionWithSignatures) ID() common.Hash {
@@ -308,6 +327,21 @@ func (cws *CrossTransactionWithSignatures) SignaturesLength() int {
 		return l
 	}
 	return 0
+}
+
+func (cws *CrossTransactionWithSignatures) CrossTransaction() *CrossTransaction {
+	return &CrossTransaction{
+		Data: ctxdata{
+			Value:            cws.Data.Value,
+			CTxId:            cws.Data.CTxId,
+			TxHash:           cws.Data.TxHash,
+			From:             cws.Data.From,
+			BlockHash:        cws.Data.BlockHash,
+			DestinationId:    cws.Data.DestinationId,
+			DestinationValue: cws.Data.DestinationValue,
+			Input:            cws.Data.Input,
+		},
+	}
 }
 
 func (cws *CrossTransactionWithSignatures) Resolution() []*CrossTransaction {

@@ -40,6 +40,7 @@ func generateCtx(n int) []*cc.CrossTransactionWithSignatures {
 				R:                nil,
 				S:                nil,
 			},
+			BlockNum: uint64(i),
 		}
 	}
 	return ctxList
@@ -127,21 +128,25 @@ func TestIndexDB_ReadWrite(t *testing.T) {
 }
 
 func TestIndexDB_Query(t *testing.T) {
-	ctxList := generateCtx(20)
+	ctxList := generateCtx(100)
 	rootDB := setupIndexDB(t)
 	defer rootDB.Close()
 
 	db := NewIndexDB(big.NewInt(1), rootDB, 20)
 	db.db.Drop(&CrossTransactionIndexed{})
 	for _, ctx := range ctxList {
-		assert.NoError(t, db.Write(ctx), "")
+		assert.NoError(t, db.Write(ctx))
+	}
+
+	{
+		assert.EqualValues(t, db.Height(), 99)
 	}
 
 	// query without filter
 	{
-		list := db.Query(10, 1, PriceIndex)
-		assert.Equal(t, 10, len(list))
-		for i := 1; i < 10; i++ {
+		list := db.Query(50, 1, PriceIndex)
+		assert.Equal(t, 50, len(list))
+		for i := 1; i < 50; i++ {
 			price1, _ := list[i-1].Price().Float64()
 			price2, _ := list[i].Price().Float64()
 			assert.LessOrEqual(t, price1, price2)
@@ -152,16 +157,22 @@ func TestIndexDB_Query(t *testing.T) {
 	{
 		list := db.Query(5, 4, PriceIndex)
 		assert.Equal(t, 5, len(list))
-		list = db.Query(5, 5, PriceIndex)
+		list = db.Query(50, 5, PriceIndex)
 		assert.Equal(t, 0, len(list))
 	}
 
-	// query with status filter after delete
+	// update status
 	{
-		assert.NoError(t, db.Delete(ctxList[0].ID()))
+		assert.NoError(t, db.Update(ctxList[0].ID(), func(ctx *CrossTransactionIndexed) {
+			ctx.Status = cc.CtxStatusFinished
+		}))
 		list := db.Query(100, 1, PriceIndex, q.Eq(StatusField, cc.CtxStatusFinished))
 		assert.Equal(t, 1, len(list))
-		list = db.Query(100, 1, PriceIndex, q.Not(q.Eq(StatusField, cc.CtxStatusFinished)))
-		assert.Equal(t, 19, len(list))
 	}
+
+	// query DestinationValue
+	{
+		assert.NotNil(t, db.Query(0, 0, PriceIndex, q.Eq(DestinationValue, ctxList[10].Data.DestinationValue)))
+	}
+
 }

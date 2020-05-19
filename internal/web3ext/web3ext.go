@@ -21,6 +21,7 @@ var Modules = map[string]string{
 	"accounting": AccountingJs,
 	"admin":      AdminJs,
 	"chequebook": ChequebookJs,
+	"cross":      CrossJs,
 	"clique":     CliqueJs,
 	"ethash":     EthashJs,
 	"dpos":       DPoS_JS,
@@ -37,6 +38,34 @@ var Modules = map[string]string{
 	"txpool":     TxpoolJs,
 	"les":        LESJs,
 }
+
+const CrossJs = `
+web3._extend({
+	property: 'cross',
+	methods: [
+		new web3._extend.Method({
+			name: 'syncPending',
+			call: 'cross_syncPending',
+			params: 0,
+		}),
+		new web3._extend.Method({
+			name: 'syncStore',
+			call: 'cross_syncStore',
+			params: 0,
+		}),
+	],
+	properties: [
+		new web3._extend.Property({
+			name: 'peers',
+			getter: 'cross_peers'
+		}),
+		new web3._extend.Property({
+			name: 'height',
+			getter: 'cross_height'
+		}),
+	]
+});
+`
 
 const ChequebookJs = `
 web3._extend({

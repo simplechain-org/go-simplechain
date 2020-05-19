@@ -262,7 +262,7 @@ func (h *Handler) MakeEvent(chain *Chain, event *types.Log, crossTxBytes hexutil
 	if len(crossTxBytes) > 0 {
 		var addTx cc.CrossTransaction
 
-		crossTxWithSign := cc.NewCrossTransactionWithSignatures(signedTx)
+		crossTxWithSign := cc.NewCrossTransactionWithSignatures(signedTx, event.BlockNumber)
 
 		if err := rlp.DecodeBytes(crossTxBytes, &addTx); err != nil {
 			panic(err)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/big"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/simplechain-org/go-simplechain/common"
@@ -25,7 +26,7 @@ const (
 	CtxSignMsg        = 0x31
 	GetCtxSyncMsg     = 0x32
 	CtxSyncMsg        = 0x33
-	GetPendingSyncMsg = 0x34 //TODO: sync pending-sign ctx when anchor restart
+	GetPendingSyncMsg = 0x34
 	PendingSyncMsg    = 0x35
 
 	protocolVersion    = 1
@@ -54,16 +55,6 @@ type crossCommons struct {
 
 	bc      *core.BlockChain
 	handler *Handler
-}
-
-type SyncReq struct {
-	Chain   uint64
-	StartID common.Hash
-}
-
-type SyncResp struct {
-	Chain uint64
-	Data  [][]byte
 }
 
 func NewCrossService(ctx *node.ServiceContext, main, sub cross.SimpleChain, config *eth.Config) (*CrossService, error) {
@@ -114,7 +105,7 @@ func NewCrossService(ctx *node.ServiceContext, main, sub cross.SimpleChain, conf
 		{
 			Namespace: "eth",
 			Version:   "1.0",
-			Service:   NewPrivateCrossChainAPI(mainHandler, subHandler),
+			Service:   NewPublicCrossManualAPI(mainHandler, subHandler),
 			Public:    true,
 		},
 	})
@@ -128,8 +119,17 @@ func NewCrossService(ctx *node.ServiceContext, main, sub cross.SimpleChain, conf
 		{
 			Namespace: "eth",
 			Version:   "1.0",
-			Service:   NewPrivateCrossChainAPI(mainHandler, subHandler),
+			Service:   NewPublicCrossManualAPI(mainHandler, subHandler),
 			Public:    true,
+		},
+	})
+
+	main.RegisterAPIs([]rpc.API{
+		{
+			Namespace: "cross",
+			Version:   "1.0",
+			Service:   NewPrivateCrossAdminAPI(srv),
+			Public:    false,
 		},
 	})
 
@@ -218,34 +218,6 @@ func (srv *CrossService) Stop() error {
 	return nil
 }
 
-func (srv *CrossService) syncer() {
-	for {
-		select {
-		case <-srv.newPeerCh:
-			if srv.peers.Len() > 0 {
-				go srv.synchronise(srv.peers.BestPeer())
-			}
-
-		case <-srv.quitSync:
-			return
-		}
-	}
-}
-
-func (srv *CrossService) synchronise(main, sub *anchorPeer) {
-	//TODO: 用增量同步取代全量同步
-	if main != nil {
-		if srv.main.handler.GetHeight().Cmp(main.crossStatus.MainHeight) < 0 {
-			go main.SendSyncRequest(&SyncReq{Chain: srv.main.networkID})
-		}
-	}
-	if sub != nil {
-		if srv.sub.handler.GetHeight().Cmp(sub.crossStatus.SubHeight) < 0 {
-			go sub.SendSyncRequest(&SyncReq{Chain: srv.sub.networkID})
-		}
-	}
-}
-
 func (srv *CrossService) handle(p *anchorPeer) error {
 	var (
 		mainNetworkID = srv.main.networkID
@@ -256,8 +228,8 @@ func (srv *CrossService) handle(p *anchorPeer) error {
 		subTD         = srv.sub.bc.GetTd(subHead.Hash(), subHead.Number.Uint64())
 		mainGenesis   = srv.main.genesis
 		subGenesis    = srv.sub.genesis
-		mainHeight    = srv.main.handler.GetHeight()
-		subHeight     = srv.sub.handler.GetHeight()
+		mainHeight    = srv.main.handler.Height()
+		subHeight     = srv.sub.handler.Height()
 		main          = srv.config.MainChainCtxAddress
 		sub           = srv.config.SubChainCtxAddress
 	)
@@ -311,13 +283,17 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 		if err := msg.Decode(&req); err != nil {
 			return eth.ErrResp(eth.ErrDecode, "msg %v: %v", msg, err)
 		}
-		p.log.Info("receive ctx sync request", "chain", req.Chain, "startID", req.StartID)
+		p.Log().Info("receive ctx sync request", "chain", req.Chain, "height", req.Height)
 
 		h := srv.getCrossHandler(new(big.Int).SetUint64(req.Chain))
 		if h == nil {
 			break
 		}
-		ctxList := h.GetSyncCrossTransaction(req.StartID, defaultMaxSyncSize)
+		if h.chain.BlockChain().CurrentBlock().NumberU64() < req.Height {
+			break
+		}
+		ctxList := h.GetSyncCrossTransaction(req.Height, defaultMaxSyncSize)
+		log.Warn("[debug] GetSyncCrossTransaction", "count", len(ctxList))
 		var data [][]byte
 		for _, ctx := range ctxList {
 			b, err := rlp.EncodeToBytes(ctx)
@@ -326,6 +302,7 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 			}
 			data = append(data, b)
 		}
+
 		if len(data) > 0 {
 			return p.SendSyncResponse(&SyncResp{
 				Chain: req.Chain,
@@ -338,15 +315,15 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 		if err := msg.Decode(&resp); err != nil {
 			return eth.ErrResp(eth.ErrDecode, "msg %v: %v", msg, err)
 		}
-		p.log.Info("receive ctx sync response", "chain", resp.Chain, "len(data)", len(resp.Data))
+		p.Log().Info("receive ctx sync response", "chain", resp.Chain, "len(data)", len(resp.Data))
 
 		var ctxList []*cc.CrossTransactionWithSignatures
 		for _, b := range resp.Data {
-			var ctx *cc.CrossTransactionWithSignatures
+			var ctx cc.CrossTransactionWithSignatures
 			if err := rlp.DecodeBytes(b, &ctx); err != nil {
 				return eth.ErrResp(eth.ErrDecode, "msg %v: %v", msg, err)
 			}
-			ctxList = append(ctxList, ctx)
+			ctxList = append(ctxList, &ctx)
 		}
 
 		if len(ctxList) == 0 {
@@ -358,9 +335,78 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 
 		// send next sync request after last
 		return p.SendSyncRequest(&SyncReq{
-			Chain:   resp.Chain,
-			StartID: ctxList[len(ctxList)-1].ID(),
+			Chain:  resp.Chain,
+			Height: ctxList[len(ctxList)-1].BlockNum + 1, // require on next block
 		})
+
+	case msg.Code == GetPendingSyncMsg:
+		var req SyncPendingReq
+		if err := msg.Decode(&req); err != nil {
+			return eth.ErrResp(eth.ErrDecode, "msg %v: %v", msg, err)
+		}
+
+		h := srv.getCrossHandler(new(big.Int).SetUint64(req.Chain))
+		if h == nil {
+			break
+		}
+
+		ctxList := h.GetSyncPending(req.Ids)
+		var data [][]byte
+		for _, ctx := range ctxList {
+			b, err := rlp.EncodeToBytes(ctx)
+			if err != nil {
+				continue
+			}
+			data = append(data, b)
+		}
+		if len(data) > 0 {
+			return p.SendSyncPendingResponse(&SyncPendingResp{
+				Chain: req.Chain,
+				Data:  data,
+			})
+		}
+
+	case msg.Code == PendingSyncMsg:
+		var resp SyncPendingResp
+		if err := msg.Decode(&resp); err != nil {
+			return eth.ErrResp(eth.ErrDecode, "msg %v: %v", msg, err)
+		}
+		p.Log().Debug("receive pending sync response", "chain", resp.Chain, "len(data)", len(resp.Data))
+
+		h := srv.getCrossHandler(new(big.Int).SetUint64(resp.Chain))
+		if h == nil {
+			break
+		}
+
+		atomic.StoreUint32(&h.pendingSync, 1)
+
+		var ctxList []*cc.CrossTransaction
+		for _, b := range resp.Data {
+			var ctx cc.CrossTransaction
+			if err := rlp.DecodeBytes(b, &ctx); err != nil {
+				return eth.ErrResp(eth.ErrDecode, "msg %v: %v", msg, err)
+			}
+			ctxList = append(ctxList, &ctx)
+		}
+
+		if len(ctxList) == 0 {
+			atomic.StoreUint32(&h.pendingSync, 0)
+			break
+		}
+
+		synced := h.SyncPending(ctxList)
+		p.Log().Info("sync pending cross transactions", "total", len(ctxList), "success", len(synced))
+		pending := h.Pending(defaultMaxSyncSize, synced)
+
+		atomic.StoreUint32(&h.pendingSync, 0)
+
+		if len(pending) > 0 {
+			// send next sync pending request
+			return p.SendSyncPendingRequest(&SyncPendingReq{
+				Chain: resp.Chain,
+				Ids:   pending,
+			})
+		}
 
 	case msg.Code == CtxSignMsg:
 		var ctx *cc.CrossTransaction
