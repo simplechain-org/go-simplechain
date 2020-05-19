@@ -208,10 +208,10 @@ type faucet struct {
 	nonce    uint64             // Current pending nonce of the faucet
 	price    *big.Int           // Current gas price to issue funds with
 
-	conns    []*websocket.Conn    // Currently live websocket connections
-	timeouts map[string]time.Time // History of users and their funding timeouts
-	reqs     []*request           // Currently pending funding requests
-	update   chan struct{}        // Channel to signal request updates
+	conns    []*websocket.Conn            // Currently live websocket connections
+	timeouts map[common.Address]time.Time // History of users and their funding timeouts
+	reqs     []*request                   // Currently pending funding requests
+	update   chan struct{}                // Channel to signal request updates
 
 	lock sync.RWMutex // Lock protecting the faucet's internals
 }
@@ -242,7 +242,9 @@ func newFaucet(genesis *core.Genesis, port int, enodes []*discv5.Node, network u
 		//cfg.NetworkId = network
 		//cfg.Genesis = genesis
 		//return les.New(ctx, &cfg)
-		config := &eth.Config{Genesis: genesis}
+		config := &eth.Config{Genesis: genesis,
+			Role: common.RoleMainChain,
+		}
 		return eth.New(ctx, config)
 	}); err != nil {
 		return nil, err
@@ -282,7 +284,7 @@ func newFaucet(genesis *core.Genesis, port int, enodes []*discv5.Node, network u
 		index:    index,
 		keystore: ks,
 		account:  ks.Accounts()[0],
-		timeouts: make(map[string]time.Time),
+		timeouts: make(map[common.Address]time.Time),
 		update:   make(chan struct{}, 1),
 	}, nil
 }
@@ -386,22 +388,7 @@ func (f *faucet) apiHandler(w http.ResponseWriter, r *http.Request) {
 		if err = conn.ReadJSON(&msg); err != nil {
 			return
 		}
-		if !*noauthFlag && !strings.HasPrefix(msg.URL, "https://gist.github.com/") && !strings.HasPrefix(msg.URL, "https://twitter.com/") &&
-			!strings.HasPrefix(msg.URL, "https://plus.google.com/") && !strings.HasPrefix(msg.URL, "https://www.facebook.com/") {
-			if err = sendError(conn, errors.New("URL doesn't link to supported services")); err != nil {
-				log.Warn("Failed to send URL error to client", "err", err)
-				return
-			}
-			continue
-		}
-		if msg.Tier >= uint(*tiersFlag) {
-			//lint:ignore ST1005 This error is to be displayed in the browser
-			if err = sendError(conn, errors.New("Invalid funding tier requested")); err != nil {
-				log.Warn("Failed to send tier error to client", "err", err)
-				return
-			}
-			continue
-		}
+
 		log.Info("Faucet funds requested", "url", msg.URL, "tier", msg.Tier)
 
 		// If captcha verifications are enabled, make sure we're not dealing with a robot
@@ -442,43 +429,16 @@ func (f *faucet) apiHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		// Retrieve the Ethereum address to fund, the requesting user and a profile picture
-		var (
-			username string
-			avatar   string
-			address  common.Address
-		)
-		switch {
-		case strings.HasPrefix(msg.URL, "https://gist.github.com/"):
-			if err = sendError(conn, errors.New("GitHub authentication discontinued at the official request of GitHub")); err != nil {
-				log.Warn("Failed to send GitHub deprecation to client", "err", err)
-				return
-			}
-			continue
-		case strings.HasPrefix(msg.URL, "https://plus.google.com/"):
-			//lint:ignore ST1005 Google is a company name and should be capitalized.
-			if err = sendError(conn, errors.New("Google+ authentication discontinued as the service was sunset")); err != nil {
-				log.Warn("Failed to send Google+ deprecation to client", "err", err)
-				return
-			}
-			continue
-		case strings.HasPrefix(msg.URL, "https://twitter.com/"):
-			username, avatar, address, err = authTwitter(msg.URL)
-		case strings.HasPrefix(msg.URL, "https://www.facebook.com/"):
-			username, avatar, address, err = authFacebook(msg.URL)
-		case *noauthFlag:
-			username, avatar, address, err = authNoAuth(msg.URL)
-		default:
-			//lint:ignore ST1005 This error is to be displayed in the browser
-			err = errors.New("Something funky happened, please open an issue at https://github.com/simplechain-org/go-simplechain/issues")
-		}
-		if err != nil {
-			if err = sendError(conn, err); err != nil {
-				log.Warn("Failed to send prefix error to client", "err", err)
+		var avatar string
+
+		if len(msg.URL) != len(common.Address{}.String()) {
+			if err = sendError(conn, fmt.Errorf("please check address: %s ", msg.URL)); err != nil { // nolint: gosimple
+				log.Warn("Failed to send address error to client", "err", err)
 				return
 			}
 			continue
 		}
-		log.Info("Faucet request valid", "url", msg.URL, "tier", msg.Tier, "user", username, "address", address)
+		address := common.HexToAddress(msg.URL)
 
 		// Ensure the user didn't request funds too recently
 		f.lock.Lock()
@@ -486,7 +446,7 @@ func (f *faucet) apiHandler(w http.ResponseWriter, r *http.Request) {
 			fund    bool
 			timeout time.Time
 		)
-		if timeout = f.timeouts[username]; time.Now().After(timeout) {
+		if timeout = f.timeouts[address]; time.Now().After(timeout) {
 			// User wasn't funded recently, create the funding transaction
 			amount := new(big.Int).Mul(big.NewInt(int64(*payoutFlag)), ether)
 			amount = new(big.Int).Mul(amount, new(big.Int).Exp(big.NewInt(5), big.NewInt(int64(msg.Tier)), nil))
@@ -520,7 +480,7 @@ func (f *faucet) apiHandler(w http.ResponseWriter, r *http.Request) {
 			timeout := time.Duration(*minutesFlag*int(math.Pow(3, float64(msg.Tier)))) * time.Minute
 			grace := timeout / 288 // 24h timeout => 5m grace
 
-			f.timeouts[username] = time.Now().Add(timeout - grace)
+			f.timeouts[address] = time.Now().Add(timeout - grace)
 			fund = true
 		}
 		f.lock.Unlock()
@@ -533,7 +493,7 @@ func (f *faucet) apiHandler(w http.ResponseWriter, r *http.Request) {
 			}
 			continue
 		}
-		if err = sendSuccess(conn, fmt.Sprintf("Funding request accepted for %s into %s", username, address.Hex())); err != nil {
+		if err = sendSuccess(conn, fmt.Sprintf("Funding request for %s", address.Hex())); err != nil {
 			log.Warn("Failed to send funding success to client", "err", err)
 			return
 		}
