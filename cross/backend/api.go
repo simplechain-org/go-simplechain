@@ -7,19 +7,81 @@ import (
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	cc "github.com/simplechain-org/go-simplechain/cross/core"
+	db "github.com/simplechain-org/go-simplechain/cross/database"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/rlp"
 )
 
-type PrivateCrossChainAPI struct {
+type PrivateCrossAdminAPI struct {
+	service *CrossService
+}
+
+func NewPrivateCrossAdminAPI(service *CrossService) *PrivateCrossAdminAPI {
+	return &PrivateCrossAdminAPI{service}
+}
+
+func (s *PrivateCrossAdminAPI) SyncPending() (bool, error) {
+	main, sub := s.service.peers.BestPeer()
+	go s.service.syncPending(s.service.main, main)
+	go s.service.syncPending(s.service.sub, sub)
+	return main != nil || sub != nil, nil
+}
+
+func (s *PrivateCrossAdminAPI) SyncStore() (bool, error) {
+	main, sub := s.service.peers.BestPeer()
+	go s.service.synchronise(main, sub)
+	return main != nil || sub != nil, nil
+}
+
+func (s *PrivateCrossAdminAPI) Repair() (bool, error) {
+	var (
+		errs   []error
+		errsCh = make(chan error, 4)
+	)
+	repair := func(store db.CtxDB) {
+		errsCh <- store.Repair()
+	}
+	go repair(s.service.main.handler.store.localStore)
+	go repair(s.service.main.handler.store.remoteStore)
+	go repair(s.service.sub.handler.store.localStore)
+	go repair(s.service.sub.handler.store.remoteStore)
+
+	for i := 0; i < 4; i++ {
+		err := <-errsCh
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	if errs != nil {
+		return false, errs[0]
+	}
+	return true, nil
+}
+
+func (s *PrivateCrossAdminAPI) Peers() (infos []*CrossPeerInfo, err error) {
+	for _, p := range s.service.peers.peers {
+		infos = append(infos, p.Info())
+	}
+	return
+}
+
+func (s *PrivateCrossAdminAPI) Height() map[string]hexutil.Uint64 {
+	return map[string]hexutil.Uint64{
+		"main": hexutil.Uint64(s.service.main.handler.Height().Uint64()),
+		"sub":  hexutil.Uint64(s.service.sub.handler.Height().Uint64()),
+	}
+}
+
+type PublicCrossManualAPI struct {
 	mainHandler *Handler
 	subHandler  *Handler
 }
 
-func NewPrivateCrossChainAPI(mainHandler, subHandler *Handler) *PrivateCrossChainAPI {
-	return &PrivateCrossChainAPI{mainHandler, subHandler}
+func NewPublicCrossManualAPI(mainHandler, subHandler *Handler) *PublicCrossManualAPI {
+	return &PublicCrossManualAPI{mainHandler, subHandler}
 }
-func (s *PrivateCrossChainAPI) ImportMainCtx(ctxWithSignsSArgs hexutil.Bytes) error {
+func (s *PublicCrossManualAPI) ImportMainCtx(ctxWithSignsSArgs hexutil.Bytes) error {
 	ctx := new(cc.CrossTransactionWithSignatures)
 	if err := rlp.DecodeBytes(ctxWithSignsSArgs, ctx); err != nil {
 		return err
@@ -50,7 +112,7 @@ func (s *PrivateCrossChainAPI) ImportMainCtx(ctxWithSignsSArgs hexutil.Bytes) er
 	return nil
 }
 
-func (s *PrivateCrossChainAPI) ImportSubCtx(ctxWithSignsSArgs hexutil.Bytes) error {
+func (s *PublicCrossManualAPI) ImportSubCtx(ctxWithSignsSArgs hexutil.Bytes) error {
 	ctx := new(cc.CrossTransactionWithSignatures)
 	if err := rlp.DecodeBytes(ctxWithSignsSArgs, ctx); err != nil {
 		return err

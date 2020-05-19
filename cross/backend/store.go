@@ -152,7 +152,9 @@ func (store *CrossStore) Pending(number uint64, limit int, exclude map[common.Ha
 	store.mu.RLock()
 	defer store.mu.RUnlock()
 	store.pending.Map(func(ctx *cc.CrossTransactionWithSignatures) bool {
-		//if cws.BlockNum < number && cws.BlockNum+expireNumber > number {
+		if ctx.BlockNum+expireNumber <= number {
+			return false
+		}
 		//if ctx, err := cc.SignCtx(cws.CrossTransaction(), store.signer, store.signHash); err == nil {
 		if ctxID := ctx.ID(); exclude == nil || !exclude[ctxID] {
 			pending = append(pending, ctxID)
@@ -405,8 +407,8 @@ func (store *CrossStore) RemoveRemotes(rtxs []*cc.ReceptTransaction) {
 	}
 }
 
-func (store *CrossStore) Height() int {
-	return store.localStore.Count()
+func (store *CrossStore) Height() uint64 {
+	return store.localStore.Height()
 }
 
 func (store *CrossStore) MarkStatus(txms []*cc.CrossTransactionModifier, status cc.CtxStatus) {

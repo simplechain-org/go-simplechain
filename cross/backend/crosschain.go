@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/big"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/simplechain-org/go-simplechain/common"
@@ -104,7 +105,7 @@ func NewCrossService(ctx *node.ServiceContext, main, sub cross.SimpleChain, conf
 		{
 			Namespace: "eth",
 			Version:   "1.0",
-			Service:   NewPrivateCrossChainAPI(mainHandler, subHandler),
+			Service:   NewPublicCrossManualAPI(mainHandler, subHandler),
 			Public:    true,
 		},
 	})
@@ -118,8 +119,17 @@ func NewCrossService(ctx *node.ServiceContext, main, sub cross.SimpleChain, conf
 		{
 			Namespace: "eth",
 			Version:   "1.0",
-			Service:   NewPrivateCrossChainAPI(mainHandler, subHandler),
+			Service:   NewPublicCrossManualAPI(mainHandler, subHandler),
 			Public:    true,
+		},
+	})
+
+	main.RegisterAPIs([]rpc.API{
+		{
+			Namespace: "cross",
+			Version:   "1.0",
+			Service:   NewPrivateCrossAdminAPI(srv),
+			Public:    false,
 		},
 	})
 
@@ -283,6 +293,7 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 			break
 		}
 		ctxList := h.GetSyncCrossTransaction(req.Height, defaultMaxSyncSize)
+		log.Warn("[debug] GetSyncCrossTransaction", "count", len(ctxList))
 		var data [][]byte
 		for _, ctx := range ctxList {
 			b, err := rlp.EncodeToBytes(ctx)
@@ -338,6 +349,7 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 		if h == nil {
 			break
 		}
+
 		ctxList := h.GetSyncPending(req.Ids)
 		var data [][]byte
 		for _, ctx := range ctxList {
@@ -359,12 +371,14 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 		if err := msg.Decode(&resp); err != nil {
 			return eth.ErrResp(eth.ErrDecode, "msg %v: %v", msg, err)
 		}
-		p.Log().Info("receive pending sync response", "chain", resp.Chain, "len(data)", len(resp.Data))
+		p.Log().Debug("receive pending sync response", "chain", resp.Chain, "len(data)", len(resp.Data))
 
 		h := srv.getCrossHandler(new(big.Int).SetUint64(resp.Chain))
 		if h == nil {
 			break
 		}
+
+		atomic.StoreUint32(&h.pendingSync, 1)
 
 		var ctxList []*cc.CrossTransaction
 		for _, b := range resp.Data {
@@ -376,12 +390,16 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 		}
 
 		if len(ctxList) == 0 {
+			atomic.StoreUint32(&h.pendingSync, 0)
 			break
 		}
 
 		synced := h.SyncPending(ctxList)
 		p.Log().Info("sync pending cross transactions", "total", len(ctxList), "success", len(synced))
 		pending := h.Pending(defaultMaxSyncSize, synced)
+
+		atomic.StoreUint32(&h.pendingSync, 0)
+
 		if len(pending) > 0 {
 			// send next sync pending request
 			return p.SendSyncPendingRequest(&SyncPendingReq{

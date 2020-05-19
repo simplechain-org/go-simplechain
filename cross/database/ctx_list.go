@@ -187,19 +187,23 @@ func (m *CtxSortedByBlockNum) RemoveByHash(hash common.Hash) {
 
 func (m *CtxSortedByBlockNum) RemoveUnderNum(num uint64) {
 	for m.index.Len() > 0 {
-		item := heap.Pop(m.index)
-		if item.(byBlockNum).blockNum > num {
-			heap.Push(m.index, item)
+		index := heap.Pop(m.index).(byBlockNum)
+		if index.blockNum > num {
+			heap.Push(m.index, index)
 			break
 		}
-		delete(m.items, item.(byBlockNum).txId)
+		delete(m.items, index.txId)
 	}
 }
 
 func (m *CtxSortedByBlockNum) Map(do func(*cc.CrossTransactionWithSignatures) bool) {
-	for _, ctx := range m.items {
-		if broke := do(ctx); broke {
-			return
+	for m.index.Len() > 0 {
+		index := heap.Pop(m.index).(byBlockNum)
+		if ctx, ok := m.items[index.txId]; ok {
+			defer heap.Push(m.index, index) // 循环完成后才向index回填数据，所以在loop中使用defer
+			if broke := do(ctx); broke {
+				break
+			}
 		}
 	}
 }

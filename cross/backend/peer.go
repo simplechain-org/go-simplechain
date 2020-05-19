@@ -31,6 +31,7 @@ type anchorPeer struct {
 	knownCTxs           mapset.Set
 	queuedLocalCtxSign  chan *cc.CrossTransaction // ctx signed by local anchor
 	queuedRemoteCtxSign chan *cc.CrossTransaction // signed ctx received by others
+	pendingFetchRequest chan *SyncPendingReq
 }
 
 func newAnchorPeer(p *p2p.Peer, rw p2p.MsgReadWriter) *anchorPeer {

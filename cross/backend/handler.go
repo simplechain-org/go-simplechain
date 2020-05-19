@@ -17,11 +17,14 @@ import (
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/params"
+
+	lru "github.com/hashicorp/golang-lru"
 )
 
 const (
-	txChanSize     = 4096
-	rmLogsChanSize = 10
+	txChanSize        = 4096
+	rmLogsChanSize    = 10
+	signedPendingSize = 256
 )
 
 type RoleHandler int
@@ -50,6 +53,9 @@ type Handler struct {
 	quitSync       chan struct{}
 	crossMsgReader <-chan interface{} // Channel to read  cross-chain message
 	crossMsgWriter chan<- interface{} // Channel to write cross-chain message
+
+	pendingSync  uint32     // Flag whether pending sync is running
+	pendingCache *lru.Cache // cache signed pending ctx
 
 	confirmedMakerCh  chan cc.ConfirmedMakerEvent // Channel to receive one-signed makerTx from ctxStore
 	confirmedMakerSub event.Subscription
@@ -102,6 +108,8 @@ func NewCrossHandler(chain cross.SimpleChain, roleHandler RoleHandler, role comm
 		return nil
 	}
 
+	pendingCache, _ := lru.New(signedPendingSize)
+
 	return &Handler{
 		chain:               chain,
 		roleHandler:         roleHandler,
@@ -121,6 +129,7 @@ func NewCrossHandler(chain cross.SimpleChain, roleHandler RoleHandler, role comm
 		service:             service,
 		gasHelper:           gasHelper,
 		log:                 log.New("chainID", chain.ChainConfig().ChainID),
+		pendingCache:        pendingCache,
 	}
 }
 
@@ -163,7 +172,7 @@ func (h *Handler) Stop() {
 
 	close(h.quitSync)
 
-	h.log.Info("SimpleChain MsgHandler stopped")
+	h.log.Info("CrossChain Handler stopped")
 }
 
 func (h *Handler) loop() {
@@ -317,7 +326,7 @@ func (h *Handler) AddRemoteCtx(ctx *cc.CrossTransaction) error {
 		return ErrVerifyCtx
 	}
 	if err := h.store.AddRemote(ctx); err != nil && err != cc.ErrDuplicateSign {
-		h.log.Error("Add remote ctx", "id", ctx.ID().String(), "err", err)
+		h.log.Warn("Add remote ctx", "id", ctx.ID().String(), "err", err)
 	}
 	return nil
 }
@@ -437,7 +446,7 @@ func (h *Handler) promoteTransaction() {
 					break
 				}
 			}
-			h.log.Info("UpdateSelfTx", "len", len(newTxs))
+			h.log.Info("promoteTransaction", "len", len(newTxs))
 			h.pm.AddLocals(newTxs)
 		}
 	}
@@ -451,8 +460,13 @@ func (h *Handler) Pending(limit int, exclude map[common.Hash]bool) (ids []common
 func (h *Handler) GetSyncPending(ids []common.Hash) []*cc.CrossTransaction {
 	results := make([]*cc.CrossTransaction, 0, len(ids))
 	for _, id := range ids {
+		if item, ok := h.pendingCache.Get(id); ok {
+			results = append(results, item.(*cc.CrossTransaction))
+			continue
+		}
 		if ctx := h.store.GetLocal(id); ctx != nil {
 			results = append(results, ctx)
+			h.pendingCache.Add(id, ctx)
 		}
 	}
 	h.log.Debug("GetSyncPending", "req", len(ids), "result", len(results))
@@ -473,7 +487,7 @@ func (h *Handler) SyncPending(ctxs []*cc.CrossTransaction) map[common.Hash]bool 
 
 // for cross store sync
 func (h *Handler) Height() *big.Int {
-	return big.NewInt(int64(h.store.Height()))
+	return new(big.Int).SetUint64(h.store.Height())
 }
 
 func (h *Handler) GetSyncCrossTransaction(height uint64, syncSize int) []*cc.CrossTransactionWithSignatures {

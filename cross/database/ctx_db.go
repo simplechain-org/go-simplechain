@@ -34,7 +34,9 @@ type CtxDB interface {
 	ChainID() *big.Int
 	//Size() int
 	Count(filter ...q.Matcher) int
+	Height() uint64
 	Load() error
+	Repair() error
 	Write(ctx *cc.CrossTransactionWithSignatures) error
 	Read(ctxId common.Hash) (*cc.CrossTransactionWithSignatures, error)
 	One(field FieldName, key interface{}) *cc.CrossTransactionWithSignatures
@@ -44,6 +46,7 @@ type CtxDB interface {
 	Has(id common.Hash) bool
 	Query(pageSize int, startPage int, orderBy FieldName, filter ...q.Matcher) []*cc.CrossTransactionWithSignatures
 	RangeByNumber(begin, end uint64, pageSize int) []*cc.CrossTransactionWithSignatures
+
 	//QueryByPK(pageSize int, startPage int, filter ...q.Matcher) []*cc.CrossTransactionWithSignatures
 	//QueryByPrice(pageSize int, startPage int, filter ...q.Matcher) []*cc.CrossTransactionWithSignatures
 	//Range(pageSize int, startCtxID *common.Hash, endCtxID *common.Hash) []*cc.CrossTransactionWithSignatures

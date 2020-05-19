@@ -40,6 +40,7 @@ func generateCtx(n int) []*cc.CrossTransactionWithSignatures {
 				R:                nil,
 				S:                nil,
 			},
+			BlockNum: uint64(i),
 		}
 	}
 	return ctxList
@@ -135,6 +136,10 @@ func TestIndexDB_Query(t *testing.T) {
 	db.db.Drop(&CrossTransactionIndexed{})
 	for _, ctx := range ctxList {
 		assert.NoError(t, db.Write(ctx))
+	}
+
+	{
+		assert.EqualValues(t, db.Height(), 99)
 	}
 
 	// query without filter

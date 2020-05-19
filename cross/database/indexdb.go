@@ -56,15 +56,30 @@ func (d *indexDB) Load() error {
 	return nil
 }
 
+func (d *indexDB) Height() uint64 {
+	var ctxs []*CrossTransactionIndexed
+	if err := d.db.AllByIndex(BlockNumField, &ctxs, storm.Limit(1), storm.Reverse()); err != nil || len(ctxs) == 0 {
+		return 0
+	}
+	return ctxs[0].BlockNum
+}
+
+func (d *indexDB) Repair() error {
+	return d.db.ReIndex(&CrossTransactionIndexed{})
+}
+
 func (d *indexDB) Close() error {
 	return d.db.Commit()
 }
 
 func (d *indexDB) Write(ctx *cc.CrossTransactionWithSignatures) error {
 	old, err := d.get(ctx.ID())
-	if old != nil && old.BlockHash != ctx.BlockHash() {
-		return ErrCtxDbFailure{err: fmt.Errorf("blockchain reorg, txID:%s, old:%s, new:%s",
-			ctx.ID(), old.BlockHash.String(), ctx.BlockHash().String())}
+	if old != nil {
+		if old.BlockHash != ctx.BlockHash() {
+			return ErrCtxDbFailure{err: fmt.Errorf("blockchain reorg, txID:%s, old:%s, new:%s",
+				ctx.ID(), old.BlockHash.String(), ctx.BlockHash().String())}
+		}
+		return nil
 	}
 
 	persist := NewCrossTransactionIndexed(ctx)
@@ -72,9 +87,7 @@ func (d *indexDB) Write(ctx *cc.CrossTransactionWithSignatures) error {
 	if err != nil {
 		return ErrCtxDbFailure{fmt.Sprintf("Write:%s save fail", ctx.ID().String()), err}
 	}
-	//if old == nil {
-	//	atomic.AddInt64(&d.total, 1)
-	//}
+
 	if d.cache != nil {
 		d.cache.Put(CtxIdIndex, ctx.ID(), persist)
 	}
