@@ -48,7 +48,6 @@ import (
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/eth"
-	"github.com/simplechain-org/go-simplechain/eth/downloader"
 	"github.com/simplechain-org/go-simplechain/ethclient"
 	"github.com/simplechain-org/go-simplechain/ethstats"
 	"github.com/simplechain-org/go-simplechain/les"
@@ -223,6 +222,7 @@ func newFaucet(genesis *core.Genesis, port int, enodes []*discv5.Node, network u
 		Name:    "geth",
 		Version: params.VersionWithCommit(gitCommit, gitDate),
 		DataDir: filepath.Join(os.Getenv("HOME"), ".faucet"),
+		Role:    common.RoleMainChain,
 		P2P: p2p.Config{
 			NAT:              nat.Any(),
 			NoDiscovery:      true,
@@ -237,11 +237,13 @@ func newFaucet(genesis *core.Genesis, port int, enodes []*discv5.Node, network u
 	}
 	// Assemble the Ethereum light client protocol
 	if err := stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
-		cfg := eth.DefaultConfig
-		cfg.SyncMode = downloader.LightSync
-		cfg.NetworkId = network
-		cfg.Genesis = genesis
-		return les.New(ctx, &cfg)
+		//cfg := eth.DefaultConfig
+		//cfg.SyncMode = downloader.LightSync
+		//cfg.NetworkId = network
+		//cfg.Genesis = genesis
+		//return les.New(ctx, &cfg)
+		config := &eth.Config{Genesis: genesis}
+		return eth.New(ctx, config)
 	}); err != nil {
 		return nil, err
 	}
