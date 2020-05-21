@@ -82,8 +82,7 @@ var (
 	noauthFlag = flag.Bool("noauth", false, "Enables funding requests without authentication")
 	logFlag    = flag.Int("loglevel", 3, "Log level to use for Ethereum and the faucet")
 
-	mainRoleFlag = flag.Bool("main", false, "main chain")
-	subRoleFlag  = flag.Bool("sub", false, "main chain")
+	roleFlag = flag.String("role", "mainchain", "It can be one of (mainchain,subchain) (default: mainchain)")
 )
 
 var (
@@ -94,6 +93,13 @@ var (
 	gitCommit = "" // Git SHA1 commit hash of the release (set via linker flags)
 	gitDate   = "" // Git commit date YYYYMMDD of the release (set via linker flags)
 )
+
+/*
+./faucet --genesis chain11_gen.json --network 11 --role mainchain --faucet.name chain11
+--bootnodes "enode://0726d35690f0fc2dc5d5dc4873e2e1528f0335b7ed0b685620c01c10a9ac5ef327f3ed1e55c0c7871a4c79ae50252b73d532c981450eb7b085ccd1acf97d4de7@127.0.0.1:30312"
+--account.json UTC--2020-05-09T08-12-24.138015918Z--17d32329cbb82698eaaba47e9ab8988b2e009b75
+--account.pass password1.txt
+*/
 
 func main() {
 	// Parse the flags and set up the logger to print everything requested
@@ -178,12 +184,15 @@ func main() {
 	ks.Unlock(acc, pass)
 
 	var role common.ChainRole
-	if *mainRoleFlag {
+	switch *roleFlag {
+	case "mainchain":
 		role = common.RoleMainChain
-	}
-	if *subRoleFlag {
+	case "subchain":
 		role = common.RoleSubChain
+	default:
+		log.Crit("Failed to set Role(mainchain,subchain)", "role", *roleFlag)
 	}
+
 	// Assemble and start the faucet light service
 	faucet, err := newFaucet(genesis, *ethPortFlag, enodes, *netFlag, *statsFlag, ks, website.Bytes(), role)
 	if err != nil {
