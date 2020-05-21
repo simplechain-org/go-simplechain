@@ -48,7 +48,6 @@ import (
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/eth"
-	"github.com/simplechain-org/go-simplechain/eth/downloader"
 	"github.com/simplechain-org/go-simplechain/ethclient"
 	"github.com/simplechain-org/go-simplechain/ethstats"
 	"github.com/simplechain-org/go-simplechain/les"
@@ -70,8 +69,8 @@ var (
 	statsFlag   = flag.String("ethstats", "", "Ethstats network monitoring auth string")
 
 	netnameFlag = flag.String("faucet.name", "", "Network name to assign to the faucet")
-	payoutFlag  = flag.Int("faucet.amount", 1, "Number of Ethers to pay out per user request")
-	minutesFlag = flag.Int("faucet.minutes", 1440, "Number of minutes to wait between funding rounds")
+	payoutFlag  = flag.Int("faucet.amount", 5, "Number of Ethers to pay out per user request")
+	minutesFlag = flag.Int("faucet.minutes", 720, "Number of minutes to wait between funding rounds")
 	tiersFlag   = flag.Int("faucet.tiers", 3, "Number of funding tiers to enable (x3 time, x2.5 funds)")
 
 	accJSONFlag = flag.String("account.json", "", "Key json file to fund user requests with")
@@ -82,6 +81,8 @@ var (
 
 	noauthFlag = flag.Bool("noauth", false, "Enables funding requests without authentication")
 	logFlag    = flag.Int("loglevel", 3, "Log level to use for Ethereum and the faucet")
+
+	roleFlag = flag.String("role", "mainchain", "It can be one of (mainchain,subchain) (default: mainchain)")
 )
 
 var (
@@ -92,6 +93,13 @@ var (
 	gitCommit = "" // Git SHA1 commit hash of the release (set via linker flags)
 	gitDate   = "" // Git commit date YYYYMMDD of the release (set via linker flags)
 )
+
+/*
+./faucet --genesis chain11_gen.json --network 11 --role mainchain --faucet.name chain11
+--bootnodes "enode://0726d35690f0fc2dc5d5dc4873e2e1528f0335b7ed0b685620c01c10a9ac5ef327f3ed1e55c0c7871a4c79ae50252b73d532c981450eb7b085ccd1acf97d4de7@127.0.0.1:30312"
+--account.json UTC--2020-05-09T08-12-24.138015918Z--17d32329cbb82698eaaba47e9ab8988b2e009b75
+--account.pass password1.txt
+*/
 
 func main() {
 	// Parse the flags and set up the logger to print everything requested
@@ -175,8 +183,18 @@ func main() {
 	}
 	ks.Unlock(acc, pass)
 
+	var role common.ChainRole
+	switch *roleFlag {
+	case "mainchain":
+		role = common.RoleMainChain
+	case "subchain":
+		role = common.RoleSubChain
+	default:
+		log.Crit("Failed to set Role(mainchain,subchain)", "role", *roleFlag)
+	}
+
 	// Assemble and start the faucet light service
-	faucet, err := newFaucet(genesis, *ethPortFlag, enodes, *netFlag, *statsFlag, ks, website.Bytes())
+	faucet, err := newFaucet(genesis, *ethPortFlag, enodes, *netFlag, *statsFlag, ks, website.Bytes(), role)
 	if err != nil {
 		log.Crit("Failed to start faucet", "err", err)
 	}
@@ -209,20 +227,21 @@ type faucet struct {
 	nonce    uint64             // Current pending nonce of the faucet
 	price    *big.Int           // Current gas price to issue funds with
 
-	conns    []*websocket.Conn    // Currently live websocket connections
-	timeouts map[string]time.Time // History of users and their funding timeouts
-	reqs     []*request           // Currently pending funding requests
-	update   chan struct{}        // Channel to signal request updates
+	conns    []*websocket.Conn            // Currently live websocket connections
+	timeouts map[common.Address]time.Time // History of users and their funding timeouts
+	reqs     []*request                   // Currently pending funding requests
+	update   chan struct{}                // Channel to signal request updates
 
 	lock sync.RWMutex // Lock protecting the faucet's internals
 }
 
-func newFaucet(genesis *core.Genesis, port int, enodes []*discv5.Node, network uint64, stats string, ks *keystore.KeyStore, index []byte) (*faucet, error) {
+func newFaucet(genesis *core.Genesis, port int, enodes []*discv5.Node, network uint64, stats string, ks *keystore.KeyStore, index []byte, role common.ChainRole) (*faucet, error) {
 	// Assemble the raw devp2p protocol stack
 	stack, err := node.New(&node.Config{
 		Name:    "geth",
 		Version: params.VersionWithCommit(gitCommit, gitDate),
 		DataDir: filepath.Join(os.Getenv("HOME"), ".faucet"),
+		Role:    role,
 		P2P: p2p.Config{
 			NAT:              nat.Any(),
 			NoDiscovery:      true,
@@ -237,11 +256,10 @@ func newFaucet(genesis *core.Genesis, port int, enodes []*discv5.Node, network u
 	}
 	// Assemble the Ethereum light client protocol
 	if err := stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
-		cfg := eth.DefaultConfig
-		cfg.SyncMode = downloader.LightSync
-		cfg.NetworkId = network
-		cfg.Genesis = genesis
-		return les.New(ctx, &cfg)
+		config := &eth.Config{Genesis: genesis,
+			Role: role,
+		}
+		return eth.New(ctx, config)
 	}); err != nil {
 		return nil, err
 	}
@@ -271,6 +289,7 @@ func newFaucet(genesis *core.Genesis, port int, enodes []*discv5.Node, network u
 		stack.Stop()
 		return nil, err
 	}
+	fmt.Println(api.SupportedModules())
 	client := ethclient.NewClient(api)
 
 	return &faucet{
@@ -280,7 +299,7 @@ func newFaucet(genesis *core.Genesis, port int, enodes []*discv5.Node, network u
 		index:    index,
 		keystore: ks,
 		account:  ks.Accounts()[0],
-		timeouts: make(map[string]time.Time),
+		timeouts: make(map[common.Address]time.Time),
 		update:   make(chan struct{}, 1),
 	}, nil
 }
@@ -384,22 +403,7 @@ func (f *faucet) apiHandler(w http.ResponseWriter, r *http.Request) {
 		if err = conn.ReadJSON(&msg); err != nil {
 			return
 		}
-		if !*noauthFlag && !strings.HasPrefix(msg.URL, "https://gist.github.com/") && !strings.HasPrefix(msg.URL, "https://twitter.com/") &&
-			!strings.HasPrefix(msg.URL, "https://plus.google.com/") && !strings.HasPrefix(msg.URL, "https://www.facebook.com/") {
-			if err = sendError(conn, errors.New("URL doesn't link to supported services")); err != nil {
-				log.Warn("Failed to send URL error to client", "err", err)
-				return
-			}
-			continue
-		}
-		if msg.Tier >= uint(*tiersFlag) {
-			//lint:ignore ST1005 This error is to be displayed in the browser
-			if err = sendError(conn, errors.New("Invalid funding tier requested")); err != nil {
-				log.Warn("Failed to send tier error to client", "err", err)
-				return
-			}
-			continue
-		}
+
 		log.Info("Faucet funds requested", "url", msg.URL, "tier", msg.Tier)
 
 		// If captcha verifications are enabled, make sure we're not dealing with a robot
@@ -440,43 +444,16 @@ func (f *faucet) apiHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		// Retrieve the Ethereum address to fund, the requesting user and a profile picture
-		var (
-			username string
-			avatar   string
-			address  common.Address
-		)
-		switch {
-		case strings.HasPrefix(msg.URL, "https://gist.github.com/"):
-			if err = sendError(conn, errors.New("GitHub authentication discontinued at the official request of GitHub")); err != nil {
-				log.Warn("Failed to send GitHub deprecation to client", "err", err)
-				return
-			}
-			continue
-		case strings.HasPrefix(msg.URL, "https://plus.google.com/"):
-			//lint:ignore ST1005 Google is a company name and should be capitalized.
-			if err = sendError(conn, errors.New("Google+ authentication discontinued as the service was sunset")); err != nil {
-				log.Warn("Failed to send Google+ deprecation to client", "err", err)
-				return
-			}
-			continue
-		case strings.HasPrefix(msg.URL, "https://twitter.com/"):
-			username, avatar, address, err = authTwitter(msg.URL)
-		case strings.HasPrefix(msg.URL, "https://www.facebook.com/"):
-			username, avatar, address, err = authFacebook(msg.URL)
-		case *noauthFlag:
-			username, avatar, address, err = authNoAuth(msg.URL)
-		default:
-			//lint:ignore ST1005 This error is to be displayed in the browser
-			err = errors.New("Something funky happened, please open an issue at https://github.com/simplechain-org/go-simplechain/issues")
-		}
-		if err != nil {
-			if err = sendError(conn, err); err != nil {
-				log.Warn("Failed to send prefix error to client", "err", err)
+		var avatar string
+
+		if len(msg.URL) != len(common.Address{}.String()) {
+			if err = sendError(conn, fmt.Errorf("please check address: %s ", msg.URL)); err != nil { // nolint: gosimple
+				log.Warn("Failed to send address error to client", "err", err)
 				return
 			}
 			continue
 		}
-		log.Info("Faucet request valid", "url", msg.URL, "tier", msg.Tier, "user", username, "address", address)
+		address := common.HexToAddress(msg.URL)
 
 		// Ensure the user didn't request funds too recently
 		f.lock.Lock()
@@ -484,7 +461,7 @@ func (f *faucet) apiHandler(w http.ResponseWriter, r *http.Request) {
 			fund    bool
 			timeout time.Time
 		)
-		if timeout = f.timeouts[username]; time.Now().After(timeout) {
+		if timeout = f.timeouts[address]; time.Now().After(timeout) {
 			// User wasn't funded recently, create the funding transaction
 			amount := new(big.Int).Mul(big.NewInt(int64(*payoutFlag)), ether)
 			amount = new(big.Int).Mul(amount, new(big.Int).Exp(big.NewInt(5), big.NewInt(int64(msg.Tier)), nil))
@@ -518,7 +495,7 @@ func (f *faucet) apiHandler(w http.ResponseWriter, r *http.Request) {
 			timeout := time.Duration(*minutesFlag*int(math.Pow(3, float64(msg.Tier)))) * time.Minute
 			grace := timeout / 288 // 24h timeout => 5m grace
 
-			f.timeouts[username] = time.Now().Add(timeout - grace)
+			f.timeouts[address] = time.Now().Add(timeout - grace)
 			fund = true
 		}
 		f.lock.Unlock()
@@ -531,7 +508,7 @@ func (f *faucet) apiHandler(w http.ResponseWriter, r *http.Request) {
 			}
 			continue
 		}
-		if err = sendSuccess(conn, fmt.Sprintf("Funding request accepted for %s into %s", username, address.Hex())); err != nil {
+		if err = sendSuccess(conn, fmt.Sprintf("Funding request for %s", address.Hex())); err != nil {
 			log.Warn("Failed to send funding success to client", "err", err)
 			return
 		}
