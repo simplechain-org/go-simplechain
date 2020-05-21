@@ -54,8 +54,10 @@ type Handler struct {
 	crossMsgReader <-chan interface{} // Channel to read  cross-chain message
 	crossMsgWriter chan<- interface{} // Channel to write cross-chain message
 
-	pendingSync  uint32     // Flag whether pending sync is running
-	pendingCache *lru.Cache // cache signed pending ctx
+	synchronising uint32 // Flag whether cross sync is running
+	synchronizeCh chan []*cc.CrossTransactionWithSignatures
+	pendingSync   uint32     // Flag whether pending sync is running
+	pendingCache  *lru.Cache // cache signed pending ctx
 
 	confirmedMakerCh  chan cc.ConfirmedMakerEvent // Channel to receive one-signed makerTx from ctxStore
 	confirmedMakerSub event.Subscription
@@ -129,7 +131,9 @@ func NewCrossHandler(chain cross.SimpleChain, roleHandler RoleHandler, role comm
 		service:             service,
 		gasHelper:           gasHelper,
 		log:                 log.New("chainID", chain.ChainConfig().ChainID),
-		pendingCache:        pendingCache,
+
+		synchronizeCh: make(chan []*cc.CrossTransactionWithSignatures, 1),
+		pendingCache:  pendingCache,
 	}
 }
 
@@ -205,7 +209,7 @@ func (h *Handler) loop() {
 			return
 
 		case ev := <-h.newTakerCh:
-			h.store.MarkStatus(ev.Takers, cc.CtxStatusImplementing)
+			h.store.MarkStatus(ev.Takers, cc.CtxStatusExecuting)
 		case <-h.newTakerSub.Err():
 			return
 
@@ -484,6 +488,9 @@ func (h *Handler) SyncPending(ctxs []*cc.CrossTransaction) map[common.Hash]bool 
 	}
 	return synced
 }
+
+func (h *Handler) LocalID() uint64  { return h.pm.NetworkId() }
+func (h *Handler) RemoteID() uint64 { return h.store.remoteStore.ChainID().Uint64() }
 
 // for cross store sync
 func (h *Handler) Height() *big.Int {

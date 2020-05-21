@@ -414,7 +414,7 @@ func (store *CrossStore) Height() uint64 {
 func (store *CrossStore) MarkStatus(txms []*cc.CrossTransactionModifier, status cc.CtxStatus) {
 	mark := func(txm *cc.CrossTransactionModifier, s crossdb.CtxDB) {
 		err := s.Update(txm.ID, func(ctx *crossdb.CrossTransactionIndexed) {
-			ctx.Status = status
+			ctx.Status = uint8(status)
 			if txm.AtBlockNumber > ctx.BlockNum {
 				ctx.BlockNum = txm.AtBlockNumber
 			}
@@ -498,49 +498,57 @@ func (store *CrossStore) PoolStats() (int, int) {
 	return store.pending.Len(), store.queued.Len()
 }
 
-func (store *CrossStore) StoreStats() (int, int) {
-	condition := q.Eq(crossdb.StatusField, cc.CtxStatusWaiting)
-	return store.localStore.Count(condition), store.remoteStore.Count(condition)
-}
+func (store *CrossStore) StoreStats() (map[cc.CtxStatus]int, map[cc.CtxStatus]int) {
+	waiting := q.Eq(crossdb.StatusField, cc.CtxStatusWaiting)
+	executing := q.Eq(crossdb.StatusField, cc.CtxStatusExecuting)
+	finishing := q.Eq(crossdb.StatusField, cc.CtxStatusFinishing)
+	finished := q.Eq(crossdb.StatusField, cc.CtxStatusFinished)
 
-func (store *CrossStore) LocalStats() int {
-	return store.localStore.Count(q.Eq(crossdb.StatusField, cc.CtxStatusWaiting))
-}
-
-func (store *CrossStore) SenderStats(from common.Address) int {
-	return store.localStore.Count(q.Eq(crossdb.StatusField, cc.CtxStatusWaiting), q.Eq(crossdb.FromField, from))
-}
-
-func (store *CrossStore) RemoteStats() int {
-	return store.remoteStore.Count(q.Eq(crossdb.StatusField, cc.CtxStatusWaiting))
-}
-
-func (store *CrossStore) Query(localPageSize, localPage, remotePageSize, remotePage int) (map[uint64][]*cc.CrossTransactionWithSignatures, map[uint64][]*cc.CrossTransactionWithSignatures) {
-	return map[uint64][]*cc.CrossTransactionWithSignatures{store.remoteStore.ChainID().Uint64(): store.query(store.localStore, localPageSize, localPage)}, //TODO: 适配前端，key使用remoteID
-		map[uint64][]*cc.CrossTransactionWithSignatures{store.remoteStore.ChainID().Uint64(): store.query(store.remoteStore, remotePageSize, remotePage)}
-}
-
-func (store *CrossStore) QueryRemote(remotePageSize, remotePage int) map[uint64][]*cc.CrossTransactionWithSignatures {
-	return map[uint64][]*cc.CrossTransactionWithSignatures{store.remoteStore.ChainID().Uint64(): store.query(store.remoteStore, remotePageSize, remotePage)}
-}
-
-func (store *CrossStore) QueryLocal(localPageSize, localPage int) map[uint64][]*cc.CrossTransactionWithSignatures {
-	return map[uint64][]*cc.CrossTransactionWithSignatures{store.remoteStore.ChainID().Uint64(): store.query(store.localStore, localPageSize, localPage)} //TODO: 适配前端，key使用remoteID
-}
-
-func (store *CrossStore) QueryLocalBySender(from common.Address, pageSize, startPage int) map[uint64][]*cc.OwnerCrossTransactionWithSignatures {
-	locals := make(map[uint64][]*cc.OwnerCrossTransactionWithSignatures, 1)
-	txs := store.query(store.localStore, pageSize, startPage, q.Eq(crossdb.FromField, from))
-	for _, v := range txs {
-		//TODO: 适配前端，key使用remoteID
-		locals[store.remoteStore.ChainID().Uint64()] = append(locals[store.remoteStore.ChainID().Uint64()], &cc.OwnerCrossTransactionWithSignatures{
-			Cws:  v,
-			Time: NewChainInvoke(store.chain).GetTransactionTimeOnChain(v),
-		})
+	stats := func(db crossdb.CtxDB) map[cc.CtxStatus]int {
+		return map[cc.CtxStatus]int{
+			cc.CtxStatusWaiting:   store.localStore.Count(waiting),
+			cc.CtxStatusExecuting: store.localStore.Count(executing),
+			cc.CtxStatusFinishing: store.localStore.Count(finishing),
+			cc.CtxStatusFinished:  store.localStore.Count(finished),
+		}
 	}
-	return locals
+	return stats(store.localStore), stats(store.remoteStore)
 }
 
-func (store *CrossStore) query(db crossdb.CtxDB, pageSize, startPage int, condition ...q.Matcher) []*cc.CrossTransactionWithSignatures {
-	return db.Query(pageSize, startPage, crossdb.PriceIndex, append(condition, q.Eq(crossdb.StatusField, cc.CtxStatusWaiting))...)
-}
+//func (store *CrossStore) LocalStats() int {
+//	return store.localStore.Count(q.Eq(crossdb.StatusField, cc.CtxStatusWaiting))
+//}
+//
+//func (store *CrossStore) SenderStats(from common.Address) int {
+//	return store.localStore.Count(q.Eq(crossdb.StatusField, cc.CtxStatusWaiting), q.Eq(crossdb.FromField, from))
+//}
+//
+//func (store *CrossStore) RemoteStats() int {
+//	return store.remoteStore.Count(q.Eq(crossdb.StatusField, cc.CtxStatusWaiting))
+//}
+//
+//func (store *CrossStore) Query(localPageSize, localPage, remotePageSize, remotePage int) (map[uint64][]*cc.CrossTransactionWithSignatures, map[uint64][]*cc.CrossTransactionWithSignatures) {
+//	return map[uint64][]*cc.CrossTransactionWithSignatures{store.remoteStore.ChainID().Uint64(): store.query(store.localStore, localPageSize, localPage)}, //TODO: 适配前端，key使用remoteID
+//		map[uint64][]*cc.CrossTransactionWithSignatures{store.remoteStore.ChainID().Uint64(): store.query(store.remoteStore, remotePageSize, remotePage)}
+//}
+//
+//func (store *CrossStore) QueryRemote(remotePageSize, remotePage int) map[uint64][]*cc.CrossTransactionWithSignatures {
+//	return map[uint64][]*cc.CrossTransactionWithSignatures{store.remoteStore.ChainID().Uint64(): store.query(store.remoteStore, remotePageSize, remotePage)}
+//}
+//
+//func (store *CrossStore) QueryLocal(localPageSize, localPage int) map[uint64][]*cc.CrossTransactionWithSignatures {
+//	return map[uint64][]*cc.CrossTransactionWithSignatures{store.remoteStore.ChainID().Uint64(): store.query(store.localStore, localPageSize, localPage)} //TODO: 适配前端，key使用remoteID
+//}
+//
+//func (store *CrossStore) QueryLocalBySender(from common.Address, pageSize, startPage int) map[uint64][]*cc.OwnerCrossTransactionWithSignatures {
+//	locals := make(map[uint64][]*cc.OwnerCrossTransactionWithSignatures, 1)
+//	txs := store.query(store.localStore, pageSize, startPage, q.Eq(crossdb.FromField, from))
+//	for _, v := range txs {
+//		//TODO: 适配前端，key使用remoteID
+//		locals[store.remoteStore.ChainID().Uint64()] = append(locals[store.remoteStore.ChainID().Uint64()], &cc.OwnerCrossTransactionWithSignatures{
+//			Cws:  v,
+//			Time: NewChainInvoke(store.chain).GetTransactionTimeOnChain(v),
+//		})
+//	}
+//	return locals
+//}

@@ -39,17 +39,14 @@ type CtxDB interface {
 	Repair() error
 	Write(ctx *cc.CrossTransactionWithSignatures) error
 	Read(ctxId common.Hash) (*cc.CrossTransactionWithSignatures, error)
-	One(field FieldName, key interface{}) *cc.CrossTransactionWithSignatures
-	//ReadAll(ctxId common.Hash) (common.Hash, error)
-	//Delete(ctxId common.Hash, atNumber uint64) error
 	Update(id common.Hash, updater func(ctx *CrossTransactionIndexed)) error
 	Has(id common.Hash) bool
-	Query(pageSize int, startPage int, orderBy FieldName, filter ...q.Matcher) []*cc.CrossTransactionWithSignatures
+
+	One(field FieldName, key interface{}) *cc.CrossTransactionWithSignatures
+	Query(pageSize int, startPage int, orderBy []FieldName, reverse bool, filter ...q.Matcher) []*cc.CrossTransactionWithSignatures
 	RangeByNumber(begin, end uint64, pageSize int) []*cc.CrossTransactionWithSignatures
 
-	//QueryByPK(pageSize int, startPage int, filter ...q.Matcher) []*cc.CrossTransactionWithSignatures
-	//QueryByPrice(pageSize int, startPage int, filter ...q.Matcher) []*cc.CrossTransactionWithSignatures
-	//Range(pageSize int, startCtxID *common.Hash, endCtxID *common.Hash) []*cc.CrossTransactionWithSignatures
+	Clean() error
 }
 
 func OpenStormDB(ctx ServiceContext, name string) (*storm.DB, error) {

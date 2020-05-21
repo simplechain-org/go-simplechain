@@ -123,9 +123,9 @@ func (p *anchorPeer) readStatus(mainNetwork, subNetwork uint64, mainGenesis, sub
 	return nil
 }
 
-func (p *anchorPeer) SendSyncRequest(req *SyncReq) error {
-	p.Log().Debug("Sending batch of ctx sync request", "chain", req.Chain, "height", req.Height)
-	return p2p.Send(p.rw, GetCtxSyncMsg, req)
+func (p *anchorPeer) RequestCtxSyncByHeight(chainID uint64, height uint64) error {
+	p.Log().Debug("Sending batch of ctx sync request", "chain", chainID, "height", height)
+	return p2p.Send(p.rw, GetCtxSyncMsg, &SyncReq{chainID, height})
 }
 
 func (p *anchorPeer) SendSyncResponse(resp *SyncResp) error {

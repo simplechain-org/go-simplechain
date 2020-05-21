@@ -68,6 +68,10 @@ func (d *indexDB) Repair() error {
 	return d.db.ReIndex(&CrossTransactionIndexed{})
 }
 
+func (d *indexDB) Clean() error {
+	return d.db.Drop(&CrossTransactionIndexed{})
+}
+
 func (d *indexDB) Close() error {
 	return d.db.Commit()
 }
@@ -153,10 +157,6 @@ func (d *indexDB) Has(id common.Hash) bool {
 	return err == nil
 }
 
-func (d *indexDB) Query(pageSize int, startPage int, orderBy FieldName, filter ...q.Matcher) []*cc.CrossTransactionWithSignatures {
-	return d.query(pageSize, startPage, orderBy, filter...)
-}
-
 func (d *indexDB) Range(pageSize int, startCtxID, endCtxID *common.Hash) []*cc.CrossTransactionWithSignatures {
 	var (
 		min, max uint64 = 0, math.MaxUint64
@@ -191,12 +191,18 @@ func (d *indexDB) Range(pageSize int, startCtxID, endCtxID *common.Hash) []*cc.C
 	return results
 }
 
-func (d *indexDB) query(pageSize int, startPage int, orderBy string, filter ...q.Matcher) []*cc.CrossTransactionWithSignatures {
+func (d *indexDB) Query(pageSize int, startPage int, orderBy []FieldName, reverse bool, filter ...q.Matcher) []*cc.CrossTransactionWithSignatures {
 	if pageSize > 0 && startPage <= 0 {
 		return nil
 	}
 	var ctxs []*CrossTransactionIndexed
-	query := d.db.Select(filter...).OrderBy(orderBy)
+	query := d.db.Select(filter...)
+	if len(orderBy) > 0 {
+		query.OrderBy(orderBy...)
+	}
+	if reverse {
+		query.Reverse()
+	}
 	if pageSize > 0 {
 		query.Limit(pageSize).Skip(pageSize * (startPage - 1))
 	}

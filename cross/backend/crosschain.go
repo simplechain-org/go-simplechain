@@ -32,6 +32,7 @@ const (
 	protocolVersion    = 1
 	protocolMaxMsgSize = 10 * 1024 * 1024
 	handshakeTimeout   = 5 * time.Second
+	rttMaxEstimate     = 20 * time.Second // Maximum round-trip time to target for download requests
 	defaultMaxSyncSize = 100
 )
 
@@ -124,15 +125,6 @@ func NewCrossService(ctx *node.ServiceContext, main, sub cross.SimpleChain, conf
 		},
 	})
 
-	main.RegisterAPIs([]rpc.API{
-		{
-			Namespace: "cross",
-			Version:   "1.0",
-			Service:   NewPrivateCrossAdminAPI(srv),
-			Public:    false,
-		},
-	})
-
 	srv.main = crossCommons{
 		bc:          main.BlockChain(),
 		genesis:     main.BlockChain().Genesis().Hash(),
@@ -190,7 +182,14 @@ func (srv *CrossService) Protocols() []p2p.Protocol {
 
 func (srv *CrossService) APIs() []rpc.API {
 	// APIs are registered to SimpleChain service
-	return nil
+	return []rpc.API{
+		{
+			Namespace: "cross",
+			Version:   "1.0",
+			Service:   NewPrivateCrossAdminAPI(srv),
+			Public:    false,
+		},
+	}
 }
 
 func (srv *CrossService) Start(server *p2p.Server) error {
@@ -289,11 +288,8 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 		if h == nil {
 			break
 		}
-		if h.chain.BlockChain().CurrentBlock().NumberU64() < req.Height {
-			break
-		}
+
 		ctxList := h.GetSyncCrossTransaction(req.Height, defaultMaxSyncSize)
-		log.Warn("[debug] GetSyncCrossTransaction", "count", len(ctxList))
 		var data [][]byte
 		for _, ctx := range ctxList {
 			b, err := rlp.EncodeToBytes(ctx)
@@ -303,12 +299,10 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 			data = append(data, b)
 		}
 
-		if len(data) > 0 {
-			return p.SendSyncResponse(&SyncResp{
-				Chain: req.Chain,
-				Data:  data,
-			})
-		}
+		return p.SendSyncResponse(&SyncResp{
+			Chain: req.Chain,
+			Data:  data,
+		})
 
 	case msg.Code == CtxSyncMsg:
 		var resp SyncResp
@@ -330,14 +324,12 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 			break
 		}
 
-		srv.main.handler.SyncCrossTransaction(ctxList)
-		srv.sub.handler.SyncCrossTransaction(ctxList)
+		h := srv.getCrossHandler(new(big.Int).SetUint64(resp.Chain))
+		if h == nil {
+			break
+		}
 
-		// send next sync request after last
-		return p.SendSyncRequest(&SyncReq{
-			Chain:  resp.Chain,
-			Height: ctxList[len(ctxList)-1].BlockNum + 1, // require on next block
-		})
+		h.synchronizeCh <- ctxList
 
 	case msg.Code == GetPendingSyncMsg:
 		var req SyncPendingReq
@@ -379,6 +371,7 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 		}
 
 		atomic.StoreUint32(&h.pendingSync, 1)
+		defer atomic.StoreUint32(&h.pendingSync, 0)
 
 		var ctxList []*cc.CrossTransaction
 		for _, b := range resp.Data {
@@ -390,7 +383,6 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 		}
 
 		if len(ctxList) == 0 {
-			atomic.StoreUint32(&h.pendingSync, 0)
 			break
 		}
 

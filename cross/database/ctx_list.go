@@ -243,9 +243,8 @@ type CrossTransactionIndexed struct {
 	TxHash   common.Hash    `storm:"index"`
 	Price    *big.Float     `storm:"index"`
 	BlockNum uint64         `storm:"index"`
-
 	// normal field
-	Status cc.CtxStatus
+	Status uint8 `storm:"index"`
 
 	Value            *big.Int
 	BlockHash        common.Hash
@@ -261,7 +260,7 @@ type CrossTransactionIndexed struct {
 func NewCrossTransactionIndexed(ctx *cc.CrossTransactionWithSignatures) *CrossTransactionIndexed {
 	return &CrossTransactionIndexed{
 		CtxId:            ctx.ID(),
-		Status:           ctx.Status,
+		Status:           uint8(ctx.Status),
 		BlockNum:         ctx.BlockNum,
 		From:             ctx.Data.From,
 		Price:            new(big.Float).SetRat(ctx.Price()),
@@ -280,7 +279,7 @@ func NewCrossTransactionIndexed(ctx *cc.CrossTransactionWithSignatures) *CrossTr
 
 func (c CrossTransactionIndexed) ToCrossTransaction() *cc.CrossTransactionWithSignatures {
 	return &cc.CrossTransactionWithSignatures{
-		Status:   c.Status,
+		Status:   cc.CtxStatus(c.Status),
 		BlockNum: c.BlockNum,
 		Data: cc.CtxDatas{
 			Value:            c.Value,
