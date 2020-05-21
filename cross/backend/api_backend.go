@@ -39,7 +39,7 @@ func (h *Handler) QueryRemoteByDestinationValueAndPage(value *big.Int, pageSize,
 	}
 	var (
 		store     = h.store.remoteStore
-		condition = []q.Matcher{q.Eq(crossdb.StatusField, cc.CtxStatusWaiting), q.Eq(crossdb.DestinationValue, value)}
+		condition = []q.Matcher{q.Eq(crossdb.StatusField, cc.CtxStatusWaiting), q.Gte(crossdb.DestinationValue, value)}
 		orderBy   = []crossdb.FieldName{crossdb.PriceIndex}
 		reverse   = false
 	)
