@@ -506,10 +506,10 @@ func (store *CrossStore) StoreStats() (map[cc.CtxStatus]int, map[cc.CtxStatus]in
 
 	stats := func(db crossdb.CtxDB) map[cc.CtxStatus]int {
 		return map[cc.CtxStatus]int{
-			cc.CtxStatusWaiting:   store.localStore.Count(waiting),
-			cc.CtxStatusExecuting: store.localStore.Count(executing),
-			cc.CtxStatusFinishing: store.localStore.Count(finishing),
-			cc.CtxStatusFinished:  store.localStore.Count(finished),
+			cc.CtxStatusWaiting:   db.Count(waiting),
+			cc.CtxStatusExecuting: db.Count(executing),
+			cc.CtxStatusFinishing: db.Count(finishing),
+			cc.CtxStatusFinished:  db.Count(finished),
 		}
 	}
 	return stats(store.localStore), stats(store.remoteStore)

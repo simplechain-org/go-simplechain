@@ -12,10 +12,13 @@ import (
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/cross"
 	cc "github.com/simplechain-org/go-simplechain/cross/core"
+	db "github.com/simplechain-org/go-simplechain/cross/database"
 	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/rlp"
+
+	"github.com/asdine/storm/v3/q"
 )
 
 func TestNewCtxStoreAdd(t *testing.T) {
@@ -80,10 +83,10 @@ func TestNewCtxStoreAdd(t *testing.T) {
 	}
 	ev := <-signedCh
 	ev.CallBack(ev.Tws)
-	//TODO-U
-	//if ctxStore.LocalStats() != 1 {
-	//	t.Errorf("add failed,stats:%d (!= %d)", ctxStore.LocalStats(), 1)
-	//}
+
+	if ctxStore.localStore.Count(q.Eq(db.StatusField, cc.CtxStatusWaiting)) != 1 {
+		t.Errorf("add failed,stats:%d (!= %d)", ctxStore.localStore.Count(), 1)
+	}
 
 	ctxStore.Stop()
 }

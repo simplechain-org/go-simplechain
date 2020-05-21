@@ -208,34 +208,6 @@ func (m *CtxSortedByBlockNum) Map(do func(*cc.CrossTransactionWithSignatures) bo
 	}
 }
 
-type CtxToBlockHash lru.ARCCache
-
-func NewCtxToBlockHash(cap int) *CtxToBlockHash {
-	cache, _ := lru.NewARC(cap)
-	return (*CtxToBlockHash)(cache)
-}
-
-func (m *CtxToBlockHash) Has(txID common.Hash) bool {
-	return (*lru.ARCCache)(m).Contains(txID)
-}
-
-func (m *CtxToBlockHash) Get(txID common.Hash) (common.Hash, bool) {
-	item, ok := (*lru.ARCCache)(m).Get(txID)
-	if !ok {
-		return common.Hash{}, false
-	}
-	return item.(common.Hash), ok
-}
-
-func (m *CtxToBlockHash) Put(txID common.Hash, blockHash common.Hash) bool {
-	var update bool
-	if oldBlockHash, ok := m.Get(txID); ok {
-		update = blockHash != oldBlockHash
-	}
-	(*lru.ARCCache)(m).Add(txID, blockHash)
-	return update
-}
-
 type CrossTransactionIndexed struct {
 	PK       uint64         `storm:"id,increment"`
 	CtxId    common.Hash    `storm:"unique"`

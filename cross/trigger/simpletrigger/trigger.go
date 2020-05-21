@@ -1,15 +1,16 @@
-package core
+package simpletrigger
 
 import (
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/types"
+	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/params"
 )
 
 const defaultConfirmDepth = 12
 
-type CrossTrigger struct {
+type SimpleTrigger struct {
 	unconfirmedBlockLogs
 	contract common.Address
 
@@ -22,12 +23,12 @@ type CrossTrigger struct {
 	scope               event.SubscriptionScope
 }
 
-func (t *CrossTrigger) Stop() {
+func (t *SimpleTrigger) Stop() {
 	t.scope.Close()
 }
 
-func NewCrossTrigger(contract common.Address, chain chainRetriever) *CrossTrigger {
-	return &CrossTrigger{
+func NewSimpleTrigger(contract common.Address, chain chainRetriever) *SimpleTrigger {
+	return &SimpleTrigger{
 		contract: contract,
 		unconfirmedBlockLogs: unconfirmedBlockLogs{
 			chain: chain,
@@ -36,12 +37,12 @@ func NewCrossTrigger(contract common.Address, chain chainRetriever) *CrossTrigge
 	}
 }
 
-func (t *CrossTrigger) StoreCrossContractLog(blockNumber uint64, hash common.Hash, logs []*types.Log) {
+func (t *SimpleTrigger) StoreCrossContractLog(blockNumber uint64, hash common.Hash, logs []*types.Log) {
 	var unconfirmedLogs []*types.Log
 	if logs != nil {
-		var takers []*CrossTransactionModifier
-		var finishes []*CrossTransactionModifier
-		var updates []*RemoteChainInfo
+		var takers []*cc.CrossTransactionModifier
+		var finishes []*cc.CrossTransactionModifier
+		var updates []*cc.RemoteChainInfo
 		for _, v := range logs {
 			if t.contract == v.Address && len(v.Topics) > 0 {
 				switch v.Topics[0] {
@@ -50,7 +51,7 @@ func (t *CrossTrigger) StoreCrossContractLog(blockNumber uint64, hash common.Has
 
 				case params.TakerTopic:
 					if len(v.Topics) >= 3 && len(v.Data) >= common.HashLength*4 {
-						takers = append(takers, &CrossTransactionModifier{
+						takers = append(takers, &cc.CrossTransactionModifier{
 							ID:            v.Topics[1],
 							ChainId:       common.BytesToHash(v.Data[:common.HashLength]).Big(), //get remote chainID from input data
 							AtBlockNumber: v.BlockNumber,
@@ -60,7 +61,7 @@ func (t *CrossTrigger) StoreCrossContractLog(blockNumber uint64, hash common.Has
 
 				case params.MakerFinishTopic:
 					if len(v.Topics) >= 3 {
-						finishes = append(finishes, &CrossTransactionModifier{
+						finishes = append(finishes, &cc.CrossTransactionModifier{
 							ID:            v.Topics[1],
 							ChainId:       t.chain.GetChainConfig().ChainID,
 							AtBlockNumber: v.BlockNumber,
@@ -70,7 +71,7 @@ func (t *CrossTrigger) StoreCrossContractLog(blockNumber uint64, hash common.Has
 
 				case params.AddAnchorsTopic, params.RemoveAnchorsTopic:
 					updates = append(updates,
-						&RemoteChainInfo{
+						&cc.RemoteChainInfo{
 							RemoteChainId: common.BytesToHash(v.Data[:common.HashLength]).Big().Uint64(),
 							BlockNumber:   v.BlockNumber,
 						})
@@ -79,51 +80,51 @@ func (t *CrossTrigger) StoreCrossContractLog(blockNumber uint64, hash common.Has
 		}
 		// send event immediately for newTaker, newFinish, anchorUpdate
 		if len(takers) > 0 {
-			go t.takerFeed.Send(NewTakerEvent{Takers: takers})
+			go t.takerFeed.Send(cc.NewTakerEvent{Takers: takers})
 		}
 		if len(updates) > 0 {
-			go t.updateAnchorFeed.Send(AnchorEvent{ChainInfo: updates})
+			go t.updateAnchorFeed.Send(cc.AnchorEvent{ChainInfo: updates})
 		}
 		if len(finishes) > 0 {
-			go t.finishFeed.Send(NewFinishEvent{Finishes: finishes})
+			go t.finishFeed.Send(cc.NewFinishEvent{Finishes: finishes})
 		}
 	}
 
 	t.insert(blockNumber, hash, unconfirmedLogs)
 }
 
-func (t *CrossTrigger) ConfirmedMakerFeedSend(ctx ConfirmedMakerEvent) int {
+func (t *SimpleTrigger) ConfirmedMakerFeedSend(ctx cc.ConfirmedMakerEvent) int {
 	return t.confirmedMakerFeed.Send(ctx)
 }
 
-func (t *CrossTrigger) SubscribeConfirmedMakerEvent(ch chan<- ConfirmedMakerEvent) event.Subscription {
+func (t *SimpleTrigger) SubscribeConfirmedMakerEvent(ch chan<- cc.ConfirmedMakerEvent) event.Subscription {
 	return t.scope.Track(t.confirmedMakerFeed.Subscribe(ch))
 }
 
-func (t *CrossTrigger) ConfirmedTakerSend(transaction ConfirmedTakerEvent) int {
+func (t *SimpleTrigger) ConfirmedTakerSend(transaction cc.ConfirmedTakerEvent) int {
 	return t.confirmedTakerFeed.Send(transaction)
 }
 
-func (t *CrossTrigger) SubscribeConfirmedTakerEvent(ch chan<- ConfirmedTakerEvent) event.Subscription {
+func (t *SimpleTrigger) SubscribeConfirmedTakerEvent(ch chan<- cc.ConfirmedTakerEvent) event.Subscription {
 	return t.scope.Track(t.confirmedTakerFeed.Subscribe(ch))
 }
 
-func (t *CrossTrigger) SubscribeNewTakerEvent(ch chan<- NewTakerEvent) event.Subscription {
+func (t *SimpleTrigger) SubscribeNewTakerEvent(ch chan<- cc.NewTakerEvent) event.Subscription {
 	return t.scope.Track(t.takerFeed.Subscribe(ch))
 }
 
-func (t *CrossTrigger) SubscribeNewFinishEvent(ch chan<- NewFinishEvent) event.Subscription {
+func (t *SimpleTrigger) SubscribeNewFinishEvent(ch chan<- cc.NewFinishEvent) event.Subscription {
 	return t.scope.Track(t.finishFeed.Subscribe(ch))
 }
 
-func (t *CrossTrigger) SubscribeConfirmedFinishEvent(ch chan<- ConfirmedFinishEvent) event.Subscription {
+func (t *SimpleTrigger) SubscribeConfirmedFinishEvent(ch chan<- cc.ConfirmedFinishEvent) event.Subscription {
 	return t.scope.Track(t.confirmedFinishFeed.Subscribe(ch))
 }
 
-func (t *CrossTrigger) SubscribeUpdateAnchorEvent(ch chan<- AnchorEvent) event.Subscription {
+func (t *SimpleTrigger) SubscribeUpdateAnchorEvent(ch chan<- cc.AnchorEvent) event.Subscription {
 	return t.scope.Track(t.updateAnchorFeed.Subscribe(ch))
 }
 
-func (t *CrossTrigger) ConfirmedFinishFeedSend(tx ConfirmedFinishEvent) int {
+func (t *SimpleTrigger) ConfirmedFinishFeedSend(tx cc.ConfirmedFinishEvent) int {
 	return t.confirmedFinishFeed.Send(tx)
 }

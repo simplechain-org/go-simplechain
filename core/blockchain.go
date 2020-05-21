@@ -37,7 +37,8 @@ import (
 	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/core/vm"
-	cc "github.com/simplechain-org/go-simplechain/cross/core"
+	"github.com/simplechain-org/go-simplechain/cross/trigger"
+	"github.com/simplechain-org/go-simplechain/cross/trigger/simpletrigger"
 	"github.com/simplechain-org/go-simplechain/ethdb"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/log"
@@ -178,7 +179,7 @@ type BlockChain struct {
 	badBlocks       *lru.Cache                     // Bad block cache
 	shouldPreserve  func(*types.Block) bool        // Function used to determine whether should preserve the given block.
 	terminateInsert func(common.Hash, uint64) bool // Testing hook used to terminate ancient receipt chain insertion.
-	crossTrigger    *cc.CrossTrigger
+	crossTrigger    *simpletrigger.SimpleTrigger
 }
 
 // NewBlockChain returns a fully initialised block chain using information
@@ -299,7 +300,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 	go bc.update()
 
 	if contract != (common.Address{}) {
-		bc.crossTrigger = cc.NewCrossTrigger(contract, bc)
+		bc.crossTrigger = simpletrigger.NewSimpleTrigger(contract, bc)
 	}
 
 	return bc, nil
@@ -2280,4 +2281,4 @@ func (bc *BlockChain) GetChainConfig() *params.ChainConfig {
 	return bc.chainConfig
 }
 
-func (bc *BlockChain) GetCrossTrigger() *cc.CrossTrigger { return bc.crossTrigger }
+func (bc *BlockChain) GetCrossTrigger() trigger.Trigger { return bc.crossTrigger }
