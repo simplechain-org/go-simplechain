@@ -170,9 +170,9 @@ type CtxStatus uint8
 const (
 	// CtxStatusWaiting is the status code of a rtx transaction if waiting for orders.
 	CtxStatusWaiting CtxStatus = iota
-	// CtxStatusImplementing is the status code of a rtx transaction if execution implementing.
-	CtxStatusImplementing
-	// CtxStatusFinished is the status code of a rtx transaction if execution finishing.
+	// CtxStatusExecuting is the status code of a rtx transaction if execution implementing.
+	CtxStatusExecuting
+	// CtxStatusFinished is the status code of a rtx transaction if make finishing.
 	CtxStatusFinishing
 	// CtxStatusFinished is the status code of a rtx transaction if make finish confirmed.
 	CtxStatusFinished
@@ -197,10 +197,10 @@ const (
 */
 
 var ctxStatusToString = map[CtxStatus]string{
-	CtxStatusWaiting:      "waiting",
-	CtxStatusImplementing: "executing",
-	CtxStatusFinishing:    "finishing",
-	CtxStatusFinished:     "finished",
+	CtxStatusWaiting:   "waiting",
+	CtxStatusExecuting: "executing",
+	CtxStatusFinishing: "finishing",
+	CtxStatusFinished:  "finished",
 }
 
 func (s CtxStatus) String() string {
@@ -209,6 +209,10 @@ func (s CtxStatus) String() string {
 		return "unknown"
 	}
 	return str
+}
+
+func (s CtxStatus) MarshalText() ([]byte, error) {
+	return []byte(s.String()), nil
 }
 
 type CrossTransactionWithSignatures struct {

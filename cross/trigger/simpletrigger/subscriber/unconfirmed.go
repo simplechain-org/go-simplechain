@@ -1,4 +1,4 @@
-package core
+package subscriber
 
 import (
 	"container/ring"
@@ -6,6 +6,7 @@ import (
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/types"
+	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/params"
 )
@@ -33,7 +34,7 @@ type unconfirmedBlockLogs struct {
 }
 
 // Insert adds a new block to the set of trigger ones.
-func (t *CrossTrigger) insert(index uint64, hash common.Hash, blockLogs []*types.Log) {
+func (t *SimpleSubscriber) insert(index uint64, hash common.Hash, blockLogs []*types.Log) {
 	// If a new block was mined locally, shift out any old enough blocks
 	t.shift(index)
 
@@ -58,7 +59,7 @@ func (t *CrossTrigger) insert(index uint64, hash common.Hash, blockLogs []*types
 // Shift drops all trigger blocks from the set which exceed the trigger sets depth
 // allowance, checking them against the canonical chain for inclusion or staleness
 // report.
-func (t *CrossTrigger) shift(height uint64) {
+func (t *SimpleSubscriber) shift(height uint64) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -75,9 +76,9 @@ func (t *CrossTrigger) shift(height uint64) {
 			log.Warn("Failed to retrieve header of mined block", "number", next.index, "hash", next.hash)
 		case header.Hash() == next.hash:
 			if next.logs != nil {
-				var ctxs []*CrossTransaction
-				var rtxs []*ReceptTransaction
-				var finishModifiers []*CrossTransactionModifier
+				var ctxs []*cc.CrossTransaction
+				var rtxs []*cc.ReceptTransaction
+				var finishModifiers []*cc.CrossTransactionModifier
 
 				//todo add and del anchors
 				for _, v := range next.logs {
@@ -91,7 +92,7 @@ func (t *CrossTrigger) shift(height uint64) {
 							ctxId := v.Topics[1]
 							count := common.BytesToHash(v.Data[common.HashLength*4 : common.HashLength*5]).Big().Int64()
 							ctxs = append(ctxs,
-								NewCrossTransaction(
+								cc.NewCrossTransaction(
 									common.BytesToHash(v.Data[common.HashLength:common.HashLength*2]).Big(),
 									common.BytesToHash(v.Data[common.HashLength*2:common.HashLength*3]).Big(),
 									common.BytesToHash(v.Data[:common.HashLength]).Big(),
@@ -109,14 +110,14 @@ func (t *CrossTrigger) shift(height uint64) {
 							from = common.BytesToAddress(v.Data[common.HashLength*2-common.AddressLength : common.HashLength*2])
 							ctxId := v.Topics[1]
 							rtxs = append(rtxs,
-								NewReceptTransaction(ctxId, from, to, common.BytesToHash(v.Data[:common.HashLength]).Big(),
+								cc.NewReceptTransaction(ctxId, from, to, common.BytesToHash(v.Data[:common.HashLength]).Big(),
 									t.chain.GetChainConfig().ChainID))
 							continue
 						}
 
 						// delete statement
 						if len(v.Topics) >= 3 && v.Topics[0] == params.MakerFinishTopic {
-							finishModifiers = append(finishModifiers, &CrossTransactionModifier{
+							finishModifiers = append(finishModifiers, &cc.CrossTransactionModifier{
 								ID:            v.Topics[1],
 								ChainId:       t.chain.GetChainConfig().ChainID,
 								AtBlockNumber: v.BlockNumber,
@@ -125,13 +126,13 @@ func (t *CrossTrigger) shift(height uint64) {
 					}
 				}
 				if len(ctxs) > 0 {
-					t.ConfirmedMakerFeedSend(ConfirmedMakerEvent{Txs: ctxs})
+					t.ConfirmedMakerFeedSend(cc.ConfirmedMakerEvent{Txs: ctxs})
 				}
 				if len(rtxs) > 0 {
-					t.ConfirmedTakerSend(ConfirmedTakerEvent{Txs: rtxs})
+					t.ConfirmedTakerSend(cc.ConfirmedTakerEvent{Txs: rtxs})
 				}
 				if len(finishModifiers) > 0 {
-					t.ConfirmedFinishFeedSend(ConfirmedFinishEvent{Finishes: finishModifiers})
+					t.ConfirmedFinishFeedSend(cc.ConfirmedFinishEvent{Finishes: finishModifiers})
 				}
 			}
 		default:

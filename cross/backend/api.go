@@ -22,14 +22,14 @@ func NewPrivateCrossAdminAPI(service *CrossService) *PrivateCrossAdminAPI {
 
 func (s *PrivateCrossAdminAPI) SyncPending() (bool, error) {
 	main, sub := s.service.peers.BestPeer()
-	go s.service.syncPending(s.service.main, main)
-	go s.service.syncPending(s.service.sub, sub)
+	go s.service.syncPending(s.service.main.handler, main)
+	go s.service.syncPending(s.service.sub.handler, sub)
 	return main != nil || sub != nil, nil
 }
 
 func (s *PrivateCrossAdminAPI) SyncStore() (bool, error) {
 	main, sub := s.service.peers.BestPeer()
-	go s.service.synchronise(main, sub)
+	s.service.synchronise(main, sub)
 	return main != nil || sub != nil, nil
 }
 
@@ -87,14 +87,14 @@ func (s *PublicCrossManualAPI) ImportMainCtx(ctxWithSignsSArgs hexutil.Bytes) er
 		return err
 	}
 
-	if len(ctx.Resolution()) < requireSignatureCount {
-		return fmt.Errorf("invalid signture length ctx: %d,want: %d", len(ctx.Resolution()), requireSignatureCount)
+	if len(ctx.Resolution()) < s.mainHandler.validator.requireSignature {
+		return fmt.Errorf("invalid signture length ctx: %d,want: %d", len(ctx.Resolution()), s.mainHandler.validator.requireSignature)
 	}
 
 	chainId := ctx.ChainId()
 	var invalidSigIndex []int
 	for i, ctx := range ctx.Resolution() {
-		if s.subHandler.store.verifySigner(ctx, chainId, chainId) != nil {
+		if s.subHandler.validator.VerifySigner(ctx, chainId, chainId) != nil {
 			invalidSigIndex = append(invalidSigIndex, i)
 		}
 	}
@@ -118,14 +118,14 @@ func (s *PublicCrossManualAPI) ImportSubCtx(ctxWithSignsSArgs hexutil.Bytes) err
 		return err
 	}
 
-	if len(ctx.Resolution()) < requireSignatureCount {
-		return fmt.Errorf("invalid signture length ctx: %d,want: %d", len(ctx.Resolution()), requireSignatureCount)
+	if len(ctx.Resolution()) < s.subHandler.validator.requireSignature {
+		return fmt.Errorf("invalid signture length ctx: %d,want: %d", len(ctx.Resolution()), s.subHandler.validator.requireSignature)
 	}
 
 	chainId := ctx.ChainId()
 	var invalidSigIndex []int
 	for i, ctx := range ctx.Resolution() {
-		if s.mainHandler.store.verifySigner(ctx, chainId, chainId) != nil {
+		if s.mainHandler.validator.VerifySigner(ctx, chainId, chainId) != nil {
 			invalidSigIndex = append(invalidSigIndex, i)
 		}
 	}
@@ -160,7 +160,7 @@ func (s *PublicCrossChainAPI) CtxContent() map[string]map[uint64][]*RPCCrossTran
 		"local":  make(map[uint64][]*RPCCrossTransaction),
 		"remote": make(map[uint64][]*RPCCrossTransaction),
 	}
-	locals, remotes, _, _ := s.handler.Query()
+	locals, remotes, _, _ := s.handler.QueryByPage(0, 0, 0, 0)
 	for s, txs := range locals {
 		for _, tx := range txs {
 			content["local"][s] = append(content["local"][s], newRPCCrossTransaction(tx))
@@ -199,40 +199,6 @@ func (s *PublicCrossChainAPI) CtxContentByPage(localSize, localPage, remoteSize,
 	return content
 }
 
-func (s *PublicCrossChainAPI) GetLocalCtx(pageSize, startPage int) RPCPageCrossTransactions {
-	local, total := s.handler.QueryLocalByPage(pageSize, startPage)
-
-	content := RPCPageCrossTransactions{
-		Data:  make(map[uint64][]*RPCCrossTransaction),
-		Total: total,
-	}
-
-	for k, txs := range local {
-		for _, tx := range txs {
-			content.Data[k] = append(content.Data[k], newRPCCrossTransaction(tx))
-		}
-	}
-
-	return content
-}
-
-func (s *PublicCrossChainAPI) GetRemoteCtx(pageSize, startPage int) RPCPageCrossTransactions {
-	remotes, total := s.handler.QueryRemoteByPage(pageSize, startPage)
-
-	content := RPCPageCrossTransactions{
-		Data:  make(map[uint64][]*RPCCrossTransaction),
-		Total: total,
-	}
-
-	for k, txs := range remotes {
-		for _, tx := range txs {
-			content.Data[k] = append(content.Data[k], newRPCCrossTransaction(tx))
-		}
-	}
-
-	return content
-}
-
 func (s *PublicCrossChainAPI) CtxQuery(ctx context.Context, hash common.Hash) *RPCCrossTransaction {
 	return newRPCCrossTransaction(s.handler.FindByTxHash(hash))
 }
@@ -245,14 +211,14 @@ func (s *PublicCrossChainAPI) CtxQueryDestValue(ctx context.Context, value *hexu
 	}
 	return &RPCPageCrossTransactions{
 		Data: map[uint64][]*RPCCrossTransaction{
-			chainID.Uint64(): list,
+			chainID: list,
 		},
 		Total: total,
 	}
 }
 
 func (s *PublicCrossChainAPI) CtxOwner(ctx context.Context, from common.Address) map[string]map[uint64][]*RPCOwnerCrossTransaction {
-	locals, _ := s.handler.QueryLocalBySender(from)
+	locals, _ := s.handler.QueryLocalBySenderAndPage(from, 0, 0)
 	content := map[string]map[uint64][]*RPCOwnerCrossTransaction{
 		"local": make(map[uint64][]*RPCOwnerCrossTransaction),
 	}
@@ -278,9 +244,9 @@ func (s *PublicCrossChainAPI) CtxOwnerByPage(ctx context.Context, from common.Ad
 	return content
 }
 
-func (s *PublicCrossChainAPI) CtxStats() map[string]int {
+func (s *PublicCrossChainAPI) CtxStats() map[string]map[cc.CtxStatus]int {
 	local, remote := s.handler.StoreStats()
-	return map[string]int{"local": local, "remote": remote}
+	return map[string]map[cc.CtxStatus]int{"local": local, "remote": remote}
 }
 
 func (s *PublicCrossChainAPI) PoolStats() map[string]int {
@@ -288,10 +254,44 @@ func (s *PublicCrossChainAPI) PoolStats() map[string]int {
 	return map[string]int{"pending": pending, "queue": queue}
 }
 
+//func (s *PublicCrossChainAPI) GetLocalCtx(pageSize, startPage int) RPCPageCrossTransactions {
+//	local, total := s.handler.QueryLocalByPage(pageSize, startPage)
+//
+//	content := RPCPageCrossTransactions{
+//		Data:  make(map[uint64][]*RPCCrossTransaction),
+//		Total: total,
+//	}
+//
+//	for k, txs := range local {
+//		for _, tx := range txs {
+//			content.Data[k] = append(content.Data[k], newRPCCrossTransaction(tx))
+//		}
+//	}
+//
+//	return content
+//}
+//
+//func (s *PublicCrossChainAPI) GetRemoteCtx(pageSize, startPage int) RPCPageCrossTransactions {
+//	remotes, total := s.handler.QueryRemoteByPage(pageSize, startPage)
+//
+//	content := RPCPageCrossTransactions{
+//		Data:  make(map[uint64][]*RPCCrossTransaction),
+//		Total: total,
+//	}
+//
+//	for k, txs := range remotes {
+//		for _, tx := range txs {
+//			content.Data[k] = append(content.Data[k], newRPCCrossTransaction(tx))
+//		}
+//	}
+//
+//	return content
+//}
+
 type RPCCrossTransaction struct {
 	Value            *hexutil.Big   `json:"value"`
 	CTxId            common.Hash    `json:"ctxId"`
-	Status           string         `json:"status"`
+	Status           cc.CtxStatus   `json:"status"`
 	TxHash           common.Hash    `json:"txHash"`
 	From             common.Address `json:"from"`
 	BlockHash        common.Hash    `json:"blockHash"`
@@ -312,7 +312,7 @@ func newRPCCrossTransaction(tx *cc.CrossTransactionWithSignatures) *RPCCrossTran
 	result := &RPCCrossTransaction{
 		Value:            (*hexutil.Big)(tx.Data.Value),
 		CTxId:            tx.ID(),
-		Status:           tx.Status.String(),
+		Status:           tx.Status,
 		TxHash:           tx.Data.TxHash,
 		From:             tx.Data.From,
 		BlockHash:        tx.Data.BlockHash,
@@ -335,7 +335,7 @@ func newRPCCrossTransaction(tx *cc.CrossTransactionWithSignatures) *RPCCrossTran
 
 type RPCOwnerCrossTransaction struct {
 	Value            *hexutil.Big   `json:"value"`
-	Status           string         `json:"status"`
+	Status           cc.CtxStatus   `json:"status"`
 	CTxId            common.Hash    `json:"ctxId"`
 	TxHash           common.Hash    `json:"txHash"`
 	From             common.Address `json:"from"`
@@ -352,7 +352,7 @@ type RPCOwnerCrossTransaction struct {
 func newOwnerRPCCrossTransaction(tx *cc.OwnerCrossTransactionWithSignatures) *RPCOwnerCrossTransaction {
 	result := &RPCOwnerCrossTransaction{
 		Value:            (*hexutil.Big)(tx.Cws.Data.Value),
-		Status:           tx.Cws.Status.String(),
+		Status:           tx.Cws.Status,
 		CTxId:            tx.Cws.Data.CTxId,
 		TxHash:           tx.Cws.Data.TxHash,
 		From:             tx.Cws.Data.From,

@@ -2,7 +2,10 @@ module github.com/simplechain-org/go-simplechain
 
 go 1.13
 
-replace github.com/coreos/etcd => github.com/simplechain-org/etcd v0.5.0-alpha.5.0.20200207141613-5c5f4390b19e
+replace (
+	github.com/asdine/storm/v3 => github.com/simplechain-org/storm/v3 v3.2.1-0.20200521045524-c61eb1b00dec
+	github.com/coreos/etcd => github.com/simplechain-org/etcd v0.5.0-alpha.5.0.20200207141613-5c5f4390b19e
+)
 
 require (
 	github.com/Azure/azure-pipeline-go v0.2.2 // indirect
@@ -12,7 +15,6 @@ require (
 	github.com/StackExchange/wmi v0.0.0-20180116203802-5d049714c4a6 // indirect
 	github.com/VictoriaMetrics/fastcache v1.5.3
 	github.com/aristanetworks/goarista v0.0.0-20190924011532-60b7b74727fd
-	github.com/asdine/storm v2.1.2+incompatible
 	github.com/asdine/storm/v3 v3.1.1
 	github.com/btcsuite/btcd v0.0.0-20171128150713-2e60448ffcc6
 	github.com/cespare/cp v0.1.0

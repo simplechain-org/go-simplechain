@@ -12,10 +12,13 @@ import (
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/cross"
 	cc "github.com/simplechain-org/go-simplechain/cross/core"
+	db "github.com/simplechain-org/go-simplechain/cross/database"
 	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/rlp"
+
+	"github.com/asdine/storm/v3/q"
 )
 
 func TestNewCtxStoreAdd(t *testing.T) {
@@ -40,12 +43,18 @@ func TestNewCtxStoreAdd(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	signHash2 := func(hash []byte) ([]byte, error) {
+		key, _ := crypto.GenerateKey()
+		return crypto.Sign(hash, key)
+	}
+
 	ctxStore, err := setupCtxStore()
 	if err != nil {
 		t.Fatal(err)
 	}
+	ctxPool := NewCrossPool(ctxStore, NewCrossValidator(ctxStore, common.Address{}), signHash2)
 	signedCh := make(chan cc.SignedCtxEvent, 1) // receive signed ctx
-	signedSub := ctxStore.SubscribeSignedCtxEvent(signedCh)
+	signedSub := ctxPool.SubscribeSignedCtxEvent(signedCh)
 	defer signedSub.Unsubscribe()
 
 	// ctx signed by anchor2
@@ -57,18 +66,18 @@ func TestNewCtxStoreAdd(t *testing.T) {
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
 		addr,
 		nil),
-		signer, ctxStore.signHash)
+		signer, signHash2)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if err := ctxStore.AddRemote(tx1); err != nil {
+	if err := ctxPool.AddRemote(tx1); err != nil {
 		t.Fatal(err)
 	}
-	if err := ctxStore.AddRemote(tx2); err != nil {
+	if err := ctxPool.AddRemote(tx2); err != nil {
 		t.Fatal(err)
 	}
-	if err := ctxStore.AddLocal(cc.NewCrossTransaction(big.NewInt(1e18),
+	if err := ctxPool.AddLocal(cc.NewCrossTransaction(big.NewInt(1e18),
 		big.NewInt(2e18),
 		big.NewInt(19),
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
@@ -81,22 +90,23 @@ func TestNewCtxStoreAdd(t *testing.T) {
 	ev := <-signedCh
 	ev.CallBack(ev.Tws)
 
-	if ctxStore.LocalStats() != 1 {
-		t.Errorf("add failed,stats:%d (!= %d)", ctxStore.LocalStats(), 1)
+	if ctxStore.localStore.Count(q.Eq(db.StatusField, cc.CtxStatusWaiting)) != 1 {
+		t.Errorf("add failed,stats:%d (!= %d)", ctxStore.localStore.Count(), 1)
 	}
 
-	ctxStore.Stop()
+	ctxStore.Close()
 }
 
 func setupCtxStore() (*CrossStore, error) {
-	signHash := func(hash []byte) ([]byte, error) {
-		key, _ := crypto.GenerateKey()
-		return crypto.Sign(hash, key)
-	}
 	statedb, _ := state.New(common.Hash{}, state.NewDatabase(rawdb.NewMemoryDatabase()))
 	blockchain := &testBlockChain{statedb, 1000000, new(event.Feed)}
 
-	return NewCrossStore(nil, cross.DefaultCtxStoreConfig, params.TestChainConfig, blockchain, "testing-cross-store", common.Address{}, signHash)
+	store, err := NewCrossStore(nil, cross.DefaultCtxStoreConfig, params.TestChainConfig, blockchain, "testing-cross-store")
+	if err != nil {
+		return nil, err
+	}
+	store.localStore.Clean()
+	return store, nil
 }
 
 type testBlockChain struct {

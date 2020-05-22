@@ -204,7 +204,7 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*Ethereum, error) {
 			TrieTimeLimit:       config.TrieTimeout,
 		}
 	)
-	eth.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, chainConfig, eth.engine, vmConfig, eth.config.SubChainCtxAddress, eth.shouldPreserve)
+	eth.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, chainConfig, eth.engine, vmConfig, eth.shouldPreserve)
 	if err != nil {
 		return nil, err
 	}

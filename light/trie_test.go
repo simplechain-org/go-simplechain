@@ -23,7 +23,6 @@ import (
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/consensus/ethash"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/rawdb"
@@ -41,7 +40,7 @@ func TestNodeIterator(t *testing.T) {
 		genesis = gspec.MustCommit(fulldb)
 	)
 	gspec.MustCommit(lightdb)
-	blockchain, _ := core.NewBlockChain(fulldb, nil, params.TestChainConfig, ethash.NewFullFaker(), vm.Config{}, common.Address{}, nil)
+	blockchain, _ := core.NewBlockChain(fulldb, nil, params.TestChainConfig, ethash.NewFullFaker(), vm.Config{}, nil)
 	gchain, _ := core.GenerateChain(params.TestChainConfig, genesis, ethash.NewFaker(), fulldb, 4, testChainGen)
 	if _, err := blockchain.InsertChain(gchain); err != nil {
 		panic(err)

@@ -12,11 +12,8 @@ import (
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/core/vm"
 	"github.com/simplechain-org/go-simplechain/cross"
-	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	"github.com/simplechain-org/go-simplechain/params"
 )
-
-type Validator func(cws *cc.CrossTransactionWithSignatures) error
 
 type ChainInvoke struct {
 	bc cross.BlockChain
@@ -65,7 +62,6 @@ func (e EvmInvoke) CallContract(from common.Address, to *common.Address, functio
 		data = append(data, input...)
 	}
 
-	//构造消息
 	checkMsg := types.NewMessage(from, to, 0, big.NewInt(0), math.MaxUint64/2, big.NewInt(params.GWei), data, false)
 	var cancel context.CancelFunc
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)

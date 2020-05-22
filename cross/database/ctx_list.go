@@ -208,34 +208,6 @@ func (m *CtxSortedByBlockNum) Map(do func(*cc.CrossTransactionWithSignatures) bo
 	}
 }
 
-type CtxToBlockHash lru.ARCCache
-
-func NewCtxToBlockHash(cap int) *CtxToBlockHash {
-	cache, _ := lru.NewARC(cap)
-	return (*CtxToBlockHash)(cache)
-}
-
-func (m *CtxToBlockHash) Has(txID common.Hash) bool {
-	return (*lru.ARCCache)(m).Contains(txID)
-}
-
-func (m *CtxToBlockHash) Get(txID common.Hash) (common.Hash, bool) {
-	item, ok := (*lru.ARCCache)(m).Get(txID)
-	if !ok {
-		return common.Hash{}, false
-	}
-	return item.(common.Hash), ok
-}
-
-func (m *CtxToBlockHash) Put(txID common.Hash, blockHash common.Hash) bool {
-	var update bool
-	if oldBlockHash, ok := m.Get(txID); ok {
-		update = blockHash != oldBlockHash
-	}
-	(*lru.ARCCache)(m).Add(txID, blockHash)
-	return update
-}
-
 type CrossTransactionIndexed struct {
 	PK       uint64         `storm:"id,increment"`
 	CtxId    common.Hash    `storm:"unique"`
@@ -243,9 +215,8 @@ type CrossTransactionIndexed struct {
 	TxHash   common.Hash    `storm:"index"`
 	Price    *big.Float     `storm:"index"`
 	BlockNum uint64         `storm:"index"`
-
 	// normal field
-	Status cc.CtxStatus
+	Status uint8 `storm:"index"`
 
 	Value            *big.Int
 	BlockHash        common.Hash
@@ -261,7 +232,7 @@ type CrossTransactionIndexed struct {
 func NewCrossTransactionIndexed(ctx *cc.CrossTransactionWithSignatures) *CrossTransactionIndexed {
 	return &CrossTransactionIndexed{
 		CtxId:            ctx.ID(),
-		Status:           ctx.Status,
+		Status:           uint8(ctx.Status),
 		BlockNum:         ctx.BlockNum,
 		From:             ctx.Data.From,
 		Price:            new(big.Float).SetRat(ctx.Price()),
@@ -280,7 +251,7 @@ func NewCrossTransactionIndexed(ctx *cc.CrossTransactionWithSignatures) *CrossTr
 
 func (c CrossTransactionIndexed) ToCrossTransaction() *cc.CrossTransactionWithSignatures {
 	return &cc.CrossTransactionWithSignatures{
-		Status:   c.Status,
+		Status:   cc.CtxStatus(c.Status),
 		BlockNum: c.BlockNum,
 		Data: cc.CtxDatas{
 			Value:            c.Value,
