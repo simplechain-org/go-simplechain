@@ -87,14 +87,14 @@ func (s *PublicCrossManualAPI) ImportMainCtx(ctxWithSignsSArgs hexutil.Bytes) er
 		return err
 	}
 
-	if len(ctx.Resolution()) < requireSignatureCount {
-		return fmt.Errorf("invalid signture length ctx: %d,want: %d", len(ctx.Resolution()), requireSignatureCount)
+	if len(ctx.Resolution()) < s.mainHandler.validator.requireSignature {
+		return fmt.Errorf("invalid signture length ctx: %d,want: %d", len(ctx.Resolution()), s.mainHandler.validator.requireSignature)
 	}
 
 	chainId := ctx.ChainId()
 	var invalidSigIndex []int
 	for i, ctx := range ctx.Resolution() {
-		if s.subHandler.store.verifySigner(ctx, chainId, chainId) != nil {
+		if s.subHandler.validator.VerifySigner(ctx, chainId, chainId) != nil {
 			invalidSigIndex = append(invalidSigIndex, i)
 		}
 	}
@@ -118,14 +118,14 @@ func (s *PublicCrossManualAPI) ImportSubCtx(ctxWithSignsSArgs hexutil.Bytes) err
 		return err
 	}
 
-	if len(ctx.Resolution()) < requireSignatureCount {
-		return fmt.Errorf("invalid signture length ctx: %d,want: %d", len(ctx.Resolution()), requireSignatureCount)
+	if len(ctx.Resolution()) < s.subHandler.validator.requireSignature {
+		return fmt.Errorf("invalid signture length ctx: %d,want: %d", len(ctx.Resolution()), s.subHandler.validator.requireSignature)
 	}
 
 	chainId := ctx.ChainId()
 	var invalidSigIndex []int
 	for i, ctx := range ctx.Resolution() {
-		if s.mainHandler.store.verifySigner(ctx, chainId, chainId) != nil {
+		if s.mainHandler.validator.VerifySigner(ctx, chainId, chainId) != nil {
 			invalidSigIndex = append(invalidSigIndex, i)
 		}
 	}

@@ -1,4 +1,4 @@
-package simpletrigger
+package subscriber
 
 import (
 	"github.com/simplechain-org/go-simplechain/common"
@@ -10,7 +10,7 @@ import (
 
 const defaultConfirmDepth = 12
 
-type SimpleTrigger struct {
+type SimpleSubscriber struct {
 	unconfirmedBlockLogs
 	contract common.Address
 
@@ -23,12 +23,12 @@ type SimpleTrigger struct {
 	scope               event.SubscriptionScope
 }
 
-func (t *SimpleTrigger) Stop() {
+func (t *SimpleSubscriber) Stop() {
 	t.scope.Close()
 }
 
-func NewSimpleTrigger(contract common.Address, chain chainRetriever) *SimpleTrigger {
-	return &SimpleTrigger{
+func NewSimpleSubscriber(contract common.Address, chain chainRetriever) *SimpleSubscriber {
+	return &SimpleSubscriber{
 		contract: contract,
 		unconfirmedBlockLogs: unconfirmedBlockLogs{
 			chain: chain,
@@ -37,7 +37,7 @@ func NewSimpleTrigger(contract common.Address, chain chainRetriever) *SimpleTrig
 	}
 }
 
-func (t *SimpleTrigger) StoreCrossContractLog(blockNumber uint64, hash common.Hash, logs []*types.Log) {
+func (t *SimpleSubscriber) StoreCrossContractLog(blockNumber uint64, hash common.Hash, logs []*types.Log) {
 	var unconfirmedLogs []*types.Log
 	if logs != nil {
 		var takers []*cc.CrossTransactionModifier
@@ -93,38 +93,38 @@ func (t *SimpleTrigger) StoreCrossContractLog(blockNumber uint64, hash common.Ha
 	t.insert(blockNumber, hash, unconfirmedLogs)
 }
 
-func (t *SimpleTrigger) ConfirmedMakerFeedSend(ctx cc.ConfirmedMakerEvent) int {
+func (t *SimpleSubscriber) ConfirmedMakerFeedSend(ctx cc.ConfirmedMakerEvent) int {
 	return t.confirmedMakerFeed.Send(ctx)
 }
 
-func (t *SimpleTrigger) SubscribeConfirmedMakerEvent(ch chan<- cc.ConfirmedMakerEvent) event.Subscription {
+func (t *SimpleSubscriber) SubscribeConfirmedMakerEvent(ch chan<- cc.ConfirmedMakerEvent) event.Subscription {
 	return t.scope.Track(t.confirmedMakerFeed.Subscribe(ch))
 }
 
-func (t *SimpleTrigger) ConfirmedTakerSend(transaction cc.ConfirmedTakerEvent) int {
+func (t *SimpleSubscriber) ConfirmedTakerSend(transaction cc.ConfirmedTakerEvent) int {
 	return t.confirmedTakerFeed.Send(transaction)
 }
 
-func (t *SimpleTrigger) SubscribeConfirmedTakerEvent(ch chan<- cc.ConfirmedTakerEvent) event.Subscription {
+func (t *SimpleSubscriber) SubscribeConfirmedTakerEvent(ch chan<- cc.ConfirmedTakerEvent) event.Subscription {
 	return t.scope.Track(t.confirmedTakerFeed.Subscribe(ch))
 }
 
-func (t *SimpleTrigger) SubscribeNewTakerEvent(ch chan<- cc.NewTakerEvent) event.Subscription {
+func (t *SimpleSubscriber) SubscribeNewTakerEvent(ch chan<- cc.NewTakerEvent) event.Subscription {
 	return t.scope.Track(t.takerFeed.Subscribe(ch))
 }
 
-func (t *SimpleTrigger) SubscribeNewFinishEvent(ch chan<- cc.NewFinishEvent) event.Subscription {
+func (t *SimpleSubscriber) SubscribeNewFinishEvent(ch chan<- cc.NewFinishEvent) event.Subscription {
 	return t.scope.Track(t.finishFeed.Subscribe(ch))
 }
 
-func (t *SimpleTrigger) SubscribeConfirmedFinishEvent(ch chan<- cc.ConfirmedFinishEvent) event.Subscription {
+func (t *SimpleSubscriber) SubscribeConfirmedFinishEvent(ch chan<- cc.ConfirmedFinishEvent) event.Subscription {
 	return t.scope.Track(t.confirmedFinishFeed.Subscribe(ch))
 }
 
-func (t *SimpleTrigger) SubscribeUpdateAnchorEvent(ch chan<- cc.AnchorEvent) event.Subscription {
+func (t *SimpleSubscriber) SubscribeUpdateAnchorEvent(ch chan<- cc.AnchorEvent) event.Subscription {
 	return t.scope.Track(t.updateAnchorFeed.Subscribe(ch))
 }
 
-func (t *SimpleTrigger) ConfirmedFinishFeedSend(tx cc.ConfirmedFinishEvent) int {
+func (t *SimpleSubscriber) ConfirmedFinishFeedSend(tx cc.ConfirmedFinishEvent) int {
 	return t.confirmedFinishFeed.Send(tx)
 }

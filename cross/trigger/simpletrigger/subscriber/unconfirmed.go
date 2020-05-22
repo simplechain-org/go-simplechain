@@ -1,4 +1,4 @@
-package simpletrigger
+package subscriber
 
 import (
 	"container/ring"
@@ -34,7 +34,7 @@ type unconfirmedBlockLogs struct {
 }
 
 // Insert adds a new block to the set of trigger ones.
-func (t *SimpleTrigger) insert(index uint64, hash common.Hash, blockLogs []*types.Log) {
+func (t *SimpleSubscriber) insert(index uint64, hash common.Hash, blockLogs []*types.Log) {
 	// If a new block was mined locally, shift out any old enough blocks
 	t.shift(index)
 
@@ -59,7 +59,7 @@ func (t *SimpleTrigger) insert(index uint64, hash common.Hash, blockLogs []*type
 // Shift drops all trigger blocks from the set which exceed the trigger sets depth
 // allowance, checking them against the canonical chain for inclusion or staleness
 // report.
-func (t *SimpleTrigger) shift(height uint64) {
+func (t *SimpleSubscriber) shift(height uint64) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 

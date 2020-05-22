@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-simplechain library. If not, see <http://www.gnu.org/licenses/>.
 
-package simpletrigger
+package subscriber
 
 import (
 	"testing"
@@ -39,7 +39,7 @@ func (r *noopChainRetriever) GetChainConfig() *params.ChainConfig { return nil }
 func TestUnconfirmedInsertBounds(t *testing.T) {
 	limit := defaultConfirmDepth
 
-	pool := NewSimpleTrigger(common.Address{}, new(noopChainRetriever))
+	pool := NewSimpleSubscriber(common.Address{}, new(noopChainRetriever))
 	for depth := uint64(0); depth < 2*uint64(limit); depth++ {
 		// Insert multiple blocks for the same level just to stress it
 		for i := 0; i < int(depth); i++ {
@@ -61,7 +61,7 @@ func TestUnconfirmedShifts(t *testing.T) {
 	// Create a pool with a few blocks on various depths
 	limit, start := uint(defaultConfirmDepth), uint64(25)
 
-	pool := NewSimpleTrigger(common.Address{}, new(noopChainRetriever))
+	pool := NewSimpleSubscriber(common.Address{}, new(noopChainRetriever))
 	for depth := start; depth < start+uint64(limit); depth++ {
 		pool.insert(depth, common.Hash([32]byte{byte(depth)}), nil)
 	}

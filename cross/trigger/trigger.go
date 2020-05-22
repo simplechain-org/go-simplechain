@@ -5,11 +5,18 @@ import (
 	"github.com/simplechain-org/go-simplechain/event"
 )
 
-type Trigger interface {
+type Subscriber interface {
 	SubscribeUpdateAnchorEvent(ch chan<- core.AnchorEvent) event.Subscription
 	SubscribeNewTakerEvent(ch chan<- core.NewTakerEvent) event.Subscription
 	SubscribeNewFinishEvent(ch chan<- core.NewFinishEvent) event.Subscription
 	SubscribeConfirmedMakerEvent(ch chan<- core.ConfirmedMakerEvent) event.Subscription
 	SubscribeConfirmedTakerEvent(ch chan<- core.ConfirmedTakerEvent) event.Subscription
 	SubscribeConfirmedFinishEvent(ch chan<- core.ConfirmedFinishEvent) event.Subscription
+	Stop()
+}
+
+type Executor interface {
+	SubmitTransaction([]*core.ReceptTransaction)
+	Start()
+	Stop()
 }

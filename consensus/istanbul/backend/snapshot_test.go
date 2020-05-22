@@ -347,7 +347,7 @@ func TestVoting(t *testing.T) {
 			config.Epoch = tt.epoch
 		}
 		engine := New(config, accounts.accounts[tt.validators[0]], db).(*backend)
-		chain, err := core.NewBlockChain(db, nil, genesis.Config, engine, vm.Config{}, common.Address{}, nil)
+		chain, err := core.NewBlockChain(db, nil, genesis.Config, engine, vm.Config{}, nil)
 		if err != nil {
 			t.Errorf("test %d: failed to create blockchain: %v", i, err)
 			continue

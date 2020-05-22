@@ -66,34 +66,20 @@ func NewCrossService(ctx *node.ServiceContext, main, sub cross.SimpleChain, conf
 		quitSync:  make(chan struct{}),
 	}
 
-	// construct cross store
-	mainStore, err := NewCrossStore(ctx, config.CtxStore, main.ChainConfig(), main.BlockChain(), common.MainMakerData, config.MainChainCtxAddress, main.SignHash)
-	if err != nil {
-		return nil, err
-	}
-	subStore, err := NewCrossStore(ctx, config.CtxStore, sub.ChainConfig(), sub.BlockChain(), common.SubMakerData, config.SubChainCtxAddress, sub.SignHash)
-	if err != nil {
-		return nil, err
-	}
-
 	// construct cross handler
-	mainHandler := NewCrossHandler(main, RoleMainHandler, config.Role,
-		srv, mainStore, main.BlockChain(),
-		ctx.MainCh, ctx.SubCh,
-		config.MainChainCtxAddress, config.SubChainCtxAddress,
-		main.SignHash, config.AnchorSigner,
-	)
+	mainHandler, err := NewCrossHandler(ctx, main, srv, config.CtxStore, common.MainMakerData, config.MainChainCtxAddress, ctx.MainCh, ctx.SubCh, main.SignHash, config.AnchorSigner)
+	if err != nil {
+		return nil, err
+	}
 
-	subHandler := NewCrossHandler(sub, RoleSubHandler, config.Role,
-		srv, subStore, sub.BlockChain(),
-		ctx.SubCh, ctx.MainCh,
-		config.MainChainCtxAddress, config.SubChainCtxAddress,
-		main.SignHash, config.AnchorSigner,
-	)
+	subHandler, err := NewCrossHandler(ctx, sub, srv, config.CtxStore, common.SubMakerData, config.SubChainCtxAddress, ctx.SubCh, ctx.MainCh, main.SignHash, config.AnchorSigner)
+	if err != nil {
+		return nil, err
+	}
 
 	// register crosschain
-	mainStore.RegisterChain(sub.ChainConfig().ChainID)
-	subStore.RegisterChain(main.ChainConfig().ChainID)
+	mainHandler.store.RegisterChain(sub.ChainConfig().ChainID)
+	subHandler.store.RegisterChain(main.ChainConfig().ChainID)
 
 	// register apis
 	main.RegisterAPIs([]rpc.API{

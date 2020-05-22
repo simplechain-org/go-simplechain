@@ -93,7 +93,7 @@ func (h *Handler) PoolStats() (int, int) {
 	if !h.pm.CanAcceptTxs() {
 		return 0, 0
 	}
-	return h.store.PoolStats()
+	return h.pool.Stats()
 }
 
 func (h *Handler) StoreStats() (map[cc.CtxStatus]int, map[cc.CtxStatus]int) {

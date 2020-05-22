@@ -35,7 +35,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -659,90 +658,90 @@ func sendSuccess(conn *websocket.Conn, msg string) error {
 
 // authTwitter tries to authenticate a faucet request using Twitter posts, returning
 // the username, avatar URL and Ethereum address to fund on success.
-func authTwitter(url string) (string, string, common.Address, error) {
-	// Ensure the user specified a meaningful URL, no fancy nonsense
-	parts := strings.Split(url, "/")
-	if len(parts) < 4 || parts[len(parts)-2] != "status" {
-		//lint:ignore ST1005 This error is to be displayed in the browser
-		return "", "", common.Address{}, errors.New("Invalid Twitter status URL")
-	}
-	// Twitter's API isn't really friendly with direct links. Still, we don't
-	// want to do ask read permissions from users, so just load the public posts and
-	// scrape it for the Ethereum address and profile URL.
-	res, err := http.Get(url)
-	if err != nil {
-		return "", "", common.Address{}, err
-	}
-	defer res.Body.Close()
-
-	// Resolve the username from the final redirect, no intermediate junk
-	parts = strings.Split(res.Request.URL.String(), "/")
-	if len(parts) < 4 || parts[len(parts)-2] != "status" {
-		//lint:ignore ST1005 This error is to be displayed in the browser
-		return "", "", common.Address{}, errors.New("Invalid Twitter status URL")
-	}
-	username := parts[len(parts)-3]
-
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return "", "", common.Address{}, err
-	}
-	address := common.HexToAddress(string(regexp.MustCompile("0x[0-9a-fA-F]{40}").Find(body)))
-	if address == (common.Address{}) {
-		//lint:ignore ST1005 This error is to be displayed in the browser
-		return "", "", common.Address{}, errors.New("No Ethereum address found to fund")
-	}
-	var avatar string
-	if parts = regexp.MustCompile("src=\"([^\"]+twimg.com/profile_images[^\"]+)\"").FindStringSubmatch(string(body)); len(parts) == 2 {
-		avatar = parts[1]
-	}
-	return username + "@twitter", avatar, address, nil
-}
+//func authTwitter(url string) (string, string, common.Address, error) {
+//	// Ensure the user specified a meaningful URL, no fancy nonsense
+//	parts := strings.Split(url, "/")
+//	if len(parts) < 4 || parts[len(parts)-2] != "status" {
+//		//lint:ignore ST1005 This error is to be displayed in the browser
+//		return "", "", common.Address{}, errors.New("Invalid Twitter status URL")
+//	}
+//	// Twitter's API isn't really friendly with direct links. Still, we don't
+//	// want to do ask read permissions from users, so just load the public posts and
+//	// scrape it for the Ethereum address and profile URL.
+//	res, err := http.Get(url)
+//	if err != nil {
+//		return "", "", common.Address{}, err
+//	}
+//	defer res.Body.Close()
+//
+//	// Resolve the username from the final redirect, no intermediate junk
+//	parts = strings.Split(res.Request.URL.String(), "/")
+//	if len(parts) < 4 || parts[len(parts)-2] != "status" {
+//		//lint:ignore ST1005 This error is to be displayed in the browser
+//		return "", "", common.Address{}, errors.New("Invalid Twitter status URL")
+//	}
+//	username := parts[len(parts)-3]
+//
+//	body, err := ioutil.ReadAll(res.Body)
+//	if err != nil {
+//		return "", "", common.Address{}, err
+//	}
+//	address := common.HexToAddress(string(regexp.MustCompile("0x[0-9a-fA-F]{40}").Find(body)))
+//	if address == (common.Address{}) {
+//		//lint:ignore ST1005 This error is to be displayed in the browser
+//		return "", "", common.Address{}, errors.New("No Ethereum address found to fund")
+//	}
+//	var avatar string
+//	if parts = regexp.MustCompile("src=\"([^\"]+twimg.com/profile_images[^\"]+)\"").FindStringSubmatch(string(body)); len(parts) == 2 {
+//		avatar = parts[1]
+//	}
+//	return username + "@twitter", avatar, address, nil
+//}
 
 // authFacebook tries to authenticate a faucet request using Facebook posts,
 // returning the username, avatar URL and Ethereum address to fund on success.
-func authFacebook(url string) (string, string, common.Address, error) {
-	// Ensure the user specified a meaningful URL, no fancy nonsense
-	parts := strings.Split(url, "/")
-	if len(parts) < 4 || parts[len(parts)-2] != "posts" {
-		//lint:ignore ST1005 This error is to be displayed in the browser
-		return "", "", common.Address{}, errors.New("Invalid Facebook post URL")
-	}
-	username := parts[len(parts)-3]
-
-	// Facebook's Graph API isn't really friendly with direct links. Still, we don't
-	// want to do ask read permissions from users, so just load the public posts and
-	// scrape it for the Ethereum address and profile URL.
-	res, err := http.Get(url)
-	if err != nil {
-		return "", "", common.Address{}, err
-	}
-	defer res.Body.Close()
-
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return "", "", common.Address{}, err
-	}
-	address := common.HexToAddress(string(regexp.MustCompile("0x[0-9a-fA-F]{40}").Find(body)))
-	if address == (common.Address{}) {
-		//lint:ignore ST1005 This error is to be displayed in the browser
-		return "", "", common.Address{}, errors.New("No Ethereum address found to fund")
-	}
-	var avatar string
-	if parts = regexp.MustCompile("src=\"([^\"]+fbcdn.net[^\"]+)\"").FindStringSubmatch(string(body)); len(parts) == 2 {
-		avatar = parts[1]
-	}
-	return username + "@facebook", avatar, address, nil
-}
+//func authFacebook(url string) (string, string, common.Address, error) {
+//	// Ensure the user specified a meaningful URL, no fancy nonsense
+//	parts := strings.Split(url, "/")
+//	if len(parts) < 4 || parts[len(parts)-2] != "posts" {
+//		//lint:ignore ST1005 This error is to be displayed in the browser
+//		return "", "", common.Address{}, errors.New("Invalid Facebook post URL")
+//	}
+//	username := parts[len(parts)-3]
+//
+//	// Facebook's Graph API isn't really friendly with direct links. Still, we don't
+//	// want to do ask read permissions from users, so just load the public posts and
+//	// scrape it for the Ethereum address and profile URL.
+//	res, err := http.Get(url)
+//	if err != nil {
+//		return "", "", common.Address{}, err
+//	}
+//	defer res.Body.Close()
+//
+//	body, err := ioutil.ReadAll(res.Body)
+//	if err != nil {
+//		return "", "", common.Address{}, err
+//	}
+//	address := common.HexToAddress(string(regexp.MustCompile("0x[0-9a-fA-F]{40}").Find(body)))
+//	if address == (common.Address{}) {
+//		//lint:ignore ST1005 This error is to be displayed in the browser
+//		return "", "", common.Address{}, errors.New("No Ethereum address found to fund")
+//	}
+//	var avatar string
+//	if parts = regexp.MustCompile("src=\"([^\"]+fbcdn.net[^\"]+)\"").FindStringSubmatch(string(body)); len(parts) == 2 {
+//		avatar = parts[1]
+//	}
+//	return username + "@facebook", avatar, address, nil
+//}
 
 // authNoAuth tries to interpret a faucet request as a plain Ethereum address,
 // without actually performing any remote authentication. This mode is prone to
 // Byzantine attack, so only ever use for truly private networks.
-func authNoAuth(url string) (string, string, common.Address, error) {
-	address := common.HexToAddress(regexp.MustCompile("0x[0-9a-fA-F]{40}").FindString(url))
-	if address == (common.Address{}) {
-		//lint:ignore ST1005 This error is to be displayed in the browser
-		return "", "", common.Address{}, errors.New("No Ethereum address found to fund")
-	}
-	return address.Hex() + "@noauth", "", address, nil
-}
+//func authNoAuth(url string) (string, string, common.Address, error) {
+//	address := common.HexToAddress(regexp.MustCompile("0x[0-9a-fA-F]{40}").FindString(url))
+//	if address == (common.Address{}) {
+//		//lint:ignore ST1005 This error is to be displayed in the browser
+//		return "", "", common.Address{}, errors.New("No Ethereum address found to fund")
+//	}
+//	return address.Hex() + "@noauth", "", address, nil
+//}

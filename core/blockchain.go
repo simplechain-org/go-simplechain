@@ -38,7 +38,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/core/vm"
 	"github.com/simplechain-org/go-simplechain/cross/trigger"
-	"github.com/simplechain-org/go-simplechain/cross/trigger/simpletrigger"
+	"github.com/simplechain-org/go-simplechain/cross/trigger/simpletrigger/subscriber"
 	"github.com/simplechain-org/go-simplechain/ethdb"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/log"
@@ -179,13 +179,13 @@ type BlockChain struct {
 	badBlocks       *lru.Cache                     // Bad block cache
 	shouldPreserve  func(*types.Block) bool        // Function used to determine whether should preserve the given block.
 	terminateInsert func(common.Hash, uint64) bool // Testing hook used to terminate ancient receipt chain insertion.
-	crossTrigger    *simpletrigger.SimpleTrigger
+	crossTrigger    *subscriber.SimpleSubscriber
 }
 
 // NewBlockChain returns a fully initialised block chain using information
 // available in the database. It initialises the default Ethereum Validator and
 // Processor.
-func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *params.ChainConfig, engine consensus.Engine, vmConfig vm.Config, contract common.Address, shouldPreserve func(block *types.Block) bool) (*BlockChain, error) {
+func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *params.ChainConfig, engine consensus.Engine, vmConfig vm.Config, shouldPreserve func(block *types.Block) bool) (*BlockChain, error) {
 	if cacheConfig == nil {
 		cacheConfig = &CacheConfig{
 			TrieCleanLimit: 256,
@@ -298,10 +298,6 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 	}
 	// Take ownership of this particular state
 	go bc.update()
-
-	if contract != (common.Address{}) {
-		bc.crossTrigger = simpletrigger.NewSimpleTrigger(contract, bc)
-	}
 
 	return bc, nil
 }
@@ -2281,4 +2277,6 @@ func (bc *BlockChain) GetChainConfig() *params.ChainConfig {
 	return bc.chainConfig
 }
 
-func (bc *BlockChain) GetCrossTrigger() trigger.Trigger { return bc.crossTrigger }
+func (bc *BlockChain) SetCrossTrigger(s trigger.Subscriber) {
+	bc.crossTrigger = s.(*subscriber.SimpleSubscriber) // panic if failed
+}
