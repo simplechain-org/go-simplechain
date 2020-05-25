@@ -1994,7 +1994,7 @@ func setAnchorSign(ctx *cli.Context, ks *keystore.KeyStore, cfg *eth.Config) {
 			if err != nil {
 				Fatalf("Invalid anchorSigner: %v", err)
 			}
-			cfg.AnchorSigner = account.Address
+			cfg.CrossConfig.Signer = account.Address
 		} else {
 			Fatalf("No anchorSigner configured")
 		}

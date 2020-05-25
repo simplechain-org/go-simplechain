@@ -16,12 +16,13 @@ import (
 )
 
 const (
-	expireInterval = time.Second * 60 * 12
-	expireNumber   = 180 //pending rtx expired after block num
+	expireInterval   = time.Second * 60 * 12
+	expireNumber     = 180 //pending rtx expired after block num
+	defaultCacheSize = 4096
 )
 
 type CrossStore struct {
-	config      cross.CtxStoreConfig
+	config      cross.Config
 	chainConfig *params.ChainConfig
 	chain       cross.BlockChain
 
@@ -32,15 +33,14 @@ type CrossStore struct {
 	logger log.Logger
 }
 
-func NewCrossStore(ctx crossdb.ServiceContext, config cross.CtxStoreConfig, chainConfig *params.ChainConfig, chain cross.BlockChain, makerDb string) (*CrossStore, error) {
+func NewCrossStore(ctx crossdb.ServiceContext, config cross.Config, chainConfig *params.ChainConfig, chain cross.BlockChain, makerDb string) (*CrossStore, error) {
 	config = (&config).Sanitize()
-	config.ChainId = chainConfig.ChainID
 
 	store := &CrossStore{
 		config:      config,
 		chainConfig: chainConfig,
 		chain:       chain,
-		logger:      log.New("cross-module", "store", "local", config.ChainId),
+		logger:      log.New("cross-module", "store", "local", chainConfig.ChainID),
 	}
 
 	db, err := crossdb.OpenStormDB(ctx, makerDb)
@@ -48,7 +48,7 @@ func NewCrossStore(ctx crossdb.ServiceContext, config cross.CtxStoreConfig, chai
 		return nil, err
 	}
 	store.db = db
-	store.localStore = crossdb.NewIndexDB(config.ChainId, db, config.GlobalSlots)
+	store.localStore = crossdb.NewIndexDB(chainConfig.ChainID, db, defaultCacheSize)
 	if err := store.localStore.Load(); err != nil {
 		store.logger.Warn("Failed to load local ctx", "err", err)
 	}
@@ -60,7 +60,7 @@ func (store *CrossStore) Close() {
 }
 
 func (store *CrossStore) RegisterChain(chainID *big.Int) {
-	store.remoteStore = crossdb.NewIndexDB(chainID, store.db, store.config.GlobalSlots)
+	store.remoteStore = crossdb.NewIndexDB(chainID, store.db, defaultCacheSize)
 	store.logger.New("remote", chainID)
 	store.logger.Info("Register remote chain successfully")
 }
@@ -150,7 +150,7 @@ func (store *CrossStore) SyncCrossTransactions(ctxList []*cc.CrossTransactionWit
 
 		var db crossdb.CtxDB
 		switch {
-		case store.config.ChainId.Cmp(chainID) == 0:
+		case store.chainConfig.ChainID.Cmp(chainID) == 0:
 			db = store.localStore
 		case store.remoteStore.ChainID().Cmp(chainID) == 0:
 			db = store.remoteStore

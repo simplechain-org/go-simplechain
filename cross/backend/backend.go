@@ -41,8 +41,9 @@ type CrossService struct {
 	main crossCommons
 	sub  crossCommons
 
-	config *eth.Config
-	peers  *anchorSet
+	config      *eth.Config
+	crossConfig *cross.Config
+	peers       *anchorSet
 
 	newPeerCh chan *anchorPeer
 	quitSync  chan struct{}
@@ -60,19 +61,20 @@ type crossCommons struct {
 
 func NewCrossService(ctx *node.ServiceContext, main, sub cross.SimpleChain, config *eth.Config) (*CrossService, error) {
 	srv := &CrossService{
-		config:    config,
-		peers:     newAnchorSet(),
-		newPeerCh: make(chan *anchorPeer),
-		quitSync:  make(chan struct{}),
+		config:      config,
+		crossConfig: &config.CrossConfig,
+		peers:       newAnchorSet(),
+		newPeerCh:   make(chan *anchorPeer),
+		quitSync:    make(chan struct{}),
 	}
 
 	// construct cross handler
-	mainHandler, err := NewCrossHandler(ctx, main, srv, config.CtxStore, common.MainMakerData, config.MainChainCtxAddress, ctx.MainCh, ctx.SubCh, main.SignHash, config.AnchorSigner)
+	mainHandler, err := NewCrossHandler(ctx, main, srv, config.CrossConfig, common.MainMakerData, config.CrossConfig.MainContract, ctx.MainCh, ctx.SubCh)
 	if err != nil {
 		return nil, err
 	}
 
-	subHandler, err := NewCrossHandler(ctx, sub, srv, config.CtxStore, common.SubMakerData, config.SubChainCtxAddress, ctx.SubCh, ctx.MainCh, main.SignHash, config.AnchorSigner)
+	subHandler, err := NewCrossHandler(ctx, sub, srv, config.CrossConfig, common.SubMakerData, config.CrossConfig.SubContract, ctx.SubCh, ctx.MainCh)
 	if err != nil {
 		return nil, err
 	}
@@ -196,6 +198,8 @@ func (srv *CrossService) Start(server *p2p.Server) error {
 
 func (srv *CrossService) Stop() error {
 	log.Info("Stopping CrossChain Service")
+	srv.main.handler.Stop()
+	srv.sub.handler.Stop()
 	close(srv.quitSync)
 	srv.peers.Close()
 	srv.wg.Wait()
@@ -215,8 +219,8 @@ func (srv *CrossService) handle(p *anchorPeer) error {
 		subGenesis    = srv.sub.genesis
 		mainHeight    = srv.main.handler.Height()
 		subHeight     = srv.sub.handler.Height()
-		main          = srv.config.MainChainCtxAddress
-		sub           = srv.config.SubChainCtxAddress
+		main          = srv.crossConfig.MainContract
+		sub           = srv.crossConfig.SubContract
 	)
 	if err := p.Handshake(mainNetworkID, subNetworkID,
 		mainTD, subTD, mainHead.Hash(), subHead.Hash(),

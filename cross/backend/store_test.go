@@ -101,7 +101,7 @@ func setupCtxStore() (*CrossStore, error) {
 	statedb, _ := state.New(common.Hash{}, state.NewDatabase(rawdb.NewMemoryDatabase()))
 	blockchain := &testBlockChain{statedb, 1000000, new(event.Feed)}
 
-	store, err := NewCrossStore(nil, cross.DefaultCtxStoreConfig, params.TestChainConfig, blockchain, "testing-cross-store")
+	store, err := NewCrossStore(nil, cross.Config{}, params.TestChainConfig, blockchain, "testing-cross-store")
 	if err != nil {
 		return nil, err
 	}

@@ -63,7 +63,6 @@ var DefaultConfig = Config{
 		Blocks:     20,
 		Percentile: 60,
 	},
-	CtxStore: cross.DefaultCtxStoreConfig,
 	Role:     common.RoleMainChain,
 	Istanbul: *istanbul.DefaultConfig,
 }
@@ -168,11 +167,11 @@ type Config struct {
 
 	Role common.ChainRole
 
-	CtxStore cross.CtxStoreConfig
+	CrossConfig cross.Config
 
-	MainChainCtxAddress common.Address
+	//MainChainCtxAddress common.Address
 
-	SubChainCtxAddress common.Address
+	//SubChainCtxAddress common.Address
 
-	AnchorSigner common.Address
+	//AnchorSigner common.Address
 }

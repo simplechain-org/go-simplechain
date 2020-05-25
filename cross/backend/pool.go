@@ -82,29 +82,32 @@ func (pool *CrossPool) Stop() {
 	pool.wg.Wait()
 }
 
-func (pool *CrossPool) AddLocal(ctx *cc.CrossTransaction) error {
-	if pool.store.localStore.Has(ctx.ID()) {
-		old, err := pool.store.localStore.Read(ctx.ID())
-		if err != nil {
-			return err
+func (pool *CrossPool) AddLocals(txs []*cc.CrossTransaction) (signed []*cc.CrossTransaction, errs []error) {
+	for _, ctx := range txs {
+		if old, _ := pool.store.localStore.Read(ctx.ID()); old != nil {
+			if ctx.BlockHash() != old.BlockHash() {
+				errs = append(errs, fmt.Errorf("blockchain Reorg,txId:%s,old:%s,new:%s", ctx.ID().String(), old.BlockHash().String(), ctx.BlockHash().String()))
+			}
+			continue
 		}
-		if ctx.BlockHash() != old.BlockHash() {
-			return fmt.Errorf("blockchain Reorg,txId:%s,old:%s,new:%s", ctx.ID().String(), old.BlockHash().String(), ctx.BlockHash().String())
-		}
-		return nil
-	}
 
-	// make signature first for local ctx
-	signedTx, err := cc.SignCtx(ctx, pool.signer, pool.signHash)
-	if err != nil {
-		return err
+		// make signature first for local ctx
+		signedTx, err := cc.SignCtx(ctx, pool.signer, pool.signHash)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		signed = append(signed, signedTx)
 	}
-	*ctx = *signedTx
 
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
-	return pool.addTxLocked(ctx, true)
-
+	for _, signedTx := range signed {
+		if err := pool.addTxLocked(signedTx, true); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return signed, errs
 }
 
 func (pool *CrossPool) GetLocal(ctxID common.Hash) *cc.CrossTransaction {

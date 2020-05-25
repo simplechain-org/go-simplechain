@@ -22,7 +22,7 @@ type CrossValidator struct {
 
 	store *CrossStore
 
-	config      cross.CtxStoreConfig
+	config      cross.Config
 	chainConfig *params.ChainConfig
 	chain       cross.BlockChain
 	contract    common.Address
@@ -46,7 +46,7 @@ func NewCrossValidator(store *CrossStore, contract common.Address) *CrossValidat
 }
 
 func (v *CrossValidator) VerifyCtx(ctx *cc.CrossTransaction) error {
-	if v.config.ChainId.Cmp(ctx.ChainId()) == 0 {
+	if v.chainConfig.ChainID.Cmp(ctx.ChainId()) == 0 {
 		if v.store.localStore.Has(ctx.ID()) {
 			return fmt.Errorf("ctx was already signatured, id: %s", ctx.ID().String())
 		}
@@ -91,17 +91,14 @@ func (v *CrossValidator) VerifySigner(ctx *cc.CrossTransaction, signChain, destC
 //(must exist makerTx in source-chain, do not took by others in destination-chain)
 func (v *CrossValidator) VerifyCwsInvoking(cws *cc.CrossTransactionWithSignatures) error {
 	paddedCtxId := common.LeftPadBytes(cws.ID().Bytes(), 32) //CtxId
-	config := &params.ChainConfig{
-		ChainID: v.config.ChainId,
-		Scrypt:  new(params.ScryptConfig),
-	}
+	config := *v.chainConfig
 	stateDB, err := v.chain.StateAt(v.chain.CurrentBlock().Root())
 	if err != nil {
 		return err
 	}
-	evmInvoke := NewEvmInvoke(v.chain, v.chain.CurrentBlock().Header(), stateDB, config, vm.Config{})
+	evmInvoke := NewEvmInvoke(v.chain, v.chain.CurrentBlock().Header(), stateDB, &config, vm.Config{})
 	var res []byte
-	if v.config.ChainId.Cmp(cws.ChainId()) == 0 {
+	if config.ChainID.Cmp(cws.ChainId()) == 0 {
 		res, err = evmInvoke.CallContract(common.Address{}, &v.contract, params.GetMakerTxFn, paddedCtxId, common.LeftPadBytes(cws.DestinationId().Bytes(), 32))
 		if err != nil {
 			v.logger.Info("apply getMakerTx transaction failed", "err", err)
@@ -111,8 +108,8 @@ func (v *CrossValidator) VerifyCwsInvoking(cws *cc.CrossTransactionWithSignature
 			return core.ErrRepetitionCrossTransaction
 		}
 
-	} else if v.config.ChainId.Cmp(cws.DestinationId()) == 0 {
-		res, err = evmInvoke.CallContract(common.Address{}, &v.contract, params.GetTakerTxFn, paddedCtxId, common.LeftPadBytes(v.config.ChainId.Bytes(), 32))
+	} else if config.ChainID.Cmp(cws.DestinationId()) == 0 {
+		res, err = evmInvoke.CallContract(common.Address{}, &v.contract, params.GetTakerTxFn, paddedCtxId, common.LeftPadBytes(config.ChainID.Bytes(), 32))
 		if err != nil {
 			v.logger.Info("apply getTakerTx transaction failed", "err", err)
 			return err

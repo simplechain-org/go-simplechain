@@ -143,14 +143,14 @@ func makeConfigNode(ctx *cli.Context) (*node.Node, gethConfig) {
 		mainCtxAddress := ctx.GlobalString(utils.ContractMainFlag.Name)
 		if common.IsHexAddress(mainCtxAddress) {
 			address := common.HexToAddress(mainCtxAddress)
-			cfg.Eth.MainChainCtxAddress = address
+			cfg.Eth.CrossConfig.MainContract = address
 		}
 	}
 	if ctx.GlobalIsSet(utils.ContractSubFlag.Name) {
 		subCtxAddress := ctx.GlobalString(utils.ContractSubFlag.Name)
 		if common.IsHexAddress(subCtxAddress) {
 			address := common.HexToAddress(subCtxAddress)
-			cfg.Eth.SubChainCtxAddress = address
+			cfg.Eth.CrossConfig.SubContract = address
 		}
 	}
 
