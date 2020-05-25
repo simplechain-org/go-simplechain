@@ -82,7 +82,7 @@ func (pool *CrossPool) Stop() {
 	pool.wg.Wait()
 }
 
-func (pool *CrossPool) AddLocals(txs []*cc.CrossTransaction) (signed []*cc.CrossTransaction, errs []error) {
+func (pool *CrossPool) AddLocals(txs ...*cc.CrossTransaction) (signed []*cc.CrossTransaction, errs []error) {
 	for _, ctx := range txs {
 		if old, _ := pool.store.localStore.Read(ctx.ID()); old != nil {
 			if ctx.BlockHash() != old.BlockHash() {

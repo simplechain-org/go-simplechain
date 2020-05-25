@@ -160,7 +160,7 @@ func (h *Handler) loop() {
 	for {
 		select {
 		case ev := <-h.confirmedMakerCh:
-			signed, errs := h.pool.AddLocals(ev.Txs);
+			signed, errs := h.pool.AddLocals(ev.Txs...)
 			for _, err := range errs {
 				h.log.Warn("Add local ctx failed", "err", err)
 			}

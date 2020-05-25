@@ -91,24 +91,12 @@ func NewCrossService(ctx *node.ServiceContext, main, sub cross.SimpleChain, conf
 			Service:   NewPublicCrossChainAPI(mainHandler),
 			Public:    true,
 		},
-		{
-			Namespace: "eth",
-			Version:   "1.0",
-			Service:   NewPublicCrossManualAPI(mainHandler, subHandler),
-			Public:    true,
-		},
 	})
 	sub.RegisterAPIs([]rpc.API{
 		{
 			Namespace: "eth",
 			Version:   "1.0",
 			Service:   NewPublicCrossChainAPI(subHandler),
-			Public:    true,
-		},
-		{
-			Namespace: "eth",
-			Version:   "1.0",
-			Service:   NewPublicCrossManualAPI(mainHandler, subHandler),
 			Public:    true,
 		},
 	})

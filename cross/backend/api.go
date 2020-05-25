@@ -73,76 +73,42 @@ func (s *PrivateCrossAdminAPI) Height() map[string]hexutil.Uint64 {
 	}
 }
 
-type PublicCrossManualAPI struct {
-	mainHandler *Handler
-	subHandler  *Handler
-}
-
-func NewPublicCrossManualAPI(mainHandler, subHandler *Handler) *PublicCrossManualAPI {
-	return &PublicCrossManualAPI{mainHandler, subHandler}
-}
-func (s *PublicCrossManualAPI) ImportMainCtx(ctxWithSignsSArgs hexutil.Bytes) error {
+func (s *PrivateCrossAdminAPI) importCtx(local, remote *Handler, ctxWithSignsSArgs hexutil.Bytes) error {
 	ctx := new(cc.CrossTransactionWithSignatures)
 	if err := rlp.DecodeBytes(ctxWithSignsSArgs, ctx); err != nil {
 		return err
 	}
 
-	if len(ctx.Resolution()) < s.mainHandler.validator.requireSignature {
-		return fmt.Errorf("invalid signture length ctx: %d,want: %d", len(ctx.Resolution()), s.mainHandler.validator.requireSignature)
+	if ctx.SignaturesLength() < local.validator.requireSignature {
+		return fmt.Errorf("invalid signture length ctx: %d,want: %d", ctx.SignaturesLength(), local.validator.requireSignature)
 	}
 
 	chainId := ctx.ChainId()
 	var invalidSigIndex []int
 	for i, ctx := range ctx.Resolution() {
-		if s.subHandler.validator.VerifySigner(ctx, chainId, chainId) != nil {
+		if remote.validator.VerifySigner(ctx, chainId, chainId) != nil {
 			invalidSigIndex = append(invalidSigIndex, i)
 		}
 	}
 	if invalidSigIndex != nil {
 		return fmt.Errorf("invalid signature of ctx:%s for signature:%v\n", ctx.ID().String(), invalidSigIndex)
 	}
-	if err := s.mainHandler.store.localStore.Write(ctx); err != nil {
+	if err := local.store.localStore.Write(ctx); err != nil {
 		return err
 	}
-	if err := s.subHandler.store.remoteStore.Write(ctx); err != nil {
+	if err := remote.store.remoteStore.Write(ctx); err != nil {
 		return err
 	}
 	log.Info("rpc ImportCtx", "ctxID", ctx.ID().String())
-
 	return nil
 }
 
-func (s *PublicCrossManualAPI) ImportSubCtx(ctxWithSignsSArgs hexutil.Bytes) error {
-	ctx := new(cc.CrossTransactionWithSignatures)
-	if err := rlp.DecodeBytes(ctxWithSignsSArgs, ctx); err != nil {
-		return err
-	}
+func (s *PrivateCrossAdminAPI) ImportMainCtx(ctxWithSignsSArgs hexutil.Bytes) error {
+	return s.importCtx(s.service.main.handler, s.service.sub.handler, ctxWithSignsSArgs)
+}
 
-	if len(ctx.Resolution()) < s.subHandler.validator.requireSignature {
-		return fmt.Errorf("invalid signture length ctx: %d,want: %d", len(ctx.Resolution()), s.subHandler.validator.requireSignature)
-	}
-
-	chainId := ctx.ChainId()
-	var invalidSigIndex []int
-	for i, ctx := range ctx.Resolution() {
-		if s.mainHandler.validator.VerifySigner(ctx, chainId, chainId) != nil {
-			invalidSigIndex = append(invalidSigIndex, i)
-		}
-	}
-	if invalidSigIndex != nil {
-		return fmt.Errorf("invalid signature of ctx:%s for signature:%v\n", ctx.ID().String(), invalidSigIndex)
-	}
-
-	if err := s.subHandler.store.localStore.Write(ctx); err != nil {
-		return err
-	}
-	if err := s.mainHandler.store.remoteStore.Write(ctx); err != nil {
-		return err
-	}
-
-	log.Info("rpc ImportCtx", "ctxID", ctx.ID().String())
-
-	return nil
+func (s *PrivateCrossAdminAPI) ImportSubCtx(ctxWithSignsSArgs hexutil.Bytes) error {
+	return s.importCtx(s.service.sub.handler, s.service.main.handler, ctxWithSignsSArgs)
 }
 
 // PublicTxPoolAPI offers and API for the transaction pool. It only operates on data that is non confidential.

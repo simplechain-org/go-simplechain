@@ -60,26 +60,26 @@ func (v *CrossValidator) VerifyCtx(ctx *cc.CrossTransaction) error {
 	return v.VerifySigner(ctx, ctx.ChainId(), ctx.DestinationId())
 }
 
-// validate ctx signed by anchor (fromChain:tx signed by fromChain, )
-func (v *CrossValidator) VerifySigner(ctx *cc.CrossTransaction, signChain, destChain *big.Int) error {
-	v.logger.Debug("verify ctx signer", "ctx", ctx.ID(), "signChain", signChain, "destChain", destChain)
+// validate ctx signed by anchor
+func (v *CrossValidator) VerifySigner(ctx *cc.CrossTransaction, signChain, storeChainID *big.Int) error {
+	v.logger.Debug("verify ctx signer", "ctx", ctx.ID(), "signChain", signChain, "storeChainID", storeChainID)
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	var anchorSet *AnchorSet
-	if as, ok := v.anchors[destChain.Uint64()]; ok {
+	if as, ok := v.anchors[storeChainID.Uint64()]; ok {
 		anchorSet = as
-	} else { // ctx receive from remote, signChain == destChain
+	} else { // ctx receive from remote, signChain == storeChainID
 		newHead := v.chain.CurrentBlock().Header() // Special case during testing
 		statedb, err := v.chain.StateAt(newHead.Root)
 		if err != nil {
 			v.logger.Error("Failed to reset txpool state", "err", err)
 			return fmt.Errorf("stateAt %s err:%s", newHead.Root.String(), err.Error())
 		}
-		anchors, signedCount := QueryAnchor(v.chainConfig, v.chain, statedb, newHead, v.contract, destChain.Uint64())
+		anchors, signedCount := QueryAnchor(v.chainConfig, v.chain, statedb, newHead, v.contract, storeChainID.Uint64())
 		v.config.Anchors = anchors
 		v.requireSignature = signedCount
 		anchorSet = NewAnchorSet(v.config.Anchors)
-		v.anchors[destChain.Uint64()] = anchorSet
+		v.anchors[storeChainID.Uint64()] = anchorSet
 	}
 	if !anchorSet.IsAnchorSignedCtx(ctx, cc.NewEIP155CtxSigner(signChain)) {
 		return fmt.Errorf("invalid signature of ctx:%s", ctx.ID().String())

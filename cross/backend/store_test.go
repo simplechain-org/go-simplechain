@@ -77,14 +77,14 @@ func TestNewCtxStoreAdd(t *testing.T) {
 	if err := ctxPool.AddRemote(tx2); err != nil {
 		t.Fatal(err)
 	}
-	if err := ctxPool.AddLocal(cc.NewCrossTransaction(big.NewInt(1e18),
+	if _, errs := ctxPool.AddLocals(cc.NewCrossTransaction(big.NewInt(1e18),
 		big.NewInt(2e18),
 		big.NewInt(19),
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
 		addr,
-		nil)); err != nil {
+		nil)); errs != nil {
 		t.Fatal(err)
 	}
 	ev := <-signedCh
