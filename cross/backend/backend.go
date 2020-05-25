@@ -60,6 +60,7 @@ type crossCommons struct {
 }
 
 func NewCrossService(ctx *node.ServiceContext, main, sub cross.SimpleChain, config *eth.Config) (*CrossService, error) {
+	cross.Reporter.SetRootPath(ctx.ResolvePath("crosschainlog"))
 	srv := &CrossService{
 		config:      config,
 		crossConfig: &config.CrossConfig,

@@ -98,7 +98,7 @@ func (store *CrossStore) Height() uint64 {
 	return store.localStore.Height()
 }
 
-func (store *CrossStore) StoreStats() (map[cc.CtxStatus]int, map[cc.CtxStatus]int) {
+func (store *CrossStore) Stats() (map[cc.CtxStatus]int, map[cc.CtxStatus]int) {
 	waiting := q.Eq(crossdb.StatusField, cc.CtxStatusWaiting)
 	executing := q.Eq(crossdb.StatusField, cc.CtxStatusExecuting)
 	finishing := q.Eq(crossdb.StatusField, cc.CtxStatusFinishing)

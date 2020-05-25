@@ -30,6 +30,9 @@ type SimpleChain interface {
 }
 
 type Transaction interface {
+	ID() common.Hash
+	ChainId() *big.Int
+	DestinationId() *big.Int
 	BlockHash() common.Hash
 }
 

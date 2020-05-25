@@ -93,10 +93,10 @@ func (s *PrivateCrossAdminAPI) importCtx(local, remote *Handler, ctxWithSignsSAr
 	if invalidSigIndex != nil {
 		return fmt.Errorf("invalid signature of ctx:%s for signature:%v\n", ctx.ID().String(), invalidSigIndex)
 	}
-	if err := local.store.localStore.Write(ctx); err != nil {
+	if err := local.store.AddLocal(ctx); err != nil {
 		return err
 	}
-	if err := remote.store.remoteStore.Write(ctx); err != nil {
+	if err := remote.store.AddRemote(ctx); err != nil {
 		return err
 	}
 	log.Info("rpc ImportCtx", "ctxID", ctx.ID().String())

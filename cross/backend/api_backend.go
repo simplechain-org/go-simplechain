@@ -100,5 +100,5 @@ func (h *Handler) StoreStats() (map[cc.CtxStatus]int, map[cc.CtxStatus]int) {
 	if !h.pm.CanAcceptTxs() {
 		return nil, nil
 	}
-	return h.store.StoreStats()
+	return h.store.Stats()
 }

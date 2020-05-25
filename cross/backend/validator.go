@@ -45,8 +45,17 @@ func NewCrossValidator(store *CrossStore, contract common.Address) *CrossValidat
 	}
 }
 
+func (v *CrossValidator) IsLocalCtx(ctx cross.Transaction) bool {
+	return v.chainConfig.ChainID.Cmp(ctx.ChainId()) == 0
+}
+
+func (v *CrossValidator) IsRemoteCtx(ctx cross.Transaction) bool {
+	return v.chainConfig.ChainID.Cmp(ctx.DestinationId()) == 0
+}
+
 func (v *CrossValidator) VerifyCtx(ctx *cc.CrossTransaction) error {
-	if v.chainConfig.ChainID.Cmp(ctx.ChainId()) == 0 {
+	//if v.chainConfig.ChainID.Cmp(ctx.ChainId()) == 0 {
+	if v.IsLocalCtx(ctx) {
 		if v.store.localStore.Has(ctx.ID()) {
 			return fmt.Errorf("ctx was already signatured, id: %s", ctx.ID().String())
 		}
@@ -98,7 +107,8 @@ func (v *CrossValidator) VerifyCwsInvoking(cws *cc.CrossTransactionWithSignature
 	}
 	evmInvoke := NewEvmInvoke(v.chain, v.chain.CurrentBlock().Header(), stateDB, &config, vm.Config{})
 	var res []byte
-	if config.ChainID.Cmp(cws.ChainId()) == 0 {
+	//if config.ChainID.Cmp(cws.ChainId()) == 0 {
+	if v.IsLocalCtx(cws) {
 		res, err = evmInvoke.CallContract(common.Address{}, &v.contract, params.GetMakerTxFn, paddedCtxId, common.LeftPadBytes(cws.DestinationId().Bytes(), 32))
 		if err != nil {
 			v.logger.Info("apply getMakerTx transaction failed", "err", err)
@@ -108,7 +118,8 @@ func (v *CrossValidator) VerifyCwsInvoking(cws *cc.CrossTransactionWithSignature
 			return core.ErrRepetitionCrossTransaction
 		}
 
-	} else if config.ChainID.Cmp(cws.DestinationId()) == 0 {
+		//} else if config.ChainID.Cmp(cws.DestinationId()) == 0 {
+	} else if v.IsRemoteCtx(cws) {
 		res, err = evmInvoke.CallContract(common.Address{}, &v.contract, params.GetTakerTxFn, paddedCtxId, common.LeftPadBytes(config.ChainID.Bytes(), 32))
 		if err != nil {
 			v.logger.Info("apply getTakerTx transaction failed", "err", err)

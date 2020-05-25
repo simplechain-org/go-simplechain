@@ -64,14 +64,18 @@ func (pool *CrossPool) loop() {
 			return
 
 		case <-expire.C:
+			var removed cc.CtxIDs
 			pool.mu.Lock()
 			currentNum := pool.store.chain.CurrentBlock().NumberU64()
 			if currentNum > expireNumber {
-				pool.pending.RemoveUnderNum(currentNum - expireNumber)
-				pool.queued.RemoveUnderNum(currentNum - expireNumber)
+				removed = append(removed, pool.pending.RemoveUnderNum(currentNum-expireNumber)...)
+				removed = append(removed, pool.queued.RemoveUnderNum(currentNum-expireNumber)...)
 			}
 			pool.mu.Unlock()
 
+			if len(removed) > 0 {
+				cross.Report(pool.store.chainConfig.ChainID.Uint64(), "txs expired", "ids", removed.String())
+			}
 		}
 	}
 }
@@ -86,7 +90,10 @@ func (pool *CrossPool) AddLocals(txs ...*cc.CrossTransaction) (signed []*cc.Cros
 	for _, ctx := range txs {
 		if old, _ := pool.store.localStore.Read(ctx.ID()); old != nil {
 			if ctx.BlockHash() != old.BlockHash() {
-				errs = append(errs, fmt.Errorf("blockchain Reorg,txId:%s,old:%s,new:%s", ctx.ID().String(), old.BlockHash().String(), ctx.BlockHash().String()))
+				cross.Report(pool.store.chainConfig.ChainID.Uint64(), "blockchain reorg",
+					"ctxID", ctx.ID().String(), "old", old.BlockHash().String(), "new", ctx.BlockHash().String())
+				errs = append(errs, fmt.Errorf("blockchain reorg,txId:%s,old:%s,new:%s",
+					ctx.ID().String(), old.BlockHash().String(), ctx.BlockHash().String()))
 			}
 			continue
 		}
@@ -147,7 +154,6 @@ func (pool *CrossPool) addTxLocked(ctx *cc.CrossTransaction, local bool) error {
 
 	checkAndCommit := func(id common.Hash) error {
 		if cws := pool.pending.Get(id); cws != nil && cws.SignaturesLength() >= pool.validator.requireSignature {
-			pool.pending.RemoveByHash(id) // remove it from pending
 			pool.Commit(cws)
 		}
 		return nil
@@ -172,7 +178,7 @@ func (pool *CrossPool) addTxLocked(ctx *cc.CrossTransaction, local bool) error {
 			}
 			pendingRws = queuedRws
 		}
-		pool.pending.Put(pendingRws, pendingRws.BlockNum)
+		pool.pending.Put(pendingRws)
 		pool.queued.RemoveByHash(id)
 		return checkAndCommit(id)
 	}
@@ -183,13 +189,13 @@ func (pool *CrossPool) addTxLocked(ctx *cc.CrossTransaction, local bool) error {
 			return err
 		}
 	} else {
-		bNumber := NewChainInvoke(pool.chain).GetTransactionNumberOnChain(ctx)
-		pool.queued.Put(cc.NewCrossTransactionWithSignatures(ctx, bNumber), bNumber)
+		pool.queued.Put(cc.NewCrossTransactionWithSignatures(ctx, NewChainInvoke(pool.chain).GetTransactionNumberOnChain(ctx)))
 	}
 	return nil
 }
 
 func (pool *CrossPool) Commit(cws *cc.CrossTransactionWithSignatures) {
+	pool.pending.RemoveByHash(cws.ID()) // remove it from pending
 	pool.wg.Add(1)
 	go func() {
 		defer pool.wg.Done()
@@ -199,7 +205,7 @@ func (pool *CrossPool) Commit(cws *cc.CrossTransactionWithSignatures) {
 				pool.mu.Lock()
 				defer pool.mu.Unlock()
 				if invalidSigIndex == nil { // check signer successfully, store ctx
-					if err := pool.store.localStore.Write(cws); err != nil && !pool.store.localStore.Has(cws.ID()) {
+					if err := pool.store.AddLocal(cws); err != nil && !pool.store.HasLocal(cws.ID()) {
 						pool.logger.Warn("commit local ctx failed", "txID", cws.ID(), "err", err)
 						return
 					}
@@ -209,7 +215,7 @@ func (pool *CrossPool) Commit(cws *cc.CrossTransactionWithSignatures) {
 					for _, invalid := range invalidSigIndex {
 						cws.RemoveSignature(invalid)
 					}
-					pool.pending.Put(cws, cws.BlockNum)
+					pool.pending.Put(cws)
 				}
 			}})
 	}()
@@ -226,7 +232,6 @@ func (pool *CrossPool) Pending(number uint64, limit int, exclude map[common.Hash
 		if ctx.BlockNum+expireNumber <= number {
 			return false
 		}
-		//if ctx, err := cc.SignCtx(cws.CrossTransaction(), store.signer, store.signHash); err == nil {
 		if ctxID := ctx.ID(); exclude == nil || !exclude[ctxID] {
 			pending = append(pending, ctxID)
 		}

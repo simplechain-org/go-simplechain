@@ -242,11 +242,13 @@ func (h *Handler) readCrossMessage() {
 
 					if invalidSigIndex != nil {
 						h.log.Warn("invalid signature remote chain ctx", "ctxID", cws.ID().String(), "sigIndex", invalidSigIndex)
+						cross.Report(h.chain.ChainConfig().ChainID.Uint64(), "VerifyCwsInvoking failed", "ctxID", cws.ID().String(), "sigIndex", invalidSigIndex)
 						break
 					}
 
 					if err := h.validator.VerifyCwsInvoking(cws); err != nil {
 						h.log.Warn("invoking verify failed", "ctxID", cws.ID().String(), "error", err)
+						cross.Report(h.chain.ChainConfig().ChainID.Uint64(), "VerifyCwsInvoking failed", "ctxID", cws.ID().String(), "error", err)
 						break
 					}
 

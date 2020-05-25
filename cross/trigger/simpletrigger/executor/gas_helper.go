@@ -39,6 +39,14 @@ func NewGasHelper(blockchain *core.BlockChain, chain cross.SimpleChain) *GasHelp
 	return &GasHelper{blockchain: blockchain, chain: chain}
 }
 
+func (h *GasHelper) GetBalance(addr common.Address) (*big.Int, error) {
+	state, err := h.blockchain.State()
+	if err != nil {
+		return nil, err
+	}
+	return state.GetBalance(addr), nil
+}
+
 func (this *GasHelper) doCall(ctx context.Context, args CallArgs, blockNr rpc.BlockNumber, vmCfg vm.Config, timeout time.Duration) ([]byte, uint64, bool, error) {
 	defer func(start time.Time) { log.Debug("Executing EVM call finished", "runtime", time.Since(start)) }(time.Now())
 

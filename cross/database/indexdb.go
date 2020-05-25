@@ -6,6 +6,7 @@ import (
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/math"
+	"github.com/simplechain-org/go-simplechain/cross"
 	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	"github.com/simplechain-org/go-simplechain/log"
 
@@ -80,8 +81,10 @@ func (d *indexDB) Write(ctx *cc.CrossTransactionWithSignatures) error {
 	old, err := d.get(ctx.ID())
 	if old != nil {
 		if old.BlockHash != ctx.BlockHash() {
+			cross.Report(d.chainID.Uint64(), "blockchain reorg", "ctxID", ctx.ID().String(),
+				"old", old.BlockHash.String(), "new", ctx.BlockHash().String())
 			return ErrCtxDbFailure{err: fmt.Errorf("blockchain reorg, txID:%s, old:%s, new:%s",
-				ctx.ID(), old.BlockHash.String(), ctx.BlockHash().String())}
+				ctx.ID().String(), old.BlockHash.String(), ctx.BlockHash().String())}
 		}
 		return nil
 	}
