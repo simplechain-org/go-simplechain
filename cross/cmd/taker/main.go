@@ -16,13 +16,15 @@ import (
 	"github.com/simplechain-org/go-simplechain/rpc"
 )
 
-var rawurlVar *string = flag.String("rawurl", "http://127.0.0.1:8556", "rpc url")
+var (
+	rawurlVar = flag.String("rawurl", "http://127.0.0.1:8556", "rpc url")
 
-var contract *string = flag.String("contract", "0x8eefA4bFeA64F2A89f3064D48646415168662a1e", "合约地址")
+	contract = flag.String("contract", "0x8eefA4bFeA64F2A89f3064D48646415168662a1e", "合约地址")
 
-var fromVar *string = flag.String("from", "0xb9d7df1a34a28c7b82acc841c12959ba00b51131", "接单人地址")
+	fromVar = flag.String("from", "0xb9d7df1a34a28c7b82acc841c12959ba00b51131", "接单人地址")
 
-var gaslimitVar *uint64 = flag.Uint64("gaslimit", 200000, "gas最大值")
+	gaslimitVar = flag.Uint64("gaslimit", 200000, "gas最大值")
+)
 
 type SendTxArgs struct {
 	From     common.Address  `json:"From"`
@@ -40,6 +42,7 @@ type RPCCrossTransaction struct {
 	CTxId            common.Hash    `json:"ctxId"`
 	TxHash           common.Hash    `json:"TxHash"`
 	From             common.Address `json:"From"`
+	To               common.Address `json:"to"`
 	BlockHash        common.Hash    `json:"BlockHash"`
 	DestinationId    *hexutil.Big   `json:"destinationId"`
 	DestinationValue *hexutil.Big   `json:"DestinationValue"`
@@ -54,6 +57,7 @@ type Order struct {
 	TxId             common.Hash
 	TxHash           common.Hash
 	From             common.Address
+	To               common.Address
 	BlockHash        common.Hash
 	DestinationValue *big.Int
 	Data             []byte
@@ -75,6 +79,17 @@ func taker() {
 		fmt.Println(err)
 		return
 	}
+	abi, err := abi.JSON(bytes.NewReader(data))
+	if err != nil {
+		log.Fatalln(err)
+	}
+	//账户地址
+	from := common.HexToAddress(*fromVar)
+	//合约地址
+	//在子链上接单就要填写子链上的合约地址
+	//在主链上接单就要填写主链上的合约地址
+	to := common.HexToAddress(*contract)
+	gas := hexutil.Uint64(*gaslimitVar)
 
 	client, err := rpc.Dial(*rawurlVar)
 	if err != nil {
@@ -91,20 +106,10 @@ func taker() {
 	for remoteId, value := range signatures["remote"] {
 		for i, v := range value {
 			if i <= 10000 { //自动最多接10000单交易
-				//账户地址
-				from := common.HexToAddress(*fromVar)
-				//合约地址
-				//在子链上接单就要填写子链上的合约地址
-				//在主链上接单就要填写主链上的合约地址
-				to := common.HexToAddress(*contract)
-				gas := hexutil.Uint64(*gaslimitVar)
-
-				abi, err := abi.JSON(bytes.NewReader(data))
-				if err != nil {
-					log.Fatalln(err)
+				if v.To != (common.Address{}) && v.To != from { //指定了接单地址并且不是from的直接跳过
+					fmt.Printf("tx: %s need taker: %s\n", v.TxHash.String(), v.To.String())
 					continue
 				}
-
 				r := make([][32]byte, 0, len(v.R))
 				s := make([][32]byte, 0, len(v.S))
 				vv := make([]*big.Int, 0, len(v.V))
@@ -129,6 +134,7 @@ func taker() {
 					TxId:             v.CTxId,
 					TxHash:           v.TxHash,
 					From:             v.From,
+					To:               v.To,
 					BlockHash:        v.BlockHash,
 					DestinationValue: v.DestinationValue.ToInt(),
 					Data:             v.Input,

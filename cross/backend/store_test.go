@@ -22,10 +22,12 @@ import (
 )
 
 func TestNewCtxStoreAdd(t *testing.T) {
-	key, _ := crypto.GenerateKey()
-	addr := crypto.PubkeyToAddress(key.PublicKey)
+	fromKey, _ := crypto.GenerateKey()
+	fromAddr := crypto.PubkeyToAddress(fromKey.PublicKey)
+	toKey, _ := crypto.GenerateKey()
+	toAddr := crypto.PubkeyToAddress(toKey.PublicKey)
 	signHash := func(hash []byte) ([]byte, error) {
-		return crypto.Sign(hash, key)
+		return crypto.Sign(hash, fromKey)
 	}
 
 	signer := cc.NewEIP155CtxSigner(big.NewInt(18))
@@ -36,7 +38,8 @@ func TestNewCtxStoreAdd(t *testing.T) {
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
-		addr,
+		fromAddr,
+		toAddr,
 		nil),
 		signer, signHash)
 	if err != nil {
@@ -64,7 +67,8 @@ func TestNewCtxStoreAdd(t *testing.T) {
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
-		addr,
+		fromAddr,
+		toAddr,
 		nil),
 		signer, signHash2)
 	if err != nil {
@@ -83,7 +87,8 @@ func TestNewCtxStoreAdd(t *testing.T) {
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
-		addr,
+		fromAddr,
+		toAddr,
 		nil)); err != nil {
 		t.Fatal(err)
 	}

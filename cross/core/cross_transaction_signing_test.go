@@ -25,6 +25,7 @@ func TestEIP155CtxSigning(t *testing.T) {
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
 		addr,
+		common.Address{},
 		nil),
 		signer, signHash)
 	if err != nil {
@@ -54,6 +55,7 @@ func TestEIP155CtxChainId(t *testing.T) {
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
 		addr,
+		common.Address{},
 		nil),
 		signer, signHash)
 	if err != nil {
@@ -119,6 +121,7 @@ func TestCtxChainId(t *testing.T) {
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
+		common.Address{},
 		common.Address{},
 		nil)
 

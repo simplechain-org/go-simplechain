@@ -212,6 +212,7 @@ type CrossTransactionIndexed struct {
 	PK       uint64         `storm:"id,increment"`
 	CtxId    common.Hash    `storm:"unique"`
 	From     common.Address `storm:"index"`
+	To       common.Address `storm:"index"`
 	TxHash   common.Hash    `storm:"index"`
 	Price    *big.Float     `storm:"index"`
 	BlockNum uint64         `storm:"index"`
@@ -235,6 +236,7 @@ func NewCrossTransactionIndexed(ctx *cc.CrossTransactionWithSignatures) *CrossTr
 		Status:           uint8(ctx.Status),
 		BlockNum:         ctx.BlockNum,
 		From:             ctx.Data.From,
+		To:               ctx.Data.To,
 		Price:            new(big.Float).SetRat(ctx.Price()),
 		Value:            ctx.Data.Value,
 		TxHash:           ctx.Data.TxHash,
@@ -258,6 +260,7 @@ func (c CrossTransactionIndexed) ToCrossTransaction() *cc.CrossTransactionWithSi
 			CTxId:            c.CtxId,
 			TxHash:           c.TxHash,
 			From:             c.From,
+			To:               c.To,
 			BlockHash:        c.BlockHash,
 			DestinationId:    c.DestinationId,
 			DestinationValue: c.DestinationValue,
