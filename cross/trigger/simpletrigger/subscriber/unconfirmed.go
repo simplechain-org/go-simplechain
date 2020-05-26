@@ -79,28 +79,30 @@ func (t *SimpleSubscriber) shift(height uint64) {
 				var ctxs []*cc.CrossTransaction
 				var rtxs []*cc.ReceptTransaction
 				var finishModifiers []*cc.CrossTransactionModifier
-
 				//todo add and del anchors
 				for _, v := range next.logs {
 					tx, blockHash, blockNumber := t.chain.GetTransactionByTxHash(v.TxHash)
 					if tx != nil && blockHash == v.BlockHash && blockNumber == v.BlockNumber &&
 						t.contract == v.Address {
 
-						if len(v.Topics) >= 3 && v.Topics[0] == params.MakerTopic && len(v.Data) >= common.HashLength*5 {
+						if len(v.Topics) >= 3 && v.Topics[0] == params.MakerTopic && len(v.Data) >= common.HashLength*6 {
 							var from common.Address
+							var to common.Address
 							copy(from[:], v.Topics[2][common.HashLength-common.AddressLength:])
+							copy(to[:], v.Data[common.HashLength-common.AddressLength:common.HashLength])
 							ctxId := v.Topics[1]
-							count := common.BytesToHash(v.Data[common.HashLength*4 : common.HashLength*5]).Big().Int64()
+							count := common.BytesToHash(v.Data[common.HashLength*5 : common.HashLength*6]).Big().Int64()
 							ctxs = append(ctxs,
 								cc.NewCrossTransaction(
-									common.BytesToHash(v.Data[common.HashLength:common.HashLength*2]).Big(),
 									common.BytesToHash(v.Data[common.HashLength*2:common.HashLength*3]).Big(),
-									common.BytesToHash(v.Data[:common.HashLength]).Big(),
+									common.BytesToHash(v.Data[common.HashLength*3:common.HashLength*4]).Big(),
+									common.BytesToHash(v.Data[common.HashLength:common.HashLength*2]).Big(),
 									ctxId,
 									v.TxHash,
 									v.BlockHash,
 									from,
-									v.Data[common.HashLength*5:common.HashLength*5+count])) //todo
+									to,
+									v.Data[common.HashLength*6:common.HashLength*6+count])) //todo
 							continue
 						}
 

@@ -15,24 +15,25 @@ import (
 	"github.com/simplechain-org/go-simplechain/rpc"
 )
 
-var rawurlVar *string = flag.String("rawurl", "http://127.0.0.1:8545", "rpc url")
+var (
+	rawurlVar = flag.String("rawurl", "http://127.0.0.1:8545", "rpc url")
 
-//var contract *string =flag.String("contract", "0x8eefA4bFeA64F2A89f3064D48646415168662a1e", "合约地址")
-var contract *string = flag.String("contract", "0xAa22934Df3867B8d59574dD4557ef1BA6dA2f8f3", "合约地址")
+	contract = flag.String("contract", "0xAa22934Df3867B8d59574dD4557ef1BA6dA2f8f3", "合约地址")
 
-var value *uint64 = flag.Uint64("value", 1e+18, "转入合约的数量")
+	value = flag.Uint64("value", 1e+18, "转入合约的数量")
 
-var destValue *uint64 = flag.Uint64("destValue", 1e+18, "兑换数量")
+	destValue = flag.Uint64("destValue", 1e+18, "兑换数量")
 
-//var chainId *uint64=flag.Uint64("chainId", 1, "目的链id")
-var chainId *uint64 = flag.Uint64("chainId", 512, "目的链id")
+	chainId = flag.Uint64("chainId", 512, "目的链id")
 
-//var fromVar *string=flag.String("from", "0x8029fcfc954ff7be80afd4db9f77f18c8aa1ecbc", "发起人地址")
-var fromVar *string = flag.String("from", "0x7964576407c299ec0e65991ba74019d622316a0d", "发起人地址")
+	fromVar = flag.String("from", "0x7964576407c299ec0e65991ba74019d622316a0d", "发起人地址")
 
-var gaslimitVar *uint64 = flag.Uint64("gaslimit", 100000, "gas最大值")
+	focusVar = flag.String("to", "", "focus addr")
 
-var countTx *int = flag.Int("count", 500, "交易数")
+	gaslimitVar = flag.Uint64("gaslimit", 100000, "gas最大值")
+
+	countTx = flag.Int("count", 500, "交易数")
+)
 
 type SendTxArgs struct {
 	From     common.Address  `json:"from"`
@@ -64,6 +65,7 @@ func maker() {
 	}
 
 	from := common.HexToAddress(*fromVar)
+	focusAddr := common.HexToAddress(*focusVar)
 	to := common.HexToAddress(*contract)
 	gas := hexutil.Uint64(*gaslimitVar)
 	value := hexutil.Big(*new(big.Int).SetUint64(*value))
@@ -77,7 +79,7 @@ func maker() {
 	des := new(big.Int).SetUint64(*destValue)
 
 	//out, err := abi.Pack("makerStart",remoteChainId ,des,[]byte("In the end, it’s not the years in your life that count. It’s the life in your years."))
-	out, err := abi.Pack("makerStart", remoteChainId, des, []byte{})
+	out, err := abi.Pack("makerStart", remoteChainId, des, focusAddr, []byte{})
 	if err != nil {
 		fmt.Println(err)
 		return
