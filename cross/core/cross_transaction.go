@@ -46,6 +46,7 @@ type ctxdata struct {
 	CTxId            common.Hash    `json:"ctxId" gencodec:"required"` //cross_transaction ID
 	TxHash           common.Hash    `json:"txHash" gencodec:"required"`
 	From             common.Address `json:"from" gencodec:"required"`             //Token owner
+	To               common.Address `json:"to" gencodec:"required"`               //Token to
 	BlockHash        common.Hash    `json:"blockHash" gencodec:"required"`        //The Hash of block in which the message resides
 	DestinationId    *big.Int       `json:"destinationId" gencodec:"required"`    //Message destination networkId
 	DestinationValue *big.Int       `json:"destinationValue" gencodec:"required"` //Token charge
@@ -57,13 +58,14 @@ type ctxdata struct {
 	S *big.Int `json:"s" gencodec:"required"`
 }
 
-func NewCrossTransaction(amount, charge, networkId *big.Int, id, txHash, bHash common.Hash, from common.Address, input []byte) *CrossTransaction {
+func NewCrossTransaction(amount, charge, networkId *big.Int, id, txHash, bHash common.Hash, from, to common.Address, input []byte) *CrossTransaction {
 	return &CrossTransaction{
 		Data: ctxdata{
 			Value:            amount,
 			CTxId:            id,
 			TxHash:           txHash,
 			From:             from,
+			To:               to,
 			BlockHash:        bHash,
 			DestinationId:    networkId,
 			DestinationValue: charge,
@@ -106,6 +108,7 @@ func (tx *CrossTransaction) Hash() (h common.Hash) {
 	b = append(b, tx.Data.CTxId.Bytes()...)
 	b = append(b, tx.Data.TxHash.Bytes()...)
 	b = append(b, tx.Data.From.Bytes()...)
+	b = append(b, tx.Data.To.Bytes()...)
 	b = append(b, tx.Data.BlockHash.Bytes()...)
 	b = append(b, common.LeftPadBytes(tx.Data.DestinationId.Bytes(), 32)...)
 	b = append(b, common.LeftPadBytes(tx.Data.DestinationValue.Bytes(), 32)...)
@@ -130,6 +133,7 @@ func (tx *CrossTransaction) SignHash() (h common.Hash) {
 	b = append(b, tx.Data.CTxId.Bytes()...)
 	b = append(b, tx.Data.TxHash.Bytes()...)
 	b = append(b, tx.Data.From.Bytes()...)
+	b = append(b, tx.Data.To.Bytes()...)
 	b = append(b, tx.Data.BlockHash.Bytes()...)
 	b = append(b, common.LeftPadBytes(tx.Data.DestinationId.Bytes(), 32)...)
 	b = append(b, common.LeftPadBytes(tx.Data.DestinationValue.Bytes(), 32)...)
@@ -246,6 +250,7 @@ type CtxDatas struct {
 	CTxId            common.Hash    `json:"ctxId" gencodec:"required"` //cross_transaction ID
 	TxHash           common.Hash    `json:"txHash" gencodec:"required"`
 	From             common.Address `json:"from" gencodec:"required"`             //Token owner
+	To               common.Address `json:"to" gencodec:"required"`               //Token to
 	BlockHash        common.Hash    `json:"blockHash" gencodec:"required"`        //The Hash of block in which the message resides
 	DestinationId    *big.Int       `json:"destinationId" gencodec:"required"`    //Message destination networkId
 	DestinationValue *big.Int       `json:"destinationValue" gencodec:"required"` //Token charge
@@ -263,6 +268,7 @@ func NewCrossTransactionWithSignatures(ctx *CrossTransaction, num uint64) *Cross
 		CTxId:            ctx.Data.CTxId,
 		TxHash:           ctx.Data.TxHash,
 		From:             ctx.Data.From,
+		To:               ctx.Data.To,
 		BlockHash:        ctx.Data.BlockHash,
 		DestinationId:    ctx.Data.DestinationId,
 		DestinationValue: ctx.Data.DestinationValue,
@@ -300,6 +306,7 @@ func (cws *CrossTransactionWithSignatures) Hash() (h common.Hash) {
 	b = append(b, cws.Data.CTxId.Bytes()...)
 	b = append(b, cws.Data.TxHash.Bytes()...)
 	b = append(b, cws.Data.From.Bytes()...)
+	b = append(b, cws.Data.To.Bytes()...)
 	b = append(b, cws.Data.BlockHash.Bytes()...)
 	b = append(b, common.LeftPadBytes(cws.Data.DestinationId.Bytes(), 32)...)
 	b = append(b, common.LeftPadBytes(cws.Data.DestinationValue.Bytes(), 32)...)
@@ -355,6 +362,7 @@ func (cws *CrossTransactionWithSignatures) CrossTransaction() *CrossTransaction 
 			CTxId:            cws.Data.CTxId,
 			TxHash:           cws.Data.TxHash,
 			From:             cws.Data.From,
+			To:               cws.Data.To,
 			BlockHash:        cws.Data.BlockHash,
 			DestinationId:    cws.Data.DestinationId,
 			DestinationValue: cws.Data.DestinationValue,
@@ -373,6 +381,7 @@ func (cws *CrossTransactionWithSignatures) Resolution() []*CrossTransaction {
 				CTxId:            cws.Data.CTxId,
 				TxHash:           cws.Data.TxHash,
 				From:             cws.Data.From,
+				To:               cws.Data.To,
 				BlockHash:        cws.Data.BlockHash,
 				DestinationId:    cws.Data.DestinationId,
 				DestinationValue: cws.Data.DestinationValue,

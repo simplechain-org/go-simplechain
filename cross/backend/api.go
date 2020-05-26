@@ -260,6 +260,7 @@ type RPCCrossTransaction struct {
 	Status           cc.CtxStatus   `json:"status"`
 	TxHash           common.Hash    `json:"txHash"`
 	From             common.Address `json:"from"`
+	To               common.Address `json:"to"`
 	BlockHash        common.Hash    `json:"blockHash"`
 	DestinationId    *hexutil.Big   `json:"destinationId"`
 	DestinationValue *hexutil.Big   `json:"destinationValue"`
@@ -281,6 +282,7 @@ func newRPCCrossTransaction(tx *cc.CrossTransactionWithSignatures) *RPCCrossTran
 		Status:           tx.Status,
 		TxHash:           tx.Data.TxHash,
 		From:             tx.Data.From,
+		To:               tx.Data.To,
 		BlockHash:        tx.Data.BlockHash,
 		DestinationId:    (*hexutil.Big)(tx.Data.DestinationId),
 		DestinationValue: (*hexutil.Big)(tx.Data.DestinationValue),
@@ -305,6 +307,7 @@ type RPCOwnerCrossTransaction struct {
 	CTxId            common.Hash    `json:"ctxId"`
 	TxHash           common.Hash    `json:"txHash"`
 	From             common.Address `json:"from"`
+	To               common.Address `json:"to"`
 	BlockHash        common.Hash    `json:"blockHash"`
 	DestinationId    *hexutil.Big   `json:"destinationId"`
 	DestinationValue *hexutil.Big   `json:"destinationValue"`
@@ -322,6 +325,7 @@ func newOwnerRPCCrossTransaction(tx *cc.OwnerCrossTransactionWithSignatures) *RP
 		CTxId:            tx.Cws.Data.CTxId,
 		TxHash:           tx.Cws.Data.TxHash,
 		From:             tx.Cws.Data.From,
+		To:               tx.Cws.Data.To,
 		BlockHash:        tx.Cws.Data.BlockHash,
 		DestinationId:    (*hexutil.Big)(tx.Cws.Data.DestinationId),
 		DestinationValue: (*hexutil.Big)(tx.Cws.Data.DestinationValue),
