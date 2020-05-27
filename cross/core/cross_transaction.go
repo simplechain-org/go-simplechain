@@ -195,6 +195,8 @@ const (
 	CtxStatusFinishing
 	// CtxStatusFinished is the status code of a rtx transaction if make finish confirmed.
 	CtxStatusFinished
+	// unsigned transaction
+	CtxStatusPending
 )
 
 /**
@@ -220,6 +222,7 @@ var ctxStatusToString = map[CtxStatus]string{
 	CtxStatusExecuting: "executing",
 	CtxStatusFinishing: "finishing",
 	CtxStatusFinished:  "finished",
+	CtxStatusPending:   "pending",
 }
 
 func (s CtxStatus) String() string {

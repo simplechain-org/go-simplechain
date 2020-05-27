@@ -1,7 +1,6 @@
 package backend
 
 import (
-	"errors"
 	"math/big"
 
 	"github.com/simplechain-org/go-simplechain/accounts"
@@ -17,6 +16,8 @@ import (
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/node"
 	"github.com/simplechain-org/go-simplechain/params"
+
+	"github.com/asdine/storm/v3"
 )
 
 const (
@@ -24,8 +25,6 @@ const (
 	rmLogsChanSize    = 10
 	signedPendingSize = 256
 )
-
-var ErrVerifyCtx = errors.New("verify ctx failed")
 
 type Handler struct {
 	blockChain *core.BlockChain
@@ -242,17 +241,17 @@ func (h *Handler) readCrossMessage() {
 
 					if invalidSigIndex != nil {
 						h.log.Warn("invalid signature remote chain ctx", "ctxID", cws.ID().String(), "sigIndex", invalidSigIndex)
-						cross.Report(h.chain.ChainConfig().ChainID.Uint64(), "VerifyCwsInvoking failed", "ctxID", cws.ID().String(), "sigIndex", invalidSigIndex)
+						cross.Report(h.chain.ChainConfig().ChainID.Uint64(), "VerifyContract failed", "ctxID", cws.ID().String(), "sigIndex", invalidSigIndex)
 						break
 					}
 
-					if err := h.validator.VerifyCwsInvoking(cws); err != nil {
+					if err := h.validator.VerifyContract(cws); err != nil {
 						h.log.Warn("invoking verify failed", "ctxID", cws.ID().String(), "error", err)
-						cross.Report(h.chain.ChainConfig().ChainID.Uint64(), "VerifyCwsInvoking failed", "ctxID", cws.ID().String(), "error", err)
+						cross.Report(h.chain.ChainConfig().ChainID.Uint64(), "VerifyContract failed", "ctxID", cws.ID().String(), "error", err)
 						break
 					}
 
-					if err := h.store.AddRemote(cws); err != nil {
+					if err := h.store.AddRemote(cws); err != nil && err != storm.ErrAlreadyExists {
 						h.log.Warn("add remote ctx failed", "error", err.Error())
 					}
 				}
@@ -303,7 +302,7 @@ func (h *Handler) reorgLogs(logs []*types.Log) {
 
 func (h *Handler) AddRemoteCtx(ctx *cc.CrossTransaction) error {
 	if err := h.validator.VerifyCtx(ctx); err != nil {
-		return ErrVerifyCtx
+		return err
 	}
 	if err := h.pool.AddRemote(ctx); err != nil && err != cc.ErrDuplicateSign {
 		h.log.Warn("Add remote ctx", "id", ctx.ID().String(), "err", err)
@@ -336,14 +335,13 @@ func (h *Handler) GetSyncPending(ids []common.Hash) []*cc.CrossTransaction {
 	return results
 }
 
-func (h *Handler) SyncPending(ctxs []*cc.CrossTransaction) map[common.Hash]bool {
+func (h *Handler) SyncPending(ctxList []*cc.CrossTransaction) map[common.Hash]bool {
 	synced := make(map[common.Hash]bool)
-	for _, ctx := range ctxs {
-		if err := h.AddRemoteCtx(ctx); err == nil {
-			synced[ctx.ID()] = true
-		} else {
-			h.log.Debug("SyncPending failed", "id", ctx.ID(), "err", err)
+	for _, ctx := range ctxList {
+		if err := h.AddRemoteCtx(ctx); err != nil {
+			h.log.Trace("SyncPending failed", "id", ctx.ID(), "err", err)
 		}
+		synced[ctx.ID()] = true
 	}
 	return synced
 }
@@ -357,11 +355,46 @@ func (h *Handler) Height() *big.Int {
 }
 
 func (h *Handler) GetSyncCrossTransaction(height uint64, syncSize int) []*cc.CrossTransactionWithSignatures {
-	return h.store.GetSyncCrossTransactions(height, h.chain.BlockChain().CurrentBlock().NumberU64(), syncSize)
+	return h.store.localStore.RangeByNumber(height, h.chain.BlockChain().CurrentBlock().NumberU64(), syncSize)
 }
 
-func (h *Handler) SyncCrossTransaction(ctx []*cc.CrossTransactionWithSignatures) int {
-	return h.store.SyncCrossTransactions(ctx)
+func (h *Handler) SyncCrossTransaction(ctxList []*cc.CrossTransactionWithSignatures) int {
+	var success, ignore, failed int
+
+	for _, ctx := range ctxList {
+		switch {
+		case h.validator.IsLocalCtx(ctx):
+			if h.store.HasLocal(ctx.ID()) {
+				ignore++
+				continue
+			}
+			if h.validator.VerifyReorg(ctx) != nil {
+				failed++
+				continue
+			}
+			if h.store.AddLocal(ctx) != nil {
+				failed++
+				continue
+			}
+			success++
+
+		case h.validator.IsRemoteCtx(ctx):
+			if h.store.HasRemote(ctx.ID()) {
+				ignore++
+				continue
+			}
+			if h.store.AddRemote(ctx) != nil {
+				failed++
+				continue
+			}
+			success++
+
+		default:
+			ignore++
+		}
+	}
+	h.log.Info("sync cross transactions", "success", success, "ignore", ignore, "fail", failed)
+	return success
 }
 
 func (h *Handler) signHash(hash []byte) ([]byte, error) {

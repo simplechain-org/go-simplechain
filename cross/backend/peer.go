@@ -128,19 +128,19 @@ func (p *anchorPeer) RequestCtxSyncByHeight(chainID uint64, height uint64) error
 	return p2p.Send(p.rw, GetCtxSyncMsg, &SyncReq{chainID, height})
 }
 
-func (p *anchorPeer) SendSyncResponse(resp *SyncResp) error {
-	p.Log().Debug("Sending batch of ctx sync response", "chain", resp.Chain, "count", len(resp.Data))
-	return p2p.Send(p.rw, CtxSyncMsg, resp)
+func (p *anchorPeer) SendSyncResponse(chain uint64, data [][]byte) error {
+	p.Log().Debug("Sending batch of ctx sync response", "chain", chain, "count", len(data))
+	return p2p.Send(p.rw, CtxSyncMsg, &SyncResp{chain, data})
 }
 
-func (p *anchorPeer) SendSyncPendingRequest(req *SyncPendingReq) error {
-	p.Log().Debug("Sending batch of ctx pending sync request", "chain", req.Chain, "count", len(req.Ids))
-	return p2p.Send(p.rw, GetPendingSyncMsg, req)
+func (p *anchorPeer) SendSyncPendingRequest(chain uint64, ids []common.Hash) error {
+	p.Log().Debug("Sending batch of ctx pending sync request", "chain", chain, "count", len(ids))
+	return p2p.Send(p.rw, GetPendingSyncMsg, &SyncPendingReq{chain, ids})
 }
 
-func (p *anchorPeer) SendSyncPendingResponse(resp *SyncPendingResp) error {
-	p.Log().Debug("Sending batch of ctx pending sync response", "chain", resp.Chain, "count", len(resp.Data))
-	return p2p.Send(p.rw, PendingSyncMsg, resp)
+func (p *anchorPeer) SendSyncPendingResponse(chain uint64, data [][]byte) error {
+	p.Log().Debug("Sending batch of ctx pending sync response", "chain", chain, "count", len(data))
+	return p2p.Send(p.rw, PendingSyncMsg, &SyncPendingResp{chain, data})
 }
 
 func (p *anchorPeer) MarkCrossTransaction(hash common.Hash) {

@@ -1,7 +1,6 @@
 package backend
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/log"
 
+	"github.com/asdine/storm/v3"
 	lru "github.com/hashicorp/golang-lru"
 )
 
@@ -88,16 +88,10 @@ func (pool *CrossPool) Stop() {
 
 func (pool *CrossPool) AddLocals(txs ...*cc.CrossTransaction) (signed []*cc.CrossTransaction, errs []error) {
 	for _, ctx := range txs {
-		if old, _ := pool.store.localStore.Read(ctx.ID()); old != nil {
-			if ctx.BlockHash() != old.BlockHash() {
-				cross.Report(pool.store.chainConfig.ChainID.Uint64(), "blockchain reorg",
-					"ctxID", ctx.ID().String(), "old", old.BlockHash().String(), "new", ctx.BlockHash().String())
-				errs = append(errs, fmt.Errorf("blockchain reorg,txId:%s,old:%s,new:%s",
-					ctx.ID().String(), old.BlockHash().String(), ctx.BlockHash().String()))
-			}
+		if err := pool.validator.VerifyReorg(ctx); err != nil {
+			errs = append(errs, err)
 			continue
 		}
-
 		// make signature first for local ctx
 		signedTx, err := cc.SignCtx(ctx, pool.signer, pool.signHash)
 		if err != nil {
@@ -205,9 +199,8 @@ func (pool *CrossPool) Commit(cws *cc.CrossTransactionWithSignatures) {
 				pool.mu.Lock()
 				defer pool.mu.Unlock()
 				if invalidSigIndex == nil { // check signer successfully, store ctx
-					if err := pool.store.AddLocal(cws); err != nil && !pool.store.HasLocal(cws.ID()) {
+					if err := pool.store.AddLocal(cws); err != nil && err != storm.ErrAlreadyExists {
 						pool.logger.Warn("commit local ctx failed", "txID", cws.ID(), "err", err)
-						return
 					}
 
 				} else { // check failed, rollback to the pending

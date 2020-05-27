@@ -36,52 +36,20 @@ func (srv *CrossService) syncer() {
 			if srv.peers.Len() > 0 {
 				srv.synchronise(srv.peers.BestPeer())
 			}
-			//每个锚定节点重连后都有可能缺少他的签名，所以需要向每个重新连接的peer请求签名
-			go srv.syncPending(srv.main.handler, p)
-			go srv.syncPending(srv.sub.handler, p)
+
+			peers := map[string]*anchorPeer{p.id: p}
+			go srv.syncPending(srv.main.handler, peers)
+			go srv.syncPending(srv.sub.handler, peers)
 
 		case <-ticker.C:
 			if srv.peers.Len() == 0 {
 				break
 			}
-			//TODO: inefficient synchronize for multiplying peers，
-			// 锚定节点数量较多时只同步best peer无法解决2/3多签问题，
-			// 以下只是在目前只需要两个签名即可完成多签的环境下减少签名丢失的临时解决方法
-			main, sub := srv.peers.BestPeer()
-			go srv.syncPending(srv.main.handler, main)
-			go srv.syncPending(srv.sub.handler, sub)
+			go srv.syncPending(srv.main.handler, srv.peers.peers)
+			go srv.syncPending(srv.sub.handler, srv.peers.peers)
 
 		case <-srv.quitSync:
 			return
-		}
-	}
-}
-
-func (srv *CrossService) syncWithPeer(handler *Handler, peer *anchorPeer, height *big.Int) {
-	if !atomic.CompareAndSwapUint32(&handler.synchronising, 0, 1) {
-		peer.Log().Debug("sync busy")
-		return
-	}
-
-	if h := handler.Height(); h.Cmp(height) <= 0 {
-		go peer.RequestCtxSyncByHeight(handler.pm.NetworkId(), h.Uint64())
-	}
-	timeout := time.After(rttMaxEstimate)
-	for {
-		select {
-		case txs := <-handler.synchronizeCh:
-			if len(txs) == 0 {
-				atomic.StoreUint32(&handler.synchronising, 0)
-				peer.Log().Debug("sync ctx request completed")
-			}
-			srv.main.handler.SyncCrossTransaction(txs)
-			srv.sub.handler.SyncCrossTransaction(txs)
-			// send next sync request after last
-			go peer.RequestCtxSyncByHeight(handler.pm.NetworkId(), txs[len(txs)-1].BlockNum+1)
-
-		case <-timeout:
-			atomic.StoreUint32(&handler.synchronising, 0)
-			peer.Log().Debug("sync ctx request timed out")
 		}
 	}
 }
@@ -91,17 +59,69 @@ func (srv *CrossService) synchronise(main, sub *anchorPeer) {
 	go srv.syncWithPeer(srv.sub.handler, sub, sub.crossStatus.SubHeight)
 }
 
-func (srv *CrossService) syncPending(handler *Handler, p *anchorPeer) {
-	if p == nil || atomic.LoadUint32(&handler.pendingSync) == 1 {
+func (srv *CrossService) syncWithPeer(handler *Handler, peer *anchorPeer, height *big.Int) {
+	if !atomic.CompareAndSwapUint32(&handler.synchronising, 0, 1) {
+		peer.Log().Debug("sync busy")
 		return
 	}
 
-	pending := handler.Pending(defaultMaxSyncSize, nil)
-	if pending != nil {
-		go p.SendSyncPendingRequest(&SyncPendingReq{
-			Chain: handler.pm.NetworkId(),
-			Ids:   pending,
-		})
+	// ignore prev sync
+	for empty := false; !empty; {
+		select {
+		case <-handler.synchronizeCh:
+		default:
+			empty = true
+		}
 	}
-	p.Log().Info("start sync pending cross transaction", "chainID", handler.pm.NetworkId(), "pending", len(pending))
+
+	if h := handler.Height(); h.Cmp(height) <= 0 {
+		go peer.RequestCtxSyncByHeight(handler.pm.NetworkId(), h.Uint64())
+	}
+
+	timeout := time.NewTimer(rttMaxEstimate)
+	defer timeout.Stop()
+	for {
+		select {
+		case txs := <-handler.synchronizeCh:
+			if len(txs) == 0 {
+				atomic.StoreUint32(&handler.synchronising, 0)
+				peer.Log().Debug("sync ctx request completed")
+			}
+			srv.main.handler.SyncCrossTransaction(txs)
+			srv.sub.handler.SyncCrossTransaction(txs)
+
+			timeout.Reset(rttMaxEstimate)
+			// send next sync request after last
+			go peer.RequestCtxSyncByHeight(handler.pm.NetworkId(), txs[len(txs)-1].BlockNum+1)
+
+		case <-timeout.C:
+			atomic.StoreUint32(&handler.synchronising, 0)
+			peer.Log().Debug("sync ctx request timed out")
+			return
+		}
+	}
+}
+
+func (srv *CrossService) syncPending(handler *Handler, peers map[string]*anchorPeer) {
+	pending := handler.Pending(defaultMaxSyncSize, nil)
+	peerWithPending := make(map[string][]common.Hash)
+	for _, id := range pending {
+		for pid, p := range peers {
+			if !p.knownCTxs.Contains(id) {
+				peerWithPending[pid] = append(peerWithPending[pid], id)
+			}
+		}
+	}
+	for pid, pending := range peerWithPending {
+		peer := srv.peers.Peer(pid)
+		srv.syncPendingWithPeer(handler, peer, pending)
+	}
+}
+
+func (srv *CrossService) syncPendingWithPeer(handler *Handler, p *anchorPeer, pending []common.Hash) {
+	if p == nil || pending == nil {
+		return
+	}
+	go p.SendSyncPendingRequest(handler.pm.NetworkId(), pending)
+	p.Log().Info("start sync pending cross transaction", "chainID", handler.pm.NetworkId(), "pending", len(pending), "peer", p.id)
 }

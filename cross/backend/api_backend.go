@@ -89,6 +89,31 @@ func (h *Handler) QueryLocalBySenderAndPage(from common.Address, pageSize, start
 	return locals, total
 }
 
+func (h *Handler) QueryRemoteByTakerAndPage(to common.Address, pageSize, startPage int) (map[uint64][]*cc.OwnerCrossTransactionWithSignatures, int) {
+	if !h.pm.CanAcceptTxs() {
+		return nil, 0
+	}
+	var (
+		store     = h.store.remoteStore
+		condition = []q.Matcher{q.Eq(crossdb.StatusField, cc.CtxStatusWaiting), q.Eq(crossdb.ToField, to)}
+		orderBy   = []crossdb.FieldName{crossdb.PriceIndex}
+		reverse   = false
+	)
+
+	txs := query(store, pageSize, startPage, orderBy, reverse, condition...)
+	total := count(store, condition...)
+	locals := make(map[uint64][]*cc.OwnerCrossTransactionWithSignatures, 1)
+	for _, v := range txs {
+		//TODO: 适配前端，key使用remoteID
+		locals[h.RemoteID()] = append(locals[h.RemoteID()], &cc.OwnerCrossTransactionWithSignatures{
+			Cws:  v,
+			Time: NewChainInvoke(h.blockChain).GetTransactionTimeOnChain(v),
+		})
+	}
+
+	return locals, total
+}
+
 func (h *Handler) PoolStats() (int, int) {
 	if !h.pm.CanAcceptTxs() {
 		return 0, 0

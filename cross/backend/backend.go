@@ -278,10 +278,7 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 			data = append(data, b)
 		}
 
-		return p.SendSyncResponse(&SyncResp{
-			Chain: req.Chain,
-			Data:  data,
-		})
+		return p.SendSyncResponse(req.Chain, data)
 
 	case msg.Code == CtxSyncMsg:
 		var resp SyncResp
@@ -289,6 +286,11 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 			return eth.ErrResp(eth.ErrDecode, "msg %v: %v", msg, err)
 		}
 		p.Log().Info("receive ctx sync response", "chain", resp.Chain, "len(data)", len(resp.Data))
+
+		h := srv.getCrossHandler(new(big.Int).SetUint64(resp.Chain))
+		if h == nil || atomic.LoadUint32(&h.synchronising) == 0 { // ignore if handler isn't synchronising
+			break
+		}
 
 		var ctxList []*cc.CrossTransactionWithSignatures
 		for _, b := range resp.Data {
@@ -300,11 +302,6 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 		}
 
 		if len(ctxList) == 0 {
-			break
-		}
-
-		h := srv.getCrossHandler(new(big.Int).SetUint64(resp.Chain))
-		if h == nil {
 			break
 		}
 
@@ -331,10 +328,7 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 			data = append(data, b)
 		}
 		if len(data) > 0 {
-			return p.SendSyncPendingResponse(&SyncPendingResp{
-				Chain: req.Chain,
-				Data:  data,
-			})
+			return p.SendSyncPendingResponse(req.Chain, data)
 		}
 
 	case msg.Code == PendingSyncMsg:
@@ -359,6 +353,7 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 				return eth.ErrResp(eth.ErrDecode, "msg %v: %v", msg, err)
 			}
 			ctxList = append(ctxList, &ctx)
+			p.MarkCrossTransaction(ctx.ID()) //mark ctx id and would not require pending from this peer
 		}
 
 		if len(ctxList) == 0 {
@@ -373,10 +368,7 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 
 		if len(pending) > 0 {
 			// send next sync pending request
-			return p.SendSyncPendingRequest(&SyncPendingReq{
-				Chain: resp.Chain,
-				Ids:   pending,
-			})
+			return p.SendSyncPendingRequest(resp.Chain, pending)
 		}
 
 	case msg.Code == CtxSignMsg:
@@ -384,6 +376,7 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 		if err := msg.Decode(&ctx); err != nil {
 			return eth.ErrResp(eth.ErrDecode, "msg %v: %v", msg, err)
 		}
+		p.MarkCrossTransaction(ctx.SignHash())
 
 		h := srv.getCrossHandler(ctx.ChainId())
 		if h == nil {
@@ -391,10 +384,10 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 		}
 
 		err := h.AddRemoteCtx(ctx)
-		if err != ErrVerifyCtx {
-			p.MarkCrossTransaction(ctx.SignHash())
-			srv.BroadcastCrossTx([]*cc.CrossTransaction{ctx}, false)
+		if err == ErrExpiredCtx || err == ErrInvalidSignCtx {
+			break
 		}
+		srv.BroadcastCrossTx([]*cc.CrossTransaction{ctx}, false)
 
 	default:
 		return eth.ErrResp(eth.ErrInvalidMsgCode, "%v", msg.Code)

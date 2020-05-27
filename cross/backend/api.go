@@ -21,10 +21,9 @@ func NewPrivateCrossAdminAPI(service *CrossService) *PrivateCrossAdminAPI {
 }
 
 func (s *PrivateCrossAdminAPI) SyncPending() (bool, error) {
-	main, sub := s.service.peers.BestPeer()
-	go s.service.syncPending(s.service.main.handler, main)
-	go s.service.syncPending(s.service.sub.handler, sub)
-	return main != nil || sub != nil, nil
+	go s.service.syncPending(s.service.main.handler, s.service.peers.peers)
+	go s.service.syncPending(s.service.sub.handler, s.service.peers.peers)
+	return s.service.peers.Len() > 0, nil
 }
 
 func (s *PrivateCrossAdminAPI) SyncStore() (bool, error) {
@@ -198,6 +197,20 @@ func (s *PublicCrossChainAPI) CtxOwner(ctx context.Context, from common.Address)
 
 func (s *PublicCrossChainAPI) CtxOwnerByPage(ctx context.Context, from common.Address, pageSize, startPage int) RPCPageOwnerCrossTransactions {
 	locals, total := s.handler.QueryLocalBySenderAndPage(from, pageSize, startPage)
+	content := RPCPageOwnerCrossTransactions{
+		Data:  make(map[uint64][]*RPCOwnerCrossTransaction, len(locals)),
+		Total: total,
+	}
+	for chainID, txs := range locals {
+		for _, tx := range txs {
+			content.Data[chainID] = append(content.Data[chainID], newOwnerRPCCrossTransaction(tx))
+		}
+	}
+	return content
+}
+
+func (s *PublicCrossChainAPI) CtxTakerByPage(ctx context.Context, to common.Address, pageSize, startPage int) RPCPageOwnerCrossTransactions {
+	locals, total := s.handler.QueryRemoteByTakerAndPage(to, pageSize, startPage)
 	content := RPCPageOwnerCrossTransactions{
 		Data:  make(map[uint64][]*RPCOwnerCrossTransaction, len(locals)),
 		Total: total,
