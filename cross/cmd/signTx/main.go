@@ -24,11 +24,13 @@ import (
 	"github.com/simplechain-org/go-simplechain/rlp"
 )
 
-var configPath = flag.String("conf", "./config", "config path")
-var txHash = flag.String("hash", "", "tx hash")
-var addCrossTx = flag.String("data", "", "crossTransactionWithSignatures rlp data")
-var parseCrossChain = flag.Bool("p", false, "parse events from blocks")
-var mainChain = flag.Bool("main", false, "tx on main chain")
+var (
+	configPath      = flag.String("conf", "./config", "config path")
+	txHash          = flag.String("hash", "", "tx hash")
+	addCrossTx      = flag.String("data", "", "crossTransactionWithSignatures rlp data")
+	parseCrossChain = flag.Bool("p", false, "parse events from blocks")
+	role            = flag.String("role", "mainchain", "it can be one of (mainchain,subchain) (default: mainchain)")
+)
 
 type ChainConfig struct {
 	Url          string
@@ -81,11 +83,12 @@ func main() {
 		return
 	}
 
-	if *mainChain {
+	if *role == "mainchain" {
 		h.handleTx(&h.MainChain, common.HexToHash(*txHash))
-	} else {
+	} else if *role == "subchain" {
 		h.handleTx(&h.SubChain, common.HexToHash(*txHash))
 	}
+
 }
 
 type Chain struct {
