@@ -431,6 +431,11 @@
 						"type": "bytes32"
 					},
 					{
+						"internalType": "bytes32",
+						"name": "txHash",
+						"type": "bytes32"
+					},
+					{
 						"internalType": "address payable",
 						"name": "from",
 						"type": "address"

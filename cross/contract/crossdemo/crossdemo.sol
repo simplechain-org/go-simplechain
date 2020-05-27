@@ -33,8 +33,9 @@ contract crossDemo{
         uint256 value;
         uint8 signatureCount;
         mapping (address => uint8) signatures;
-        address payable to;
         address payable from;
+        address payable to;
+        bytes32 takerHash;
     }
 
     //创建交易 maker
@@ -143,7 +144,6 @@ contract crossDemo{
         require((crossChains[remoteChainId].anchorAddress.length - crossChains[remoteChainId].signConfirmCount) >= _anchors.length,"_anchors too many");
         uint64 temp = 0;
         crossChains[remoteChainId].anchorsPositionBit = (temp - 1) >> (64 - crossChains[remoteChainId].anchorAddress.length + _anchors.length);
-        //测试用重复删除
         for (uint8 i=0; i<_anchors.length; i++) {
             if (crossChains[remoteChainId].anchors[_anchors[i]].remoteChainId == 0) {
                 revert();
@@ -211,7 +211,13 @@ contract crossDemo{
         require(crossChains[remoteChainId].remoteChainId > 0,"chainId not exist"); //是否支持的跨链
         bytes32 txId = keccak256(abi.encodePacked(msg.sender, list(), remoteChainId));
         assert(crossChains[remoteChainId].makerTxs[txId].value == 0);
-        crossChains[remoteChainId].makerTxs[txId] = MakerInfo({value:(msg.value - crossChains[remoteChainId].reward),signatureCount:0,to:focus,from:msg.sender});
+        crossChains[remoteChainId].makerTxs[txId] = MakerInfo({
+            value:(msg.value - crossChains[remoteChainId].reward),
+            signatureCount:0,
+            to:focus,
+            from:msg.sender,
+            takerHash:bytes32(0x0)
+            });
         uint total = crossChains[remoteChainId].totalReward + crossChains[remoteChainId].reward;
         assert(total >= crossChains[remoteChainId].totalReward);
         crossChains[remoteChainId].totalReward = total;
@@ -220,22 +226,20 @@ contract crossDemo{
 
     struct Recept {
         bytes32 txId;
+        bytes32 txHash;
         address payable from;
         address payable to;
     }
-
     //锚定节点执行,防作恶
     function makerFinish(Recept memory rtx,uint remoteChainId) public onlyAnchor(remoteChainId) payable {
         require(crossChains[remoteChainId].makerTxs[rtx.txId].signatures[msg.sender] != 1);
-        if (crossChains[remoteChainId].makerTxs[rtx.txId].to == address(0x0)) {
-            crossChains[remoteChainId].makerTxs[rtx.txId].signatures[msg.sender] = 1;
-            crossChains[remoteChainId].makerTxs[rtx.txId].signatureCount ++;
-            crossChains[remoteChainId].makerTxs[rtx.txId].to = rtx.to;
-        } else {
-            require(crossChains[remoteChainId].makerTxs[rtx.txId].to == rtx.to,"to is error");
-            crossChains[remoteChainId].makerTxs[rtx.txId].signatures[msg.sender] = 1;
-            crossChains[remoteChainId].makerTxs[rtx.txId].signatureCount ++;
-        }
+        require(crossChains[remoteChainId].makerTxs[rtx.txId].value > 0);
+        require(crossChains[remoteChainId].makerTxs[rtx.txId].to == address(0x0) || crossChains[remoteChainId].makerTxs[rtx.txId].to == rtx.to,"to is error");
+        require(crossChains[remoteChainId].makerTxs[rtx.txId].takerHash == bytes32(0x0) || crossChains[remoteChainId].makerTxs[rtx.txId].takerHash == rtx.txHash,"txHash is error");
+        crossChains[remoteChainId].makerTxs[rtx.txId].signatures[msg.sender] = 1;
+        crossChains[remoteChainId].makerTxs[rtx.txId].signatureCount ++;
+        crossChains[remoteChainId].makerTxs[rtx.txId].to = rtx.to;
+        crossChains[remoteChainId].makerTxs[rtx.txId].takerHash = rtx.txHash;
 
         if (crossChains[remoteChainId].makerTxs[rtx.txId].signatureCount >= crossChains[remoteChainId].signConfirmCount){
             rtx.to.transfer(crossChains[remoteChainId].makerTxs[rtx.txId].value);
