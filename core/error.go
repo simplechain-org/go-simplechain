@@ -35,7 +35,4 @@ var (
 
 	// ErrNoGenesis is returned when there is no Genesis Block.
 	ErrNoGenesis = errors.New("genesis not found in chain")
-
-	// 合约重复接单
-	ErrRepetitionCrossTransaction = errors.New("repetition cross transaction")
 )

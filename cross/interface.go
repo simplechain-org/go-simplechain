@@ -4,6 +4,7 @@ import (
 	"context"
 	"math/big"
 
+	"github.com/simplechain-org/go-simplechain/accounts"
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/state"
@@ -17,9 +18,10 @@ import (
 type SimpleChain interface {
 	BlockChain() *core.BlockChain
 	ChainConfig() *params.ChainConfig
-	SignHash(hash []byte) ([]byte, error)
+	//SignHash(hash []byte) ([]byte, error)
 	GasOracle() *gasprice.Oracle
 	ProtocolManager() ProtocolManager
+	AccountManager() *accounts.Manager
 	RegisterAPIs([]rpc.API)
 	GetEVM(ctx context.Context, msg core.Message, state *state.StateDB, header *types.Header, vmCfg vm.Config) (*vm.EVM, func() error, error)
 	BlockByNumber(ctx context.Context, blockNr rpc.BlockNumber) (*types.Block, error)
@@ -28,6 +30,9 @@ type SimpleChain interface {
 }
 
 type Transaction interface {
+	ID() common.Hash
+	ChainId() *big.Int
+	DestinationId() *big.Int
 	BlockHash() common.Hash
 }
 

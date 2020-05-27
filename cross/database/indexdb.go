@@ -29,6 +29,7 @@ const (
 	PriceIndex       FieldName = "Price"
 	StatusField      FieldName = "Status"
 	FromField        FieldName = "From"
+	ToField          FieldName = "To"
 	DestinationValue FieldName = "DestinationValue"
 	BlockNumField    FieldName = "BlockNum"
 )
@@ -77,18 +78,23 @@ func (d *indexDB) Close() error {
 }
 
 func (d *indexDB) Write(ctx *cc.CrossTransactionWithSignatures) error {
-	old, err := d.get(ctx.ID())
-	if old != nil {
-		if old.BlockHash != ctx.BlockHash() {
-			return ErrCtxDbFailure{err: fmt.Errorf("blockchain reorg, txID:%s, old:%s, new:%s",
-				ctx.ID(), old.BlockHash.String(), ctx.BlockHash().String())}
-		}
-		return nil
-	}
+	//old, err := d.get(ctx.ID())
+	//if old != nil {
+	//	if old.BlockHash != ctx.BlockHash() {
+	//		cross.Report(d.chainID.Uint64(), "blockchain reorg", "ctxID", ctx.ID().String(),
+	//			"old", old.BlockHash.String(), "new", ctx.BlockHash().String())
+	//		return ErrCtxDbFailure{err: fmt.Errorf("blockchain reorg, txID:%s, old:%s, new:%s",
+	//			ctx.ID().String(), old.BlockHash.String(), ctx.BlockHash().String())}
+	//	}
+	//	return nil
+	//}
 
 	persist := NewCrossTransactionIndexed(ctx)
-	err = d.db.Save(persist)
+	err := d.db.Save(persist)
 	if err != nil {
+		if err == storm.ErrAlreadyExists {
+			return err
+		}
 		return ErrCtxDbFailure{fmt.Sprintf("Write:%s save fail", ctx.ID().String()), err}
 	}
 

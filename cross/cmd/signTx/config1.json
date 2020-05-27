@@ -2,14 +2,14 @@
   "Anchor": "0x6051De4667626B97af2b81A392ad228e0fF58002",
   "AnchorKey": "f4334c719192c2a819eb0d3f2f0150b726a13e8229e697ebc00bf16d49e0cf35",
   "Main": {
-    "Url": "http://127.0.0.1:8546",
+    "Url": "datadir1/sipe.ipc",
     "ChainID": 8,
     "ContractAddr": "0xc6e80d9a45ce121497e4ea6cb0ff6c32653d0fc5",
     "FromBlock": 0,
     "EndBlock": 1000
   },
   "Sub": {
-    "Url": "http://127.0.0.1:8556",
+    "Url": "datadir1/subsipe.ipc",
     "ChainID": 808,
     "ContractAddr": "0x8eefa4bfea64f2a89f3064d48646415168662a1e",
     "FromBlock": 0,

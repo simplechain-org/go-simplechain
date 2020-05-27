@@ -1,6 +1,7 @@
 package core
 
 import (
+	"bytes"
 	"errors"
 	"math/big"
 	"sync/atomic"
@@ -13,6 +14,20 @@ import (
 )
 
 type SignHash func(hash []byte) ([]byte, error)
+
+type CtxID = common.Hash
+type CtxIDs []CtxID
+
+func (ids CtxIDs) String() string {
+	var buffer bytes.Buffer
+	buffer.WriteString("[")
+	for _, id := range ids {
+		buffer.WriteString(" ")
+		buffer.WriteString(id.String())
+	}
+	buffer.WriteString(" ]")
+	return buffer.String()
+}
 
 var ErrDuplicateSign = errors.New("signatures already exist")
 var ErrInvalidSign = errors.New("not same ctx")
@@ -180,6 +195,8 @@ const (
 	CtxStatusFinishing
 	// CtxStatusFinished is the status code of a rtx transaction if make finish confirmed.
 	CtxStatusFinished
+	// unsigned transaction
+	CtxStatusPending
 )
 
 /**
@@ -205,6 +222,7 @@ var ctxStatusToString = map[CtxStatus]string{
 	CtxStatusExecuting: "executing",
 	CtxStatusFinishing: "finishing",
 	CtxStatusFinished:  "finished",
+	CtxStatusPending:   "pending",
 }
 
 func (s CtxStatus) String() string {

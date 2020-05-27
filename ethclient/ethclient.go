@@ -546,7 +546,7 @@ func (ec *Client) SendCrossTxMain(ctx context.Context, tx *cc.CrossTransactionWi
 	if err != nil {
 		return err
 	}
-	return ec.c.CallContext(ctx, nil, "eth_importMainCtx", hexutil.Encode(data))
+	return ec.c.CallContext(ctx, nil, "cross_importMainCtx", hexutil.Encode(data))
 }
 
 func (ec *Client) SendCrossTxSub(ctx context.Context, tx *cc.CrossTransactionWithSignatures) error {
@@ -554,5 +554,5 @@ func (ec *Client) SendCrossTxSub(ctx context.Context, tx *cc.CrossTransactionWit
 	if err != nil {
 		return err
 	}
-	return ec.c.CallContext(ctx, nil, "eth_importSubCtx", hexutil.Encode(data))
+	return ec.c.CallContext(ctx, nil, "cross_importSubCtx", hexutil.Encode(data))
 }

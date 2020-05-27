@@ -18,6 +18,8 @@ import (
 	"github.com/simplechain-org/go-simplechain/params"
 )
 
+const maxFinishGasLimit = 250000
+
 type TranParam struct {
 	gasLimit uint64
 	gasPrice *big.Int
@@ -146,8 +148,13 @@ func (exe *SimpleExecutor) createTransaction(rws *cc.ReceptTransaction) (*TranPa
 		exe.log.Error("ConstructData", "err", err)
 		return nil, err
 	}
+	if balance, err := exe.gasHelper.GetBalance(exe.anchor); err != nil || balance == nil || balance.Cmp(new(big.Int).Mul(gasPrice, new(big.Int).SetUint64(maxFinishGasLimit))) < 0 {
+		log.Warn("insufficient balance for finishing", "ctxID", rws.CTxId.String(),
+			"chainID", rws.ChainId, "error", err, "balance", balance, "price", gasPrice)
+		cross.Report(exe.gasHelper.chain.ChainConfig().ChainID.Uint64(), "insufficient balance", "ctxID", rws.CTxId.String())
+	}
 
-	return &TranParam{gasLimit: 250000, gasPrice: gasPrice, data: data}, nil
+	return &TranParam{gasLimit: maxFinishGasLimit, gasPrice: gasPrice, data: data}, nil
 }
 
 func (exe *SimpleExecutor) checkTransaction(address, tokenAddress common.Address, nonce, gasLimit uint64, gasPrice *big.Int, data []byte) (bool, error) {

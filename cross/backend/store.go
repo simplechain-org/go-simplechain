@@ -16,12 +16,13 @@ import (
 )
 
 const (
-	expireInterval = time.Second * 60 * 12
-	expireNumber   = 180 //pending rtx expired after block num
+	expireInterval   = time.Second * 60 * 12
+	expireNumber     = 180 //pending rtx expired after block num
+	defaultCacheSize = 4096
 )
 
 type CrossStore struct {
-	config      cross.CtxStoreConfig
+	config      cross.Config
 	chainConfig *params.ChainConfig
 	chain       cross.BlockChain
 
@@ -32,15 +33,14 @@ type CrossStore struct {
 	logger log.Logger
 }
 
-func NewCrossStore(ctx crossdb.ServiceContext, config cross.CtxStoreConfig, chainConfig *params.ChainConfig, chain cross.BlockChain, makerDb string) (*CrossStore, error) {
+func NewCrossStore(ctx crossdb.ServiceContext, config cross.Config, chainConfig *params.ChainConfig, chain cross.BlockChain, makerDb string) (*CrossStore, error) {
 	config = (&config).Sanitize()
-	config.ChainId = chainConfig.ChainID
 
 	store := &CrossStore{
 		config:      config,
 		chainConfig: chainConfig,
 		chain:       chain,
-		logger:      log.New("cross-module", "store", "local", config.ChainId),
+		logger:      log.New("cross-module", "store", "local", chainConfig.ChainID),
 	}
 
 	db, err := crossdb.OpenStormDB(ctx, makerDb)
@@ -48,7 +48,7 @@ func NewCrossStore(ctx crossdb.ServiceContext, config cross.CtxStoreConfig, chai
 		return nil, err
 	}
 	store.db = db
-	store.localStore = crossdb.NewIndexDB(config.ChainId, db, config.GlobalSlots)
+	store.localStore = crossdb.NewIndexDB(chainConfig.ChainID, db, defaultCacheSize)
 	if err := store.localStore.Load(); err != nil {
 		store.logger.Warn("Failed to load local ctx", "err", err)
 	}
@@ -60,7 +60,7 @@ func (store *CrossStore) Close() {
 }
 
 func (store *CrossStore) RegisterChain(chainID *big.Int) {
-	store.remoteStore = crossdb.NewIndexDB(chainID, store.db, store.config.GlobalSlots)
+	store.remoteStore = crossdb.NewIndexDB(chainID, store.db, defaultCacheSize)
 	store.logger.New("remote", chainID)
 	store.logger.Info("Register remote chain successfully")
 }
@@ -82,6 +82,10 @@ func (store *CrossStore) AddRemote(ctx *cc.CrossTransactionWithSignatures) error
 	return store.remoteStore.Write(ctx)
 }
 
+func (store *CrossStore) HasRemote(ctxID common.Hash) bool {
+	return store.remoteStore.Has(ctxID)
+}
+
 func (store *CrossStore) RemoveRemotes(rtxs []*cc.ReceptTransaction) {
 	for _, v := range rtxs {
 		store.MarkStatus([]*cc.CrossTransactionModifier{
@@ -98,7 +102,7 @@ func (store *CrossStore) Height() uint64 {
 	return store.localStore.Height()
 }
 
-func (store *CrossStore) StoreStats() (map[cc.CtxStatus]int, map[cc.CtxStatus]int) {
+func (store *CrossStore) Stats() (map[cc.CtxStatus]int, map[cc.CtxStatus]int) {
 	waiting := q.Eq(crossdb.StatusField, cc.CtxStatusWaiting)
 	executing := q.Eq(crossdb.StatusField, cc.CtxStatusExecuting)
 	finishing := q.Eq(crossdb.StatusField, cc.CtxStatusFinishing)
@@ -138,37 +142,37 @@ func (store *CrossStore) MarkStatus(txms []*cc.CrossTransactionModifier, status 
 	}
 }
 
-func (store *CrossStore) GetSyncCrossTransactions(reqHeight, maxHeight uint64, pageSize int) []*cc.CrossTransactionWithSignatures {
-	return store.localStore.RangeByNumber(reqHeight, maxHeight, pageSize)
-}
+//func (store *CrossStore) GetSyncCrossTransactions(reqHeight, maxHeight uint64, pageSize int) []*cc.CrossTransactionWithSignatures {
+//	return store.localStore.RangeByNumber(reqHeight, maxHeight, pageSize)
+//}
 
 // sync cross transactions (with signatures) from other anchor peers
-func (store *CrossStore) SyncCrossTransactions(ctxList []*cc.CrossTransactionWithSignatures) int {
-	var success, ignore int
-	for _, ctx := range ctxList {
-		chainID := ctx.ChainId()
-
-		var db crossdb.CtxDB
-		switch {
-		case store.config.ChainId.Cmp(chainID) == 0:
-			db = store.localStore
-		case store.remoteStore.ChainID().Cmp(chainID) == 0:
-			db = store.remoteStore
-		default:
-			return 0
-		}
-
-		if db.Has(ctx.ID()) {
-			ignore++
-			continue
-		}
-		if err := db.Write(ctx); err != nil {
-			store.logger.Warn("SyncCrossTransactions failed", "txID", ctx.ID(), "err", err)
-			continue
-		}
-		success++
-	}
-
-	store.logger.Info("sync cross transactions", "success", success, "ignore", ignore, "fail", len(ctxList)-success-ignore)
-	return success
-}
+//func (store *CrossStore) SyncCrossTransactions(ctxList []*cc.CrossTransactionWithSignatures) int {
+//	var success, ignore int
+//	for _, ctx := range ctxList {
+//		chainID := ctx.ChainId()
+//
+//		var db crossdb.CtxDB
+//		switch {
+//		case store.chainConfig.ChainID.Cmp(chainID) == 0:
+//			db = store.localStore
+//		case store.remoteStore.ChainID().Cmp(chainID) == 0:
+//			db = store.remoteStore
+//		default:
+//			return 0
+//		}
+//
+//		if db.Has(ctx.ID()) {
+//			ignore++
+//			continue
+//		}
+//		if err := db.Write(ctx); err != nil {
+//			store.logger.Warn("SyncCrossTransactions failed", "txID", ctx.ID(), "err", err)
+//			continue
+//		}
+//		success++
+//	}
+//
+//	store.logger.Info("sync cross transactions", "success", success, "ignore", ignore, "fail", len(ctxList)-success-ignore)
+//	return success
+//}

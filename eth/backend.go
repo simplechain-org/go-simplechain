@@ -701,13 +701,3 @@ func (s *Ethereum) GetEVM(ctx context.Context, msg core.Message, state *state.St
 	context := core.NewEVMContext(msg, header, s.blockchain, nil)
 	return vm.NewEVM(context, state, s.chainConfig, vmCfg), vmError, nil
 }
-
-func (s *Ethereum) SignHash(hash []byte) ([]byte, error) {
-	account := accounts.Account{Address: s.config.AnchorSigner}
-	wallet, err := s.accountManager.Find(account)
-	if err != nil {
-		log.Error("account not found ", "address", s.config.AnchorSigner)
-		return nil, err
-	}
-	return wallet.SignHash(account, hash)
-}

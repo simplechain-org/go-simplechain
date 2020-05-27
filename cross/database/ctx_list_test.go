@@ -23,7 +23,7 @@ func TestCtxSortedByBlockNumAdd(t *testing.T) {
 	}
 
 	for _, v := range rand.Perm(len(txs)) {
-		list.Put(txs[v], txs[v].BlockNum)
+		list.Put(txs[v])
 	}
 
 	// Verify internal state

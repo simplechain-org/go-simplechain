@@ -81,7 +81,7 @@ func TestNewCtxStoreAdd(t *testing.T) {
 	if err := ctxPool.AddRemote(tx2); err != nil {
 		t.Fatal(err)
 	}
-	if err := ctxPool.AddLocal(cc.NewCrossTransaction(big.NewInt(1e18),
+	if _, errs := ctxPool.AddLocals(cc.NewCrossTransaction(big.NewInt(1e18),
 		big.NewInt(2e18),
 		big.NewInt(19),
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
@@ -89,7 +89,7 @@ func TestNewCtxStoreAdd(t *testing.T) {
 		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
 		fromAddr,
 		toAddr,
-		nil)); err != nil {
+		nil)); errs != nil {
 		t.Fatal(err)
 	}
 	ev := <-signedCh
@@ -106,7 +106,7 @@ func setupCtxStore() (*CrossStore, error) {
 	statedb, _ := state.New(common.Hash{}, state.NewDatabase(rawdb.NewMemoryDatabase()))
 	blockchain := &testBlockChain{statedb, 1000000, new(event.Feed)}
 
-	store, err := NewCrossStore(nil, cross.DefaultCtxStoreConfig, params.TestChainConfig, blockchain, "testing-cross-store")
+	store, err := NewCrossStore(nil, cross.Config{}, params.TestChainConfig, blockchain, "testing-cross-store")
 	if err != nil {
 		return nil, err
 	}

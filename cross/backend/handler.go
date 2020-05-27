@@ -1,9 +1,9 @@
 package backend
 
 import (
-	"errors"
 	"math/big"
 
+	"github.com/simplechain-org/go-simplechain/accounts"
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/types"
@@ -16,6 +16,8 @@ import (
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/node"
 	"github.com/simplechain-org/go-simplechain/params"
+
+	"github.com/asdine/storm/v3"
 )
 
 const (
@@ -24,11 +26,10 @@ const (
 	signedPendingSize = 256
 )
 
-var ErrVerifyCtx = errors.New("verify ctx failed")
-
 type Handler struct {
 	blockChain *core.BlockChain
 	pm         cross.ProtocolManager
+	config     cross.Config
 
 	service    *CrossService
 	store      *CrossStore
@@ -73,40 +74,38 @@ type Handler struct {
 }
 
 func NewCrossHandler(ctx *node.ServiceContext, chain cross.SimpleChain,
-	service *CrossService, storeConfig cross.CtxStoreConfig, storePath string, contract common.Address,
-	crossMsgReader <-chan interface{}, crossMsgWriter chan<- interface{},
-	signHash cc.SignHash, anchorSigner common.Address) (*Handler, error) {
+	service *CrossService, config cross.Config, storePath string, contract common.Address,
+	crossMsgReader <-chan interface{}, crossMsgWriter chan<- interface{} /*, signHash cc.SignHash*/) (h *Handler, err error) {
 
-	store, err := NewCrossStore(ctx, storeConfig, chain.ChainConfig(), chain.BlockChain(), storePath)
-	if err != nil {
-		return nil, err
-	}
-	validator := NewCrossValidator(store, contract)
-	pool := NewCrossPool(store, validator, signHash)
-
-	subscribe := subscriber.NewSimpleSubscriber(contract, chain.BlockChain())
-	execute, err := executor.NewSimpleExecutor(chain, anchorSigner, contract, signHash)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Handler{
+	h = &Handler{
 		chain:          chain,
 		blockChain:     chain.BlockChain(),
 		pm:             chain.ProtocolManager(),
+		config:         config,
 		service:        service,
-		store:          store,
-		pool:           pool,
-		validator:      validator,
 		contract:       contract,
-		subscriber:     subscribe,
-		executor:       execute,
 		crossMsgReader: crossMsgReader,
 		crossMsgWriter: crossMsgWriter,
 		synchronizeCh:  make(chan []*cc.CrossTransactionWithSignatures, 1),
 		quitSync:       make(chan struct{}),
 		log:            log.New("cross-module", "handler", "chainID", chain.ChainConfig().ChainID),
-	}, nil
+	}
+
+	h.store, err = NewCrossStore(ctx, config, chain.ChainConfig(), chain.BlockChain(), storePath)
+	if err != nil {
+		return nil, err
+	}
+
+	h.validator = NewCrossValidator(h.store, contract)
+	h.pool = NewCrossPool(h.store, h.validator, h.signHash)
+
+	h.subscriber = subscriber.NewSimpleSubscriber(contract, chain.BlockChain())
+	h.executor, err = executor.NewSimpleExecutor(chain, config.Signer, contract, h.signHash)
+	if err != nil {
+		return nil, err
+	}
+
+	return h, nil
 }
 
 func (h *Handler) Start() {
@@ -150,22 +149,21 @@ func (h *Handler) Stop() {
 	h.rmLogsSub.Unsubscribe()
 	h.updateAnchorSub.Unsubscribe()
 
+	h.pool.Stop()
 	h.executor.Stop()
+	h.store.Close()
 	close(h.quitSync)
-
-	h.log.Info("CrossChain Handler stopped")
 }
 
 func (h *Handler) loop() {
 	for {
 		select {
 		case ev := <-h.confirmedMakerCh:
-			for _, tx := range ev.Txs {
-				if err := h.pool.AddLocal(tx); err != nil {
-					h.log.Warn("Add local ctx failed", "err", err)
-				}
+			signed, errs := h.pool.AddLocals(ev.Txs...)
+			for _, err := range errs {
+				h.log.Warn("Add local ctx failed", "err", err)
 			}
-			h.service.BroadcastCrossTx(ev.Txs, true)
+			h.service.BroadcastCrossTx(signed, true)
 
 		case <-h.confirmedMakerSub.Err():
 			return
@@ -243,15 +241,17 @@ func (h *Handler) readCrossMessage() {
 
 					if invalidSigIndex != nil {
 						h.log.Warn("invalid signature remote chain ctx", "ctxID", cws.ID().String(), "sigIndex", invalidSigIndex)
+						cross.Report(h.chain.ChainConfig().ChainID.Uint64(), "VerifyContract failed", "ctxID", cws.ID().String(), "sigIndex", invalidSigIndex)
 						break
 					}
 
-					if err := h.validator.VerifyCwsInvoking(cws); err != nil {
+					if err := h.validator.VerifyContract(cws); err != nil {
 						h.log.Warn("invoking verify failed", "ctxID", cws.ID().String(), "error", err)
+						cross.Report(h.chain.ChainConfig().ChainID.Uint64(), "VerifyContract failed", "ctxID", cws.ID().String(), "error", err)
 						break
 					}
 
-					if err := h.store.AddRemote(cws); err != nil {
+					if err := h.store.AddRemote(cws); err != nil && err != storm.ErrAlreadyExists {
 						h.log.Warn("add remote ctx failed", "error", err.Error())
 					}
 				}
@@ -302,7 +302,7 @@ func (h *Handler) reorgLogs(logs []*types.Log) {
 
 func (h *Handler) AddRemoteCtx(ctx *cc.CrossTransaction) error {
 	if err := h.validator.VerifyCtx(ctx); err != nil {
-		return ErrVerifyCtx
+		return err
 	}
 	if err := h.pool.AddRemote(ctx); err != nil && err != cc.ErrDuplicateSign {
 		h.log.Warn("Add remote ctx", "id", ctx.ID().String(), "err", err)
@@ -335,14 +335,13 @@ func (h *Handler) GetSyncPending(ids []common.Hash) []*cc.CrossTransaction {
 	return results
 }
 
-func (h *Handler) SyncPending(ctxs []*cc.CrossTransaction) map[common.Hash]bool {
+func (h *Handler) SyncPending(ctxList []*cc.CrossTransaction) map[common.Hash]bool {
 	synced := make(map[common.Hash]bool)
-	for _, ctx := range ctxs {
-		if err := h.AddRemoteCtx(ctx); err == nil {
-			synced[ctx.ID()] = true
-		} else {
-			h.log.Debug("SyncPending failed", "id", ctx.ID(), "err", err)
+	for _, ctx := range ctxList {
+		if err := h.AddRemoteCtx(ctx); err != nil {
+			h.log.Trace("SyncPending failed", "id", ctx.ID(), "err", err)
 		}
+		synced[ctx.ID()] = true
 	}
 	return synced
 }
@@ -356,9 +355,54 @@ func (h *Handler) Height() *big.Int {
 }
 
 func (h *Handler) GetSyncCrossTransaction(height uint64, syncSize int) []*cc.CrossTransactionWithSignatures {
-	return h.store.GetSyncCrossTransactions(height, h.chain.BlockChain().CurrentBlock().NumberU64(), syncSize)
+	return h.store.localStore.RangeByNumber(height, h.chain.BlockChain().CurrentBlock().NumberU64(), syncSize)
 }
 
-func (h *Handler) SyncCrossTransaction(ctx []*cc.CrossTransactionWithSignatures) int {
-	return h.store.SyncCrossTransactions(ctx)
+func (h *Handler) SyncCrossTransaction(ctxList []*cc.CrossTransactionWithSignatures) int {
+	var success, ignore, failed int
+
+	for _, ctx := range ctxList {
+		switch {
+		case h.validator.IsLocalCtx(ctx):
+			if h.store.HasLocal(ctx.ID()) {
+				ignore++
+				continue
+			}
+			if h.validator.VerifyReorg(ctx) != nil {
+				failed++
+				continue
+			}
+			if h.store.AddLocal(ctx) != nil {
+				failed++
+				continue
+			}
+			success++
+
+		case h.validator.IsRemoteCtx(ctx):
+			if h.store.HasRemote(ctx.ID()) {
+				ignore++
+				continue
+			}
+			if h.store.AddRemote(ctx) != nil {
+				failed++
+				continue
+			}
+			success++
+
+		default:
+			ignore++
+		}
+	}
+	h.log.Info("sync cross transactions", "success", success, "ignore", ignore, "fail", failed)
+	return success
+}
+
+func (h *Handler) signHash(hash []byte) ([]byte, error) {
+	account := accounts.Account{Address: h.config.Signer}
+	wallet, err := h.chain.AccountManager().Find(account)
+	if err != nil {
+		log.Error("account not found ", "address", h.config.Signer)
+		return nil, err
+	}
+	return wallet.SignHash(account, hash)
 }
