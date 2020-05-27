@@ -112,8 +112,8 @@ func (t *SimpleSubscriber) shift(height uint64) {
 							from = common.BytesToAddress(v.Data[common.HashLength*2-common.AddressLength : common.HashLength*2])
 							ctxId := v.Topics[1]
 							rtxs = append(rtxs,
-								cc.NewReceptTransaction(ctxId, from, to, common.BytesToHash(v.Data[:common.HashLength]).Big(),
-									t.chain.GetChainConfig().ChainID))
+								cc.NewReceptTransaction(ctxId, v.TxHash, from, to,
+									common.BytesToHash(v.Data[:common.HashLength]).Big(), t.chain.GetChainConfig().ChainID))
 							continue
 						}
 
