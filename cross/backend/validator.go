@@ -51,7 +51,7 @@ func NewCrossValidator(store *CrossStore, contract common.Address) *CrossValidat
 		chainConfig:      store.chainConfig,
 		chain:            store.chain,
 		contract:         contract,
-		logger:           log.New("cross-module", "validator"),
+		logger:           log.New("X-module", "validator"),
 	}
 }
 

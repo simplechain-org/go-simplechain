@@ -49,7 +49,7 @@ func NewCrossPool(store *CrossStore, validator *CrossValidator, signHash cc.Sign
 		signer:       cc.MakeCtxSigner(store.chainConfig),
 		signHash:     signHash,
 		stopCh:       make(chan struct{}),
-		logger:       log.New("cross-module", "pool"),
+		logger:       log.New("X-module", "pool"),
 	}
 }
 
@@ -218,17 +218,22 @@ func (pool *CrossPool) Stats() (int, int) {
 	return pool.pending.Len(), pool.queued.Len()
 }
 
-func (pool *CrossPool) Pending(number uint64, limit int, exclude map[common.Hash]bool) (pending []common.Hash) {
+func (pool *CrossPool) Pending(startNumber, lastNumber uint64, limit int) []*cc.CrossTransactionWithSignatures {
 	pool.mu.RLock()
 	defer pool.mu.RUnlock()
+	var pending []*cc.CrossTransactionWithSignatures
 	pool.pending.Map(func(ctx *cc.CrossTransactionWithSignatures) bool {
-		if ctx.BlockNum+expireNumber <= number {
+		if ctx.BlockNum+expireNumber <= lastNumber { // 过期pending不取
 			return false
 		}
-		if ctxID := ctx.ID(); exclude == nil || !exclude[ctxID] {
-			pending = append(pending, ctxID)
+		if ctx.BlockNum <= startNumber { // 低于起始高度的pending不取
+			return false
 		}
-		return len(pending) >= limit
+		if pending != nil && len(pending) >= limit && pending[len(pending)-1].BlockNum != ctx.BlockNum {
+			return true
+		}
+		pending = append(pending, ctx)
+		return false
 	})
 	return pending
 }

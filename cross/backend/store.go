@@ -40,7 +40,7 @@ func NewCrossStore(ctx crossdb.ServiceContext, config cross.Config, chainConfig 
 		config:      config,
 		chainConfig: chainConfig,
 		chain:       chain,
-		logger:      log.New("cross-module", "store", "local", chainConfig.ChainID),
+		logger:      log.New("X-module", "store", "local", chainConfig.ChainID),
 	}
 
 	db, err := crossdb.OpenStormDB(ctx, makerDb)
@@ -98,6 +98,14 @@ func (store *CrossStore) RemoveRemotes(rtxs []*cc.ReceptTransaction) {
 	}
 }
 
+func (store *CrossStore) AddLocals(ctxList []*cc.CrossTransactionWithSignatures, replaceable bool) error {
+	return store.localStore.Writes(ctxList, replaceable)
+}
+
+func (store *CrossStore) AddRemotes(ctxList []*cc.CrossTransactionWithSignatures, replaceable bool) error {
+	return store.remoteStore.Writes(ctxList, replaceable)
+}
+
 func (store *CrossStore) Height() uint64 {
 	return store.localStore.Height()
 }
@@ -140,6 +148,27 @@ func (store *CrossStore) MarkStatus(txms []*cc.CrossTransactionModifier, status 
 			mark(tx, store.remoteStore)
 		}
 	}
+}
+
+func (store *CrossStore) markStatus(txmList []*cc.CrossTransactionModifier, local bool) error {
+	var (
+		ids      []cc.CtxID
+		updaters []func(ctx *crossdb.CrossTransactionIndexed)
+	)
+	for _, txm := range txmList {
+		ids = append(ids, txm.ID)
+		updaters = append(updaters, func(ctx *crossdb.CrossTransactionIndexed) {
+			ctx.Status = uint8(txm.Status)
+			if txm.AtBlockNumber > ctx.BlockNum {
+				ctx.BlockNum = txm.AtBlockNumber
+			}
+		})
+	}
+
+	if local {
+		return store.localStore.Updates(ids, updaters)
+	}
+	return store.remoteStore.Updates(ids, updaters)
 }
 
 //func (store *CrossStore) GetSyncCrossTransactions(reqHeight, maxHeight uint64, pageSize int) []*cc.CrossTransactionWithSignatures {

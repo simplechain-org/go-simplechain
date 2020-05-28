@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"github.com/simplechain-org/go-simplechain/log"
 	"math/big"
 	"sync/atomic"
 	"time"
@@ -86,9 +87,12 @@ func (srv *CrossService) syncWithPeer(handler *Handler, peer *anchorPeer, height
 			if len(txs) == 0 {
 				atomic.StoreUint32(&handler.synchronising, 0)
 				peer.Log().Debug("sync ctx request completed")
+				return
 			}
-			srv.main.handler.SyncCrossTransaction(txs)
-			srv.sub.handler.SyncCrossTransaction(txs)
+			local := srv.main.handler.SyncCrossTransaction(txs)
+			remote := srv.sub.handler.SyncCrossTransaction(txs)
+
+			log.Info("Import cross transactions", "total", len(txs), "local", local, "remote", remote)
 
 			timeout.Reset(rttMaxEstimate)
 			// send next sync request after last
@@ -103,7 +107,7 @@ func (srv *CrossService) syncWithPeer(handler *Handler, peer *anchorPeer, height
 }
 
 func (srv *CrossService) syncPending(handler *Handler, peers map[string]*anchorPeer) {
-	pending := handler.Pending(defaultMaxSyncSize, nil)
+	pending := handler.Pending(0, defaultMaxSyncSize)
 	peerWithPending := make(map[string][]common.Hash)
 	for _, id := range pending {
 		for pid, p := range peers {
