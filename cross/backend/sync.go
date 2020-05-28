@@ -1,12 +1,12 @@
 package backend
 
 import (
-	"github.com/simplechain-org/go-simplechain/log"
 	"math/big"
 	"sync/atomic"
 	"time"
 
 	"github.com/simplechain-org/go-simplechain/common"
+	"github.com/simplechain-org/go-simplechain/log"
 )
 
 type SyncReq struct {

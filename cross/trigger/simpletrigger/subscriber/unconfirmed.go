@@ -131,7 +131,7 @@ func (t *SimpleSubscriber) shift(height uint64, currentEvent *cc.CrossBlockEvent
 
 				confirmNumber := header.Number.Uint64() + uint64(t.depth) // make a confirmed number
 
-				if currentEvent.Number.Uint64() == confirmNumber {
+				if currentEvent != nil && currentEvent.Number.Uint64() == confirmNumber {
 					currentEvent.ConfirmedMaker.Txs = append(currentEvent.ConfirmedMaker.Txs, ctxs...)
 					currentEvent.ConfirmedTaker.Txs = append(currentEvent.ConfirmedTaker.Txs, rtxs...)
 					currentEvent.ConfirmedFinish.Finishes = append(currentEvent.ConfirmedFinish.Finishes, finishModifiers...)
@@ -144,17 +144,6 @@ func (t *SimpleSubscriber) shift(height uint64, currentEvent *cc.CrossBlockEvent
 						ConfirmedFinish: cc.ConfirmedFinishEvent{Finishes: finishModifiers},
 					})
 				}
-
-				//TODO-Delete
-				//if len(ctxs) > 0 {
-				//	t.ConfirmedMakerFeedSend(cc.ConfirmedMakerEvent{Txs: ctxs})
-				//}
-				//if len(rtxs) > 0 {
-				//	t.ConfirmedTakerSend(cc.ConfirmedTakerEvent{Txs: rtxs})
-				//}
-				//if len(finishModifiers) > 0 {
-				//	t.ConfirmedFinishFeedSend(cc.ConfirmedFinishEvent{Finishes: finishModifiers})
-				//}
 			}
 		default:
 			log.Info("⑂ block  became a side fork", "number", next.index, "hash", next.hash)

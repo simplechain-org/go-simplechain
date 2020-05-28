@@ -50,26 +50,26 @@ type Handler struct {
 	crossBlockCh  chan cc.CrossBlockEvent
 	crossBlockSub event.Subscription
 
-	confirmedMakerCh  chan cc.ConfirmedMakerEvent // Channel to receive one-signed makerTx from ctxStore
-	confirmedMakerSub event.Subscription
-	signedCtxCh       chan cc.SignedCtxEvent // Channel to receive signed-completely makerTx from ctxStore
-	signedCtxSub      event.Subscription
+	//confirmedMakerCh  chan cc.ConfirmedMakerEvent // Channel to receive one-signed makerTx from ctxStore
+	//confirmedMakerSub event.Subscription
+	signedCtxCh  chan cc.SignedCtxEvent // Channel to receive signed-completely makerTx from ctxStore
+	signedCtxSub event.Subscription
 
-	newTakerCh        chan cc.NewTakerEvent // Channel to receive taker tx
-	newTakerSub       event.Subscription
-	confirmedTakerCh  chan cc.ConfirmedTakerEvent // Channel to receive one-signed takerTx from rtxStore
-	confirmedTakerSub event.Subscription
-
-	newFinishCh        chan cc.NewFinishEvent
-	newFinishSub       event.Subscription
-	confirmedFinishCh  chan cc.ConfirmedFinishEvent // Channel to receive confirmed makerFinish event
-	confirmedFinishSub event.Subscription
+	//newTakerCh        chan cc.NewTakerEvent // Channel to receive taker tx
+	//newTakerSub       event.Subscription
+	//confirmedTakerCh  chan cc.ConfirmedTakerEvent // Channel to receive one-signed takerTx from rtxStore
+	//confirmedTakerSub event.Subscription
+	//
+	//newFinishCh        chan cc.NewFinishEvent
+	//newFinishSub       event.Subscription
+	//confirmedFinishCh  chan cc.ConfirmedFinishEvent // Channel to receive confirmed makerFinish event
+	//confirmedFinishSub event.Subscription
 
 	rmLogsCh  chan core.RemovedLogsEvent // Channel to receive removed log event
 	rmLogsSub event.Subscription         // Subscription for removed log event
 
-	updateAnchorCh  chan cc.NewAnchorEvent
-	updateAnchorSub event.Subscription
+	//updateAnchorCh  chan cc.NewAnchorEvent
+	//updateAnchorSub event.Subscription
 
 	chain cross.SimpleChain
 
@@ -114,28 +114,11 @@ func NewCrossHandler(ctx *node.ServiceContext, chain cross.SimpleChain,
 func (h *Handler) Start() {
 	h.blockChain.SetCrossTrigger(h.subscriber)
 
-	h.confirmedMakerCh = make(chan cc.ConfirmedMakerEvent, txChanSize)
-	h.confirmedMakerSub = h.subscriber.SubscribeConfirmedMakerEvent(h.confirmedMakerCh)
-	h.confirmedTakerCh = make(chan cc.ConfirmedTakerEvent, txChanSize)
-	h.confirmedTakerSub = h.subscriber.SubscribeConfirmedTakerEvent(h.confirmedTakerCh)
-
 	h.signedCtxCh = make(chan cc.SignedCtxEvent, txChanSize)
 	h.signedCtxSub = h.pool.SubscribeSignedCtxEvent(h.signedCtxCh)
 
-	h.confirmedFinishCh = make(chan cc.ConfirmedFinishEvent, txChanSize)
-	h.confirmedFinishSub = h.subscriber.SubscribeConfirmedFinishEvent(h.confirmedFinishCh)
-
-	h.newTakerCh = make(chan cc.NewTakerEvent, txChanSize)
-	h.newTakerSub = h.subscriber.SubscribeNewTakerEvent(h.newTakerCh)
-
-	h.newFinishCh = make(chan cc.NewFinishEvent, txChanSize)
-	h.newFinishSub = h.subscriber.SubscribeNewFinishEvent(h.newFinishCh)
-
 	h.rmLogsCh = make(chan core.RemovedLogsEvent, rmLogsChanSize)
 	h.rmLogsSub = h.blockChain.SubscribeRemovedLogsEvent(h.rmLogsCh)
-
-	h.updateAnchorCh = make(chan cc.NewAnchorEvent, txChanSize)
-	h.updateAnchorSub = h.subscriber.SubscribeUpdateAnchorEvent(h.updateAnchorCh)
 
 	h.crossBlockCh = make(chan cc.CrossBlockEvent, txChanSize)
 	h.crossBlockSub = h.subscriber.SubscribeCrossBlockEvent(h.crossBlockCh)
@@ -147,13 +130,9 @@ func (h *Handler) Start() {
 }
 
 func (h *Handler) Stop() {
-	h.confirmedMakerSub.Unsubscribe()
-	h.signedCtxSub.Unsubscribe()
-	h.confirmedTakerSub.Unsubscribe()
-	h.newTakerSub.Unsubscribe()
-	h.confirmedFinishSub.Unsubscribe()
 	h.rmLogsSub.Unsubscribe()
-	h.updateAnchorSub.Unsubscribe()
+	h.signedCtxSub.Unsubscribe()
+	//h.updateAnchorSub.Unsubscribe()
 
 	h.pool.Stop()
 	h.executor.Stop()
@@ -170,55 +149,14 @@ func (h *Handler) loop() {
 			h.log.Warn("crossBlockSub stopped", "error", err)
 			return
 
-		case ev := <-h.confirmedMakerCh:
-			signed, errs := h.pool.AddLocals(ev.Txs...)
-			for _, err := range errs {
-				h.log.Warn("Add local ctx failed", "err", err)
-			}
-			h.service.BroadcastCrossTx(signed, true)
-
-		case <-h.confirmedMakerSub.Err():
-			return
-
 		case ev := <-h.signedCtxCh:
 			h.writeCrossMessage(ev)
 		case <-h.signedCtxSub.Err():
 			return
 
-		case ev := <-h.confirmedTakerCh:
-			h.writeCrossMessage(ev)
-			h.store.RemoveRemotes(ev.Txs)
-
-		case <-h.confirmedTakerSub.Err():
-			return
-
-		case ev := <-h.newTakerCh:
-			h.store.MarkStatus(ev.Takers, cc.CtxStatusExecuting)
-		case <-h.newTakerSub.Err():
-			return
-
-		case ev := <-h.newFinishCh:
-			h.store.MarkStatus(ev.Finishes, cc.CtxStatusFinishing)
-		case <-h.newFinishSub.Err():
-			return
-
 		case ev := <-h.rmLogsCh:
 			h.reorgLogs(ev.Logs)
 		case <-h.rmLogsSub.Err():
-			return
-
-		case ev := <-h.confirmedFinishCh:
-			h.makeFinish(ev.Finishes)
-		case <-h.confirmedFinishSub.Err():
-			return
-
-		case ev := <-h.updateAnchorCh:
-			for _, v := range ev.ChainInfo {
-				if err := h.validator.UpdateAnchors(v); err != nil {
-					h.log.Info("ctxStore UpdateAnchors failed", "err", err)
-				}
-			}
-		case <-h.updateAnchorSub.Err():
 			return
 		}
 	}
@@ -379,11 +317,15 @@ func (h *Handler) reorgLogs(logs []*types.Log) {
 		}
 	}
 	if len(takerLogs) > 0 {
-		h.store.MarkStatus(takerLogs, cc.CtxStatusWaiting)
+		if err := h.store.markStatus(takerLogs, false); err != nil {
+			h.log.Warn("reorg cross failed", "error", err)
+		}
 	}
 
 	if len(finishLogs) > 0 {
-		h.store.MarkStatus(finishLogs, cc.CtxStatusFinishing)
+		if err := h.store.markStatus(finishLogs, true); err != nil {
+			h.log.Warn("reorg cross failed", "error", err)
+		}
 	}
 }
 
@@ -395,15 +337,6 @@ func (h *Handler) AddRemoteCtx(ctx *cc.CrossTransaction) error {
 		h.log.Warn("Add remote ctx", "id", ctx.ID().String(), "err", err)
 	}
 	return nil
-}
-
-func (h *Handler) makeFinish(finishes []*cc.CrossTransactionModifier) {
-	transactions := make([]string, len(finishes))
-	for i, finish := range finishes {
-		transactions[i] = finish.ID.String()
-	}
-	h.log.Info("cross transaction finished", "transactions", transactions)
-	h.store.MarkStatus(finishes, cc.CtxStatusFinished)
 }
 
 // for ctx pending sync
@@ -511,45 +444,6 @@ func (h *Handler) SyncCrossTransaction(ctxList []*cc.CrossTransactionWithSignatu
 
 	return success
 }
-
-//func (h *Handler) SyncCrossTransaction(ctxList []*cc.CrossTransactionWithSignatures) int {
-//	var success, ignore, failed int
-//
-//	for _, ctx := range ctxList {
-//		switch {
-//		case h.validator.IsLocalCtx(ctx):
-//			if h.validator.VerifyReorg(ctx) != nil {
-//				failed++
-//				continue
-//			}
-//			if h.store.HasLocal(ctx.ID()) {
-//				ignore++
-//				continue
-//			}
-//			if h.store.AddLocal(ctx) != nil {
-//				failed++
-//				continue
-//			}
-//			success++
-//
-//		case h.validator.IsRemoteCtx(ctx):
-//			if h.store.HasRemote(ctx.ID()) {
-//				ignore++
-//				continue
-//			}
-//			if h.store.AddRemote(ctx) != nil {
-//				failed++
-//				continue
-//			}
-//			success++
-//
-//		default:
-//			ignore++
-//		}
-//	}
-//	h.log.Info("sync cross transactions", "success", success, "ignore", ignore, "fail", failed)
-//	return success
-//}
 
 func (h *Handler) signHash(hash []byte) ([]byte, error) {
 	account := accounts.Account{Address: h.config.Signer}

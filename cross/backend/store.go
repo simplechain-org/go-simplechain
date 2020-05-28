@@ -86,18 +86,6 @@ func (store *CrossStore) HasRemote(ctxID common.Hash) bool {
 	return store.remoteStore.Has(ctxID)
 }
 
-func (store *CrossStore) RemoveRemotes(rtxs []*cc.ReceptTransaction) {
-	for _, v := range rtxs {
-		store.MarkStatus([]*cc.CrossTransactionModifier{
-			{
-				ID:      v.CTxId,
-				ChainId: v.DestinationId,
-				// update remote wouldn't modify blockNumber
-			},
-		}, cc.CtxStatusFinished)
-	}
-}
-
 func (store *CrossStore) AddLocals(ctxList []*cc.CrossTransactionWithSignatures, replaceable bool) error {
 	return store.localStore.Writes(ctxList, replaceable)
 }
@@ -170,38 +158,3 @@ func (store *CrossStore) markStatus(txmList []*cc.CrossTransactionModifier, loca
 	}
 	return store.remoteStore.Updates(ids, updaters)
 }
-
-//func (store *CrossStore) GetSyncCrossTransactions(reqHeight, maxHeight uint64, pageSize int) []*cc.CrossTransactionWithSignatures {
-//	return store.localStore.RangeByNumber(reqHeight, maxHeight, pageSize)
-//}
-
-// sync cross transactions (with signatures) from other anchor peers
-//func (store *CrossStore) SyncCrossTransactions(ctxList []*cc.CrossTransactionWithSignatures) int {
-//	var success, ignore int
-//	for _, ctx := range ctxList {
-//		chainID := ctx.ChainId()
-//
-//		var db crossdb.CtxDB
-//		switch {
-//		case store.chainConfig.ChainID.Cmp(chainID) == 0:
-//			db = store.localStore
-//		case store.remoteStore.ChainID().Cmp(chainID) == 0:
-//			db = store.remoteStore
-//		default:
-//			return 0
-//		}
-//
-//		if db.Has(ctx.ID()) {
-//			ignore++
-//			continue
-//		}
-//		if err := db.Write(ctx); err != nil {
-//			store.logger.Warn("SyncCrossTransactions failed", "txID", ctx.ID(), "err", err)
-//			continue
-//		}
-//		success++
-//	}
-//
-//	store.logger.Info("sync cross transactions", "success", success, "ignore", ignore, "fail", len(ctxList)-success-ignore)
-//	return success
-//}

@@ -121,8 +121,7 @@ func (d *indexDB) Writes(ctxList []*cc.CrossTransactionWithSignatures, replaceab
 			err = tx.Save(persist)
 
 		case !replaceable:
-			err = storm.ErrAlreadyExists
-
+			continue
 		case replaceable && ctx.BlockNum > old.BlockNum:
 			persist.PK = old.PK
 			err = tx.Update(persist)
@@ -155,6 +154,18 @@ func (d *indexDB) One(field FieldName, key interface{}) *cc.CrossTransactionWith
 		d.cache.Put(field, key, &ctx)
 	}
 	return ctx.ToCrossTransaction()
+}
+
+func (d *indexDB) Find(index FieldName, key interface{}) []*cc.CrossTransactionWithSignatures {
+	var (
+		results []*cc.CrossTransactionWithSignatures
+		list    []*CrossTransactionIndexed
+	)
+	d.db.Find(index, key, &list)
+	for _, ctx := range list {
+		results = append(results, ctx.ToCrossTransaction())
+	}
+	return results
 }
 
 func (d *indexDB) get(ctxId common.Hash) (*CrossTransactionIndexed, error) {

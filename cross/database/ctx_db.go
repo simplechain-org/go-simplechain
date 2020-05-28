@@ -43,6 +43,7 @@ type CtxDB interface {
 	Has(id common.Hash) bool
 
 	One(field FieldName, key interface{}) *cc.CrossTransactionWithSignatures
+	Find(field FieldName, key interface{}) []*cc.CrossTransactionWithSignatures
 	Query(pageSize int, startPage int, orderBy []FieldName, reverse bool, filter ...q.Matcher) []*cc.CrossTransactionWithSignatures
 	RangeByNumber(begin, end uint64, pageSize int) []*cc.CrossTransactionWithSignatures
 

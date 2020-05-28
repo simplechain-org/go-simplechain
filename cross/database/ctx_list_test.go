@@ -47,8 +47,8 @@ func TestCtxSortedByBlockNumAdd(t *testing.T) {
 
 	const limitNum = 50
 	list.RemoveUnderNum(limitNum)
-	if len(list.items) != list.index.Len() {
-		t.Errorf("index count mismatch: have %d, want %d", list.index.Len(), len(list.items))
+	if len(list.items) != list.index.Size() {
+		t.Errorf("index count mismatch: have %d, want %d", list.index.Size(), len(list.items))
 	}
 
 	for i, tx := range txs {

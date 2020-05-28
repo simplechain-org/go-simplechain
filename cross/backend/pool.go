@@ -53,6 +53,11 @@ func NewCrossPool(store *CrossStore, validator *CrossValidator, signHash cc.Sign
 	}
 }
 
+func (pool *CrossPool) load() {
+	//TODO: load pending transactions
+	//pool.store.localStore.Find(crossdb.StatusField, cc.CtxStatusPending)
+}
+
 func (pool *CrossPool) loop() {
 	defer pool.wg.Done()
 	expire := time.NewTicker(expireInterval)
@@ -173,7 +178,7 @@ func (pool *CrossPool) addTxLocked(ctx *cc.CrossTransaction, local bool) error {
 			pendingRws = queuedRws
 		}
 		pool.pending.Put(pendingRws)
-		pool.queued.RemoveByHash(id)
+		pool.queued.RemoveByID(id)
 		return checkAndCommit(id)
 	}
 
@@ -189,7 +194,7 @@ func (pool *CrossPool) addTxLocked(ctx *cc.CrossTransaction, local bool) error {
 }
 
 func (pool *CrossPool) Commit(cws *cc.CrossTransactionWithSignatures) {
-	pool.pending.RemoveByHash(cws.ID()) // remove it from pending
+	pool.pending.RemoveByID(cws.ID()) // remove it from pending
 	pool.wg.Add(1)
 	go func() {
 		defer pool.wg.Done()
