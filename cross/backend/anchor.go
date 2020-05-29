@@ -54,7 +54,9 @@ func QueryAnchor(config *params.ChainConfig, bc core.ChainContext, statedb *stat
 			copy(anchor[:], res[common.HashLength*(4+i)-common.AddressLength:common.HashLength*(4+i)])
 			anchors = append(anchors, anchor)
 		}
-		return anchors, int(signConfirmCount)
+		if signConfirmCount > 0 { //when set no anchors,signConfirmCount Parsed as 0
+			return anchors, int(signConfirmCount)
+		}
 	}
-	return anchors, 2
+	return anchors, minRequireSignature
 }
