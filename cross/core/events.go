@@ -18,7 +18,7 @@ type ConfirmedTakerEvent struct {
 	Txs []*ReceptTransaction
 }
 
-type SignedCtxEvent struct {
+type SignedCtxEvent struct { // pool event
 	Tws      *CrossTransactionWithSignatures
 	CallBack func(cws *CrossTransactionWithSignatures, invalidSigIndex ...int)
 }
@@ -31,7 +31,7 @@ type ConfirmedFinishEvent struct {
 	Finishes []*CrossTransactionModifier
 }
 
-type AnchorEvent struct {
+type NewAnchorEvent struct {
 	ChainInfo []*RemoteChainInfo
 }
 
@@ -40,4 +40,20 @@ type CrossTransactionModifier struct {
 	ChainId       *big.Int
 	Status        CtxStatus
 	AtBlockNumber uint64
+}
+
+type CrossBlockEvent struct {
+	Number          *big.Int
+	ConfirmedMaker  ConfirmedMakerEvent
+	NewTaker        NewTakerEvent
+	ConfirmedTaker  ConfirmedTakerEvent
+	NewFinish       NewFinishEvent
+	ConfirmedFinish ConfirmedFinishEvent
+	NewAnchor       NewAnchorEvent
+}
+
+func (e CrossBlockEvent) IsEmpty() bool {
+	return len(e.ConfirmedMaker.Txs)+len(e.ConfirmedTaker.Txs)+
+		len(e.ConfirmedFinish.Finishes)+len(e.NewTaker.Takers)+
+		len(e.NewFinish.Finishes)+len(e.NewAnchor.ChainInfo) == 0
 }

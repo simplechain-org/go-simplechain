@@ -285,7 +285,7 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 		if err := msg.Decode(&resp); err != nil {
 			return eth.ErrResp(eth.ErrDecode, "msg %v: %v", msg, err)
 		}
-		p.Log().Info("receive ctx sync response", "chain", resp.Chain, "len(data)", len(resp.Data))
+		p.Log().Debug("receive ctx sync response", "chain", resp.Chain, "len(data)", len(resp.Data))
 
 		h := srv.getCrossHandler(new(big.Int).SetUint64(resp.Chain))
 		if h == nil || atomic.LoadUint32(&h.synchronising) == 0 { // ignore if handler isn't synchronising
@@ -361,8 +361,8 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 		}
 
 		synced := h.SyncPending(ctxList)
-		p.Log().Info("sync pending cross transactions", "total", len(ctxList), "success", len(synced))
-		pending := h.Pending(defaultMaxSyncSize, synced)
+		p.Log().Info("sync pending cross transactions", "total", len(ctxList))
+		pending := h.Pending(synced, defaultMaxSyncSize)
 
 		atomic.StoreUint32(&h.pendingSync, 0)
 
