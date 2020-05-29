@@ -35,17 +35,20 @@ type CtxDB interface {
 	//Size() int
 	Count(filter ...q.Matcher) int
 	Height() uint64
-	Load() error
-	Repair() error
 	Write(ctx *cc.CrossTransactionWithSignatures) error
+	Writes([]*cc.CrossTransactionWithSignatures, bool) error
 	Read(ctxId common.Hash) (*cc.CrossTransactionWithSignatures, error)
 	Update(id common.Hash, updater func(ctx *CrossTransactionIndexed)) error
+	Updates(idList []common.Hash, updaters []func(ctx *CrossTransactionIndexed)) error
 	Has(id common.Hash) bool
 
 	One(field FieldName, key interface{}) *cc.CrossTransactionWithSignatures
+	Find(field FieldName, key interface{}) []*cc.CrossTransactionWithSignatures
 	Query(pageSize int, startPage int, orderBy []FieldName, reverse bool, filter ...q.Matcher) []*cc.CrossTransactionWithSignatures
 	RangeByNumber(begin, end uint64, pageSize int) []*cc.CrossTransactionWithSignatures
 
+	Load() error
+	Repair() error
 	Clean() error
 }
 

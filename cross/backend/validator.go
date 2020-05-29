@@ -51,7 +51,7 @@ func NewCrossValidator(store *CrossStore, contract common.Address) *CrossValidat
 		chainConfig:      store.chainConfig,
 		chain:            store.chain,
 		contract:         contract,
-		logger:           log.New("cross-module", "validator"),
+		logger:           log.New("X-module", "validator"),
 	}
 }
 
@@ -66,7 +66,7 @@ func (v *CrossValidator) IsRemoteCtx(ctx cross.Transaction) bool {
 func (v *CrossValidator) VerifyCtx(ctx *cc.CrossTransaction) error {
 	//if v.chainConfig.ChainID.Cmp(ctx.ChainId()) == 0 {
 	if v.IsLocalCtx(ctx) {
-		if v.store.localStore.Has(ctx.ID()) {
+		if v.store.HasLocal(ctx.ID()) {
 			v.logger.Debug("ctx is already signatured", "ctxID", ctx.ID().String())
 			return ErrAlreadyExistCtx
 		}
@@ -147,7 +147,7 @@ func (v *CrossValidator) VerifyContract(cws *cc.CrossTransactionWithSignatures) 
 }
 
 func (v *CrossValidator) VerifyReorg(ctx cross.Transaction) error {
-	if v.store.localStore.Has(ctx.ID()) {
+	if v.store.HasLocal(ctx.ID()) {
 		old, err := v.store.localStore.Read(ctx.ID())
 		if err != nil {
 			v.logger.Warn("VerifyReorg failed", "err", err)

@@ -2,6 +2,7 @@ package subscriber
 
 import (
 	"container/ring"
+	"math/big"
 	"sync"
 
 	"github.com/simplechain-org/go-simplechain/common"
@@ -34,9 +35,9 @@ type unconfirmedBlockLogs struct {
 }
 
 // Insert adds a new block to the set of trigger ones.
-func (t *SimpleSubscriber) insert(index uint64, hash common.Hash, blockLogs []*types.Log) {
+func (t *SimpleSubscriber) insert(index uint64, hash common.Hash, blockLogs []*types.Log, currentEvent *cc.CrossBlockEvent) {
 	// If a new block was mined locally, shift out any old enough blocks
-	t.shift(index)
+	t.shift(index, currentEvent)
 
 	// Create the new item as its own ring
 	item := ring.New(1)
@@ -59,7 +60,7 @@ func (t *SimpleSubscriber) insert(index uint64, hash common.Hash, blockLogs []*t
 // Shift drops all trigger blocks from the set which exceed the trigger sets depth
 // allowance, checking them against the canonical chain for inclusion or staleness
 // report.
-func (t *SimpleSubscriber) shift(height uint64) {
+func (t *SimpleSubscriber) shift(height uint64, currentEvent *cc.CrossBlockEvent) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -117,24 +118,31 @@ func (t *SimpleSubscriber) shift(height uint64) {
 							continue
 						}
 
-						// delete statement
 						if len(v.Topics) >= 3 && v.Topics[0] == params.MakerFinishTopic {
 							finishModifiers = append(finishModifiers, &cc.CrossTransactionModifier{
 								ID:            v.Topics[1],
 								ChainId:       t.chain.GetChainConfig().ChainID,
 								AtBlockNumber: v.BlockNumber,
+								Status:        cc.CtxStatusFinished,
 							})
 						}
 					}
 				}
-				if len(ctxs) > 0 {
-					t.ConfirmedMakerFeedSend(cc.ConfirmedMakerEvent{Txs: ctxs})
-				}
-				if len(rtxs) > 0 {
-					t.ConfirmedTakerSend(cc.ConfirmedTakerEvent{Txs: rtxs})
-				}
-				if len(finishModifiers) > 0 {
-					t.ConfirmedFinishFeedSend(cc.ConfirmedFinishEvent{Finishes: finishModifiers})
+
+				confirmNumber := header.Number.Uint64() + uint64(t.depth) // make a confirmed number
+
+				if currentEvent != nil && currentEvent.Number.Uint64() == confirmNumber {
+					currentEvent.ConfirmedMaker.Txs = append(currentEvent.ConfirmedMaker.Txs, ctxs...)
+					currentEvent.ConfirmedTaker.Txs = append(currentEvent.ConfirmedTaker.Txs, rtxs...)
+					currentEvent.ConfirmedFinish.Finishes = append(currentEvent.ConfirmedFinish.Finishes, finishModifiers...)
+
+				} else if len(ctxs)+len(rtxs)+len(finishModifiers) > 0 {
+					t.crossBlockSend(cc.CrossBlockEvent{
+						Number:          new(big.Int).SetUint64(confirmNumber),
+						ConfirmedMaker:  cc.ConfirmedMakerEvent{Txs: ctxs},
+						ConfirmedTaker:  cc.ConfirmedTakerEvent{Txs: rtxs},
+						ConfirmedFinish: cc.ConfirmedFinishEvent{Finishes: finishModifiers},
+					})
 				}
 			}
 		default:
@@ -149,4 +157,5 @@ func (t *SimpleSubscriber) shift(height uint64) {
 			t.blocks = t.blocks.Move(1)
 		}
 	}
+
 }
