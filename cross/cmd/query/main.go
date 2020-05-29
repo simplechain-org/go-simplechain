@@ -10,7 +10,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/rpc"
 )
 
-var rawurlVar *string = flag.String("rawurl", "http://127.0.0.1:8556", "rpc url")
+var rawurlVar = flag.String("rawurl", "http://127.0.0.1:8556", "rpc url")
 
 type RPCCrossTransaction struct {
 	Value            *hexutil.Big   `json:"Value"`

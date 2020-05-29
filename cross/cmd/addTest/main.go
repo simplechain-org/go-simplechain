@@ -15,18 +15,20 @@ import (
 	"github.com/simplechain-org/go-simplechain/rpc"
 )
 
-var rawurlVar *string = flag.String("rawurl", "http://192.168.3.40:8545", "rpc url")
+var (
+	rawurlVar = flag.String("rawurl", "http://192.168.3.40:8545", "rpc url")
 
-var contract *string = flag.String("contract", "0xAa22934Df3867B8d59574dD4557ef1BA6dA2f8f3", "合约地址")
+	contract = flag.String("contract", "0xAa22934Df3867B8d59574dD4557ef1BA6dA2f8f3", "合约地址")
 
-var chainId *uint64 = flag.Uint64("chainId", 512, "目的链id")
+	chainId = flag.Uint64("chainId", 512, "目的链id")
 
-var fromVar *string = flag.String("from", "0x7964576407c299ec0e65991ba74019d622316a0d", "发起人地址")
+	fromVar = flag.String("from", "0x7964576407c299ec0e65991ba74019d622316a0d", "发起人地址")
 
-var gaslimitVar *uint64 = flag.Uint64("gaslimit", 2000000, "gas最大值")
+	gaslimitVar = flag.Uint64("gaslimit", 2000000, "gas最大值")
 
-var anchor1 *string = flag.String("anchor1", "0x788fc622D030C660ef6b79E36Dbdd79b494a0866", "锚定节点名单")
-var anchor2 *string = flag.String("anchor2", "0x90185B43E0B1ed1875Ec5FdC3A4AC2A7934EcF24", "锚定节点名单")
+	anchor1 = flag.String("anchor1", "0x788fc622D030C660ef6b79E36Dbdd79b494a0866", "锚定节点名单")
+	anchor2 = flag.String("anchor2", "0x90185B43E0B1ed1875Ec5FdC3A4AC2A7934EcF24", "锚定节点名单")
+)
 
 type SendTxArgs struct {
 	From     common.Address  `json:"from"`

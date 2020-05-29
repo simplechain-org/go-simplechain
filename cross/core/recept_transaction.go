@@ -9,15 +9,17 @@ import (
 
 type ReceptTransaction struct {
 	CTxId         common.Hash    `json:"ctxId" gencodec:"required"`         //cross_transaction ID
+	TxHash        common.Hash    `json:"txHash" gencodec:"required"`        //taker txHash
 	From          common.Address `json:"from" gencodec:"required"`          //Token seller
 	To            common.Address `json:"to" gencodec:"required"`            //Token buyer
 	DestinationId *big.Int       `json:"destinationId" gencodec:"required"` //Message destination networkId
 	ChainId       *big.Int       `json:"chainId" gencodec:"required"`
 }
 
-func NewReceptTransaction(id common.Hash, from, to common.Address, remoteChainId, chainId *big.Int) *ReceptTransaction {
+func NewReceptTransaction(id, txHash common.Hash, from, to common.Address, remoteChainId, chainId *big.Int) *ReceptTransaction {
 	return &ReceptTransaction{
 		CTxId:         id,
+		TxHash:        txHash,
 		From:          from,
 		To:            to,
 		DestinationId: remoteChainId,
@@ -26,25 +28,21 @@ func NewReceptTransaction(id common.Hash, from, to common.Address, remoteChainId
 }
 
 type Recept struct {
-	TxId  common.Hash
-	From  common.Address
-	To    common.Address
-	Input []byte
+	TxId   common.Hash
+	TxHash common.Hash
+	From   common.Address
+	To     common.Address
+	Input  []byte
 }
 
 func (rws *ReceptTransaction) ConstructData(crossContract abi.ABI) ([]byte, error) {
 	rep := Recept{
-		TxId:  rws.CTxId,
-		From:  rws.From,
-		To:    rws.To,
-		Input: nil,
+		TxId:   rws.CTxId,
+		TxHash: rws.TxHash,
+		From:   rws.From,
+		To:     rws.To,
+		Input:  nil,
 	}
 
-	out, err := crossContract.Pack("makerFinish", rep, rws.ChainId)
-	if err != nil {
-		return nil, err
-	}
-
-	//input := hexutil.Bytes(out)
-	return out, nil
+	return crossContract.Pack("makerFinish", rep, rws.ChainId)
 }

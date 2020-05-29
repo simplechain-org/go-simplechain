@@ -24,13 +24,13 @@ import (
 	"github.com/simplechain-org/go-simplechain/rlp"
 )
 
-var configPath = flag.String("conf", "./config", "config path")
-var txHash = flag.String("hash", "", "tx hash")
-var addCrossTx = flag.String("data", "", "crossTransactionWithSignatures rlp data")
-var parseCrossChain = flag.Bool("p", false, "parse events from blocks")
-var mainChain = flag.Bool("main", false, "tx on main chain")
-
-//var subChain = flag.Bool("sub", false, "tx on sub chain")
+var (
+	configPath      = flag.String("conf", "./config", "config path")
+	txHash          = flag.String("hash", "", "tx hash")
+	addCrossTx      = flag.String("data", "", "crossTransactionWithSignatures rlp data")
+	parseCrossChain = flag.Bool("p", false, "parse events from blocks")
+	role            = flag.String("role", "mainchain", "it can be one of (mainchain,subchain) (default: mainchain)")
+)
 
 type ChainConfig struct {
 	Url          string
@@ -83,11 +83,12 @@ func main() {
 		return
 	}
 
-	if *mainChain {
+	if *role == "mainchain" {
 		h.handleTx(&h.MainChain, common.HexToHash(*txHash))
-	} else {
+	} else if *role == "subchain" {
 		h.handleTx(&h.SubChain, common.HexToHash(*txHash))
 	}
+
 }
 
 type Chain struct {
@@ -205,6 +206,7 @@ func (h *Handler) TakerEvent(chain *Chain, ctx context.Context, event *types.Log
 
 	rtx := &cc.ReceptTransaction{
 		CTxId:         event.Topics[1],
+		TxHash:        event.TxHash,
 		From:          from,
 		To:            to,
 		DestinationId: common.BytesToHash(event.Data[:common.HashLength]).Big(),
@@ -221,8 +223,6 @@ func (h *Handler) TakerEvent(chain *Chain, ctx context.Context, event *types.Log
 			log.Error("GetTxForLockOut newSignedTransaction", "err", err)
 			panic(err)
 		}
-		//data, _ := json.Marshal(tx)
-		//fmt.Println("crossTxWithSign second struct: ", string(data))
 
 		if err = otherChain.Client.SendTransaction(ctx, tx); err != nil {
 			log.Error("sub chain SendTransaction failed", "err", err, "hash", tx.Hash())
@@ -274,13 +274,7 @@ func (h *Handler) MakeEvent(chain *Chain, event *types.Log, crossTxBytes hexutil
 		if err := crossTxWithSign.AddSignature(&addTx); err != nil {
 			panic(err)
 		}
-		//crossTxWithSignData, err := rlp.EncodeToBytes(crossTxWithSign)
-		//if err != nil {
-		//	panic(err)
-		//}
-		//log.Info("crossTxWithSigns Data", "rlp", hexutil.Bytes(crossTxWithSignData))
-		//data, _ = json.Marshal(crossTxWithSign)
-		//fmt.Println("crossTxWithSign second struct: ", string(data))
+
 		if chain.IsMain {
 			if err = chain.Client.SendCrossTxMain(context.Background(), crossTxWithSign); err != nil {
 				panic(err)
@@ -294,11 +288,7 @@ func (h *Handler) MakeEvent(chain *Chain, event *types.Log, crossTxBytes hexutil
 		log.Info("SendCrossTransaction successfully", "ctxID", crossTxWithSign.ID())
 	} else {
 		log.Info("CrossTransaction", "tx_rlp", hexutil.Bytes(data))
-
-		//data, _ = json.Marshal(signedTx)
-		//fmt.Println("crossTxWithSign struct: ", string(data))
 	}
-
 }
 
 // SignCtx signs the transaction using the given signer and private key
