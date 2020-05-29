@@ -2,6 +2,11 @@ package cross
 
 import "github.com/simplechain-org/go-simplechain/common"
 
+const (
+	LogDir  = "crosslog"
+	DataDir = "crossdata"
+)
+
 type Config struct {
 	MainContract common.Address
 	SubContract  common.Address

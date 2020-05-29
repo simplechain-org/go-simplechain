@@ -35,23 +35,21 @@ func (s *PrivateCrossAdminAPI) SyncStore() (bool, error) {
 func (s *PrivateCrossAdminAPI) Repair() (bool, error) {
 	var (
 		errs   []error
-		errsCh = make(chan error, 4)
+		stores = s.service.store.stores
+		errsCh = make(chan error, len(stores))
 	)
 	repair := func(store db.CtxDB) {
 		errsCh <- store.Repair()
 	}
-	go repair(s.service.main.handler.store.localStore)
-	go repair(s.service.main.handler.store.remoteStore)
-	go repair(s.service.sub.handler.store.localStore)
-	go repair(s.service.sub.handler.store.remoteStore)
-
+	for _, store := range stores {
+		go repair(store)
+	}
 	for i := 0; i < 4; i++ {
 		err := <-errsCh
 		if err != nil {
 			errs = append(errs, err)
 		}
 	}
-
 	if errs != nil {
 		return false, errs[0]
 	}
@@ -92,12 +90,12 @@ func (s *PrivateCrossAdminAPI) importCtx(local, remote *Handler, ctxWithSignsSAr
 	if invalidSigIndex != nil {
 		return fmt.Errorf("invalid signature of ctx:%s for signature:%v\n", ctx.ID().String(), invalidSigIndex)
 	}
-	if err := local.store.AddLocal(ctx); err != nil {
+	if err := s.service.store.Add(ctx); err != nil {
 		return err
 	}
-	if err := remote.store.AddRemote(ctx); err != nil {
-		return err
-	}
+	//if err := remote.store.AddRemote(ctx); err != nil {
+	//	return err
+	//}
 	log.Info("rpc ImportCtx", "ctxID", ctx.ID().String())
 	return nil
 }
@@ -223,9 +221,8 @@ func (s *PublicCrossChainAPI) CtxTakerByPage(ctx context.Context, to common.Addr
 	return content
 }
 
-func (s *PublicCrossChainAPI) CtxStats() map[string]map[cc.CtxStatus]int {
-	local, remote := s.handler.StoreStats()
-	return map[string]map[cc.CtxStatus]int{"local": local, "remote": remote}
+func (s *PublicCrossChainAPI) CtxStats() map[uint64]map[cc.CtxStatus]int {
+	return s.handler.StoreStats()
 }
 
 func (s *PublicCrossChainAPI) PoolStats() map[string]int {

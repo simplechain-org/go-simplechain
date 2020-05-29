@@ -14,10 +14,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/cross/trigger/simpletrigger/subscriber"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/log"
-	"github.com/simplechain-org/go-simplechain/node"
 	"github.com/simplechain-org/go-simplechain/params"
-
-	"github.com/asdine/storm/v3"
 )
 
 const (
@@ -30,6 +27,8 @@ type Handler struct {
 	blockChain *core.BlockChain
 	pm         cross.ProtocolManager
 	config     cross.Config
+	chainID    *big.Int
+	remoteID   *big.Int
 
 	service    *CrossService
 	store      *CrossStore
@@ -50,42 +49,28 @@ type Handler struct {
 	crossBlockCh  chan cc.CrossBlockEvent
 	crossBlockSub event.Subscription
 
-	//confirmedMakerCh  chan cc.ConfirmedMakerEvent // Channel to receive one-signed makerTx from ctxStore
-	//confirmedMakerSub event.Subscription
 	signedCtxCh  chan cc.SignedCtxEvent // Channel to receive signed-completely makerTx from ctxStore
 	signedCtxSub event.Subscription
 
-	//newTakerCh        chan cc.NewTakerEvent // Channel to receive taker tx
-	//newTakerSub       event.Subscription
-	//confirmedTakerCh  chan cc.ConfirmedTakerEvent // Channel to receive one-signed takerTx from rtxStore
-	//confirmedTakerSub event.Subscription
-	//
-	//newFinishCh        chan cc.NewFinishEvent
-	//newFinishSub       event.Subscription
-	//confirmedFinishCh  chan cc.ConfirmedFinishEvent // Channel to receive confirmed makerFinish event
-	//confirmedFinishSub event.Subscription
-
 	rmLogsCh  chan core.RemovedLogsEvent // Channel to receive removed log event
 	rmLogsSub event.Subscription         // Subscription for removed log event
-
-	//updateAnchorCh  chan cc.NewAnchorEvent
-	//updateAnchorSub event.Subscription
 
 	chain cross.SimpleChain
 
 	log log.Logger
 }
 
-func NewCrossHandler(ctx *node.ServiceContext, chain cross.SimpleChain,
-	service *CrossService, config cross.Config, storePath string, contract common.Address,
-	crossMsgReader <-chan interface{}, crossMsgWriter chan<- interface{} /*, signHash cc.SignHash*/) (h *Handler, err error) {
+func NewCrossHandler(chain cross.SimpleChain, service *CrossService, config cross.Config, contract common.Address,
+	crossMsgReader <-chan interface{}, crossMsgWriter chan<- interface{}) (h *Handler, err error) {
 
 	h = &Handler{
 		chain:          chain,
 		blockChain:     chain.BlockChain(),
 		pm:             chain.ProtocolManager(),
 		config:         config,
+		chainID:        chain.ChainConfig().ChainID,
 		service:        service,
+		store:          service.store,
 		contract:       contract,
 		crossMsgReader: crossMsgReader,
 		crossMsgWriter: crossMsgWriter,
@@ -94,13 +79,8 @@ func NewCrossHandler(ctx *node.ServiceContext, chain cross.SimpleChain,
 		log:            log.New("X-module", "handler", "chainID", chain.ChainConfig().ChainID),
 	}
 
-	h.store, err = NewCrossStore(ctx, config, chain.ChainConfig(), chain.BlockChain(), storePath)
-	if err != nil {
-		return nil, err
-	}
-
-	h.validator = NewCrossValidator(h.store, contract)
-	h.pool = NewCrossPool(h.store, h.validator, h.signHash)
+	h.validator = NewCrossValidator(h.store, contract, chain.BlockChain(), config, chain.ChainConfig())
+	h.pool = NewCrossPool(h.store, h.validator, h.signHash, chain.BlockChain(), chain.ChainConfig())
 
 	h.subscriber = subscriber.NewSimpleSubscriber(contract, chain.BlockChain())
 	h.executor, err = executor.NewSimpleExecutor(chain, config.Signer, contract, h.signHash)
@@ -132,7 +112,6 @@ func (h *Handler) Start() {
 func (h *Handler) Stop() {
 	h.rmLogsSub.Unsubscribe()
 	h.signedCtxSub.Unsubscribe()
-	//h.updateAnchorSub.Unsubscribe()
 
 	h.pool.Stop()
 	h.executor.Stop()
@@ -145,8 +124,7 @@ func (h *Handler) loop() {
 		select {
 		case ev := <-h.crossBlockCh:
 			h.handle(ev)
-		case err := <-h.crossBlockSub.Err():
-			h.log.Warn("crossBlockSub stopped", "error", err)
+		case <-h.crossBlockSub.Err():
 			return
 
 		case ev := <-h.signedCtxCh:
@@ -188,11 +166,9 @@ func (h *Handler) handle(current cc.CrossBlockEvent) {
 	if takers := current.ConfirmedTaker.Txs; len(takers) > 0 {
 		for _, tx := range takers {
 			remote = append(remote, &cc.CrossTransactionModifier{
-
-				ID:      tx.CTxId,
-				ChainId: tx.DestinationId,
+				ID: tx.CTxId,
 				// update remote wouldn't modify blockNumber
-				Status: cc.CtxStatusFinished,
+				Status: cc.CtxStatusExecuted,
 			})
 		}
 		h.writeCrossMessage(current.ConfirmedTaker)
@@ -223,13 +199,13 @@ func (h *Handler) handle(current cc.CrossBlockEvent) {
 	}
 
 	if len(local) > 0 {
-		if err := h.store.markStatus(local, true); err != nil {
+		if err := h.store.Updates(h.chainID, local); err != nil {
 			h.log.Warn("handle cross failed", "error", err)
 		}
 	}
 
 	if len(remote) > 0 {
-		if err := h.store.markStatus(remote, false); err != nil {
+		if err := h.store.Updates(h.remoteID, remote); err != nil {
 			h.log.Warn("handle cross failed", "error", err)
 		}
 	}
@@ -273,10 +249,6 @@ func (h *Handler) readCrossMessage() {
 						cross.Report(h.chain.ChainConfig().ChainID.Uint64(), "VerifyContract failed", "ctxID", cws.ID().String(), "error", err)
 						break
 					}
-
-					if err := h.store.AddRemote(cws); err != nil && err != storm.ErrAlreadyExists {
-						h.log.Warn("add remote ctx failed", "error", err.Error())
-					}
 				}
 
 			case cc.ConfirmedTakerEvent:
@@ -298,18 +270,16 @@ func (h *Handler) reorgLogs(logs []*types.Log) {
 			case params.TakerTopic: // remote ctx taken
 				if len(l.Topics) >= 3 && len(l.Data) >= common.HashLength {
 					takerLogs = append(takerLogs, &cc.CrossTransactionModifier{
-						ID:      l.Topics[1],
-						ChainId: common.BytesToHash(l.Data[:common.HashLength]).Big(),
-						Status:  cc.CtxStatusWaiting,
+						ID:     l.Topics[1],
+						Status: cc.CtxStatusWaiting,
 					})
 				}
 
 			case params.MakerFinishTopic: // local ctx finished
 				if len(l.Topics) >= 3 {
 					finishLogs = append(finishLogs, &cc.CrossTransactionModifier{
-						ID:      l.Topics[1],
-						ChainId: new(big.Int).SetUint64(h.pm.NetworkId()),
-						Status:  cc.CtxStatusWaiting,
+						ID:     l.Topics[1],
+						Status: cc.CtxStatusWaiting,
 					})
 				}
 			}
@@ -317,13 +287,13 @@ func (h *Handler) reorgLogs(logs []*types.Log) {
 		}
 	}
 	if len(takerLogs) > 0 {
-		if err := h.store.markStatus(takerLogs, false); err != nil {
+		if err := h.store.Updates(h.chainID, takerLogs); err != nil {
 			h.log.Warn("reorg cross failed", "error", err)
 		}
 	}
 
 	if len(finishLogs) > 0 {
-		if err := h.store.markStatus(finishLogs, true); err != nil {
+		if err := h.store.Updates(h.chainID, finishLogs); err != nil {
 			h.log.Warn("reorg cross failed", "error", err)
 		}
 	}
@@ -371,21 +341,24 @@ func (h *Handler) SyncPending(ctxList []*cc.CrossTransaction) (lastNumber uint64
 	return lastNumber
 }
 
-func (h *Handler) LocalID() uint64  { return h.pm.NetworkId() }
-func (h *Handler) RemoteID() uint64 { return h.store.remoteStore.ChainID().Uint64() }
+func (h *Handler) RegisterChain(chainID *big.Int) {
+	h.remoteID = chainID
+	h.store.RegisterChain(chainID)
+}
+func (h *Handler) LocalID() uint64  { return h.chainID.Uint64() }
+func (h *Handler) RemoteID() uint64 { return h.remoteID.Uint64() }
 
 // for cross store sync
 func (h *Handler) Height() *big.Int {
-	return new(big.Int).SetUint64(h.store.Height())
+	return new(big.Int).SetUint64(h.store.Height(h.chainID))
 }
 
 func (h *Handler) GetSyncCrossTransaction(height uint64, syncSize int) []*cc.CrossTransactionWithSignatures {
-	return h.store.localStore.RangeByNumber(height, h.chain.BlockChain().CurrentBlock().NumberU64(), syncSize)
+	return h.store.stores[h.chainID.Uint64()].RangeByNumber(height, h.chain.BlockChain().CurrentBlock().NumberU64(), syncSize)
 }
 
 func (h *Handler) SyncCrossTransaction(ctxList []*cc.CrossTransactionWithSignatures) int {
 	var localList []*cc.CrossTransactionWithSignatures
-	var remoteList []*cc.CrossTransactionWithSignatures
 
 	sync := func(syncList *[]*cc.CrossTransactionWithSignatures, ctx *cc.CrossTransactionWithSignatures) (result []*cc.CrossTransactionWithSignatures) {
 		if len(*syncList) > 0 && ctx.BlockNum != (*syncList)[len(*syncList)-1].BlockNum {
@@ -399,46 +372,22 @@ func (h *Handler) SyncCrossTransaction(ctxList []*cc.CrossTransactionWithSignatu
 
 	var success int
 	for _, ctx := range ctxList {
-		switch {
-		case h.validator.IsLocalCtx(ctx):
-			if h.validator.VerifyReorg(ctx) != nil {
-				continue
-			}
-			syncList := sync(&localList, ctx)
-			if syncList != nil {
-				if err := h.store.AddLocals(syncList, true); err == nil {
-					success += len(syncList)
-				} else {
-					h.log.Warn("sync local ctx failed", "err", err)
-				}
-			}
-
-		case h.validator.IsRemoteCtx(ctx):
-			syncList := sync(&remoteList, ctx)
-			if syncList != nil {
-				if err := h.store.AddRemotes(syncList, true); err == nil {
-					success += len(syncList)
-				} else {
-					h.log.Warn("sync remote ctx failed", "err", err)
-				}
+		syncList := sync(&localList, ctx)
+		if syncList != nil {
+			if err := h.store.Adds(h.chainID, syncList, true); err == nil {
+				success += len(syncList)
+			} else {
+				h.log.Warn("sync local ctx failed", "err", err)
 			}
 		}
 	}
 
 	// add remains
 	if len(localList) > 0 {
-		if err := h.store.AddLocals(localList, true); err == nil {
+		if err := h.store.Adds(h.chainID, localList, true); err == nil {
 			success += len(localList)
 		} else {
 			h.log.Warn("sync local ctx failed", "err", err)
-		}
-	}
-
-	if len(remoteList) > 0 {
-		if err := h.store.AddRemotes(remoteList, true); err == nil {
-			success += len(remoteList)
-		} else {
-			h.log.Warn("sync remote ctx failed", "err", err)
 		}
 	}
 

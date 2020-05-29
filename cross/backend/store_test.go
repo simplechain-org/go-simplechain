@@ -29,8 +29,9 @@ func TestNewCtxStoreAdd(t *testing.T) {
 	signHash := func(hash []byte) ([]byte, error) {
 		return crypto.Sign(hash, fromKey)
 	}
+	chainID := big.NewInt(18)
 
-	signer := cc.NewEIP155CtxSigner(big.NewInt(18))
+	signer := cc.NewEIP155CtxSigner(chainID)
 	// ctx signed by anchor1
 	tx1, err := cc.SignCtx(cc.NewCrossTransaction(big.NewInt(1e18),
 		big.NewInt(2e18),
@@ -51,11 +52,14 @@ func TestNewCtxStoreAdd(t *testing.T) {
 		return crypto.Sign(hash, key)
 	}
 
-	ctxStore, err := setupCtxStore()
+	statedb, _ := state.New(common.Hash{}, state.NewDatabase(rawdb.NewMemoryDatabase()))
+	blockchain := &testBlockChain{statedb, 1000000, new(event.Feed)}
+
+	ctxStore, err := setupCtxStore(chainID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctxPool := NewCrossPool(ctxStore, NewCrossValidator(ctxStore, common.Address{}), signHash2)
+	ctxPool := NewCrossPool(ctxStore, NewCrossValidator(ctxStore, common.Address{}, blockchain, cross.Config{}, params.TestChainConfig), signHash2, blockchain, params.TestChainConfig)
 	signedCh := make(chan cc.SignedCtxEvent, 1) // receive signed ctx
 	signedSub := ctxPool.SubscribeSignedCtxEvent(signedCh)
 	defer signedSub.Unsubscribe()
@@ -95,22 +99,20 @@ func TestNewCtxStoreAdd(t *testing.T) {
 	ev := <-signedCh
 	ev.CallBack(ev.Tws)
 
-	if ctxStore.localStore.Count(q.Eq(db.StatusField, cc.CtxStatusWaiting)) != 1 {
-		t.Errorf("add failed,stats:%d (!= %d)", ctxStore.localStore.Count(), 1)
+	if ctxStore.stores[chainID.Uint64()].Count(q.Eq(db.StatusField, cc.CtxStatusWaiting)) != 1 {
+		t.Errorf("add failed,stats:%d (!= %d)", ctxStore.stores[chainID.Uint64()].Count(), 1)
 	}
 
 	ctxStore.Close()
 }
 
-func setupCtxStore() (*CrossStore, error) {
-	statedb, _ := state.New(common.Hash{}, state.NewDatabase(rawdb.NewMemoryDatabase()))
-	blockchain := &testBlockChain{statedb, 1000000, new(event.Feed)}
-
-	store, err := NewCrossStore(nil, cross.Config{}, params.TestChainConfig, blockchain, "testing-cross-store")
+func setupCtxStore(chainID *big.Int) (*CrossStore, error) {
+	store, err := NewCrossStore(nil, "testing-cross-store")
 	if err != nil {
 		return nil, err
 	}
-	store.localStore.Clean()
+	store.RegisterChain(chainID)
+	store.stores[chainID.Uint64()].Clean()
 	return store, nil
 }
 

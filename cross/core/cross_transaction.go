@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"math/big"
+	"sync"
 	"sync/atomic"
 
 	"github.com/simplechain-org/go-simplechain/common"
@@ -184,59 +185,6 @@ func (s *CTxByPrice) Pop() interface{} {
 	return x
 }
 
-type CtxStatus uint8
-
-const (
-	// CtxStatusWaiting is the status code of a rtx transaction if waiting for orders.
-	CtxStatusWaiting CtxStatus = iota
-	// CtxStatusExecuting is the status code of a rtx transaction if execution implementing.
-	CtxStatusExecuting
-	// CtxStatusFinished is the status code of a rtx transaction if make finishing.
-	CtxStatusFinishing
-	// CtxStatusFinished is the status code of a rtx transaction if make finish confirmed.
-	CtxStatusFinished
-	// unsigned transaction
-	CtxStatusPending
-)
-
-/**
-  |------| <-new-- maker         |------|
-  |local | (waiting)			 |remote|
-  |      |						 |      |
-  |ctxdb |		   taker --mod-> |ctxdb |
-  |      |			 (executing) |      |
-  |status|						 |status|
-  |      |	confirmTaker --mod-> |      |
-  | mod  |            (finished) | only |
-  | with |                       | has  |
-  |number| <-new-- finish        |number|
-  |      | (finishing)           |  on  |
-  |      |                       |saving|
-  |      | <-mod-- confirmFinish |      |
-  |      | (finished)            |      |
-  |------|                       |------|
-*/
-
-var ctxStatusToString = map[CtxStatus]string{
-	CtxStatusWaiting:   "waiting",
-	CtxStatusExecuting: "executing",
-	CtxStatusFinishing: "finishing",
-	CtxStatusFinished:  "finished",
-	CtxStatusPending:   "pending",
-}
-
-func (s CtxStatus) String() string {
-	str, ok := ctxStatusToString[s]
-	if !ok {
-		return "unknown"
-	}
-	return str
-}
-
-func (s CtxStatus) MarshalText() ([]byte, error) {
-	return []byte(s.String()), nil
-}
-
 type CrossTransactionWithSignatures struct {
 	Data     CtxDatas
 	Status   CtxStatus `json:"status" gencodec:"required"`
@@ -246,6 +194,7 @@ type CrossTransactionWithSignatures struct {
 	hash atomic.Value
 	size atomic.Value
 	from atomic.Value
+	lock sync.RWMutex
 }
 
 type CtxDatas struct {
@@ -290,10 +239,12 @@ func (cws *CrossTransactionWithSignatures) ID() common.Hash {
 }
 
 func (cws *CrossTransactionWithSignatures) ChainId() *big.Int {
-	if cws.SignaturesLength() > 0 {
+	cws.lock.RLock()
+	defer cws.lock.RUnlock()
+	if cws.signaturesLength() > 0 {
 		return types.DeriveChainId(cws.Data.V[0])
 	}
-	return nil
+	return big.NewInt(0)
 }
 func (cws *CrossTransactionWithSignatures) DestinationId() *big.Int {
 	return cws.Data.DestinationId
@@ -325,25 +276,29 @@ func (cws *CrossTransactionWithSignatures) BlockHash() common.Hash {
 }
 
 func (cws *CrossTransactionWithSignatures) AddSignature(ctx *CrossTransaction) error {
-	if cws.Hash() == ctx.Hash() {
-		var exist bool
-		for _, r := range cws.Data.R {
-			if r.Cmp(ctx.Data.R) == 0 {
-				exist = true
-			}
-		}
-		if !exist {
-			cws.Data.V = append(cws.Data.V, ctx.Data.V)
-			cws.Data.R = append(cws.Data.R, ctx.Data.R)
-			cws.Data.S = append(cws.Data.S, ctx.Data.S)
-			return nil
-		}
-		return ErrDuplicateSign
+	if cws.Hash() != ctx.Hash() {
+		return ErrInvalidSign
 	}
-	return ErrInvalidSign
+	cws.lock.Lock()
+	defer cws.lock.Unlock()
+	var exist bool
+	for _, r := range cws.Data.R {
+		if r.Cmp(ctx.Data.R) == 0 {
+			exist = true
+		}
+	}
+	if !exist {
+		cws.Data.V = append(cws.Data.V, ctx.Data.V)
+		cws.Data.R = append(cws.Data.R, ctx.Data.R)
+		cws.Data.S = append(cws.Data.S, ctx.Data.S)
+		return nil
+	}
+	return ErrDuplicateSign
 }
 func (cws *CrossTransactionWithSignatures) RemoveSignature(index int) {
-	if index < cws.SignaturesLength() {
+	cws.lock.Lock()
+	defer cws.lock.Unlock()
+	if index < cws.signaturesLength() {
 		cws.Data.V = append(cws.Data.V[:index], cws.Data.V[index+1:]...)
 		cws.Data.R = append(cws.Data.R[:index], cws.Data.R[index+1:]...)
 		cws.Data.S = append(cws.Data.S[:index], cws.Data.S[index+1:]...)
@@ -351,6 +306,11 @@ func (cws *CrossTransactionWithSignatures) RemoveSignature(index int) {
 }
 
 func (cws *CrossTransactionWithSignatures) SignaturesLength() int {
+	cws.lock.RLock()
+	defer cws.lock.RUnlock()
+	return cws.signaturesLength()
+}
+func (cws *CrossTransactionWithSignatures) signaturesLength() int {
 	l := len(cws.Data.V)
 	if l == len(cws.Data.R) && l == len(cws.Data.V) {
 		return l
@@ -375,7 +335,9 @@ func (cws *CrossTransactionWithSignatures) CrossTransaction() *CrossTransaction 
 }
 
 func (cws *CrossTransactionWithSignatures) Resolution() []*CrossTransaction {
-	l := cws.SignaturesLength()
+	cws.lock.RLock()
+	defer cws.lock.RUnlock()
+	l := cws.signaturesLength()
 	var ctxs []*CrossTransaction
 	for i := 0; i < l; i++ {
 		ctxs = append(ctxs, &CrossTransaction{
@@ -415,10 +377,10 @@ func (cws *CrossTransactionWithSignatures) Size() common.StorageSize {
 	return common.StorageSize(c)
 }
 
-func (cws *CrossTransactionWithSignatures) Copy() *CrossTransactionWithSignatures {
-	cpy := *cws
-	return &cpy
-}
+//func (cws *CrossTransactionWithSignatures) Copy() *CrossTransactionWithSignatures {
+//	cpy := *cws
+//	return &cpy
+//}
 
 type RemoteChainInfo struct {
 	RemoteChainId uint64

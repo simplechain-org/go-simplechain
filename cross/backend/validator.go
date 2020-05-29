@@ -30,7 +30,8 @@ type CrossValidator struct {
 	anchors          map[uint64]*AnchorSet // chainID => anchorSet
 	requireSignature int
 
-	store *CrossStore
+	chainID *big.Int
+	store   *CrossStore
 
 	config      cross.Config
 	chainConfig *params.ChainConfig
@@ -42,14 +43,15 @@ type CrossValidator struct {
 	logger log.Logger
 }
 
-func NewCrossValidator(store *CrossStore, contract common.Address) *CrossValidator {
+func NewCrossValidator(store *CrossStore, contract common.Address, chain cross.BlockChain, config cross.Config, chainConfig *params.ChainConfig) *CrossValidator {
 	return &CrossValidator{
 		anchors:          make(map[uint64]*AnchorSet),
 		requireSignature: minRequireSignature,
+		chainID:          chainConfig.ChainID,
 		store:            store,
-		config:           store.config,
-		chainConfig:      store.chainConfig,
-		chain:            store.chain,
+		config:           config,
+		chainConfig:      chainConfig,
+		chain:            chain,
 		contract:         contract,
 		logger:           log.New("X-module", "validator"),
 	}
@@ -66,7 +68,7 @@ func (v *CrossValidator) IsRemoteCtx(ctx cross.Transaction) bool {
 func (v *CrossValidator) VerifyCtx(ctx *cc.CrossTransaction) error {
 	//if v.chainConfig.ChainID.Cmp(ctx.ChainId()) == 0 {
 	if v.IsLocalCtx(ctx) {
-		if v.store.HasLocal(ctx.ID()) {
+		if v.store.Has(v.chainID, ctx.ID()) {
 			v.logger.Debug("ctx is already signatured", "ctxID", ctx.ID().String())
 			return ErrAlreadyExistCtx
 		}
@@ -147,10 +149,10 @@ func (v *CrossValidator) VerifyContract(cws *cc.CrossTransactionWithSignatures) 
 }
 
 func (v *CrossValidator) VerifyReorg(ctx cross.Transaction) error {
-	if v.store.HasLocal(ctx.ID()) {
-		old, err := v.store.localStore.Read(ctx.ID())
-		if err != nil {
-			v.logger.Warn("VerifyReorg failed", "err", err)
+	if v.store.Has(v.chainID, ctx.ID()) {
+		old := v.store.Get(v.chainID, ctx.ID())
+		if old == nil {
+			v.logger.Warn("VerifyReorg failed, can't load ctx")
 			return ErrInternal
 		}
 		if ctx.BlockHash() != old.BlockHash() {

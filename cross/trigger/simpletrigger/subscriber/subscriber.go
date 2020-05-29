@@ -56,10 +56,8 @@ func (t *SimpleSubscriber) StoreCrossContractLog(blockNumber uint64, hash common
 				case params.TakerTopic:
 					if len(v.Topics) >= 3 && len(v.Data) >= common.HashLength*4 {
 						takers = append(takers, &cc.CrossTransactionModifier{
-							ID:            v.Topics[1],
-							ChainId:       common.BytesToHash(v.Data[:common.HashLength]).Big(), //get remote chainID from input data
-							AtBlockNumber: v.BlockNumber,
-							Status:        cc.CtxStatusExecuting,
+							ID:     v.Topics[1],
+							Status: cc.CtxStatusExecuting,
 						})
 						unconfirmedLogs = append(unconfirmedLogs, v)
 					}
@@ -68,7 +66,6 @@ func (t *SimpleSubscriber) StoreCrossContractLog(blockNumber uint64, hash common
 					if len(v.Topics) >= 3 {
 						finishes = append(finishes, &cc.CrossTransactionModifier{
 							ID:            v.Topics[1],
-							ChainId:       t.chain.GetChainConfig().ChainID,
 							AtBlockNumber: v.BlockNumber,
 							Status:        cc.CtxStatusFinishing,
 						})

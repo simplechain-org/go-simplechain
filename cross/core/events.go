@@ -37,7 +37,6 @@ type NewAnchorEvent struct {
 
 type CrossTransactionModifier struct {
 	ID            common.Hash
-	ChainId       *big.Int
 	Status        CtxStatus
 	AtBlockNumber uint64
 }

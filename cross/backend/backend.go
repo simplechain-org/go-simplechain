@@ -17,7 +17,6 @@ import (
 	"github.com/simplechain-org/go-simplechain/node"
 	"github.com/simplechain-org/go-simplechain/p2p"
 	"github.com/simplechain-org/go-simplechain/p2p/enode"
-	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/rlp"
 	"github.com/simplechain-org/go-simplechain/rpc"
 )
@@ -34,16 +33,17 @@ const (
 	handshakeTimeout   = 5 * time.Second
 	rttMaxEstimate     = 20 * time.Second // Maximum round-trip time to target for download requests
 	defaultMaxSyncSize = 100
+	defaultCrossChSize = 100
 )
 
 // CrossService implements node.Service
 type CrossService struct {
-	main crossCommons
-	sub  crossCommons
+	main  crossCommons
+	sub   crossCommons
+	store *CrossStore
 
-	config      *eth.Config
-	crossConfig *cross.Config
-	peers       *anchorSet
+	config *cross.Config
+	peers  *anchorSet
 
 	newPeerCh chan *anchorPeer
 	quitSync  chan struct{}
@@ -51,38 +51,45 @@ type CrossService struct {
 }
 
 type crossCommons struct {
-	genesis     common.Hash
-	chainConfig *params.ChainConfig
-	networkID   uint64
+	genesis common.Hash
+	chainID uint64
 
 	bc      *core.BlockChain
 	handler *Handler
+	channel chan interface{}
 }
 
-func NewCrossService(ctx *node.ServiceContext, main, sub cross.SimpleChain, config *eth.Config) (*CrossService, error) {
-	cross.Reporter.SetRootPath(ctx.ResolvePath("crosschainlog"))
-	srv := &CrossService{
-		config:      config,
-		crossConfig: &config.CrossConfig,
-		peers:       newAnchorSet(),
-		newPeerCh:   make(chan *anchorPeer),
-		quitSync:    make(chan struct{}),
+func NewCrossService(ctx *node.ServiceContext, main, sub cross.SimpleChain, config *cross.Config) (srv *CrossService, err error) {
+	srv = &CrossService{
+		config:    config,
+		peers:     newAnchorSet(),
+		newPeerCh: make(chan *anchorPeer),
+		quitSync:  make(chan struct{}),
 	}
 
-	// construct cross handler
-	mainHandler, err := NewCrossHandler(ctx, main, srv, config.CrossConfig, common.MainMakerData, config.CrossConfig.MainContract, ctx.MainCh, ctx.SubCh)
+	cross.Reporter.SetRootPath(ctx.ResolvePath(cross.LogDir))
+
+	srv.store, err = NewCrossStore(ctx, cross.DataDir)
 	if err != nil {
 		return nil, err
 	}
 
-	subHandler, err := NewCrossHandler(ctx, sub, srv, config.CrossConfig, common.SubMakerData, config.CrossConfig.SubContract, ctx.SubCh, ctx.MainCh)
+	mainCh, subCh := make(chan interface{}, defaultCrossChSize), make(chan interface{}, defaultCrossChSize)
+
+	// construct cross handler
+	mainHandler, err := NewCrossHandler(main, srv, *config, config.MainContract, mainCh, subCh)
+	if err != nil {
+		return nil, err
+	}
+
+	subHandler, err := NewCrossHandler(sub, srv, *config, config.SubContract, subCh, mainCh)
 	if err != nil {
 		return nil, err
 	}
 
 	// register crosschain
-	mainHandler.store.RegisterChain(sub.ChainConfig().ChainID)
-	subHandler.store.RegisterChain(main.ChainConfig().ChainID)
+	mainHandler.RegisterChain(sub.ChainConfig().ChainID)
+	subHandler.RegisterChain(main.ChainConfig().ChainID)
 
 	// register apis
 	main.RegisterAPIs([]rpc.API{
@@ -103,19 +110,19 @@ func NewCrossService(ctx *node.ServiceContext, main, sub cross.SimpleChain, conf
 	})
 
 	srv.main = crossCommons{
-		bc:          main.BlockChain(),
-		genesis:     main.BlockChain().Genesis().Hash(),
-		chainConfig: main.BlockChain().Config(),
-		networkID:   main.BlockChain().Config().ChainID.Uint64(),
-		handler:     mainHandler,
+		bc:      main.BlockChain(),
+		genesis: main.BlockChain().Genesis().Hash(),
+		chainID: main.BlockChain().Config().ChainID.Uint64(),
+		handler: mainHandler,
+		channel: mainCh,
 	}
 
 	srv.sub = crossCommons{
-		bc:          sub.BlockChain(),
-		genesis:     sub.BlockChain().Genesis().Hash(),
-		chainConfig: sub.BlockChain().Config(),
-		networkID:   sub.BlockChain().Config().ChainID.Uint64(),
-		handler:     subHandler,
+		bc:      sub.BlockChain(),
+		genesis: sub.BlockChain().Genesis().Hash(),
+		chainID: sub.BlockChain().Config().ChainID.Uint64(),
+		handler: subHandler,
+		channel: subCh,
 	}
 
 	return srv, nil
@@ -125,10 +132,10 @@ func (srv *CrossService) getCrossHandler(chainID *big.Int) *Handler {
 	if chainID == nil {
 		return nil
 	}
-	if chainID.Uint64() == srv.main.networkID {
+	if chainID.Uint64() == srv.main.chainID {
 		return srv.main.handler
 	}
-	if chainID.Uint64() == srv.sub.networkID {
+	if chainID.Uint64() == srv.sub.chainID {
 		return srv.sub.handler
 	}
 	return nil
@@ -181,7 +188,7 @@ func (srv *CrossService) Start(server *p2p.Server) error {
 	srv.sub.handler.Start()
 
 	// start sync handlers
-	go srv.syncer()
+	go srv.sync()
 	return nil
 }
 
@@ -198,8 +205,8 @@ func (srv *CrossService) Stop() error {
 
 func (srv *CrossService) handle(p *anchorPeer) error {
 	var (
-		mainNetworkID = srv.main.networkID
-		subNetworkID  = srv.sub.networkID
+		mainNetworkID = srv.main.chainID
+		subNetworkID  = srv.sub.chainID
 		mainHead      = srv.main.bc.CurrentHeader()
 		subHead       = srv.sub.bc.CurrentHeader()
 		mainTD        = srv.main.bc.GetTd(mainHead.Hash(), mainHead.Number.Uint64())
@@ -208,8 +215,8 @@ func (srv *CrossService) handle(p *anchorPeer) error {
 		subGenesis    = srv.sub.genesis
 		mainHeight    = srv.main.handler.Height()
 		subHeight     = srv.sub.handler.Height()
-		main          = srv.crossConfig.MainContract
-		sub           = srv.crossConfig.SubContract
+		main          = srv.config.MainContract
+		sub           = srv.config.SubContract
 	)
 	if err := p.Handshake(mainNetworkID, subNetworkID,
 		mainTD, subTD, mainHead.Hash(), subHead.Hash(),
@@ -353,7 +360,6 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 				return eth.ErrResp(eth.ErrDecode, "msg %v: %v", msg, err)
 			}
 			ctxList = append(ctxList, &ctx)
-			p.MarkCrossTransaction(ctx.ID()) //mark ctx id and would not require pending from this peer
 		}
 
 		if len(ctxList) == 0 {
@@ -437,7 +443,7 @@ func (srv *CrossService) NodeInfo() *CrossNodeInfo {
 	mainBlock, subBlock := srv.main.bc.CurrentBlock(), srv.sub.bc.CurrentBlock()
 	return &CrossNodeInfo{
 		Main: eth.NodeInfo{
-			Network:    srv.main.networkID,
+			Network:    srv.main.chainID,
 			Difficulty: srv.main.bc.GetTd(mainBlock.Hash(), mainBlock.NumberU64()),
 			Genesis:    srv.main.genesis,
 			Config:     srv.main.bc.Config(),
@@ -445,7 +451,7 @@ func (srv *CrossService) NodeInfo() *CrossNodeInfo {
 			Consensus:  "crosschain",
 		},
 		Sub: eth.NodeInfo{
-			Network:    srv.sub.networkID,
+			Network:    srv.sub.chainID,
 			Difficulty: srv.sub.bc.GetTd(subBlock.Hash(), subBlock.NumberU64()),
 			Genesis:    srv.sub.genesis,
 			Config:     srv.sub.bc.Config(),
