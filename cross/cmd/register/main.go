@@ -66,6 +66,7 @@ func register() {
 	from := common.HexToAddress(*fromVar)
 	to := common.HexToAddress(*contract)
 	gas := hexutil.Uint64(*gaslimitVar)
+	price := hexutil.Big(*big.NewInt(1e9))
 
 	abi, err := abi.JSON(bytes.NewReader(data))
 	if err != nil {
@@ -92,6 +93,7 @@ func register() {
 		From:  from,
 		To:    &to,
 		Gas:   &gas,
+		GasPrice:&price,
 		Value: nil,
 		Input: &input,
 	}); err != nil {

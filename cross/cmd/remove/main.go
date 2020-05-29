@@ -58,6 +58,8 @@ func AddAnchors(client *rpc.Client) {
 
 	value := hexutil.Big(*big.NewInt(0))
 
+	price := hexutil.Big(*big.NewInt(1e9))
+
 	abi, err := abi.JSON(bytes.NewReader(data))
 
 	if err != nil {
@@ -92,6 +94,7 @@ func AddAnchors(client *rpc.Client) {
 		From:  from,
 		To:    &to,
 		Gas:   &gas,
+		GasPrice:&price,
 		Value: &value,
 		Input: &input,
 	}
