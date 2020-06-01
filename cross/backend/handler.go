@@ -5,8 +5,6 @@ import (
 
 	"github.com/simplechain-org/go-simplechain/accounts"
 	"github.com/simplechain-org/go-simplechain/common"
-	"github.com/simplechain-org/go-simplechain/core"
-	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/cross"
 	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	"github.com/simplechain-org/go-simplechain/cross/trigger"
@@ -14,7 +12,6 @@ import (
 	"github.com/simplechain-org/go-simplechain/cross/trigger/simpletrigger/subscriber"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/log"
-	"github.com/simplechain-org/go-simplechain/params"
 )
 
 const (
@@ -24,7 +21,7 @@ const (
 )
 
 type Handler struct {
-	blockChain *core.BlockChain
+	blockChain cross.BlockChain
 	pm         cross.ProtocolManager
 	config     cross.Config
 	chainID    *big.Int
@@ -52,8 +49,8 @@ type Handler struct {
 	signedCtxCh  chan cc.SignedCtxEvent // Channel to receive signed-completely makerTx from ctxStore
 	signedCtxSub event.Subscription
 
-	rmLogsCh  chan core.RemovedLogsEvent // Channel to receive removed log event
-	rmLogsSub event.Subscription         // Subscription for removed log event
+	rmLogsCh  chan cc.ReorgBlockEvent // Channel to receive removed log event
+	rmLogsSub event.Subscription      // Subscription for removed log event
 
 	chain cross.SimpleChain
 
@@ -97,8 +94,8 @@ func (h *Handler) Start() {
 	h.signedCtxCh = make(chan cc.SignedCtxEvent, txChanSize)
 	h.signedCtxSub = h.pool.SubscribeSignedCtxEvent(h.signedCtxCh)
 
-	h.rmLogsCh = make(chan core.RemovedLogsEvent, rmLogsChanSize)
-	h.rmLogsSub = h.blockChain.SubscribeRemovedLogsEvent(h.rmLogsCh)
+	h.rmLogsCh = make(chan cc.ReorgBlockEvent, rmLogsChanSize)
+	h.rmLogsSub = h.subscriber.SubscribeReorgBlockEvent(h.rmLogsCh)
 
 	h.crossBlockCh = make(chan cc.CrossBlockEvent, txChanSize)
 	h.crossBlockSub = h.subscriber.SubscribeCrossBlockEvent(h.crossBlockCh)
@@ -133,7 +130,7 @@ func (h *Handler) loop() {
 			return
 
 		case ev := <-h.rmLogsCh:
-			h.reorgLogs(ev.Logs)
+			h.reorg(ev)
 		case <-h.rmLogsSub.Err():
 			return
 		}
@@ -182,11 +179,11 @@ func (h *Handler) handle(current cc.CrossBlockEvent) {
 	// handle confirmed finish
 	if finishes := current.ConfirmedFinish.Finishes; len(finishes) > 0 {
 		local = append(local, finishes...)
-		transactions := make([]string, len(finishes))
-		for i, finish := range finishes {
-			transactions[i] = finish.ID.String()
-		}
-		h.log.Info("cross transaction finished", "transactions", transactions)
+		//transactions := make([]string, len(finishes))
+		//for i, finish := range finishes {
+		//	transactions[i] = finish.ID.String()
+		//}
+		//h.log.Info(" cross transaction finished", "transactions", transactions)
 	}
 
 	// handle anchor update
@@ -207,6 +204,24 @@ func (h *Handler) handle(current cc.CrossBlockEvent) {
 	if len(remote) > 0 {
 		if err := h.store.Updates(h.remoteID, remote); err != nil {
 			h.log.Warn("handle cross failed", "error", err)
+		}
+	}
+}
+
+func (h *Handler) reorg(reorg cc.ReorgBlockEvent) {
+	h.log.Info("X reorg block", "reTaker", len(reorg.ReorgTaker.Takers), "reFinish", len(reorg.ReorgFinish.Finishes))
+
+	// reorg taker (remote)
+	if takers := reorg.ReorgTaker.Takers; len(takers) > 0 {
+		if err := h.store.Updates(h.remoteID, takers); err != nil {
+			h.log.Warn("reorg takers failed", "error", err)
+		}
+	}
+
+	// reorg finish (local)
+	if finishes := reorg.ReorgFinish.Finishes; len(finishes) > 0 {
+		if err := h.store.Updates(h.chainID, finishes); err != nil {
+			h.log.Warn("reorg finishes failed", "error", err)
 		}
 	}
 }
@@ -257,44 +272,6 @@ func (h *Handler) readCrossMessage() {
 
 		case <-h.quitSync:
 			return
-		}
-	}
-}
-
-func (h *Handler) reorgLogs(logs []*types.Log) {
-	var takerLogs []*cc.CrossTransactionModifier
-	var finishLogs []*cc.CrossTransactionModifier
-	for _, l := range logs {
-		if h.contract == l.Address && len(l.Topics) > 0 {
-			switch l.Topics[0] {
-			case params.TakerTopic: // remote ctx taken
-				if len(l.Topics) >= 3 && len(l.Data) >= common.HashLength {
-					takerLogs = append(takerLogs, &cc.CrossTransactionModifier{
-						ID:     l.Topics[1],
-						Status: cc.CtxStatusWaiting,
-					})
-				}
-
-			case params.MakerFinishTopic: // local ctx finished
-				if len(l.Topics) >= 3 {
-					finishLogs = append(finishLogs, &cc.CrossTransactionModifier{
-						ID:     l.Topics[1],
-						Status: cc.CtxStatusWaiting,
-					})
-				}
-			}
-
-		}
-	}
-	if len(takerLogs) > 0 {
-		if err := h.store.Updates(h.chainID, takerLogs); err != nil {
-			h.log.Warn("reorg cross failed", "error", err)
-		}
-	}
-
-	if len(finishLogs) > 0 {
-		if err := h.store.Updates(h.chainID, finishLogs); err != nil {
-			h.log.Warn("reorg cross failed", "error", err)
 		}
 	}
 }

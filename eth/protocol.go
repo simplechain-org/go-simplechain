@@ -63,9 +63,6 @@ const (
 	NodeDataMsg        = 0x0e
 	GetReceiptsMsg     = 0x0f
 	ReceiptsMsg        = 0x10
-
-	//for eth64
-	CtxSignMsg = 0x31
 )
 
 type errCode int
@@ -80,9 +77,6 @@ const (
 	ErrForkIDRejected
 	ErrNoStatusMsg
 	ErrExtraStatusMsg
-	ErrVerifyCtx
-	ErrCrossMainChainMismatch
-	ErrCrossSubChainMismatch
 )
 
 func (e errCode) String() string {
@@ -100,9 +94,6 @@ var errorToString = map[int]string{
 	ErrForkIDRejected:          "Fork ID rejected",
 	ErrNoStatusMsg:             "No status message",
 	ErrExtraStatusMsg:          "Extra status message",
-	ErrVerifyCtx:               "Invalid Ctx",
-	ErrCrossMainChainMismatch:  "main chain contract mismatch",
-	ErrCrossSubChainMismatch:   "sub chain contract mismatch",
 }
 
 type txPool interface {

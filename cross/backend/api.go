@@ -221,6 +221,19 @@ func (s *PublicCrossChainAPI) CtxTakerByPage(ctx context.Context, to common.Addr
 	return content
 }
 
+func (s *PublicCrossChainAPI) CtxGet(ctx context.Context, id common.Hash) *RPCCrossTransaction {
+	return newRPCCrossTransaction(s.handler.GetByCtxID(id))
+}
+
+func (s *PublicCrossChainAPI) CtxGetByNumber(ctx context.Context, number hexutil.Uint64) map[cc.CtxStatus][]common.Hash {
+	ctxList := s.handler.GetByBlockNumber(uint64(number))
+	result := make(map[cc.CtxStatus][]common.Hash)
+	for _, tx := range ctxList {
+		result[tx.Status] = append(result[tx.Status], tx.ID())
+	}
+	return result
+}
+
 func (s *PublicCrossChainAPI) CtxStats() map[uint64]map[cc.CtxStatus]int {
 	return s.handler.StoreStats()
 }
@@ -230,40 +243,6 @@ func (s *PublicCrossChainAPI) PoolStats() map[string]int {
 	return map[string]int{"pending": pending, "queue": queue}
 }
 
-//func (s *PublicCrossChainAPI) GetLocalCtx(pageSize, startPage int) RPCPageCrossTransactions {
-//	local, total := s.handler.QueryLocalByPage(pageSize, startPage)
-//
-//	content := RPCPageCrossTransactions{
-//		Data:  make(map[uint64][]*RPCCrossTransaction),
-//		Total: total,
-//	}
-//
-//	for k, txs := range local {
-//		for _, tx := range txs {
-//			content.Data[k] = append(content.Data[k], newRPCCrossTransaction(tx))
-//		}
-//	}
-//
-//	return content
-//}
-//
-//func (s *PublicCrossChainAPI) GetRemoteCtx(pageSize, startPage int) RPCPageCrossTransactions {
-//	remotes, total := s.handler.QueryRemoteByPage(pageSize, startPage)
-//
-//	content := RPCPageCrossTransactions{
-//		Data:  make(map[uint64][]*RPCCrossTransaction),
-//		Total: total,
-//	}
-//
-//	for k, txs := range remotes {
-//		for _, tx := range txs {
-//			content.Data[k] = append(content.Data[k], newRPCCrossTransaction(tx))
-//		}
-//	}
-//
-//	return content
-//}
-
 type RPCCrossTransaction struct {
 	Value            *hexutil.Big   `json:"value"`
 	CTxId            common.Hash    `json:"ctxId"`
@@ -272,6 +251,7 @@ type RPCCrossTransaction struct {
 	From             common.Address `json:"from"`
 	To               common.Address `json:"to"`
 	BlockHash        common.Hash    `json:"blockHash"`
+	BlockNumber      hexutil.Uint64 `json:"blockNumber"`
 	DestinationId    *hexutil.Big   `json:"destinationId"`
 	DestinationValue *hexutil.Big   `json:"destinationValue"`
 	Input            hexutil.Bytes  `json:"input"`
@@ -294,6 +274,7 @@ func newRPCCrossTransaction(tx *cc.CrossTransactionWithSignatures) *RPCCrossTran
 		From:             tx.Data.From,
 		To:               tx.Data.To,
 		BlockHash:        tx.Data.BlockHash,
+		BlockNumber:      hexutil.Uint64(tx.BlockNum),
 		DestinationId:    (*hexutil.Big)(tx.Data.DestinationId),
 		DestinationValue: (*hexutil.Big)(tx.Data.DestinationValue),
 		Input:            tx.Data.Input,
@@ -319,6 +300,7 @@ type RPCOwnerCrossTransaction struct {
 	From             common.Address `json:"from"`
 	To               common.Address `json:"to"`
 	BlockHash        common.Hash    `json:"blockHash"`
+	BlockNumber      hexutil.Uint64 `json:"blockNumber"`
 	DestinationId    *hexutil.Big   `json:"destinationId"`
 	DestinationValue *hexutil.Big   `json:"destinationValue"`
 	Input            hexutil.Bytes  `json:"input"`
@@ -337,6 +319,7 @@ func newOwnerRPCCrossTransaction(tx *cc.OwnerCrossTransactionWithSignatures) *RP
 		From:             tx.Cws.Data.From,
 		To:               tx.Cws.Data.To,
 		BlockHash:        tx.Cws.Data.BlockHash,
+		BlockNumber:      hexutil.Uint64(tx.Cws.BlockNum),
 		DestinationId:    (*hexutil.Big)(tx.Cws.Data.DestinationId),
 		DestinationValue: (*hexutil.Big)(tx.Cws.Data.DestinationValue),
 		Input:            tx.Cws.Data.Input,

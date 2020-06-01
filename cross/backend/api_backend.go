@@ -22,6 +22,22 @@ func one(db crossdb.CtxDB, field crossdb.FieldName, value interface{}) *cc.Cross
 	return db.One(field, value)
 }
 
+func (h *Handler) GetByCtxID(id common.Hash) *cc.CrossTransactionWithSignatures {
+	if !h.pm.CanAcceptTxs() {
+		return nil
+	}
+	store, _ := h.store.GetStore(h.chainID)
+	return store.One(crossdb.CtxIdIndex, id)
+}
+
+func (h *Handler) GetByBlockNumber(number uint64) []*cc.CrossTransactionWithSignatures {
+	if !h.pm.CanAcceptTxs() {
+		return nil
+	}
+	store, _ := h.store.GetStore(h.chainID)
+	return store.Find(crossdb.BlockNumField, number)
+}
+
 func (h *Handler) FindByTxHash(hash common.Hash) *cc.CrossTransactionWithSignatures {
 	if !h.pm.CanAcceptTxs() {
 		return nil

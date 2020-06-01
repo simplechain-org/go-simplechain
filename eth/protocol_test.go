@@ -62,19 +62,19 @@ func TestStatusMsgErrors63(t *testing.T) {
 	}{
 		{
 			code: TransactionMsg, data: []interface{}{},
-			wantError: ErrResp(ErrNoStatusMsg, "first msg has code 2 (!= 0)"),
+			wantError: errResp(ErrNoStatusMsg, "first msg has code 2 (!= 0)"),
 		},
 		{
 			code: StatusMsg, data: statusData63{10, DefaultConfig.NetworkId, td, head.Hash(), genesis.Hash()},
-			wantError: ErrResp(ErrProtocolVersionMismatch, "10 (!= %d)", 63),
+			wantError: errResp(ErrProtocolVersionMismatch, "10 (!= %d)", 63),
 		},
 		{
 			code: StatusMsg, data: statusData63{63, 999, td, head.Hash(), genesis.Hash()},
-			wantError: ErrResp(ErrNetworkIDMismatch, "999 (!= %d)", DefaultConfig.NetworkId),
+			wantError: errResp(ErrNetworkIDMismatch, "999 (!= %d)", DefaultConfig.NetworkId),
 		},
 		{
 			code: StatusMsg, data: statusData63{63, DefaultConfig.NetworkId, td, head.Hash(), common.Hash{3}},
-			wantError: ErrResp(ErrGenesisMismatch, "0300000000000000 (!= %x)", genesis.Hash().Bytes()[:8]),
+			wantError: errResp(ErrGenesisMismatch, "0300000000000000 (!= %x)", genesis.Hash().Bytes()[:8]),
 		},
 	}
 	for i, test := range tests {
@@ -114,23 +114,23 @@ func TestStatusMsgErrors64(t *testing.T) {
 	}{
 		{
 			code: TransactionMsg, data: []interface{}{},
-			wantError: ErrResp(ErrNoStatusMsg, "first msg has code 2 (!= 0)"),
+			wantError: errResp(ErrNoStatusMsg, "first msg has code 2 (!= 0)"),
 		},
 		{
 			code: StatusMsg, data: statusData{10, DefaultConfig.NetworkId, td, head.Hash(), genesis.Hash(), forkID},
-			wantError: ErrResp(ErrProtocolVersionMismatch, "10 (!= %d)", 64),
+			wantError: errResp(ErrProtocolVersionMismatch, "10 (!= %d)", 64),
 		},
 		{
 			code: StatusMsg, data: statusData{64, 999, td, head.Hash(), genesis.Hash(), forkID},
-			wantError: ErrResp(ErrNetworkIDMismatch, "999 (!= %d)", DefaultConfig.NetworkId),
+			wantError: errResp(ErrNetworkIDMismatch, "999 (!= %d)", DefaultConfig.NetworkId),
 		},
 		{
 			code: StatusMsg, data: statusData{64, DefaultConfig.NetworkId, td, head.Hash(), common.Hash{3}, forkID},
-			wantError: ErrResp(ErrGenesisMismatch, "0300000000000000000000000000000000000000000000000000000000000000 (!= %x)", genesis.Hash()),
+			wantError: errResp(ErrGenesisMismatch, "0300000000000000000000000000000000000000000000000000000000000000 (!= %x)", genesis.Hash()),
 		},
 		{
 			code: StatusMsg, data: statusData{64, DefaultConfig.NetworkId, td, head.Hash(), genesis.Hash(), forkid.ID{Hash: [4]byte{0x00, 0x01, 0x02, 0x03}}},
-			wantError: ErrResp(ErrForkIDRejected, forkid.ErrLocalIncompatibleOrStale.Error()),
+			wantError: errResp(ErrForkIDRejected, forkid.ErrLocalIncompatibleOrStale.Error()),
 		},
 	}
 	for i, test := range tests {
@@ -232,7 +232,7 @@ func TestForkIDSplit(t *testing.T) {
 
 	select {
 	case err := <-errc:
-		if want := ErrResp(ErrForkIDRejected, forkid.ErrLocalIncompatibleOrStale.Error()); err.Error() != want.Error() {
+		if want := errResp(ErrForkIDRejected, forkid.ErrLocalIncompatibleOrStale.Error()); err.Error() != want.Error() {
 			t.Fatalf("fork ID rejection error mismatch: have %v, want %v", err, want)
 		}
 	case <-time.After(250 * time.Millisecond):

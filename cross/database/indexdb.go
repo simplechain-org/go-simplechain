@@ -6,7 +6,6 @@ import (
 	"math/big"
 
 	"github.com/simplechain-org/go-simplechain/common"
-	"github.com/simplechain-org/go-simplechain/common/math"
 	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	"github.com/simplechain-org/go-simplechain/log"
 
@@ -79,17 +78,6 @@ func (d *indexDB) Close() error {
 }
 
 func (d *indexDB) Write(ctx *cc.CrossTransactionWithSignatures) error {
-	//old, err := d.get(ctx.ID())
-	//if old != nil {
-	//	if old.BlockHash != ctx.BlockHash() {
-	//		cross.Report(d.chainID.Uint64(), "blockchain reorg", "ctxID", ctx.ID().String(),
-	//			"old", old.BlockHash.String(), "new", ctx.BlockHash().String())
-	//		return ErrCtxDbFailure{err: fmt.Errorf("blockchain reorg, txID:%s, old:%s, new:%s",
-	//			ctx.ID().String(), old.BlockHash.String(), ctx.BlockHash().String())}
-	//	}
-	//	return nil
-	//}
-
 	persist := NewCrossTransactionIndexed(ctx)
 	err := d.db.Save(persist)
 	if err != nil {
@@ -225,40 +213,6 @@ func (d *indexDB) Updates(idList []common.Hash, updaters []func(ctx *CrossTransa
 func (d *indexDB) Has(id common.Hash) bool {
 	_, err := d.get(id)
 	return err == nil
-}
-
-func (d *indexDB) Range(pageSize int, startCtxID, endCtxID *common.Hash) []*cc.CrossTransactionWithSignatures {
-	var (
-		min, max uint64 = 0, math.MaxUint64
-		results  []*cc.CrossTransactionWithSignatures
-		list     []*CrossTransactionIndexed
-	)
-
-	if startCtxID != nil {
-		start, err := d.get(*startCtxID)
-		if err != nil {
-			return nil
-		}
-		min = start.PK + 1
-	}
-	if endCtxID != nil {
-		end, err := d.get(*endCtxID)
-		if err != nil {
-			return nil
-		}
-		max = end.PK
-	}
-
-	if err := d.db.Range(PK, min, max, &list, storm.Limit(pageSize)); err != nil {
-		log.Debug("range return no result", "startID", startCtxID, "endID", endCtxID, "minPK", min, "maxPK", max, "err", err)
-		return nil
-	}
-
-	results = make([]*cc.CrossTransactionWithSignatures, len(list))
-	for i, ctx := range list {
-		results[i] = ctx.ToCrossTransaction()
-	}
-	return results
 }
 
 func (d *indexDB) Query(pageSize int, startPage int, orderBy []FieldName, reverse bool, filter ...q.Matcher) []*cc.CrossTransactionWithSignatures {

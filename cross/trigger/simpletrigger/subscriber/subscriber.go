@@ -23,6 +23,7 @@ type SimpleSubscriber struct {
 	finishFeed          event.Feed
 	updateAnchorFeed    event.Feed
 	crossBlockFeed      event.Feed
+	reorgBlockFeed      event.Feed
 	scope               event.SubscriptionScope
 }
 
@@ -93,10 +94,48 @@ func (t *SimpleSubscriber) StoreCrossContractLog(blockNumber uint64, hash common
 	}
 }
 
+func (t *SimpleSubscriber) NotifyBlockReorg(logs []*types.Log) {
+	var reorgEvent cc.ReorgBlockEvent
+	for _, l := range logs {
+		if t.contract == l.Address && len(l.Topics) > 0 {
+			switch l.Topics[0] {
+			case params.TakerTopic: // remote ctx taken
+				if len(l.Topics) >= 3 && len(l.Data) >= common.HashLength {
+					reorgEvent.ReorgTaker.Takers = append(reorgEvent.ReorgTaker.Takers, &cc.CrossTransactionModifier{
+						ID:     l.Topics[1],
+						Status: cc.CtxStatusWaiting,
+					})
+				}
+
+			case params.MakerFinishTopic: // local ctx finished
+				if len(l.Topics) >= 3 {
+					reorgEvent.ReorgFinish.Finishes = append(reorgEvent.ReorgFinish.Finishes, &cc.CrossTransactionModifier{
+						ID:     l.Topics[1],
+						Status: cc.CtxStatusWaiting,
+					})
+				}
+			}
+		}
+	}
+
+	if !reorgEvent.IsEmpty() {
+		t.reorgBlockSend(reorgEvent)
+	}
+}
+
 func (t *SimpleSubscriber) crossBlockSend(ev cc.CrossBlockEvent) int {
 	return t.crossBlockFeed.Send(ev)
 }
 
+func (t *SimpleSubscriber) reorgBlockSend(ev cc.ReorgBlockEvent) int {
+	return t.reorgBlockFeed.Send(ev)
+}
+
 func (t *SimpleSubscriber) SubscribeCrossBlockEvent(ch chan<- cc.CrossBlockEvent) event.Subscription {
 	return t.scope.Track(t.crossBlockFeed.Subscribe(ch))
+}
+
+func (t *SimpleSubscriber) SubscribeReorgBlockEvent(ch chan<- cc.ReorgBlockEvent) event.Subscription {
+	return t.scope.Track(t.reorgBlockFeed.Subscribe(ch))
+
 }

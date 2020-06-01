@@ -8,16 +8,9 @@ import (
 
 	"github.com/simplechain-org/go-simplechain/common"
 	cc "github.com/simplechain-org/go-simplechain/cross/core"
-	"github.com/simplechain-org/go-simplechain/eth"
 	"github.com/simplechain-org/go-simplechain/p2p"
 
 	mapset "github.com/deckarep/golang-set"
-)
-
-const (
-	maxKnownCtx        = 32768 // Maximum cross transactions hashes to keep in the known list (prevent DOS)
-	maxQueuedLocalCtx  = 4096
-	maxQueuedRemoteCtx = 128
 )
 
 type anchorPeer struct {
@@ -49,27 +42,22 @@ func newAnchorPeer(p *p2p.Peer, rw p2p.MsgReadWriter) *anchorPeer {
 
 func (p *anchorPeer) Handshake(
 	mainNetwork, subNetwork uint64,
-	mainTD, subTD *big.Int,
-	mainHead, subHead common.Hash,
 	mainGenesis, subGenesis common.Hash,
 	mainHeight, subHeight *big.Int,
 	mainContract, subContract common.Address,
 ) error {
 	errc := make(chan error, 2)
 	go func() {
-		errc <- p2p.Send(p.rw, eth.StatusMsg, &crossStatusData{
-			MainNetworkID: mainNetwork,
-			SubNetworkID:  subNetwork,
-			MainTD:        mainTD,
-			SubTD:         subTD,
-			MainHead:      mainHead,
-			SubHead:       subHead,
-			MainGenesis:   mainGenesis,
-			SubGenesis:    subGenesis,
-			MainHeight:    mainHeight,
-			SubHeight:     subHeight,
-			MainContract:  mainContract,
-			SubContract:   subContract,
+		errc <- p2p.Send(p.rw, StatusMsg, &crossStatusData{
+			ProtocolVersion: uint32(p.version),
+			MainNetworkID:   mainNetwork,
+			SubNetworkID:    subNetwork,
+			MainGenesis:     mainGenesis,
+			SubGenesis:      subGenesis,
+			MainHeight:      mainHeight,
+			SubHeight:       subHeight,
+			MainContract:    mainContract,
+			SubContract:     subContract,
 		})
 	}()
 
@@ -99,26 +87,29 @@ func (p *anchorPeer) readStatus(mainNetwork, subNetwork uint64, mainGenesis, sub
 	if err != nil {
 		return err
 	}
-	if msg.Code != eth.StatusMsg {
-		return eth.ErrResp(eth.ErrNoStatusMsg, "first msg has code %x (!= %x)", msg.Code, eth.StatusMsg)
+	if msg.Code != StatusMsg {
+		return errResp(ErrNoStatusMsg, "first msg has code %x (!= %x)", msg.Code, StatusMsg)
 	}
 	if msg.Size > protocolMaxMsgSize {
-		return eth.ErrResp(eth.ErrMsgTooLarge, "%v > %v", msg.Size, protocolMaxMsgSize)
+		return errResp(ErrMsgTooLarge, "%v > %v", msg.Size, protocolMaxMsgSize)
 	}
 	if err := msg.Decode(&status); err != nil {
-		return eth.ErrResp(eth.ErrDecode, "msg %v: %v", msg, err)
+		return errResp(ErrDecode, "msg %v: %v", msg, err)
 	}
 	if status.MainNetworkID != mainNetwork || status.SubNetworkID != subNetwork {
-		return eth.ErrResp(eth.ErrNetworkIDMismatch, "main/sub:%d/%d (!= %d/%d)", status.MainNetworkID, status.SubNetworkID, mainNetwork, subNetwork)
+		return errResp(ErrNetworkIDMismatch, "main/sub:%d/%d (!= %d/%d)", status.MainNetworkID, status.SubNetworkID, mainNetwork, subNetwork)
+	}
+	if int(status.ProtocolVersion) != p.version {
+		return errResp(ErrProtocolVersionMismatch, "%d (!= %d)", status.ProtocolVersion, p.version)
 	}
 	if status.MainGenesis != mainGenesis || status.SubGenesis != subGenesis {
-		return eth.ErrResp(eth.ErrGenesisMismatch, "main/sub:%s/%s (!= %s/%s)", status.MainGenesis.String(), status.SubGenesis.String(), mainGenesis.String(), subGenesis.String())
+		return errResp(ErrGenesisMismatch, "main/sub:%s/%s (!= %s/%s)", status.MainGenesis.String(), status.SubGenesis.String(), mainGenesis.String(), subGenesis.String())
 	}
 	if status.MainContract != mainContract {
-		return eth.ErrResp(eth.ErrCrossMainChainMismatch, "%s (!=%s)", status.MainContract.String(), mainContract.String())
+		return errResp(ErrCrossMainChainMismatch, "%s (!=%s)", status.MainContract.String(), mainContract.String())
 	}
 	if status.SubContract != subContract {
-		return eth.ErrResp(eth.ErrCrossSubChainMismatch, "%s (!=%s)", status.SubContract.String(), subContract.String())
+		return errResp(ErrCrossSubChainMismatch, "%s (!=%s)", status.SubContract.String(), subContract.String())
 	}
 	return nil
 }
@@ -193,22 +184,16 @@ func (p *anchorPeer) broadcast() {
 }
 
 type CrossPeerInfo struct {
-	Main eth.PeerInfo `json:"main"`
-	Sub  eth.PeerInfo `json:"sub"`
+	Version    int      `json:"version"`
+	MainHeight *big.Int `json:"mainHeight"`
+	SubHeight  *big.Int `json:"subHeight"`
 }
 
 func (p *anchorPeer) Info() *CrossPeerInfo {
 	return &CrossPeerInfo{
-		eth.PeerInfo{
-			Version:    p.version,
-			Difficulty: p.crossStatus.MainTD,
-			Head:       p.crossStatus.MainHead.String(),
-		},
-		eth.PeerInfo{
-			Version:    p.version,
-			Difficulty: p.crossStatus.SubTD,
-			Head:       p.crossStatus.SubHead.String(),
-		},
+		Version:    p.version,
+		MainHeight: p.crossStatus.MainHeight,
+		SubHeight:  p.crossStatus.SubHeight,
 	}
 }
 
@@ -254,10 +239,10 @@ func (ps *anchorSet) Register(p *anchorPeer) error {
 	defer ps.lock.Unlock()
 
 	if ps.closed {
-		return eth.ErrClosed
+		return ErrClosed
 	}
 	if _, ok := ps.peers[p.id]; ok {
-		return eth.ErrAlreadyRegistered
+		return ErrAlreadyRegistered
 	}
 	ps.peers[p.id] = p
 	go p.broadcast()
@@ -272,7 +257,7 @@ func (ps *anchorSet) Unregister(id string) error {
 
 	p, ok := ps.peers[id]
 	if !ok {
-		return eth.ErrNotRegistered
+		return ErrNotRegistered
 	}
 	delete(ps.peers, id)
 	p.close()
@@ -292,18 +277,17 @@ func (ps *anchorSet) BestPeer() (main, sub *anchorPeer) {
 
 	var (
 		bestMainPeer, bestSubPeer     *anchorPeer
-		bestMainTd, bestSubTd         *big.Int
 		bestMainHeight, bestSubHeight *big.Int
 	)
 	for _, p := range ps.peers {
 		status := p.crossStatus
 		//分别找出mainHeight和subHeight最大的peer
-		if bestMainPeer == nil || status.MainHeight.Cmp(bestMainHeight) > 0 || (status.MainHeight.Cmp(bestMainHeight) == 0 && status.MainTD.Cmp(bestMainTd) > 0) {
-			bestMainPeer, bestMainHeight, bestMainTd = p, status.MainHeight, status.MainTD
+		if bestMainPeer == nil || status.MainHeight.Cmp(bestMainHeight) > 0 {
+			bestMainPeer, bestMainHeight = p, status.MainHeight
 		}
 
-		if bestSubPeer == nil || status.SubHeight.Cmp(bestSubHeight) > 0 || (status.SubHeight.Cmp(bestSubHeight) == 0 && status.SubTD.Cmp(bestSubTd) > 0) {
-			bestSubPeer, bestSubHeight, bestSubTd = p, status.SubHeight, status.SubTD
+		if bestSubPeer == nil || status.SubHeight.Cmp(bestSubHeight) > 0 {
+			bestSubPeer, bestSubHeight = p, status.SubHeight
 		}
 	}
 	return bestMainPeer, bestSubPeer
@@ -324,9 +308,8 @@ func (ps *anchorSet) PeersWithoutCtx(hash common.Hash) []*anchorPeer {
 
 // statusData is the network packet for the status message for eth/64 and later.
 type crossStatusData struct {
+	ProtocolVersion             uint32
 	MainNetworkID, SubNetworkID uint64
-	MainTD, SubTD               *big.Int
-	MainHead, SubHead           common.Hash
 	MainGenesis, SubGenesis     common.Hash
 	MainHeight, SubHeight       *big.Int
 	MainContract, SubContract   common.Address

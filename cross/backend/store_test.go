@@ -13,6 +13,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/cross"
 	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	db "github.com/simplechain-org/go-simplechain/cross/database"
+	"github.com/simplechain-org/go-simplechain/cross/trigger"
 	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/params"
@@ -164,4 +165,7 @@ func (bc *testBlockChain) GetHeaderByHash(common.Hash) *types.Header {
 
 func (bc *testBlockChain) Engine() consensus.Engine {
 	return nil
+}
+
+func (bc *testBlockChain) SetCrossTrigger(trigger trigger.Subscriber) {
 }
