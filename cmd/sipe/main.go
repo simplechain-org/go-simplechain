@@ -19,6 +19,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/sasha-s/go-deadlock"
 	"math"
 	"os"
 	"runtime"
@@ -274,7 +275,11 @@ func init() {
 	}
 }
 
+var mu deadlock.Mutex
+
 func main() {
+	mu.Lock()
+	defer mu.Unlock()
 	if err := app.Run(os.Args); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
