@@ -70,6 +70,15 @@ jobs:
         - unset -f cd # workaround for https://github.com/travis-ci/travis-ci/issues/8703
         - go run build/ci.go install
         - go run build/ci.go test -coverage $TEST_PACKAGES
+deploy:
+- provider: script
+  script: docker run -e GITHUB_TOKEN=$GITHUB_TOKEN --rm --privileged -v $TRAVIS_BUILD_DIR:/go/src/github.com/simplechain-org/go-simplechain -v /var/run/docker.sock:/var/run/docker.sock -w /go/src/github.com/simplechain-org/go-simplechain mailchain/goreleaser-xcgo --rm-dist
+  skip_cleanup: true
+  on:
+      tags: true
+      repo: simplechain-org/go-simplechain
+      branch: master
+      condition: $DEPLOY = true
 
 #    # This builder does the Ubuntu PPA upload
 #    - stage: build
