@@ -3,7 +3,6 @@ env:
 - GO111MODULE=on
 before:
   hooks:
-  - go env -w GOPROXY=https://goproxy.cn,direct
   - go mod download
 builds:
 - id: sipe-darwin-amd64
