@@ -1,0 +1,64 @@
+project_name: sipe
+env:
+- GO111MODULE=on
+before:
+  hooks:
+  - go env -w GOPROXY=https://goproxy.cn,direct
+  - go mod download
+builds:
+- id: sipe-darwin-amd64
+  ldflags: -s -w -X github.com/simplechain-org/go-simplechain.Version={{.Version}} -X github.com/simplechain-org/go-simplechain.BuildDate={{.Date}} -X github.com/simplechain-org/go-simplechain.CommitHash={{ .ShortCommit }}
+  binary: sipe
+  env:
+  - CGO_ENABLED=1
+  - CC=o64-clang
+  - CXX=o64-clang++
+  main: ./cmd/sipe/
+  goos:
+  - darwin
+  goarch:
+  - amd64
+- id: sipe-linux-amd64
+  ldflags: -s -w -X github.com/simplechain-org/go-simplechain.Version={{.Version}} -X github.com/simplechain-org/go-simplechain.BuildDate={{.Date}} -X github.com/simplechain-org/go-simplechain.CommitHash={{ .ShortCommit }}
+  binary: sipe
+  env:
+  - CGO_ENABLED=1
+  main: ./cmd/sipe/
+  goos:
+  - linux
+  goarch:
+  - amd64
+
+- id: sipe-windows-amd64
+  ldflags: -s -w -X github.com/simplechain-org/go-simplechain.Version={{.Version}} -X github.com/simplechain-org/go-simplechain.BuildDate={{.Date}} -X github.com/simplechain-org/go-simplechain.CommitHash={{ .ShortCommit }}
+  binary: sipe
+  env:
+  - CGO_ENABLED=1
+  - CC=x86_64-w64-mingw32-gcc
+  - CXX=x86_64-w64-mingw32-g++
+  main: ./cmd/sipe/
+  goos:
+  - windows
+  goarch:
+  - amd64
+archives:
+- format: tar.gz
+  format_overrides:
+  - goos: windows
+    format: zip
+  name_template: "{{.ProjectName}}-{{.Tag}}-{{.Os}}-{{.Arch}}"
+  wrap_in_directory: true
+  replacements:
+    macOS: darwin
+    Linux: linux
+    Windows: windows
+  files:
+  - README.md
+checksum:
+  name_template: 'checksums.txt'
+changelog:
+  sort: asc
+  filters:
+    exclude:
+    - '^docs:'
+    - '^test:'
