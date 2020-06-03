@@ -187,7 +187,7 @@ func (s *CTxByPrice) Pop() interface{} {
 
 type CrossTransactionWithSignatures struct {
 	Data     CtxDatas
-	Status   CtxStatus `json:"status" gencodec:"required"`
+	Status   CtxStatus `json:"status" gencodec:"required"` // default = pending
 	BlockNum uint64    `json:"blockNum" gencodec:"required"`
 
 	// caches
@@ -227,9 +227,11 @@ func NewCrossTransactionWithSignatures(ctx *CrossTransaction, num uint64) *Cross
 		Input:            ctx.Data.Input,
 	}
 
-	d.V = append(d.V, ctx.Data.V)
-	d.R = append(d.R, ctx.Data.R)
-	d.S = append(d.S, ctx.Data.S)
+	if ctx.Data.V != nil && ctx.Data.R != nil && ctx.Data.S != nil {
+		d.V = append(d.V, ctx.Data.V)
+		d.R = append(d.R, ctx.Data.R)
+		d.S = append(d.S, ctx.Data.S)
+	}
 
 	return &CrossTransactionWithSignatures{Data: d, BlockNum: num}
 }
@@ -275,25 +277,25 @@ func (cws *CrossTransactionWithSignatures) BlockHash() common.Hash {
 	return cws.Data.BlockHash
 }
 
+func (cws *CrossTransactionWithSignatures) SetStatus(status CtxStatus) {
+	cws.Status = status
+}
+
 func (cws *CrossTransactionWithSignatures) AddSignature(ctx *CrossTransaction) error {
 	if cws.Hash() != ctx.Hash() {
 		return ErrInvalidSign
 	}
 	cws.lock.Lock()
 	defer cws.lock.Unlock()
-	var exist bool
 	for _, r := range cws.Data.R {
 		if r.Cmp(ctx.Data.R) == 0 {
-			exist = true
+			return ErrDuplicateSign
 		}
 	}
-	if !exist {
-		cws.Data.V = append(cws.Data.V, ctx.Data.V)
-		cws.Data.R = append(cws.Data.R, ctx.Data.R)
-		cws.Data.S = append(cws.Data.S, ctx.Data.S)
-		return nil
-	}
-	return ErrDuplicateSign
+	cws.Data.V = append(cws.Data.V, ctx.Data.V)
+	cws.Data.R = append(cws.Data.R, ctx.Data.R)
+	cws.Data.S = append(cws.Data.S, ctx.Data.S)
+	return nil
 }
 func (cws *CrossTransactionWithSignatures) RemoveSignature(index int) {
 	cws.lock.Lock()

@@ -9,6 +9,7 @@ import (
 	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	"github.com/simplechain-org/go-simplechain/cross/trigger"
 	"github.com/simplechain-org/go-simplechain/cross/trigger/simpletrigger/executor"
+	"github.com/simplechain-org/go-simplechain/cross/trigger/simpletrigger/retriever"
 	"github.com/simplechain-org/go-simplechain/cross/trigger/simpletrigger/subscriber"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/log"
@@ -30,10 +31,10 @@ type Handler struct {
 	service    *CrossService
 	store      *CrossStore
 	pool       *CrossPool
-	validator  *CrossValidator
 	contract   common.Address
 	subscriber trigger.Subscriber
 	executor   trigger.Executor
+	retriever  trigger.ChainRetriever
 
 	quitSync       chan struct{}
 	crossMsgReader <-chan interface{} // Channel to read  cross-chain message
@@ -41,7 +42,6 @@ type Handler struct {
 
 	synchronising uint32 // Flag whether cross sync is running
 	synchronizeCh chan []*cc.CrossTransactionWithSignatures
-	pendingSync   uint32 // Flag whether pending sync is running
 
 	crossBlockCh  chan cc.CrossBlockEvent
 	crossBlockSub event.Subscription
@@ -76,11 +76,15 @@ func NewCrossHandler(chain cross.SimpleChain, service *CrossService, config cros
 		log:            log.New("X-module", "handler", "chainID", chain.ChainConfig().ChainID),
 	}
 
-	h.validator = NewCrossValidator(h.store, contract, chain.BlockChain(), config, chain.ChainConfig())
-	h.pool = NewCrossPool(h.store, h.validator, h.signHash, chain.BlockChain(), chain.ChainConfig())
+	{ //TODO: 将由chain本身提供这些组件
+		h.subscriber = subscriber.NewSimpleSubscriber(contract, chain.BlockChain())
+		h.executor, err = executor.NewSimpleExecutor(chain, config.Signer, contract, h.signHash)
+		h.retriever = retriever.NewSimpleRetriever(chain.BlockChain(), h.store, contract, config, chain.ChainConfig())
+	}
 
-	h.subscriber = subscriber.NewSimpleSubscriber(contract, chain.BlockChain())
-	h.executor, err = executor.NewSimpleExecutor(chain, config.Signer, contract, h.signHash)
+	h.store.RegisterChain(h.chainID)
+	h.pool = NewCrossPool(h.chainID, h.store, h.retriever, h.signHash, chain.BlockChain())
+
 	if err != nil {
 		return nil, err
 	}
@@ -151,6 +155,14 @@ func (h *Handler) handle(current cc.CrossBlockEvent) {
 		for _, err := range errs {
 			h.log.Warn("Add local ctx failed", "err", err)
 		}
+		// assemble signed local and add them to store with pending status
+		cws := make([]*cc.CrossTransactionWithSignatures, len(signed))
+		for i, ctx := range signed {
+			cws[i] = cc.NewCrossTransactionWithSignatures(ctx, current.Number.Uint64())
+		}
+		if err := h.store.Adds(h.chainID, cws, false); err != nil {
+			h.log.Warn("Store pending ctx failed", "err", err)
+		}
 		h.service.BroadcastCrossTx(signed, true)
 	}
 
@@ -179,17 +191,12 @@ func (h *Handler) handle(current cc.CrossBlockEvent) {
 	// handle confirmed finish
 	if finishes := current.ConfirmedFinish.Finishes; len(finishes) > 0 {
 		local = append(local, finishes...)
-		//transactions := make([]string, len(finishes))
-		//for i, finish := range finishes {
-		//	transactions[i] = finish.ID.String()
-		//}
-		//h.log.Info(" cross transaction finished", "transactions", transactions)
 	}
 
 	// handle anchor update
 	if updates := current.NewAnchor.ChainInfo; len(updates) > 0 {
 		for _, v := range updates {
-			if err := h.validator.UpdateAnchors(v); err != nil {
+			if err := h.retriever.UpdateAnchors(v); err != nil {
 				h.log.Info("UpdateAnchors failed", "err", err)
 			}
 		}
@@ -240,11 +247,11 @@ func (h *Handler) readCrossMessage() {
 		case v := <-h.crossMsgReader:
 			switch ev := v.(type) {
 			case cc.SignedCtxEvent:
-				cws := ev.Tws
+				cws := ev.Tx
 				if cws.DestinationId().Uint64() == h.pm.NetworkId() {
 					var invalidSigIndex []int
 					for i, ctx := range cws.Resolution() {
-						if h.validator.VerifySigner(ctx, ctx.ChainId(), ctx.ChainId()) != nil {
+						if h.retriever.VerifySigner(ctx, ctx.ChainId(), ctx.ChainId()) != nil {
 							invalidSigIndex = append(invalidSigIndex, i)
 						}
 					}
@@ -259,7 +266,7 @@ func (h *Handler) readCrossMessage() {
 						break
 					}
 
-					if err := h.validator.VerifyContract(cws); err != nil {
+					if err := h.retriever.VerifyContract(cws); err != nil {
 						h.log.Warn("invoking verify failed", "ctxID", cws.ID().String(), "error", err)
 						cross.Report(h.chain.ChainConfig().ChainID.Uint64(), "VerifyContract failed", "ctxID", cws.ID().String(), "error", err)
 						break
@@ -277,7 +284,7 @@ func (h *Handler) readCrossMessage() {
 }
 
 func (h *Handler) AddRemoteCtx(ctx *cc.CrossTransaction) error {
-	if err := h.validator.VerifyCtx(ctx); err != nil {
+	if err := h.retriever.VerifyCtx(ctx); err != nil {
 		return err
 	}
 	if err := h.pool.AddRemote(ctx); err != nil && err != cc.ErrDuplicateSign {
@@ -306,12 +313,11 @@ func (h *Handler) GetSyncPending(ids []common.Hash) []*cc.CrossTransaction {
 }
 
 func (h *Handler) SyncPending(ctxList []*cc.CrossTransaction) (lastNumber uint64) {
-	chainInvoke := NewChainInvoke(h.blockChain)
 	for _, ctx := range ctxList {
 		if err := h.AddRemoteCtx(ctx); err != nil {
 			h.log.Trace("SyncPending failed", "id", ctx.ID(), "err", err)
 		}
-		if num := chainInvoke.GetTransactionNumberOnChain(ctx); num > lastNumber {
+		if num := h.retriever.GetTransactionNumberOnChain(ctx); num > lastNumber {
 			lastNumber = num
 		}
 	}
@@ -349,14 +355,21 @@ func (h *Handler) SyncCrossTransaction(ctxList []*cc.CrossTransactionWithSignatu
 
 	var success int
 	for _, ctx := range ctxList {
-		syncList := sync(&localList, ctx)
-		if syncList != nil {
-			if err := h.store.Adds(h.chainID, syncList, true); err == nil {
-				success += len(syncList)
-			} else {
-				h.log.Warn("sync local ctx failed", "err", err)
+		if ctx.Status == cc.CtxStatusPending { // pending的交易不存store，放入交易池等待多签
+			for _, tx := range ctx.Resolution() {
+				h.pool.AddRemote(tx) // ignore errors
 			}
+			continue
 		}
+		syncList := sync(&localList, ctx) // 把同高度的ctx统一处理
+		if syncList == nil {
+			continue
+		}
+		if err := h.store.Adds(h.chainID, syncList, true); err != nil {
+			h.log.Warn("sync local ctx failed", "err", err)
+			continue
+		}
+		success += len(syncList)
 	}
 
 	// add remains

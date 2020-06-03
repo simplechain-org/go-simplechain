@@ -1,6 +1,7 @@
 package db
 
 import (
+	"fmt"
 	"math/big"
 	"math/rand"
 	"sync"
@@ -65,7 +66,7 @@ func TestIndexDB_ReadWrite(t *testing.T) {
 
 	testFunction1 := func(t *testing.T, db *indexDB) {
 		assert.NoError(t, db.Write(ctxList[0]))
-		assert.EqualValues(t, db.Count(q.Eq(StatusField, cc.CtxStatusWaiting)), 1)
+		assert.EqualValues(t, db.Count(q.Eq(StatusField, cc.CtxStatusPending)), 1)
 
 		assert.NoError(t, db.Write(ctxList[1]))
 		ctx, err := db.Read(ctxList[1].ID())
@@ -93,7 +94,7 @@ func TestIndexDB_ReadWrite(t *testing.T) {
 		db := NewIndexDB(big.NewInt(2), root, 10)
 
 		assert.NoError(t, db.Load(), "load occurs an error")
-		assert.Equal(t, 2, db.Count(q.Eq(StatusField, cc.CtxStatusWaiting)))
+		assert.Equal(t, 2, db.Count(q.Eq(StatusField, cc.CtxStatusPending)))
 		db.db.Drop(&CrossTransactionIndexed{})
 	}
 
@@ -117,7 +118,7 @@ func TestIndexDB_ReadWrite(t *testing.T) {
 			}
 		}()
 		wg.Wait()
-		assert.Equal(t, 40, db.Count(q.Eq(StatusField, cc.CtxStatusWaiting)))
+		assert.Equal(t, 40, db.Count(q.Eq(StatusField, cc.CtxStatusPending)))
 		count, err := db.db.Count(&CrossTransactionIndexed{})
 		assert.NoError(t, err)
 		assert.Equal(t, 40, count)
@@ -126,13 +127,69 @@ func TestIndexDB_ReadWrite(t *testing.T) {
 	root.Close()
 }
 
+func TestIndexDB_Update(t *testing.T) {
+	cws := generateCtx(1)[0]
+	ctxID := cws.ID()
+	cws.Status = cc.CtxStatusPending
+	rootDB := setupIndexDB(t)
+	defer rootDB.Close()
+	db := NewIndexDB(big.NewInt(1), rootDB, 20)
+	db.Clean()
+
+	Update := func(store CtxDB, cws *cc.CrossTransactionWithSignatures) error {
+		return store.Update(cws.ID(), func(ctx *CrossTransactionIndexed) {
+			ctx.Status = uint8(cws.Status)
+			ctx.BlockNum = cws.BlockNum
+			ctx.From = cws.Data.From
+			ctx.To = cws.Data.To
+			ctx.BlockHash = cws.Data.BlockHash
+			ctx.DestinationId = cws.Data.DestinationId
+			ctx.Value = cws.Data.Value
+			ctx.DestinationValue = cws.Data.DestinationValue
+			ctx.Input = cws.Data.Input
+			ctx.V = cws.Data.V
+			ctx.R = cws.Data.R
+			ctx.S = cws.Data.S
+		})
+	}
+
+	assert.NoError(t, db.Writes([]*cc.CrossTransactionWithSignatures{cws}, false))
+	cws.Status = cc.CtxStatusFinishing
+	assert.NoError(t, Update(db, cws))
+	{
+		var ctx CrossTransactionIndexed
+		db.db.One(CtxIdIndex, ctxID, &ctx)
+		fmt.Println(ctx.Status)
+	}
+	assert.NoError(t, db.Update(ctxID, func(ctx *CrossTransactionIndexed) {
+		ctx.Status = uint8(cws.Status)
+		//ctx.BlockNum = cws.BlockNum
+		//ctx.From = cws.Data.From
+		//ctx.To = cws.Data.To
+		//ctx.BlockHash = cws.Data.BlockHash
+		//ctx.DestinationId = cws.Data.DestinationId
+		//ctx.Value = cws.Data.Value
+		//ctx.DestinationValue = cws.Data.DestinationValue
+		//ctx.Input = cws.Data.Input
+		//ctx.V = cws.Data.V
+		//ctx.R = cws.Data.R
+		//ctx.S = cws.Data.S
+	}))
+	{
+		var ctx CrossTransactionIndexed
+		db.db.One(CtxIdIndex, ctxID, &ctx)
+		fmt.Println(ctx.Status)
+	}
+
+}
+
 func TestIndexDB_Query(t *testing.T) {
 	ctxList := generateCtx(100)
 	rootDB := setupIndexDB(t)
 	defer rootDB.Close()
 
 	db := NewIndexDB(big.NewInt(1), rootDB, 20)
-	db.db.Drop(&CrossTransactionIndexed{})
+	db.Clean()
 	for _, ctx := range ctxList {
 		assert.NoError(t, db.Write(ctx))
 	}
@@ -171,7 +228,7 @@ func TestIndexDB_Query(t *testing.T) {
 
 	// query DestinationValue
 	{
-		assert.NotNil(t, db.Query(0, 0, []FieldName{PriceIndex}, false, q.Eq(StatusField, cc.CtxStatusWaiting), q.Gte(DestinationValue, ctxList[10].Data.DestinationValue)))
+		assert.NotNil(t, db.Query(0, 0, []FieldName{PriceIndex}, false, q.Eq(StatusField, cc.CtxStatusPending), q.Gte(DestinationValue, ctxList[10].Data.DestinationValue)))
 	}
 
 	{

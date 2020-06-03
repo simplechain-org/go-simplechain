@@ -5,25 +5,30 @@ import (
 	"sync"
 	"time"
 
+	"github.com/asdine/storm/v3"
+	lru "github.com/hashicorp/golang-lru"
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/cross"
 	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	crossdb "github.com/simplechain-org/go-simplechain/cross/database"
+	"github.com/simplechain-org/go-simplechain/cross/trigger"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/log"
-	"github.com/simplechain-org/go-simplechain/params"
-
-	"github.com/asdine/storm/v3"
-	lru "github.com/hashicorp/golang-lru"
 )
 
-type CrossPool struct {
-	chain       cross.BlockChain
-	chainConfig *params.ChainConfig
-	chainID     *big.Int
+type store interface {
+	GetStore(chainID *big.Int) (crossdb.CtxDB, error)
+	Add(ctx *cc.CrossTransactionWithSignatures) error
+	Get(chainID *big.Int, ctxID common.Hash) *cc.CrossTransactionWithSignatures
+	Update(ctx *cc.CrossTransactionWithSignatures) error
+}
 
-	store        *CrossStore
-	validator    *CrossValidator
+type CrossPool struct {
+	chain   cross.BlockChain
+	chainID *big.Int
+
+	store        store
+	retriever    trigger.ChainRetriever
 	pending      *crossdb.CtxSortedByBlockNum //带有local签名
 	queued       *crossdb.CtxSortedByBlockNum //网络其他节点签名
 	pendingCache *lru.Cache                   // cache signed pending ctx
@@ -41,28 +46,41 @@ type CrossPool struct {
 	logger log.Logger
 }
 
-func NewCrossPool(store *CrossStore, validator *CrossValidator, signHash cc.SignHash, chain cross.BlockChain, config *params.ChainConfig) *CrossPool {
+func NewCrossPool(chainID *big.Int, store store, retriever trigger.ChainRetriever, signHash cc.SignHash, chain cross.BlockChain) *CrossPool {
 	pendingCache, _ := lru.New(signedPendingSize)
+	logger := log.New("X-module", "pool")
 
-	return &CrossPool{
+	pool := &CrossPool{
 		chain:        chain,
-		chainConfig:  config,
-		chainID:      config.ChainID,
+		chainID:      chainID,
 		store:        store,
-		validator:    validator,
+		retriever:    retriever,
 		pending:      crossdb.NewCtxSortedMap(),
 		queued:       crossdb.NewCtxSortedMap(),
 		pendingCache: pendingCache,
-		signer:       cc.MakeCtxSigner(config),
+		signer:       cc.MakeCtxSigner(chainID),
 		signHash:     signHash,
 		stopCh:       make(chan struct{}),
-		logger:       log.New("X-module", "pool"),
+		logger:       logger,
 	}
+
+	if err := pool.load(); err != nil {
+		logger.Warn("Load pending transaction failed", "error", err)
+	}
+
+	return pool
 }
 
-func (pool *CrossPool) load() {
+func (pool *CrossPool) load() error {
 	//TODO: load pending transactions
-	//pool.store.localStore.Find(crossdb.StatusField, cc.CtxStatusPending)
+	store, err := pool.store.GetStore(pool.chainID)
+	if err != nil {
+		return err
+	}
+	for _, pendingTX := range store.Find(crossdb.StatusField, cc.CtxStatusPending) {
+		pool.pending.Put(pendingTX)
+	}
+	return nil
 }
 
 func (pool *CrossPool) loop() {
@@ -76,11 +94,15 @@ func (pool *CrossPool) loop() {
 			return
 
 		case <-expire.C:
+			expireNum := pool.retriever.ExpireNumber()
+			if expireNum < 0 { //never expired
+				break
+			}
 			var removed cc.CtxIDs
 			currentNum := pool.chain.CurrentBlock().NumberU64()
-			if currentNum > expireNumber {
-				removed = append(removed, pool.pending.RemoveUnderNum(currentNum-expireNumber)...)
-				removed = append(removed, pool.queued.RemoveUnderNum(currentNum-expireNumber)...)
+			if currentNum > uint64(expireNum) {
+				removed = append(removed, pool.pending.RemoveUnderNum(currentNum-uint64(expireNum))...)
+				removed = append(removed, pool.queued.RemoveUnderNum(currentNum-uint64(expireNum))...)
 			}
 			if len(removed) > 0 {
 				cross.Report(pool.chainID.Uint64(), "txs expired", "ids", removed.String())
@@ -97,7 +119,7 @@ func (pool *CrossPool) Stop() {
 
 func (pool *CrossPool) AddLocals(txs ...*cc.CrossTransaction) (signed []*cc.CrossTransaction, errs []error) {
 	for _, ctx := range txs {
-		if err := pool.validator.VerifyReorg(ctx); err != nil {
+		if err := pool.retriever.VerifyReorg(ctx); err != nil {
 			errs = append(errs, err)
 			continue
 		}
@@ -150,7 +172,7 @@ func (pool *CrossPool) addTx(ctx *cc.CrossTransaction, local bool) error {
 	id := ctx.ID()
 
 	checkAndCommit := func(id common.Hash) error {
-		if cws := pool.pending.Get(id); cws != nil && cws.SignaturesLength() >= pool.validator.requireSignature {
+		if cws := pool.pending.Get(id); cws != nil && cws.SignaturesLength() >= pool.retriever.RequireSignatures() {
 			pool.Commit(cws)
 		}
 		return nil
@@ -166,7 +188,7 @@ func (pool *CrossPool) addTx(ctx *cc.CrossTransaction, local bool) error {
 
 	// add new local ctx, move queued signatures of this ctx to pending
 	if local {
-		pendingRws := cc.NewCrossTransactionWithSignatures(ctx, NewChainInvoke(pool.chain).GetTransactionNumberOnChain(ctx))
+		pendingRws := cc.NewCrossTransactionWithSignatures(ctx, pool.retriever.GetTransactionNumberOnChain(ctx))
 		// promote queued ctx to pending, update to number received by local
 		// move cws from queued to pending
 		if queuedRws := pool.queued.Get(id); queuedRws != nil {
@@ -186,7 +208,7 @@ func (pool *CrossPool) addTx(ctx *cc.CrossTransaction, local bool) error {
 			return err
 		}
 	} else {
-		pool.queued.Put(cc.NewCrossTransactionWithSignatures(ctx, NewChainInvoke(pool.chain).GetTransactionNumberOnChain(ctx)))
+		pool.queued.Put(cc.NewCrossTransactionWithSignatures(ctx, pool.retriever.GetTransactionNumberOnChain(ctx)))
 	}
 	return nil
 }
@@ -197,22 +219,38 @@ func (pool *CrossPool) Commit(cws *cc.CrossTransactionWithSignatures) {
 	go func() {
 		defer pool.wg.Done()
 		pool.commitFeed.Send(cc.SignedCtxEvent{
-			Tws: cws,
+			Tx: cws,
 			CallBack: func(cws *cc.CrossTransactionWithSignatures, invalidSigIndex ...int) {
 				if invalidSigIndex == nil { // check signer successfully, store ctx
-					if err := pool.store.Add(cws); err != nil && err != storm.ErrAlreadyExists {
-						pool.logger.Warn("commit local ctx failed", "txID", cws.ID(), "err", err)
-					}
-
-				} else { // check failed, rollback to the pending
-					pool.logger.Info("pending rollback for invalid signature", "ctxID", cws.ID(), "invalidSigIndex", invalidSigIndex)
-					for _, invalid := range invalidSigIndex {
-						cws.RemoveSignature(invalid)
-					}
-					pool.pending.Put(cws)
+					pool.Store(cws)
+				} else { // check failed, rollback
+					pool.Rollback(cws, invalidSigIndex)
 				}
 			}})
 	}()
+}
+
+func (pool *CrossPool) Store(cws *cc.CrossTransactionWithSignatures) {
+	cws.SetStatus(cc.CtxStatusWaiting)
+	// if pending exist, update to waiting
+	if pendingTx := pool.store.Get(pool.chainID, cws.ID()); pendingTx != nil && pendingTx.Status == cc.CtxStatusPending {
+		if err := pool.store.Update(cws); err != nil {
+			pool.logger.Warn("Store local ctx failed", "txID", cws.ID(), "err", err)
+		}
+		return
+	}
+	if err := pool.store.Add(cws); err != nil && err != storm.ErrAlreadyExists {
+		pool.logger.Warn("Store local ctx failed", "txID", cws.ID(), "err", err)
+	}
+}
+
+func (pool *CrossPool) Rollback(cws *cc.CrossTransactionWithSignatures, invalidSigIndex []int) {
+	pool.logger.Warn("pending rollback for invalid signature", "ctxID", cws.ID(), "invalidSigIndex", invalidSigIndex)
+	for _, invalid := range invalidSigIndex {
+		cws.RemoveSignature(invalid)
+	}
+	pool.pending.Put(cws)
+	cross.Report(pool.chainID.Uint64(), "pending rollback for invalid signature", "ctxID", cws.ID(), "invalidSigIndex", invalidSigIndex)
 }
 
 func (pool *CrossPool) Stats() (int, int) {
@@ -222,7 +260,7 @@ func (pool *CrossPool) Stats() (int, int) {
 func (pool *CrossPool) Pending(startNumber, lastNumber uint64, limit int) []*cc.CrossTransactionWithSignatures {
 	var pending []*cc.CrossTransactionWithSignatures
 	pool.pending.Map(func(ctx *cc.CrossTransactionWithSignatures) bool {
-		if ctx.BlockNum+expireNumber <= lastNumber { // 过期pending不取
+		if expireNum := pool.retriever.ExpireNumber(); expireNum >= 0 && ctx.BlockNum+uint64(expireNum) <= lastNumber { // 过期pending不取
 			return false
 		}
 		if ctx.BlockNum <= startNumber { // 低于起始高度的pending不取

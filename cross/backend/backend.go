@@ -345,9 +345,6 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 			break
 		}
 
-		atomic.StoreUint32(&h.pendingSync, 1)
-		defer atomic.StoreUint32(&h.pendingSync, 0)
-
 		var ctxList []*cc.CrossTransaction
 		for _, b := range resp.Data {
 			var ctx cc.CrossTransaction
@@ -364,8 +361,6 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 		synced := h.SyncPending(ctxList)
 		p.Log().Info("sync pending cross transactions", "total", len(ctxList))
 		pending := h.Pending(synced, defaultMaxSyncSize)
-
-		atomic.StoreUint32(&h.pendingSync, 0)
 
 		if len(pending) > 0 {
 			// send next sync pending request
@@ -385,7 +380,7 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 		}
 
 		err := h.AddRemoteCtx(ctx)
-		if err == ErrExpiredCtx || err == ErrInvalidSignCtx {
+		if err == cross.ErrExpiredCtx || err == cross.ErrInvalidSignCtx {
 			break
 		}
 		srv.BroadcastCrossTx([]*cc.CrossTransaction{ctx}, false)

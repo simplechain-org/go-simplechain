@@ -7,104 +7,56 @@ import (
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/consensus"
 	"github.com/simplechain-org/go-simplechain/core"
-	"github.com/simplechain-org/go-simplechain/core/rawdb"
 	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"
-	"github.com/simplechain-org/go-simplechain/cross"
 	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	db "github.com/simplechain-org/go-simplechain/cross/database"
 	"github.com/simplechain-org/go-simplechain/cross/trigger"
-	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/rlp"
 
 	"github.com/asdine/storm/v3/q"
+	"github.com/stretchr/testify/assert"
 )
 
-func TestNewCtxStoreAdd(t *testing.T) {
-	fromKey, _ := crypto.GenerateKey()
-	fromAddr := crypto.PubkeyToAddress(fromKey.PublicKey)
-	toKey, _ := crypto.GenerateKey()
-	toAddr := crypto.PubkeyToAddress(toKey.PublicKey)
-	signHash := func(hash []byte) ([]byte, error) {
-		return crypto.Sign(hash, fromKey)
-	}
-	chainID := big.NewInt(18)
-
-	signer := cc.NewEIP155CtxSigner(chainID)
-	// ctx signed by anchor1
-	tx1, err := cc.SignCtx(cc.NewCrossTransaction(big.NewInt(1e18),
-		big.NewInt(2e18),
-		big.NewInt(19),
-		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
-		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
-		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
-		fromAddr,
-		toAddr,
-		nil),
-		signer, signHash)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	signHash2 := func(hash []byte) ([]byte, error) {
-		key, _ := crypto.GenerateKey()
-		return crypto.Sign(hash, key)
-	}
-
-	statedb, _ := state.New(common.Hash{}, state.NewDatabase(rawdb.NewMemoryDatabase()))
-	blockchain := &testBlockChain{statedb, 1000000, new(event.Feed)}
-
+func TestCrossStore(t *testing.T) {
+	chainID := params.TestChainConfig.ChainID
 	ctxStore, err := setupCtxStore(chainID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctxPool := NewCrossPool(ctxStore, NewCrossValidator(ctxStore, common.Address{}, blockchain, cross.Config{}, params.TestChainConfig), signHash2, blockchain, params.TestChainConfig)
-	signedCh := make(chan cc.SignedCtxEvent, 1) // receive signed ctx
-	signedSub := ctxPool.SubscribeSignedCtxEvent(signedCh)
-	defer signedSub.Unsubscribe()
+	assert.NoError(t, err)
+	defer ctxStore.Close()
 
-	// ctx signed by anchor2
-	tx2, err := cc.SignCtx(cc.NewCrossTransaction(big.NewInt(1e18),
-		big.NewInt(2e18),
-		big.NewInt(19),
-		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
-		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
-		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
-		fromAddr,
-		toAddr,
-		nil),
-		signer, signHash2)
-	if err != nil {
-		t.Fatal(err)
+	pool := newPoolTester(ctxStore)
+	ev := <-pool.Add(t)
+	ev.CallBack(ev.Tx)
+
+	assert.Equal(t, 1, ctxStore.stores[chainID.Uint64()].Count(q.Eq(db.StatusField, cc.CtxStatusWaiting)))
+
+	// test get
+	{
+		ctx := ev.Tx
+		assert.NotNil(t, ctxStore.Get(chainID, ctx.ID()))
 	}
 
-	if err := ctxPool.AddRemote(tx1); err != nil {
-		t.Fatal(err)
-	}
-	if err := ctxPool.AddRemote(tx2); err != nil {
-		t.Fatal(err)
-	}
-	if _, errs := ctxPool.AddLocals(cc.NewCrossTransaction(big.NewInt(1e18),
-		big.NewInt(2e18),
-		big.NewInt(19),
-		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
-		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
-		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
-		fromAddr,
-		toAddr,
-		nil)); errs != nil {
-		t.Fatal(err)
-	}
-	ev := <-signedCh
-	ev.CallBack(ev.Tws)
+	// test update
+	{
+		ctx := ev.Tx
+		ctx.SetStatus(cc.CtxStatusWaiting)
+		ctx.BlockNum = 88
+		ctx.Data.BlockHash = common.BigToHash(big.NewInt(88))
+		ctx.Data.DestinationValue = big.NewInt(99)
+		ctx.Data.V = ctx.Data.V[1:]
+		ctx.Data.R = ctx.Data.R[1:]
+		ctx.Data.S = ctx.Data.S[1:]
+		assert.NoError(t, ctxStore.Update(ctx))
 
-	if ctxStore.stores[chainID.Uint64()].Count(q.Eq(db.StatusField, cc.CtxStatusWaiting)) != 1 {
-		t.Errorf("add failed,stats:%d (!= %d)", ctxStore.stores[chainID.Uint64()].Count(), 1)
+		tx := ctxStore.Get(chainID, ctx.ID())
+		assert.Equal(t, uint64(88), tx.BlockNum)
+		assert.Equal(t, common.BigToHash(big.NewInt(88)), tx.Data.BlockHash)
+		assert.Equal(t, big.NewInt(99), tx.Data.DestinationValue)
+		assert.Equal(t, 1, tx.SignaturesLength())
 	}
 
-	ctxStore.Close()
 }
 
 func setupCtxStore(chainID *big.Int) (*CrossStore, error) {

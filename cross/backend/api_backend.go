@@ -30,12 +30,12 @@ func (h *Handler) GetByCtxID(id common.Hash) *cc.CrossTransactionWithSignatures 
 	return store.One(crossdb.CtxIdIndex, id)
 }
 
-func (h *Handler) GetByBlockNumber(number uint64) []*cc.CrossTransactionWithSignatures {
+func (h *Handler) GetByBlockNumber(begin, end uint64) []*cc.CrossTransactionWithSignatures {
 	if !h.pm.CanAcceptTxs() {
 		return nil
 	}
 	store, _ := h.store.GetStore(h.chainID)
-	return store.Find(crossdb.BlockNumField, number)
+	return store.RangeByNumber(begin, end, 0)
 }
 
 func (h *Handler) FindByTxHash(hash common.Hash) *cc.CrossTransactionWithSignatures {
@@ -102,7 +102,7 @@ func (h *Handler) QueryLocalBySenderAndPage(from common.Address, pageSize, start
 		//TODO: 适配前端，key使用remoteID
 		locals[h.RemoteID()] = append(locals[h.RemoteID()], &cc.OwnerCrossTransactionWithSignatures{
 			Cws:  v,
-			Time: NewChainInvoke(h.blockChain).GetTransactionTimeOnChain(v),
+			Time: h.retriever.GetTransactionTimeOnChain(v),
 		})
 	}
 
@@ -127,7 +127,7 @@ func (h *Handler) QueryRemoteByTakerAndPage(to common.Address, pageSize, startPa
 		//TODO: 适配前端，key使用remoteID
 		locals[h.RemoteID()] = append(locals[h.RemoteID()], &cc.OwnerCrossTransactionWithSignatures{
 			Cws:  v,
-			Time: NewChainInvoke(h.blockChain).GetTransactionTimeOnChain(v),
+			Time: h.retriever.GetTransactionTimeOnChain(v),
 		})
 	}
 

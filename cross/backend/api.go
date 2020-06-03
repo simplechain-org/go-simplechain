@@ -76,14 +76,14 @@ func (s *PrivateCrossAdminAPI) importCtx(local, remote *Handler, ctxWithSignsSAr
 		return err
 	}
 
-	if ctx.SignaturesLength() < local.validator.requireSignature {
-		return fmt.Errorf("invalid signture length ctx: %d,want: %d", ctx.SignaturesLength(), local.validator.requireSignature)
+	if ctx.SignaturesLength() < local.retriever.RequireSignatures() {
+		return fmt.Errorf("invalid signture length ctx: %d,want: %d", ctx.SignaturesLength(), local.retriever.RequireSignatures())
 	}
 
 	chainId := ctx.ChainId()
 	var invalidSigIndex []int
 	for i, ctx := range ctx.Resolution() {
-		if remote.validator.VerifySigner(ctx, chainId, chainId) != nil {
+		if remote.retriever.VerifySigner(ctx, chainId, chainId) != nil {
 			invalidSigIndex = append(invalidSigIndex, i)
 		}
 	}
@@ -225,8 +225,8 @@ func (s *PublicCrossChainAPI) CtxGet(ctx context.Context, id common.Hash) *RPCCr
 	return newRPCCrossTransaction(s.handler.GetByCtxID(id))
 }
 
-func (s *PublicCrossChainAPI) CtxGetByNumber(ctx context.Context, number hexutil.Uint64) map[cc.CtxStatus][]common.Hash {
-	ctxList := s.handler.GetByBlockNumber(uint64(number))
+func (s *PublicCrossChainAPI) CtxGetByNumber(ctx context.Context, begin, end hexutil.Uint64) map[cc.CtxStatus][]common.Hash {
+	ctxList := s.handler.GetByBlockNumber(uint64(begin), uint64(end))
 	result := make(map[cc.CtxStatus][]common.Hash)
 	for _, tx := range ctxList {
 		result[tx.Status] = append(result[tx.Status], tx.ID())

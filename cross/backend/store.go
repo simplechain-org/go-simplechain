@@ -17,7 +17,6 @@ import (
 
 const (
 	expireInterval   = time.Second * 60 * 12
-	expireNumber     = 180 //pending rtx expired after block num
 	defaultCacheSize = 4096
 )
 
@@ -53,9 +52,9 @@ func (s *CrossStore) RegisterChain(chainID *big.Int) {
 	defer s.mu.Unlock()
 	if s.stores[chainID.Uint64()] == nil {
 		s.stores[chainID.Uint64()] = crossdb.NewIndexDB(chainID, s.db, defaultCacheSize)
+		s.logger.New("remote", chainID)
+		s.logger.Info("Register chain successfully")
 	}
-	s.logger.New("remote", chainID)
-	s.logger.Info("Register chain successfully")
 }
 
 func (s *CrossStore) Add(ctx *cc.CrossTransactionWithSignatures) error {
@@ -101,6 +100,52 @@ func (s *CrossStore) GetStore(chainID *big.Int) (crossdb.CtxDB, error) {
 	return s.stores[chainID.Uint64()], nil
 }
 
+func (s *CrossStore) Update(cws *cc.CrossTransactionWithSignatures) error {
+	store, err := s.GetStore(cws.ChainId())
+	if err != nil {
+		return err
+	}
+	return store.Update(cws.ID(), func(ctx *crossdb.CrossTransactionIndexed) {
+		ctx.Status = uint8(cws.Status)
+		ctx.BlockNum = cws.BlockNum
+		ctx.From = cws.Data.From
+		ctx.To = cws.Data.To
+		ctx.BlockHash = cws.Data.BlockHash
+		ctx.DestinationId = cws.Data.DestinationId
+		ctx.Value = cws.Data.Value
+		ctx.DestinationValue = cws.Data.DestinationValue
+		ctx.Input = cws.Data.Input
+		ctx.V = cws.Data.V
+		ctx.R = cws.Data.R
+		ctx.S = cws.Data.S
+	})
+}
+
+func (s *CrossStore) Updates(chainID *big.Int, txmList []*cc.CrossTransactionModifier) error {
+	store, err := s.GetStore(chainID)
+	if err != nil {
+		return err
+	}
+
+	var (
+		ids      []cc.CtxID
+		updaters []func(ctx *crossdb.CrossTransactionIndexed)
+	)
+	for _, txm := range txmList {
+		ids = append(ids, txm.ID)
+		updaters = append(updaters, func(ctx *crossdb.CrossTransactionIndexed) {
+			if txm.AtBlockNumber == 0 { // modify from remote or reorg logs
+				ctx.Status = uint8(txm.Status)
+			}
+			if txm.AtBlockNumber >= ctx.BlockNum {
+				ctx.Status = uint8(txm.Status)
+				ctx.BlockNum = txm.AtBlockNumber
+			}
+		})
+	}
+	return store.Updates(ids, updaters)
+}
+
 func (s *CrossStore) Height(chainID *big.Int) uint64 {
 	store, err := s.GetStore(chainID)
 	if err != nil {
@@ -133,29 +178,4 @@ func (s *CrossStore) Stats(chainID *big.Int) map[uint64]map[cc.CtxStatus]int {
 		results[chain] = stats(store)
 	}
 	return results
-}
-
-func (s *CrossStore) Updates(chainID *big.Int, txmList []*cc.CrossTransactionModifier) error {
-	store, err := s.GetStore(chainID)
-	if err != nil {
-		return err
-	}
-
-	var (
-		ids      []cc.CtxID
-		updaters []func(ctx *crossdb.CrossTransactionIndexed)
-	)
-	for _, txm := range txmList {
-		ids = append(ids, txm.ID)
-		updaters = append(updaters, func(ctx *crossdb.CrossTransactionIndexed) {
-			if txm.AtBlockNumber == 0 { // modify from remote or reorg logs
-				ctx.Status = uint8(txm.Status)
-			}
-			if txm.AtBlockNumber >= ctx.BlockNum {
-				ctx.Status = uint8(txm.Status)
-				ctx.BlockNum = txm.AtBlockNumber
-			}
-		})
-	}
-	return store.Updates(ids, updaters)
 }

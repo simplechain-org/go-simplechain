@@ -10,6 +10,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/log"
 
 	"github.com/asdine/storm/v3"
+	"github.com/asdine/storm/v3/index"
 	"github.com/asdine/storm/v3/q"
 )
 
@@ -110,9 +111,10 @@ func (d *indexDB) Writes(ctxList []*cc.CrossTransactionWithSignatures, replaceab
 
 		case !replaceable:
 			continue
-		case replaceable && ctx.BlockNum > old.BlockNum:
+		case replaceable && (ctx.BlockNum > old.BlockNum || old.Status == uint8(cc.CtxStatusPending)):
 			persist.PK = old.PK
 			err = tx.Update(persist)
+
 		}
 		if err != nil {
 			return err
@@ -239,9 +241,15 @@ func (d *indexDB) Query(pageSize int, startPage int, orderBy []FieldName, revers
 	return results
 }
 
-func (d *indexDB) RangeByNumber(begin, end uint64, pageSize int) []*cc.CrossTransactionWithSignatures {
-	var ctxs []*CrossTransactionIndexed
-	d.db.Range(BlockNumField, begin, end, &ctxs, storm.Limit(pageSize))
+func (d *indexDB) RangeByNumber(begin, end uint64, limit int) []*cc.CrossTransactionWithSignatures {
+	var (
+		ctxs    []*CrossTransactionIndexed
+		options []func(*index.Options)
+	)
+	if limit > 0 {
+		options = append(options, storm.Limit(limit))
+	}
+	d.db.Range(BlockNumField, begin, end, &ctxs, options...)
 	if ctxs == nil {
 		return nil
 	}

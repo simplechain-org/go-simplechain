@@ -7,7 +7,6 @@ import (
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/crypto/sha3"
-	"github.com/simplechain-org/go-simplechain/params"
 )
 
 var big8 = big.NewInt(8)
@@ -20,8 +19,8 @@ type ctxSigCache struct {
 }
 
 // MakeSigner returns a Signer based on the given chain config and block number.
-func MakeCtxSigner(config *params.ChainConfig) CtxSigner {
-	return NewEIP155CtxSigner(config.ChainID)
+func MakeCtxSigner(chainID *big.Int) CtxSigner {
+	return NewEIP155CtxSigner(chainID)
 }
 
 // SignTx signs the transaction using the given signer and private key

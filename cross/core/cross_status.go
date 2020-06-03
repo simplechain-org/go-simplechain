@@ -3,8 +3,10 @@ package core
 type CtxStatus uint8
 
 const (
+	// unsigned transaction
+	CtxStatusPending CtxStatus = iota
 	// CtxStatusWaiting is the status code of a rtx transaction if waiting for orders.
-	CtxStatusWaiting CtxStatus = iota
+	CtxStatusWaiting
 	// CtxStatusExecuting is the status code of a rtx transaction if taker executing.
 	CtxStatusExecuting
 	// CtxStatusExecuted is the status code of a rtx transaction if taker confirmed.
@@ -13,8 +15,6 @@ const (
 	CtxStatusFinishing
 	// CtxStatusFinished is the status code of a rtx transaction if make finish confirmed.
 	CtxStatusFinished
-	// unsigned transaction
-	CtxStatusPending
 )
 
 /**
@@ -36,12 +36,12 @@ const (
 */
 
 var ctxStatusToString = map[CtxStatus]string{
+	CtxStatusPending:   "pending",
 	CtxStatusWaiting:   "waiting",
 	CtxStatusExecuting: "executing",
 	CtxStatusExecuted:  "executed",
 	CtxStatusFinishing: "finishing",
 	CtxStatusFinished:  "finished",
-	CtxStatusPending:   "pending",
 }
 
 func (s CtxStatus) String() string {
