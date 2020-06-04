@@ -14,6 +14,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/cross"
 	cc "github.com/simplechain-org/go-simplechain/cross/core"
+	"github.com/simplechain-org/go-simplechain/eth"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/params"
 )
@@ -142,6 +143,9 @@ func (exe *SimpleExecutor) createTransaction(rws *cc.ReceptTransaction) (*TranPa
 	gasPrice, err := exe.gpo.SuggestPrice(context.Background())
 	if err != nil {
 		return nil, err
+	}
+	if gasPrice.Cmp(eth.DefaultConfig.Miner.GasPrice) < 0 {
+		gasPrice = eth.DefaultConfig.Miner.GasPrice
 	}
 	data, err := rws.ConstructData(exe.contractABI)
 	if err != nil {
