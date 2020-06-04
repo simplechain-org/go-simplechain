@@ -69,6 +69,7 @@ func maker() {
 	to := common.HexToAddress(*contract)
 	gas := hexutil.Uint64(*gaslimitVar)
 	value := hexutil.Big(*new(big.Int).SetUint64(*value))
+	price := hexutil.Big(*big.NewInt(1e9))
 
 	abi, err := abi.JSON(bytes.NewReader(data))
 	if err != nil {
@@ -92,6 +93,7 @@ func maker() {
 			From:  from,
 			To:    &to,
 			Gas:   &gas,
+			GasPrice:&price,
 			Value: &value,
 			Input: &input,
 		}); err != nil {

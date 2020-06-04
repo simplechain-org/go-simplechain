@@ -90,6 +90,7 @@ func taker() {
 	//在主链上接单就要填写主链上的合约地址
 	to := common.HexToAddress(*contract)
 	gas := hexutil.Uint64(*gaslimitVar)
+	price := hexutil.Big(*big.NewInt(1e9))
 
 	client, err := rpc.Dial(*rawurlVar)
 	if err != nil {
@@ -156,6 +157,7 @@ func taker() {
 					From:  from,
 					To:    &to,
 					Gas:   &gas,
+					GasPrice:&price,
 					Value: v.DestinationValue,
 					Input: &input,
 				}); err != nil {
