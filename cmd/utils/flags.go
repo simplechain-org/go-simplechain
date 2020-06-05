@@ -21,7 +21,6 @@ import (
 	"crypto/ecdsa"
 	"errors"
 	"fmt"
-	"github.com/simplechain-org/go-simplechain/cross/trigger/simpletrigger/subscriber"
 	"io"
 	"io/ioutil"
 	"math/big"
@@ -883,7 +882,8 @@ var (
 	}
 	ConfirmDepthFlag = cli.IntFlag{
 		Name: "anchor.confirmdepth",
-		Usage: "anchor's confirm block depth(default: 12)",
+		Usage: "anchor's confirm block depth",
+		Value: 12,
 	}
 )
 
