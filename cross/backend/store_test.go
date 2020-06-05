@@ -27,7 +27,11 @@ func TestCrossStore(t *testing.T) {
 	defer ctxStore.Close()
 
 	pool := newPoolTester(ctxStore)
-	ev := <-pool.Add(t)
+	signedCh := make(chan cc.SignedCtxEvent, 1) // receive signed ctx
+	pool.SubscribeSignedCtxEvent(signedCh)
+	pool.add(t)
+
+	ev := <-signedCh
 	ev.CallBack(ev.Tx)
 
 	assert.Equal(t, 1, ctxStore.stores[chainID.Uint64()].Count(q.Eq(db.StatusField, cc.CtxStatusWaiting)))

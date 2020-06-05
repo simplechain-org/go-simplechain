@@ -163,17 +163,17 @@ func TestIndexDB_Update(t *testing.T) {
 	}
 	assert.NoError(t, db.Update(ctxID, func(ctx *CrossTransactionIndexed) {
 		ctx.Status = uint8(cws.Status)
-		//ctx.BlockNum = cws.BlockNum
-		//ctx.From = cws.Data.From
-		//ctx.To = cws.Data.To
-		//ctx.BlockHash = cws.Data.BlockHash
-		//ctx.DestinationId = cws.Data.DestinationId
-		//ctx.Value = cws.Data.Value
-		//ctx.DestinationValue = cws.Data.DestinationValue
-		//ctx.Input = cws.Data.Input
-		//ctx.V = cws.Data.V
-		//ctx.R = cws.Data.R
-		//ctx.S = cws.Data.S
+		ctx.BlockNum = cws.BlockNum
+		ctx.From = cws.Data.From
+		ctx.To = cws.Data.To
+		ctx.BlockHash = cws.Data.BlockHash
+		ctx.DestinationId = cws.Data.DestinationId
+		ctx.Value = cws.Data.Value
+		ctx.DestinationValue = cws.Data.DestinationValue
+		ctx.Input = cws.Data.Input
+		ctx.V = cws.Data.V
+		ctx.R = cws.Data.R
+		ctx.S = cws.Data.S
 	}))
 	{
 		var ctx CrossTransactionIndexed
@@ -235,4 +235,77 @@ func TestIndexDB_Query(t *testing.T) {
 		assert.NotNil(t, db.Query(0, 0, nil, false, q.Eq(FromField, common.BigToAddress(big.NewInt(10)))))
 	}
 
+}
+
+func TestIndexDB_Writes(t *testing.T) {
+	ctxList := generateCtx(10)
+	rootDB := setupIndexDB(t)
+	defer rootDB.Close()
+
+	db := NewIndexDB(big.NewInt(1), rootDB, 20)
+	db.Clean()
+
+	assert.NoError(t, db.Writes(ctxList, false))
+	assert.Equal(t, 10, db.Count())
+
+	// replace to waiting
+	for _, ctx := range ctxList[0:6] {
+		ctx.Status = cc.CtxStatusWaiting
+	}
+
+	assert.NoError(t, db.Writes(ctxList, true))
+	assert.Equal(t, 6, db.Count(q.Eq(StatusField, cc.CtxStatusWaiting)))
+
+	// replace to finishing with number++
+	for _, ctx := range ctxList[0:3] {
+		ctx.Status = cc.CtxStatusFinishing
+		ctx.BlockNum++
+	}
+
+	// replace to finishing without number
+	for _, ctx := range ctxList[3:6] {
+		ctx.Status = cc.CtxStatusFinishing
+	}
+
+	assert.NoError(t, db.Writes(ctxList, true))
+	assert.Equal(t, 3, db.Count(q.Eq(StatusField, cc.CtxStatusFinishing)))
+
+	// check cache
+	for _, ctx := range ctxList[0:3] {
+		assert.Equal(t, cc.CtxStatusFinishing, db.One(CtxIdIndex, ctx.ID()).Status)
+	}
+	for _, ctx := range ctxList[3:6] {
+		assert.Equal(t, cc.CtxStatusWaiting, db.One(CtxIdIndex, ctx.ID()).Status)
+	}
+}
+
+func TestIndexDB_Updates(t *testing.T) {
+	ctxList := generateCtx(10)
+	rootDB := setupIndexDB(t)
+	defer rootDB.Close()
+
+	db := NewIndexDB(big.NewInt(1), rootDB, 20)
+	db.Clean()
+
+	assert.NoError(t, db.Writes(ctxList, false))
+	assert.Equal(t, 10, db.Count())
+
+	var (
+		ids      []common.Hash
+		updaters []func(ctx *CrossTransactionIndexed)
+	)
+
+	for _, ctx := range ctxList[0:6] {
+		ids = append(ids, ctx.ID())
+		updaters = append(updaters, func(ctx *CrossTransactionIndexed) {
+			ctx.Status = uint8(cc.CtxStatusWaiting)
+		})
+	}
+
+	assert.NoError(t, db.Updates(ids, updaters))
+	assert.Equal(t, 6, db.Count(q.Eq(StatusField, cc.CtxStatusWaiting)))
+
+	for _, ctx := range ctxList[0:6] {
+		assert.Equal(t, cc.CtxStatusWaiting, db.One(CtxIdIndex, ctx.ID()).Status)
+	}
 }

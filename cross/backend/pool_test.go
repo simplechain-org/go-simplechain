@@ -22,6 +22,7 @@ import (
 )
 
 type poolTester struct {
+	CrossPool
 	chainID   *big.Int
 	store     store
 	localKey  *ecdsa.PrivateKey
@@ -29,36 +30,56 @@ type poolTester struct {
 }
 
 func newPoolTester(store store) *poolTester {
-	p := &poolTester{store: store}
-	p.chainID = params.TestChainConfig.ChainID
-	p.localKey, _ = crypto.GenerateKey()
-	p.remoteKey, _ = crypto.GenerateKey()
-	return p
+	chainID := params.TestChainConfig.ChainID
+	localKey, _ := crypto.GenerateKey()
+	remoteKey, _ := crypto.GenerateKey()
+	fromSigner := func(hash []byte) ([]byte, error) { return crypto.Sign(hash, localKey) }
+	statedb, _ := state.New(common.Hash{}, state.NewDatabase(rawdb.NewMemoryDatabase()))
+	blockchain := &testBlockChain{statedb, 1000000, new(event.Feed)}
+
+	return &poolTester{
+		CrossPool: *NewCrossPool(params.TestChainConfig.ChainID, store, testChainRetriever{}, fromSigner, blockchain),
+		store:     store,
+		chainID:   chainID,
+		localKey:  localKey,
+		remoteKey: remoteKey,
+	}
 }
 
 func TestCrossPool_Add(t *testing.T) {
+	p := newPoolTester(newTestMemoryStore())
+	signedCh := make(chan cc.SignedCtxEvent, 1) // receive signed ctx
+	p.SubscribeSignedCtxEvent(signedCh)
+	p.add(t)
 	select {
 	case <-time.After(time.Second):
 		t.Error("timeout")
-	case ev := <-newPoolTester(newTestMemoryStore()).Add(t):
+	case ev := <-signedCh:
 		assert.Equal(t, 2, ev.Tx.SignaturesLength())
 	}
 }
 
-func (p poolTester) Add(t *testing.T) chan cc.SignedCtxEvent {
+func TestCrossPool_AddLocals(t *testing.T) {
+	p := newPoolTester(newTestMemoryStore())
+	p.addLocal(t)
+	assert.Equal(t, 1, p.pending.Len())
+	assert.Equal(t, 0, p.queued.Len())
+	p.pending.Map(func(ctx *cc.CrossTransactionWithSignatures) bool {
+		assert.Equal(t, 1, ctx.SignaturesLength())
+		return true
+	})
+}
+
+func TestCrossPool_AddRemote(t *testing.T) {
+	p := newPoolTester(newTestMemoryStore())
+	p.addRemote(t)
+	assert.Equal(t, 1, p.queued.Len())
+	assert.Equal(t, 0, p.pending.Len())
+}
+
+func (p *poolTester) addLocal(t *testing.T) {
 	fromAddr := crypto.PubkeyToAddress(p.localKey.PublicKey)
 	toAddr := crypto.PubkeyToAddress(p.remoteKey.PublicKey)
-	fromSigner := func(hash []byte) ([]byte, error) { return crypto.Sign(hash, p.localKey) }
-	toSigner := func(hash []byte) ([]byte, error) { return crypto.Sign(hash, p.remoteKey) }
-
-	signer := cc.NewEIP155CtxSigner(p.chainID)
-
-	statedb, _ := state.New(common.Hash{}, state.NewDatabase(rawdb.NewMemoryDatabase()))
-	blockchain := &testBlockChain{statedb, 1000000, new(event.Feed)}
-
-	ctxPool := NewCrossPool(p.chainID, p.store, testChainRetriever{}, fromSigner, blockchain)
-	signedCh := make(chan cc.SignedCtxEvent, 1) // receive signed ctx
-	ctxPool.SubscribeSignedCtxEvent(signedCh)
 
 	ctx := cc.NewCrossTransaction(big.NewInt(1e18),
 		big.NewInt(2e18),
@@ -70,22 +91,38 @@ func (p poolTester) Add(t *testing.T) chan cc.SignedCtxEvent {
 		toAddr,
 		nil)
 
-	// ctx signed by anchors
-	{
-		tx1, err := cc.SignCtx(ctx, signer, toSigner)
-		assert.NoError(t, err)
+	_, errs := p.AddLocals(ctx)
+	assert.Nil(t, errs)
+}
 
-		assert.NoError(t, ctxPool.AddRemote(tx1))
-	}
+func (p *poolTester) addRemote(t *testing.T) {
+	fromAddr := crypto.PubkeyToAddress(p.localKey.PublicKey)
+	toAddr := crypto.PubkeyToAddress(p.remoteKey.PublicKey)
 
-	// ctx signed by local
-	{
-		ctx := *ctx
-		_, errs := ctxPool.AddLocals(&ctx)
-		assert.Nil(t, errs)
-	}
+	signedCh := make(chan cc.SignedCtxEvent, 1) // receive signed ctx
+	p.SubscribeSignedCtxEvent(signedCh)
 
-	return signedCh
+	ctx := cc.NewCrossTransaction(big.NewInt(1e18),
+		big.NewInt(2e18),
+		big.NewInt(19),
+		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
+		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
+		common.HexToHash("0b2aa4c82a3b0187a087e030a26b71fc1a49e74d3776ae8e03876ea9153abbca"),
+		fromAddr,
+		toAddr,
+		nil)
+
+	signer := cc.NewEIP155CtxSigner(p.chainID)
+	toSigner := func(hash []byte) ([]byte, error) { return crypto.Sign(hash, p.remoteKey) }
+	tx1, err := cc.SignCtx(ctx, signer, toSigner)
+	assert.NoError(t, err)
+
+	assert.NoError(t, p.AddRemote(tx1))
+}
+
+func (p *poolTester) add(t *testing.T) {
+	p.addRemote(t)
+	p.addLocal(t)
 }
 
 type testMemoryStore struct {

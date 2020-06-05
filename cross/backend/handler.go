@@ -76,18 +76,18 @@ func NewCrossHandler(chain cross.SimpleChain, service *CrossService, config cros
 		log:            log.New("X-module", "handler", "chainID", chain.ChainConfig().ChainID),
 	}
 
-	{ //TODO: 将由chain本身提供这些组件
+	{ // TODO: 将由chain本身提供这些组件
 		h.subscriber = subscriber.NewSimpleSubscriber(contract, chain.BlockChain())
 		h.executor, err = executor.NewSimpleExecutor(chain, config.Signer, contract, h.signHash)
 		h.retriever = retriever.NewSimpleRetriever(chain.BlockChain(), h.store, contract, config, chain.ChainConfig())
 	}
 
-	h.store.RegisterChain(h.chainID)
-	h.pool = NewCrossPool(h.chainID, h.store, h.retriever, h.signHash, chain.BlockChain())
-
 	if err != nil {
 		return nil, err
 	}
+
+	h.store.RegisterChain(h.chainID)
+	h.pool = NewCrossPool(h.chainID, h.store, h.retriever, h.signHash, chain.BlockChain())
 
 	return h, nil
 }

@@ -78,6 +78,15 @@ func (d *indexDB) Close() error {
 	return d.db.Commit()
 }
 
+func (d *indexDB) rollback(cachedIds []common.Hash) {
+	// rollback cache
+	if d.cache != nil {
+		for _, cached := range cachedIds {
+			d.cache.Remove(CtxIdIndex, cached)
+		}
+	}
+}
+
 func (d *indexDB) Write(ctx *cc.CrossTransactionWithSignatures) error {
 	persist := NewCrossTransactionIndexed(ctx)
 	err := d.db.Save(persist)
@@ -94,30 +103,47 @@ func (d *indexDB) Write(ctx *cc.CrossTransactionWithSignatures) error {
 	return nil
 }
 
-func (d *indexDB) Writes(ctxList []*cc.CrossTransactionWithSignatures, replaceable bool) error {
+func (d *indexDB) Writes(ctxList []*cc.CrossTransactionWithSignatures, replaceable bool) (err error) {
 	tx, err := d.db.Begin(true)
 	if err != nil {
 		return ErrCtxDbFailure{"begin transaction failed", err}
 	}
+	var cachedIds []common.Hash
 	defer tx.Rollback()
+	defer func() {
+		if err != nil {
+			d.rollback(cachedIds)
+		}
+	}()
 
 	for _, ctx := range ctxList {
 		persist := NewCrossTransactionIndexed(ctx)
-		var old CrossTransactionIndexed
+		var (
+			old   CrossTransactionIndexed
+			saved bool
+		)
 		err = tx.One(CtxIdIndex, ctx.ID(), &old)
 		switch {
 		case err == storm.ErrNotFound:
-			err = tx.Save(persist)
+			if err = tx.Save(persist); err != nil {
+				return err
+			}
+			saved = true
 
 		case !replaceable:
 			continue
+
 		case replaceable && (ctx.BlockNum > old.BlockNum || old.Status == uint8(cc.CtxStatusPending)):
 			persist.PK = old.PK
-			err = tx.Update(persist)
-
+			if err = tx.Update(persist); err != nil {
+				return err
+			}
+			saved = true
 		}
-		if err != nil {
-			return err
+
+		if saved && d.cache != nil {
+			cachedIds = append(cachedIds, ctx.ID())
+			d.cache.Put(CtxIdIndex, ctx.ID(), persist)
 		}
 	}
 
@@ -190,7 +216,7 @@ func (d *indexDB) Update(id common.Hash, updater func(ctx *CrossTransactionIndex
 	return nil
 }
 
-func (d *indexDB) Updates(idList []common.Hash, updaters []func(ctx *CrossTransactionIndexed)) error {
+func (d *indexDB) Updates(idList []common.Hash, updaters []func(ctx *CrossTransactionIndexed)) (err error) {
 	if len(idList) != len(updaters) {
 		return ErrCtxDbFailure{err: errors.New("invalid updates params")}
 	}
@@ -198,15 +224,25 @@ func (d *indexDB) Updates(idList []common.Hash, updaters []func(ctx *CrossTransa
 	if err != nil {
 		return ErrCtxDbFailure{"begin transaction failed", err}
 	}
+	var cachedIds []common.Hash
 	defer tx.Rollback()
+	defer func() {
+		if err != nil {
+			d.rollback(cachedIds)
+		}
+	}()
 	for i, id := range idList {
 		var ctx CrossTransactionIndexed
 		if err = tx.One(CtxIdIndex, id, &ctx); err != nil {
 			return err
 		}
 		updaters[i](&ctx)
-		if err := tx.Update(&ctx); err != nil {
+		if err = tx.Update(&ctx); err != nil {
 			return err
+		}
+		if d.cache != nil {
+			cachedIds = append(cachedIds, id)
+			d.cache.Put(CtxIdIndex, id, &ctx)
 		}
 	}
 	return tx.Commit()

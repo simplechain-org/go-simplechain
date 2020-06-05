@@ -90,12 +90,12 @@ func register() {
 
 	var result common.Hash
 	if err = client.CallContext(context.Background(), &result, "eth_sendTransaction", &SendTxArgs{
-		From:  from,
-		To:    &to,
-		Gas:   &gas,
-		GasPrice:&price,
-		Value: nil,
-		Input: &input,
+		From:     from,
+		To:       &to,
+		Gas:      &gas,
+		GasPrice: &price,
+		Value:    nil,
+		Input:    &input,
 	}); err != nil {
 		fmt.Println("CallContext", "err", err)
 		return
