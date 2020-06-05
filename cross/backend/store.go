@@ -1,15 +1,15 @@
 package backend
 
 import (
+	"errors"
 	"math/big"
+	"sync"
 	"time"
 
 	"github.com/simplechain-org/go-simplechain/common"
-	"github.com/simplechain-org/go-simplechain/cross"
 	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	crossdb "github.com/simplechain-org/go-simplechain/cross/database"
 	"github.com/simplechain-org/go-simplechain/log"
-	"github.com/simplechain-org/go-simplechain/params"
 
 	"github.com/asdine/storm/v3"
 	"github.com/asdine/storm/v3/q"
@@ -17,30 +17,21 @@ import (
 
 const (
 	expireInterval   = time.Second * 60 * 12
-	expireNumber     = 180 //pending rtx expired after block num
 	defaultCacheSize = 4096
 )
 
+var ErrInvalidChainStore = errors.New("invalid chain store, chainID can not be nil")
+
 type CrossStore struct {
-	config      cross.Config
-	chainConfig *params.ChainConfig
-	chain       cross.BlockChain
-
-	localStore  crossdb.CtxDB //存储本链跨链交易
-	remoteStore crossdb.CtxDB //存储其他链的跨链交易
-	db          *storm.DB     // database to store cws
-
+	stores map[uint64]crossdb.CtxDB
+	db     *storm.DB // database to store cws
+	mu     sync.Mutex
 	logger log.Logger
 }
 
-func NewCrossStore(ctx crossdb.ServiceContext, config cross.Config, chainConfig *params.ChainConfig, chain cross.BlockChain, makerDb string) (*CrossStore, error) {
-	config = (&config).Sanitize()
-
+func NewCrossStore(ctx crossdb.ServiceContext, makerDb string) (*CrossStore, error) {
 	store := &CrossStore{
-		config:      config,
-		chainConfig: chainConfig,
-		chain:       chain,
-		logger:      log.New("X-module", "store", "local", chainConfig.ChainID),
+		logger: log.New("X-module", "store"),
 	}
 
 	db, err := crossdb.OpenStormDB(ctx, makerDb)
@@ -48,97 +39,94 @@ func NewCrossStore(ctx crossdb.ServiceContext, config cross.Config, chainConfig 
 		return nil, err
 	}
 	store.db = db
-	store.localStore = crossdb.NewIndexDB(chainConfig.ChainID, db, defaultCacheSize)
-	if err := store.localStore.Load(); err != nil {
-		store.logger.Warn("Failed to load local ctx", "err", err)
-	}
+	store.stores = make(map[uint64]crossdb.CtxDB)
 	return store, nil
 }
 
-func (store *CrossStore) Close() {
-	store.db.Close()
+func (s *CrossStore) Close() {
+	s.db.Close()
 }
 
-func (store *CrossStore) RegisterChain(chainID *big.Int) {
-	store.remoteStore = crossdb.NewIndexDB(chainID, store.db, defaultCacheSize)
-	store.logger.New("remote", chainID)
-	store.logger.Info("Register remote chain successfully")
+func (s *CrossStore) RegisterChain(chainID *big.Int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.stores[chainID.Uint64()] == nil {
+		s.stores[chainID.Uint64()] = crossdb.NewIndexDB(chainID, s.db, defaultCacheSize)
+		s.logger.New("remote", chainID)
+		s.logger.Info("Register chain successfully")
+	}
 }
 
-func (store *CrossStore) AddLocal(ctx *cc.CrossTransactionWithSignatures) error {
-	return store.localStore.Write(ctx)
+func (s *CrossStore) Add(ctx *cc.CrossTransactionWithSignatures) error {
+	store, err := s.GetStore(ctx.ChainId())
+	if err != nil {
+		return err
+	}
+	return store.Write(ctx)
 }
 
-func (store *CrossStore) HasLocal(ctxID common.Hash) bool {
-	return store.localStore.Has(ctxID)
+func (s *CrossStore) Adds(chainID *big.Int, ctxList []*cc.CrossTransactionWithSignatures, replaceable bool) error {
+	store, err := s.GetStore(chainID)
+	if err != nil {
+		return err
+	}
+	return store.Writes(ctxList, replaceable)
 }
 
-func (store *CrossStore) GetLocal(ctxID common.Hash) *cc.CrossTransactionWithSignatures {
-	ctx, _ := store.localStore.Read(ctxID)
+func (s *CrossStore) Has(chainID *big.Int, ctxID common.Hash) bool {
+	store, err := s.GetStore(chainID)
+	if err != nil {
+		return false
+	}
+	return store.Has(ctxID)
+}
+
+func (s *CrossStore) Get(chainID *big.Int, ctxID common.Hash) *cc.CrossTransactionWithSignatures {
+	store, err := s.GetStore(chainID)
+	if err != nil {
+		return nil
+	}
+	ctx, _ := store.Read(ctxID)
 	return ctx
 }
 
-func (store *CrossStore) AddRemote(ctx *cc.CrossTransactionWithSignatures) error {
-	return store.remoteStore.Write(ctx)
-}
-
-func (store *CrossStore) HasRemote(ctxID common.Hash) bool {
-	return store.remoteStore.Has(ctxID)
-}
-
-func (store *CrossStore) AddLocals(ctxList []*cc.CrossTransactionWithSignatures, replaceable bool) error {
-	return store.localStore.Writes(ctxList, replaceable)
-}
-
-func (store *CrossStore) AddRemotes(ctxList []*cc.CrossTransactionWithSignatures, replaceable bool) error {
-	return store.remoteStore.Writes(ctxList, replaceable)
-}
-
-func (store *CrossStore) Height() uint64 {
-	return store.localStore.Height()
-}
-
-func (store *CrossStore) Stats() (map[cc.CtxStatus]int, map[cc.CtxStatus]int) {
-	waiting := q.Eq(crossdb.StatusField, cc.CtxStatusWaiting)
-	executing := q.Eq(crossdb.StatusField, cc.CtxStatusExecuting)
-	finishing := q.Eq(crossdb.StatusField, cc.CtxStatusFinishing)
-	finished := q.Eq(crossdb.StatusField, cc.CtxStatusFinished)
-
-	stats := func(db crossdb.CtxDB) map[cc.CtxStatus]int {
-		return map[cc.CtxStatus]int{
-			cc.CtxStatusWaiting:   db.Count(waiting),
-			cc.CtxStatusExecuting: db.Count(executing),
-			cc.CtxStatusFinishing: db.Count(finishing),
-			cc.CtxStatusFinished:  db.Count(finished),
-		}
+func (s *CrossStore) GetStore(chainID *big.Int) (crossdb.CtxDB, error) {
+	if chainID == nil {
+		return nil, ErrInvalidChainStore
 	}
-	return stats(store.localStore), stats(store.remoteStore)
+	if s.stores[chainID.Uint64()] == nil {
+		s.RegisterChain(chainID)
+	}
+	return s.stores[chainID.Uint64()], nil
 }
 
-func (store *CrossStore) MarkStatus(txms []*cc.CrossTransactionModifier, status cc.CtxStatus) {
-	mark := func(txm *cc.CrossTransactionModifier, s crossdb.CtxDB) {
-		err := s.Update(txm.ID, func(ctx *crossdb.CrossTransactionIndexed) {
-			ctx.Status = uint8(status)
-			if txm.AtBlockNumber > ctx.BlockNum {
-				ctx.BlockNum = txm.AtBlockNumber
-			}
-		})
-		if err != nil {
-			store.logger.Warn("MarkStatus failed ", "err", err)
-		}
+func (s *CrossStore) Update(cws *cc.CrossTransactionWithSignatures) error {
+	store, err := s.GetStore(cws.ChainId())
+	if err != nil {
+		return err
+	}
+	return store.Update(cws.ID(), func(ctx *crossdb.CrossTransactionIndexed) {
+		ctx.Status = uint8(cws.Status)
+		ctx.BlockNum = cws.BlockNum
+		ctx.From = cws.Data.From
+		ctx.To = cws.Data.To
+		ctx.BlockHash = cws.Data.BlockHash
+		ctx.DestinationId = cws.Data.DestinationId
+		ctx.Value = cws.Data.Value
+		ctx.DestinationValue = cws.Data.DestinationValue
+		ctx.Input = cws.Data.Input
+		ctx.V = cws.Data.V
+		ctx.R = cws.Data.R
+		ctx.S = cws.Data.S
+	})
+}
+
+func (s *CrossStore) Updates(chainID *big.Int, txmList []*cc.CrossTransactionModifier) error {
+	store, err := s.GetStore(chainID)
+	if err != nil {
+		return err
 	}
 
-	for _, tx := range txms {
-		if tx.ChainId != nil && tx.ChainId.Cmp(store.localStore.ChainID()) == 0 {
-			mark(tx, store.localStore)
-		}
-		if tx.ChainId != nil && tx.ChainId.Cmp(store.remoteStore.ChainID()) == 0 {
-			mark(tx, store.remoteStore)
-		}
-	}
-}
-
-func (store *CrossStore) markStatus(txmList []*cc.CrossTransactionModifier, local bool) error {
 	var (
 		ids      []cc.CtxID
 		updaters []func(ctx *crossdb.CrossTransactionIndexed)
@@ -146,15 +134,48 @@ func (store *CrossStore) markStatus(txmList []*cc.CrossTransactionModifier, loca
 	for _, txm := range txmList {
 		ids = append(ids, txm.ID)
 		updaters = append(updaters, func(ctx *crossdb.CrossTransactionIndexed) {
-			ctx.Status = uint8(txm.Status)
-			if txm.AtBlockNumber > ctx.BlockNum {
+			if txm.AtBlockNumber == 0 { // modify from remote or reorg logs
+				ctx.Status = uint8(txm.Status)
+			}
+			if txm.AtBlockNumber >= ctx.BlockNum {
+				ctx.Status = uint8(txm.Status)
 				ctx.BlockNum = txm.AtBlockNumber
 			}
 		})
 	}
+	return store.Updates(ids, updaters)
+}
 
-	if local {
-		return store.localStore.Updates(ids, updaters)
+func (s *CrossStore) Height(chainID *big.Int) uint64 {
+	store, err := s.GetStore(chainID)
+	if err != nil {
+		return 0
 	}
-	return store.remoteStore.Updates(ids, updaters)
+	return store.Height()
+}
+
+func (s *CrossStore) Stats(chainID *big.Int) map[uint64]map[cc.CtxStatus]int {
+	waiting := q.Eq(crossdb.StatusField, cc.CtxStatusWaiting)
+	executing := q.Eq(crossdb.StatusField, cc.CtxStatusExecuting)
+	executed := q.Eq(crossdb.StatusField, cc.CtxStatusExecuted)
+	finishing := q.Eq(crossdb.StatusField, cc.CtxStatusFinishing)
+	finished := q.Eq(crossdb.StatusField, cc.CtxStatusFinished)
+	pending := q.Eq(crossdb.StatusField, cc.CtxStatusPending)
+
+	results := make(map[uint64]map[cc.CtxStatus]int, len(s.stores))
+
+	stats := func(db crossdb.CtxDB) map[cc.CtxStatus]int {
+		return map[cc.CtxStatus]int{
+			cc.CtxStatusWaiting:   db.Count(waiting),
+			cc.CtxStatusExecuting: db.Count(executing),
+			cc.CtxStatusExecuted:  db.Count(executed),
+			cc.CtxStatusFinishing: db.Count(finishing),
+			cc.CtxStatusFinished:  db.Count(finished),
+			cc.CtxStatusPending:   db.Count(pending),
+		}
+	}
+	for chain, store := range s.stores {
+		results[chain] = stats(store)
+	}
+	return results
 }

@@ -154,12 +154,12 @@ func taker() {
 
 				var result common.Hash
 				if err := client.CallContext(context.Background(), &result, "eth_sendTransaction", &SendTxArgs{
-					From:  from,
-					To:    &to,
-					Gas:   &gas,
-					GasPrice:&price,
-					Value: v.DestinationValue,
-					Input: &input,
+					From:     from,
+					To:       &to,
+					Gas:      &gas,
+					GasPrice: &price,
+					Value:    v.DestinationValue,
+					Input:    &input,
 				}); err != nil {
 					fmt.Println("SendTransaction", "err", err)
 					return

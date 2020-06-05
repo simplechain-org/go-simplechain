@@ -73,9 +73,6 @@ type Node struct {
 
 	log log.Logger
 
-	MainCh chan interface{}
-	SubCh  chan interface{}
-
 	//for subchain
 	subRpcAPIs       []rpc.API   // List of APIs currently provided by the node
 	subInprocHandler *rpc.Server // In-process RPC request handler to process the API requests
@@ -139,8 +136,6 @@ func New(conf *Config) (*Node, error) {
 		wsEndpoint:        conf.WSEndpoint(),
 		eventmux:          new(event.TypeMux),
 		log:               conf.Logger,
-		MainCh:            make(chan interface{}, 100),
-		SubCh:             make(chan interface{}, 100),
 		subIpcEndpoint:    conf.SubIPCEndpoint(),
 		subHttpEndpoint:   conf.SubHTTPEndpoint(),
 		subWsEndpoint:     conf.SubWSEndpoint(),
@@ -223,8 +218,6 @@ func (n *Node) Start() error {
 			services:       make(map[reflect.Type]Service),
 			EventMux:       n.eventmux,
 			AccountManager: n.accman,
-			MainCh:         n.MainCh,
-			SubCh:          n.SubCh,
 		}
 		for kind, s := range services { // copy needed for threaded access
 			ctx.services[kind] = s

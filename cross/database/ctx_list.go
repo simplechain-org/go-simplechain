@@ -18,6 +18,7 @@ package db
 
 import (
 	"math/big"
+	"sync"
 
 	"github.com/simplechain-org/go-simplechain/common"
 	cc "github.com/simplechain-org/go-simplechain/cross/core"
@@ -30,6 +31,7 @@ import (
 type CtxSortedByBlockNum struct {
 	items map[common.Hash]*cc.CrossTransactionWithSignatures
 	index *redblacktree.Tree
+	lock  sync.RWMutex
 }
 
 func NewCtxSortedMap() *CtxSortedByBlockNum {
@@ -40,10 +42,14 @@ func NewCtxSortedMap() *CtxSortedByBlockNum {
 }
 
 func (m *CtxSortedByBlockNum) Get(txId common.Hash) *cc.CrossTransactionWithSignatures {
+	m.lock.RLock()
+	defer m.lock.RUnlock()
 	return m.items[txId]
 }
 
 func (m *CtxSortedByBlockNum) Put(ctx *cc.CrossTransactionWithSignatures) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
 	id := ctx.ID()
 	if m.items[id] != nil {
 		return
@@ -51,14 +57,17 @@ func (m *CtxSortedByBlockNum) Put(ctx *cc.CrossTransactionWithSignatures) {
 
 	m.items[id] = ctx
 	m.index.Put(ctx.BlockNum, ctx.ID())
-	//heap.Push(m.index, byBlockNum{id, ctx.BlockNum})
 }
 
 func (m *CtxSortedByBlockNum) Len() int {
+	m.lock.RLock()
+	defer m.lock.RUnlock()
 	return len(m.items)
 }
 
 func (m *CtxSortedByBlockNum) RemoveByID(id common.Hash) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
 	//delete(m.items, hash) // only remove from items, dont delete index
 	if tx, ok := m.items[id]; ok {
 		for itr := m.index.LowerBound(tx.BlockNum); itr != m.index.UpperBound(tx.BlockNum); itr.Next() {
@@ -72,6 +81,8 @@ func (m *CtxSortedByBlockNum) RemoveByID(id common.Hash) {
 }
 
 func (m *CtxSortedByBlockNum) RemoveUnderNum(num uint64) (removed cc.CtxIDs) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
 	for itr := m.index.Begin(); itr.HasNext(); {
 		this := itr
 		itr.Next()
@@ -82,21 +93,12 @@ func (m *CtxSortedByBlockNum) RemoveUnderNum(num uint64) (removed cc.CtxIDs) {
 		m.index.RemoveOne(this)
 		delete(m.items, id)
 	}
-	//for m.index.Len() > 0 {
-	//	index := heap.Pop(m.index).(byBlockNum)
-	//	if index.blockNum > num {
-	//		heap.Push(m.index, index)
-	//		break
-	//	}
-	//	if _, ok := m.items[index.txId]; ok {
-	//		delete(m.items, index.txId)
-	//		removed = append(removed, index.txId)
-	//	}
-	//}
 	return
 }
 
 func (m *CtxSortedByBlockNum) Map(do func(*cc.CrossTransactionWithSignatures) bool) {
+	m.lock.RLock()
+	defer m.lock.RUnlock()
 	for itr := m.index.Begin(); !itr.IsEnd(); itr.Next() {
 		if ctx, ok := m.items[itr.Value().(common.Hash)]; ok && do(ctx) {
 			break

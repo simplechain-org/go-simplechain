@@ -32,7 +32,6 @@ type ServiceContext interface {
 type CtxDB interface {
 	io.Closer
 	ChainID() *big.Int
-	//Size() int
 	Count(filter ...q.Matcher) int
 	Height() uint64
 	Write(ctx *cc.CrossTransactionWithSignatures) error
@@ -45,7 +44,7 @@ type CtxDB interface {
 	One(field FieldName, key interface{}) *cc.CrossTransactionWithSignatures
 	Find(field FieldName, key interface{}) []*cc.CrossTransactionWithSignatures
 	Query(pageSize int, startPage int, orderBy []FieldName, reverse bool, filter ...q.Matcher) []*cc.CrossTransactionWithSignatures
-	RangeByNumber(begin, end uint64, pageSize int) []*cc.CrossTransactionWithSignatures
+	RangeByNumber(begin, end uint64, limit int) []*cc.CrossTransactionWithSignatures
 
 	Load() error
 	Repair() error

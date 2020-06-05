@@ -1,4 +1,4 @@
-package backend
+package retriever
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/core/vm"
 	"github.com/simplechain-org/go-simplechain/cross"
+	"github.com/simplechain-org/go-simplechain/cross/trigger"
 	"github.com/simplechain-org/go-simplechain/params"
 )
 
@@ -23,7 +24,7 @@ func NewChainInvoke(chain cross.BlockChain) *ChainInvoke {
 	return &ChainInvoke{bc: chain}
 }
 
-func (c ChainInvoke) GetTransactionNumberOnChain(tx cross.Transaction) uint64 {
+func (c ChainInvoke) GetTransactionNumberOnChain(tx trigger.Transaction) uint64 {
 	if num := c.bc.GetBlockNumber(tx.BlockHash()); num != nil {
 		return *num
 	}
@@ -31,14 +32,14 @@ func (c ChainInvoke) GetTransactionNumberOnChain(tx cross.Transaction) uint64 {
 	return c.bc.CurrentBlock().NumberU64()
 }
 
-func (c ChainInvoke) GetTransactionTimeOnChain(tx cross.Transaction) uint64 {
+func (c ChainInvoke) GetTransactionTimeOnChain(tx trigger.Transaction) uint64 {
 	if header := c.bc.GetHeaderByHash(tx.BlockHash()); header != nil {
 		return header.Time
 	}
 	return 0
 }
 
-func (c ChainInvoke) IsTransactionInExpiredBlock(tx cross.Transaction, expiredHeight uint64) bool {
+func (c ChainInvoke) IsTransactionInExpiredBlock(tx trigger.Transaction, expiredHeight uint64) bool {
 	return c.bc.CurrentBlock().NumberU64()-c.GetTransactionNumberOnChain(tx) > expiredHeight
 }
 

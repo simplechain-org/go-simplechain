@@ -424,23 +424,23 @@ func (p *peer) readStatusLegacy(network uint64, status *statusData63, genesis co
 		return err
 	}
 	if msg.Code != StatusMsg {
-		return ErrResp(ErrNoStatusMsg, "first msg has code %x (!= %x)", msg.Code, StatusMsg)
+		return errResp(ErrNoStatusMsg, "first msg has code %x (!= %x)", msg.Code, StatusMsg)
 	}
 	if msg.Size > protocolMaxMsgSize {
-		return ErrResp(ErrMsgTooLarge, "%v > %v", msg.Size, protocolMaxMsgSize)
+		return errResp(ErrMsgTooLarge, "%v > %v", msg.Size, protocolMaxMsgSize)
 	}
 	// Decode the handshake and make sure everything matches
 	if err := msg.Decode(&status); err != nil {
-		return ErrResp(ErrDecode, "msg %v: %v", msg, err)
+		return errResp(ErrDecode, "msg %v: %v", msg, err)
 	}
 	if status.GenesisBlock != genesis {
-		return ErrResp(ErrGenesisMismatch, "%x (!= %x)", status.GenesisBlock[:8], genesis[:8])
+		return errResp(ErrGenesisMismatch, "%x (!= %x)", status.GenesisBlock[:8], genesis[:8])
 	}
 	if status.NetworkId != network {
-		return ErrResp(ErrNetworkIDMismatch, "%d (!= %d)", status.NetworkId, network)
+		return errResp(ErrNetworkIDMismatch, "%d (!= %d)", status.NetworkId, network)
 	}
 	if int(status.ProtocolVersion) != p.version {
-		return ErrResp(ErrProtocolVersionMismatch, "%d (!= %d)", status.ProtocolVersion, p.version)
+		return errResp(ErrProtocolVersionMismatch, "%d (!= %d)", status.ProtocolVersion, p.version)
 	}
 	return nil
 }
@@ -451,26 +451,26 @@ func (p *peer) readStatus(network uint64, status *statusData, genesis common.Has
 		return err
 	}
 	if msg.Code != StatusMsg {
-		return ErrResp(ErrNoStatusMsg, "first msg has code %x (!= %x)", msg.Code, StatusMsg)
+		return errResp(ErrNoStatusMsg, "first msg has code %x (!= %x)", msg.Code, StatusMsg)
 	}
 	if msg.Size > protocolMaxMsgSize {
-		return ErrResp(ErrMsgTooLarge, "%v > %v", msg.Size, protocolMaxMsgSize)
+		return errResp(ErrMsgTooLarge, "%v > %v", msg.Size, protocolMaxMsgSize)
 	}
 	// Decode the handshake and make sure everything matches
 	if err := msg.Decode(&status); err != nil {
-		return ErrResp(ErrDecode, "msg %v: %v", msg, err)
+		return errResp(ErrDecode, "msg %v: %v", msg, err)
 	}
 	if status.NetworkID != network {
-		return ErrResp(ErrNetworkIDMismatch, "%d (!= %d)", status.NetworkID, network)
+		return errResp(ErrNetworkIDMismatch, "%d (!= %d)", status.NetworkID, network)
 	}
 	if int(status.ProtocolVersion) != p.version {
-		return ErrResp(ErrProtocolVersionMismatch, "%d (!= %d)", status.ProtocolVersion, p.version)
+		return errResp(ErrProtocolVersionMismatch, "%d (!= %d)", status.ProtocolVersion, p.version)
 	}
 	if status.Genesis != genesis {
-		return ErrResp(ErrGenesisMismatch, "%x (!= %x)", status.Genesis, genesis)
+		return errResp(ErrGenesisMismatch, "%x (!= %x)", status.Genesis, genesis)
 	}
 	if err := forkFilter(status.ForkID); err != nil {
-		return ErrResp(ErrForkIDRejected, "%v", err)
+		return errResp(ErrForkIDRejected, "%v", err)
 	}
 	return nil
 }
