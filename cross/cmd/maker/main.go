@@ -90,12 +90,12 @@ func maker() {
 	for i := 0; i < *countTx; i++ {
 		var result common.Hash
 		if err = client.CallContext(context.Background(), &result, "eth_sendTransaction", &SendTxArgs{
-			From:  from,
-			To:    &to,
-			Gas:   &gas,
-			GasPrice:&price,
-			Value: &value,
-			Input: &input,
+			From:     from,
+			To:       &to,
+			Gas:      &gas,
+			GasPrice: &price,
+			Value:    &value,
+			Input:    &input,
 		}); err != nil {
 			fmt.Println("CallContext", "err", err)
 			return

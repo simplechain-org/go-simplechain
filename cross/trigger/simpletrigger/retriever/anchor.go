@@ -1,4 +1,4 @@
-package backend
+package retriever
 
 import (
 	"math/big"

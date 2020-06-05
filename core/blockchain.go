@@ -2043,7 +2043,11 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 	// ever happens if we're reorging empty blocks, which will only happen on idle
 	// networks where performance is not an issue either way.
 	if len(deletedLogs) > 0 {
-		bc.rmLogsFeed.Send(RemovedLogsEvent{mergeLogs(deletedLogs, true)})
+		logs := mergeLogs(deletedLogs, true)
+		bc.rmLogsFeed.Send(RemovedLogsEvent{logs})
+		if bc.chainConfig.IsSingularity(bc.CurrentBlock().Number()) && bc.crossTrigger != nil {
+			bc.crossTrigger.NotifyBlockReorg(logs)
+		}
 	}
 	if len(rebirthLogs) > 0 {
 		bc.logsFeed.Send(mergeLogs(rebirthLogs, false))

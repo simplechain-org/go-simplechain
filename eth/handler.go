@@ -64,7 +64,7 @@ var (
 	syncChallengeTimeout = 15 * time.Second // Time allowance for a node to reply to the sync progress challenge
 )
 
-func ErrResp(code errCode, format string, v ...interface{}) error {
+func errResp(code errCode, format string, v ...interface{}) error {
 	return fmt.Errorf("%v - %v", code, fmt.Sprintf(format, v...))
 }
 
@@ -394,7 +394,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		return err
 	}
 	if msg.Size > protocolMaxMsgSize {
-		return ErrResp(ErrMsgTooLarge, "%v > %v", msg.Size, protocolMaxMsgSize)
+		return errResp(ErrMsgTooLarge, "%v > %v", msg.Size, protocolMaxMsgSize)
 	}
 	defer msg.Discard()
 
@@ -422,14 +422,14 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 	switch {
 	case msg.Code == StatusMsg:
 		// Status messages should never arrive after the handshake
-		return ErrResp(ErrExtraStatusMsg, "uncontrolled status message")
+		return errResp(ErrExtraStatusMsg, "uncontrolled status message")
 
 	// Block header query, collect the requested headers and reply
 	case msg.Code == GetBlockHeadersMsg:
 		// Decode the complex header query
 		var query getBlockHeadersData
 		if err := msg.Decode(&query); err != nil {
-			return ErrResp(ErrDecode, "%v: %v", msg, err)
+			return errResp(ErrDecode, "%v: %v", msg, err)
 		}
 		hashMode := query.Origin.Hash != (common.Hash{})
 		first := true
@@ -516,7 +516,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		// A batch of headers arrived to one of our previous requests
 		var headers []*types.Header
 		if err := msg.Decode(&headers); err != nil {
-			return ErrResp(ErrDecode, "msg %v: %v", msg, err)
+			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
 		// If no headers were received, but we're expencting a checkpoint header, consider it that
 		if len(headers) == 0 && p.syncDrop != nil {
@@ -582,7 +582,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			if err := msgStream.Decode(&hash); err == rlp.EOL {
 				break
 			} else if err != nil {
-				return ErrResp(ErrDecode, "msg %v: %v", msg, err)
+				return errResp(ErrDecode, "msg %v: %v", msg, err)
 			}
 			// Retrieve the requested block body, stopping if enough was found
 			if data := pm.blockchain.GetBodyRLP(hash); len(data) != 0 {
@@ -596,7 +596,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		// A batch of block bodies arrived to one of our previous requests
 		var request blockBodiesData
 		if err := msg.Decode(&request); err != nil {
-			return ErrResp(ErrDecode, "msg %v: %v", msg, err)
+			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
 		// Deliver them all to the downloader for queuing
 		transactions := make([][]*types.Transaction, len(request))
@@ -635,7 +635,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			if err := msgStream.Decode(&hash); err == rlp.EOL {
 				break
 			} else if err != nil {
-				return ErrResp(ErrDecode, "msg %v: %v", msg, err)
+				return errResp(ErrDecode, "msg %v: %v", msg, err)
 			}
 			// Retrieve the requested state entry, stopping if enough was found
 			if entry, err := pm.blockchain.TrieNode(hash); err == nil {
@@ -649,7 +649,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		// A batch of node state data arrived to one of our previous requests
 		var data [][]byte
 		if err := msg.Decode(&data); err != nil {
-			return ErrResp(ErrDecode, "msg %v: %v", msg, err)
+			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
 		// Deliver all to the downloader
 		if err := pm.downloader.DeliverNodeData(p.id, data); err != nil {
@@ -673,7 +673,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			if err := msgStream.Decode(&hash); err == rlp.EOL {
 				break
 			} else if err != nil {
-				return ErrResp(ErrDecode, "msg %v: %v", msg, err)
+				return errResp(ErrDecode, "msg %v: %v", msg, err)
 			}
 			// Retrieve the requested block's receipts, skipping if unknown to us
 			results := pm.blockchain.GetReceiptsByHash(hash)
@@ -696,7 +696,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		// A batch of receipts arrived to one of our previous requests
 		var receipts [][]*types.Receipt
 		if err := msg.Decode(&receipts); err != nil {
-			return ErrResp(ErrDecode, "msg %v: %v", msg, err)
+			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
 		// Deliver all to the downloader
 		if err := pm.downloader.DeliverReceipts(p.id, receipts); err != nil {
@@ -706,7 +706,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 	case msg.Code == NewBlockHashesMsg:
 		var announces newBlockHashesData
 		if err := msg.Decode(&announces); err != nil {
-			return ErrResp(ErrDecode, "%v: %v", msg, err)
+			return errResp(ErrDecode, "%v: %v", msg, err)
 		}
 		// Mark the hashes as present at the remote node
 		for _, block := range announces {
@@ -727,7 +727,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		// Retrieve and decode the propagated block
 		var request newBlockData
 		if err := msg.Decode(&request); err != nil {
-			return ErrResp(ErrDecode, "%v: %v", msg, err)
+			return errResp(ErrDecode, "%v: %v", msg, err)
 		}
 		if err := request.sanityCheck(); err != nil {
 			return err
@@ -766,12 +766,12 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		// Transactions can be processed, parse all of them and deliver to the pool
 		var txs []*types.Transaction
 		if err := msg.Decode(&txs); err != nil {
-			return ErrResp(ErrDecode, "msg %v: %v", msg, err)
+			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
 		for i, tx := range txs {
 			// Validate and mark the remote transaction
 			if tx == nil {
-				return ErrResp(ErrDecode, "transaction %d is nil", i)
+				return errResp(ErrDecode, "transaction %d is nil", i)
 			}
 			p.MarkTransaction(tx.Hash())
 
@@ -779,7 +779,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		pm.AddRemotes(txs)
 
 	default:
-		return ErrResp(ErrInvalidMsgCode, "%v", msg.Code)
+		return errResp(ErrInvalidMsgCode, "%v", msg.Code)
 
 	}
 	return nil

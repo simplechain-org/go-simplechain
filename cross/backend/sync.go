@@ -2,10 +2,12 @@ package backend
 
 import (
 	"math/big"
+	"sort"
 	"sync/atomic"
 	"time"
 
 	"github.com/simplechain-org/go-simplechain/common"
+	"github.com/simplechain-org/go-simplechain/cross/core"
 	"github.com/simplechain-org/go-simplechain/log"
 )
 
@@ -29,7 +31,13 @@ type SyncPendingResp struct {
 	Data  [][]byte
 }
 
-func (srv *CrossService) syncer() {
+type SortedTxByBlockNum []*core.CrossTransactionWithSignatures
+
+func (s SortedTxByBlockNum) Len() int           { return len(s) }
+func (s SortedTxByBlockNum) Less(i, j int) bool { return s[i].BlockNum < s[j].BlockNum }
+func (s SortedTxByBlockNum) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+
+func (srv *CrossService) sync() {
 	ticker := time.NewTicker(time.Second * 30)
 	for {
 		select {
@@ -89,10 +97,26 @@ func (srv *CrossService) syncWithPeer(handler *Handler, peer *anchorPeer, height
 				peer.Log().Debug("sync ctx request completed")
 				return
 			}
-			local := srv.main.handler.SyncCrossTransaction(txs)
-			remote := srv.sub.handler.SyncCrossTransaction(txs)
+			var mainTxs, subTxs []*core.CrossTransactionWithSignatures
+			for _, tx := range txs {
+				if tx.ChainId().Uint64() == srv.main.chainID {
+					mainTxs = append(mainTxs, tx)
+				}
+				if tx.ChainId().Uint64() == srv.sub.chainID {
+					subTxs = append(subTxs, tx)
+				}
+			}
+			var main, sub int
+			if mainTxs != nil {
+				sort.Sort(SortedTxByBlockNum(mainTxs))
+				main = srv.main.handler.SyncCrossTransaction(mainTxs)
+			}
+			if subTxs != nil {
+				sort.Sort(SortedTxByBlockNum(subTxs))
+				sub = srv.sub.handler.SyncCrossTransaction(subTxs)
+			}
 
-			log.Info("Import cross transactions", "total", len(txs), "local", local, "remote", remote)
+			log.Info("Import cross transactions", "total", len(txs), "main", main, "sub", sub)
 
 			timeout.Reset(rttMaxEstimate)
 			// send next sync request after last

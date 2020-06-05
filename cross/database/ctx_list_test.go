@@ -1,26 +1,18 @@
 package db
 
 import (
-	"math/big"
 	"math/rand"
 	"testing"
 
-	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/cross/core"
+
+	"github.com/stretchr/testify/assert"
 )
 
-func TestCtxSortedByBlockNumAdd(t *testing.T) {
+func TestCtxSortedByBlockNum_Add(t *testing.T) {
 	list := NewCtxSortedMap()
 
-	txs := make([]*core.CrossTransactionWithSignatures, 1024)
-	for i := 0; i < len(txs); i++ {
-		txs[i] = &core.CrossTransactionWithSignatures{
-			Data: core.CtxDatas{
-				CTxId: common.BigToHash(big.NewInt(int64(i))),
-			},
-			BlockNum: rand.Uint64(),
-		}
-	}
+	txs := generateCtx(1024)
 
 	for _, v := range rand.Perm(len(txs)) {
 		list.Put(txs[v])
@@ -59,4 +51,24 @@ func TestCtxSortedByBlockNumAdd(t *testing.T) {
 			t.Errorf("item %d: transaction is not exist: %v", i, tx)
 		}
 	}
+}
+
+func TestCtxSortedByBlockNum_Map(t *testing.T) {
+	list := NewCtxSortedMap()
+	txs := generateCtx(100)
+	for _, v := range rand.Perm(len(txs)) {
+		list.Put(txs[v])
+	}
+
+	var ctxList []*core.CrossTransactionWithSignatures
+	list.Map(func(ctx *core.CrossTransactionWithSignatures) bool {
+		ctxList = append(ctxList, ctx)
+		return len(ctxList) == 50
+	})
+
+	assert.Equal(t, 50, len(ctxList))
+	for i := 1; i < len(ctxList); i++ {
+		assert.LessOrEqual(t, ctxList[i-1].BlockNum, ctxList[i].BlockNum)
+	}
+
 }

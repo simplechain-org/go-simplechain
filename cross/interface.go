@@ -10,6 +10,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/core/vm"
+	"github.com/simplechain-org/go-simplechain/cross/trigger"
 	"github.com/simplechain-org/go-simplechain/eth/gasprice"
 	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/rpc"
@@ -43,6 +44,7 @@ type BlockChain interface {
 	GetBlockByHash(hash common.Hash) *types.Block
 	CurrentBlock() *types.Block
 	StateAt(root common.Hash) (*state.StateDB, error)
+	SetCrossTrigger(s trigger.Subscriber)
 }
 
 type ProtocolManager interface {

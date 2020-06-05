@@ -91,12 +91,12 @@ func AddAnchors(client *rpc.Client) {
 	fmt.Println("input=", input)
 
 	args := &SendTxArgs{
-		From:  from,
-		To:    &to,
-		Gas:   &gas,
-		GasPrice:&price,
-		Value: &value,
-		Input: &input,
+		From:     from,
+		To:       &to,
+		Gas:      &gas,
+		GasPrice: &price,
+		Value:    &value,
+		Input:    &input,
 	}
 
 	var result common.Hash

@@ -3,8 +3,6 @@ package common
 import "fmt"
 
 const (
-	ProtocolMain   = "simplechain"
-	ProtocolSub    = "subchain"
 	MainchainData  = "chaindata"
 	SubchainData   = "subchaindata"
 	LightchainData = "lightchaindata"
