@@ -21,6 +21,7 @@ import (
 	"crypto/ecdsa"
 	"errors"
 	"fmt"
+	"github.com/simplechain-org/go-simplechain/cross/trigger/simpletrigger/subscriber"
 	"io"
 	"io/ioutil"
 	"math/big"
@@ -879,6 +880,10 @@ var (
 	AnchorSignerFlag = cli.StringFlag{
 		Name:  "anchor.signer",
 		Usage: "public address of anchor signer",
+	}
+	ConfirmDepthFlag = cli.IntFlag{
+		Name: "anchor.confirmdepth",
+		Usage: "anchor's confirm block depth(default: 12)",
 	}
 )
 

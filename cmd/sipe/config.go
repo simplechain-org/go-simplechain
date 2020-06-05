@@ -34,6 +34,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/p2p/enode"
 	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/sub"
+	"github.com/simplechain-org/go-simplechain/cross/trigger/simpletrigger/subscriber"
 	whisper "github.com/simplechain-org/go-simplechain/whisper/whisperv6"
 	"gopkg.in/urfave/cli.v1"
 )
@@ -199,6 +200,9 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 	// Configure GraphQL if requested
 	if ctx.GlobalIsSet(utils.GraphQLEnabledFlag.Name) {
 		utils.RegisterGraphQLService(stack, cfg.Node.GraphQLEndpoint(), cfg.Node.GraphQLCors, cfg.Node.GraphQLVirtualHosts, cfg.Node.HTTPTimeouts)
+	}
+	if ctx.GlobalIsSet(utils.ConfirmDepthFlag.Name) {
+		subscriber.DefaultConfirmDepth = ctx.GlobalInt(utils.ConfirmDepthFlag.Name)
 	}
 	// Add the Ethereum Stats daemon if requested.
 	if cfg.Ethstats.URL != "" {
