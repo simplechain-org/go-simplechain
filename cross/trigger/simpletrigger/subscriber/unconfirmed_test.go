@@ -37,8 +37,8 @@ func (r *noopChainRetriever) GetChainConfig() *params.ChainConfig { return nil }
 // Tests that inserting blocks into the unconfirmed set accumulates them until
 // the desired depth is reached, after which they begin to be dropped.
 func TestUnconfirmedInsertBounds(t *testing.T) {
-	defaultConfirmDepth = 12
-	limit := defaultConfirmDepth
+	DefaultConfirmDepth = 12
+	limit := DefaultConfirmDepth
 
 	pool := NewSimpleSubscriber(common.Address{}, new(noopChainRetriever))
 	for depth := uint64(0); depth < 2*uint64(limit); depth++ {
@@ -59,7 +59,7 @@ func TestUnconfirmedInsertBounds(t *testing.T) {
 // cases as well as for corner cases such as empty sets, empty shifts or full
 // shifts.
 func TestUnconfirmedShifts(t *testing.T) {
-	defaultConfirmDepth = 12
+	DefaultConfirmDepth = 12
 	// Create a pool with a few blocks on various depths
 	limit, start := uint(12), uint64(25)
 

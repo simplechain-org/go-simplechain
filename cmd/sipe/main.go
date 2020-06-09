@@ -162,6 +162,7 @@ var (
 		utils.IstanbulRequestTimeoutFlag,
 		utils.IstanbulBlockPeriodFlag,
 		utils.AnchorSignerFlag,
+		utils.ConfirmDepthFlag,
 	}
 
 	rpcFlags = []cli.Flag{

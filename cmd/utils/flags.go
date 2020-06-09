@@ -880,6 +880,11 @@ var (
 		Name:  "anchor.signer",
 		Usage: "public address of anchor signer",
 	}
+	ConfirmDepthFlag = cli.IntFlag{
+		Name: "anchor.confirmdepth",
+		Usage: "anchor's confirm block depth",
+		Value: 12,
+	}
 )
 
 // MakeDataDir retrieves the currently requested data directory, terminating

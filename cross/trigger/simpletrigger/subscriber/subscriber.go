@@ -10,7 +10,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/params"
 )
 
-var defaultConfirmDepth = 12
+var DefaultConfirmDepth = 12
 
 type SimpleSubscriber struct {
 	unconfirmedBlockLogs
@@ -36,7 +36,7 @@ func NewSimpleSubscriber(contract common.Address, chain chainRetriever) *SimpleS
 		contract: contract,
 		unconfirmedBlockLogs: unconfirmedBlockLogs{
 			chain: chain,
-			depth: uint(defaultConfirmDepth),
+			depth: uint(DefaultConfirmDepth),
 		},
 	}
 }
