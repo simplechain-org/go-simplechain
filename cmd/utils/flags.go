@@ -881,7 +881,7 @@ var (
 		Usage: "public address of anchor signer",
 	}
 	ConfirmDepthFlag = cli.IntFlag{
-		Name: "anchor.confirmdepth",
+		Name:  "anchor.confirmdepth",
 		Usage: "anchor's confirm block depth",
 		Value: 12,
 	}

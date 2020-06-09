@@ -6,7 +6,6 @@ import (
 	"math/big"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/cross"
@@ -17,21 +16,6 @@ import (
 	"github.com/simplechain-org/go-simplechain/p2p/enode"
 	"github.com/simplechain-org/go-simplechain/rlp"
 	"github.com/simplechain-org/go-simplechain/rpc"
-)
-
-const (
-	CtxSignMsg        = 0x31
-	GetCtxSyncMsg     = 0x32
-	CtxSyncMsg        = 0x33
-	GetPendingSyncMsg = 0x34
-	PendingSyncMsg    = 0x35
-
-	protocolVersion    = 1
-	protocolMaxMsgSize = 10 * 1024 * 1024
-	handshakeTimeout   = 5 * time.Second
-	rttMaxEstimate     = 20 * time.Second // Maximum round-trip time to target for download requests
-	defaultMaxSyncSize = 100
-	defaultCrossChSize = 100
 )
 
 // CrossService implements node.Service

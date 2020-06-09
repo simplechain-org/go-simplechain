@@ -19,7 +19,7 @@ const (
 
 /**
   |------| <-new-- maker         |------|
-  |local | (waiting)			 |remote|
+  |local | (pending->waiting)	 |remote|
   |      |						 |      |
   |ctxdb |		   taker --mod-> |ctxdb |
   |      |			 (executing) |      |
