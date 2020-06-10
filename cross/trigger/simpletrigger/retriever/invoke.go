@@ -52,7 +52,8 @@ type EvmInvoke struct {
 	vmConfig    vm.Config
 }
 
-func NewEvmInvoke(bc core.ChainContext, header *types.Header, stateDB *state.StateDB, config *params.ChainConfig, vmCfg vm.Config) *EvmInvoke {
+func NewEvmInvoke(bc core.ChainContext, header *types.Header, stateDB *state.StateDB, config *params.ChainConfig,
+	vmCfg vm.Config) *EvmInvoke {
 	return &EvmInvoke{bc: bc, header: header, stateDB: stateDB, chainConfig: config, vmConfig: vmCfg}
 }
 
@@ -63,7 +64,8 @@ func (e EvmInvoke) CallContract(from common.Address, to *common.Address, functio
 		data = append(data, input...)
 	}
 
-	checkMsg := types.NewMessage(from, to, 0, big.NewInt(0), math.MaxUint64/2, big.NewInt(params.GWei), data, false)
+	checkMsg := types.NewMessage(from, to, 0, big.NewInt(0), math.MaxUint64/2,
+		big.NewInt(params.GWei), data, false)
 	var cancel context.CancelFunc
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 

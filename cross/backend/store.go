@@ -154,7 +154,7 @@ func (s *CrossStore) Height(chainID *big.Int) uint64 {
 	return store.Height()
 }
 
-func (s *CrossStore) Stats(chainID *big.Int) map[uint64]map[cc.CtxStatus]int {
+func (s *CrossStore) Stats() map[uint64]map[cc.CtxStatus]int {
 	waiting := q.Eq(crossdb.StatusField, cc.CtxStatusWaiting)
 	executing := q.Eq(crossdb.StatusField, cc.CtxStatusExecuting)
 	executed := q.Eq(crossdb.StatusField, cc.CtxStatusExecuted)

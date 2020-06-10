@@ -1,7 +1,6 @@
 package backend
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/simplechain-org/go-simplechain/common"
@@ -93,9 +92,6 @@ func (s *PrivateCrossAdminAPI) importCtx(local, remote *Handler, ctxWithSignsSAr
 	if err := s.service.store.Add(ctx); err != nil {
 		return err
 	}
-	//if err := remote.store.AddRemote(ctx); err != nil {
-	//	return err
-	//}
 	log.Info("rpc ImportCtx", "ctxID", ctx.ID().String())
 	return nil
 }
@@ -108,12 +104,10 @@ func (s *PrivateCrossAdminAPI) ImportSubCtx(ctxWithSignsSArgs hexutil.Bytes) err
 	return s.importCtx(s.service.sub.handler, s.service.main.handler, ctxWithSignsSArgs)
 }
 
-// PublicTxPoolAPI offers and API for the transaction pool. It only operates on data that is non confidential.
 type PublicCrossChainAPI struct {
 	handler *Handler
 }
 
-// NewPublicTxPoolAPI creates a new tx pool service that gives information about the transaction pool.
 func NewPublicCrossChainAPI(handler *Handler) *PublicCrossChainAPI {
 	return &PublicCrossChainAPI{handler}
 }
@@ -162,11 +156,11 @@ func (s *PublicCrossChainAPI) CtxContentByPage(localSize, localPage, remoteSize,
 	return content
 }
 
-func (s *PublicCrossChainAPI) CtxQuery(ctx context.Context, hash common.Hash) *RPCCrossTransaction {
+func (s *PublicCrossChainAPI) CtxQuery(hash common.Hash) *RPCCrossTransaction {
 	return newRPCCrossTransaction(s.handler.FindByTxHash(hash))
 }
 
-func (s *PublicCrossChainAPI) CtxQueryDestValue(ctx context.Context, value *hexutil.Big, pageSize, startPage int) *RPCPageCrossTransactions {
+func (s *PublicCrossChainAPI) CtxQueryDestValue(value *hexutil.Big, pageSize, startPage int) *RPCPageCrossTransactions {
 	chainID, txs, total := s.handler.QueryRemoteByDestinationValueAndPage(value.ToInt(), pageSize, startPage)
 	list := make([]*RPCCrossTransaction, len(txs))
 	for i, tx := range txs {
@@ -180,7 +174,7 @@ func (s *PublicCrossChainAPI) CtxQueryDestValue(ctx context.Context, value *hexu
 	}
 }
 
-func (s *PublicCrossChainAPI) CtxOwner(ctx context.Context, from common.Address) map[string]map[uint64][]*RPCOwnerCrossTransaction {
+func (s *PublicCrossChainAPI) CtxOwner(from common.Address) map[string]map[uint64][]*RPCOwnerCrossTransaction {
 	locals, _ := s.handler.QueryLocalBySenderAndPage(from, 0, 0)
 	content := map[string]map[uint64][]*RPCOwnerCrossTransaction{
 		"local": make(map[uint64][]*RPCOwnerCrossTransaction),
@@ -193,7 +187,7 @@ func (s *PublicCrossChainAPI) CtxOwner(ctx context.Context, from common.Address)
 	return content
 }
 
-func (s *PublicCrossChainAPI) CtxOwnerByPage(ctx context.Context, from common.Address, pageSize, startPage int) RPCPageOwnerCrossTransactions {
+func (s *PublicCrossChainAPI) CtxOwnerByPage(from common.Address, pageSize, startPage int) RPCPageOwnerCrossTransactions {
 	locals, total := s.handler.QueryLocalBySenderAndPage(from, pageSize, startPage)
 	content := RPCPageOwnerCrossTransactions{
 		Data:  make(map[uint64][]*RPCOwnerCrossTransaction, len(locals)),
@@ -207,7 +201,7 @@ func (s *PublicCrossChainAPI) CtxOwnerByPage(ctx context.Context, from common.Ad
 	return content
 }
 
-func (s *PublicCrossChainAPI) CtxTakerByPage(ctx context.Context, to common.Address, pageSize, startPage int) RPCPageOwnerCrossTransactions {
+func (s *PublicCrossChainAPI) CtxTakerByPage(to common.Address, pageSize, startPage int) RPCPageOwnerCrossTransactions {
 	locals, total := s.handler.QueryRemoteByTakerAndPage(to, pageSize, startPage)
 	content := RPCPageOwnerCrossTransactions{
 		Data:  make(map[uint64][]*RPCOwnerCrossTransaction, len(locals)),
@@ -221,11 +215,11 @@ func (s *PublicCrossChainAPI) CtxTakerByPage(ctx context.Context, to common.Addr
 	return content
 }
 
-func (s *PublicCrossChainAPI) CtxGet(ctx context.Context, id common.Hash) *RPCCrossTransaction {
+func (s *PublicCrossChainAPI) CtxGet(id common.Hash) *RPCCrossTransaction {
 	return newRPCCrossTransaction(s.handler.GetByCtxID(id))
 }
 
-func (s *PublicCrossChainAPI) CtxGetByNumber(ctx context.Context, begin, end hexutil.Uint64) map[cc.CtxStatus][]common.Hash {
+func (s *PublicCrossChainAPI) CtxGetByNumber(begin, end hexutil.Uint64) map[cc.CtxStatus][]common.Hash {
 	ctxList := s.handler.GetByBlockNumber(uint64(begin), uint64(end))
 	result := make(map[cc.CtxStatus][]common.Hash)
 	for _, tx := range ctxList {
@@ -260,7 +254,7 @@ type RPCCrossTransaction struct {
 	S                []*hexutil.Big `json:"s"`
 }
 
-// newRPCTransaction returns a transaction that will serialize to the RPC
+// newRPCCrossTransaction returns a transaction that will serialize to the RPC
 // representation, with the given location metadata set (if available).
 func newRPCCrossTransaction(tx *cc.CrossTransactionWithSignatures) *RPCCrossTransaction {
 	if tx == nil {

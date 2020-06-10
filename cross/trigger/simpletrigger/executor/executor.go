@@ -42,7 +42,8 @@ type SimpleExecutor struct {
 	log    log.Logger
 }
 
-func NewSimpleExecutor(chain cross.SimpleChain, anchor common.Address, contract common.Address, signHash cc.SignHash) (*SimpleExecutor, error) {
+func NewSimpleExecutor(chain cross.SimpleChain, anchor common.Address, contract common.Address, signHash cc.SignHash) (
+	*SimpleExecutor, error) {
 	logger := log.New("module", "executor", "chainID", chain.ChainConfig().ChainID)
 	data, err := hexutil.Decode(params.CrossDemoAbi)
 	if err != nil {
@@ -120,7 +121,8 @@ func (exe *SimpleExecutor) getTxForLockOut(rwss []*cc.ReceptTransaction) ([]*typ
 				exe.log.Warn("getTxForLockOut CreateTransaction", "id", rws.CTxId, "err", err)
 				continue
 			}
-			if ok, _ := exe.checkTransaction(exe.anchor, tokenAddress, nonce+count, param.gasLimit, param.gasPrice, param.data); !ok {
+			if ok, _ := exe.checkTransaction(exe.anchor, tokenAddress, nonce+count, param.gasLimit, param.gasPrice,
+				param.data); !ok {
 				exe.log.Debug("already finish the cross Transaction", "id", rws.CTxId)
 				continue
 			}
@@ -152,16 +154,20 @@ func (exe *SimpleExecutor) createTransaction(rws *cc.ReceptTransaction) (*TranPa
 		exe.log.Error("ConstructData", "err", err)
 		return nil, err
 	}
-	if balance, err := exe.gasHelper.GetBalance(exe.anchor); err != nil || balance == nil || balance.Cmp(new(big.Int).Mul(gasPrice, new(big.Int).SetUint64(maxFinishGasLimit))) < 0 {
+	if balance, err := exe.gasHelper.GetBalance(exe.anchor); err != nil || balance == nil ||
+		balance.Cmp(new(big.Int).Mul(gasPrice, new(big.Int).SetUint64(maxFinishGasLimit))) < 0 {
 		log.Warn("insufficient balance for finishing", "ctxID", rws.CTxId.String(),
 			"chainID", rws.ChainId, "error", err, "balance", balance, "price", gasPrice)
-		cross.Report(exe.gasHelper.chain.ChainConfig().ChainID.Uint64(), "insufficient balance", "ctxID", rws.CTxId.String())
+		cross.Report(exe.gasHelper.chain.ChainConfig().ChainID.Uint64(), "insufficient balance",
+			"ctxID", rws.CTxId.String())
 	}
 
 	return &TranParam{gasLimit: maxFinishGasLimit, gasPrice: gasPrice, data: data}, nil
 }
 
-func (exe *SimpleExecutor) checkTransaction(address, tokenAddress common.Address, nonce, gasLimit uint64, gasPrice *big.Int, data []byte) (bool, error) {
+func (exe *SimpleExecutor) checkTransaction(address, tokenAddress common.Address, nonce, gasLimit uint64,
+	gasPrice *big.Int, data []byte) (bool, error) {
+
 	callArgs := CallArgs{
 		From:     address,
 		To:       &tokenAddress,
@@ -199,14 +205,16 @@ func (exe *SimpleExecutor) promoteTransaction() {
 					if count == 0 {
 						nonceBegin = v.Nonce()
 					}
-					if ok, _ := exe.checkTransaction(exe.anchor, *v.To(), nonceBegin+count, v.Gas(), v.GasPrice(), v.Data()); !ok {
+					if ok, _ := exe.checkTransaction(exe.anchor, *v.To(), nonceBegin+count, v.Gas(),
+						v.GasPrice(), v.Data()); !ok {
 						exe.log.Debug("already finish the cross Transaction", "tx", v.Hash())
 						continue
 					}
 					gasPrice := new(big.Int).Div(new(big.Int).Mul(
 						v.GasPrice(), big.NewInt(100+int64(core.DefaultTxPoolConfig.PriceBump))), big.NewInt(100))
 
-					tx, err := newSignedTransaction(nonceBegin+count, *v.To(), v.Gas(), gasPrice, v.Data(), exe.pm.NetworkId(), exe.signHash)
+					tx, err := newSignedTransaction(nonceBegin+count, *v.To(), v.Gas(), gasPrice, v.Data(),
+						exe.pm.NetworkId(), exe.signHash)
 					if err != nil {
 						exe.log.Info("promoteTransaction", "err", err)
 					}

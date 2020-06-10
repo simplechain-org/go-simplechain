@@ -68,7 +68,6 @@ func (m *CtxSortedByBlockNum) Len() int {
 func (m *CtxSortedByBlockNum) RemoveByID(id common.Hash) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	//delete(m.items, hash) // only remove from items, dont delete index
 	if tx, ok := m.items[id]; ok {
 		for itr := m.index.LowerBound(tx.BlockNum); itr != m.index.UpperBound(tx.BlockNum); itr.Next() {
 			if itr.Value().(common.Hash) == id {

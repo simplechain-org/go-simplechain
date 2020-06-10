@@ -8,13 +8,13 @@ import (
 )
 
 const (
-	maxKnownCtx        = 32768 // Maximum cross transactions hashes to keep in the known list (prevent DOS)
-	maxQueuedLocalCtx  = 4096
-	maxQueuedRemoteCtx = 128
+	StatusMsg = 0x00
 )
 
 const (
-	StatusMsg = 0x00
+	maxKnownCtx        = 32768 // Maximum cross transactions hashes to keep in the known list (prevent DOS)
+	maxQueuedLocalCtx  = 4096
+	maxQueuedRemoteCtx = 128
 )
 
 var (

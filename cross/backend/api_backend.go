@@ -10,7 +10,8 @@ import (
 	"github.com/asdine/storm/v3/q"
 )
 
-func query(db crossdb.CtxDB, pageSize, startPage int, orderBy []crossdb.FieldName, reverse bool, condition ...q.Matcher) []*cc.CrossTransactionWithSignatures {
+func query(db crossdb.CtxDB, pageSize, startPage int, orderBy []crossdb.FieldName, reverse bool,
+	condition ...q.Matcher) []*cc.CrossTransactionWithSignatures {
 	return db.Query(pageSize, startPage, orderBy, reverse, condition...)
 }
 
@@ -50,7 +51,8 @@ func (h *Handler) FindByTxHash(hash common.Hash) *cc.CrossTransactionWithSignatu
 	return nil
 }
 
-func (h *Handler) QueryRemoteByDestinationValueAndPage(value *big.Int, pageSize, startPage int) (uint64, []*cc.CrossTransactionWithSignatures, int) {
+func (h *Handler) QueryRemoteByDestinationValueAndPage(value *big.Int, pageSize,
+	startPage int) (uint64, []*cc.CrossTransactionWithSignatures, int) {
 	if !h.pm.CanAcceptTxs() {
 		return 0, nil, 0
 	}
@@ -65,7 +67,8 @@ func (h *Handler) QueryRemoteByDestinationValueAndPage(value *big.Int, pageSize,
 	return h.RemoteID(), txs, total
 }
 
-func (h *Handler) QueryByPage(localSize, localPage, remoteSize, remotePage int) (map[uint64][]*cc.CrossTransactionWithSignatures, map[uint64][]*cc.CrossTransactionWithSignatures, int, int) {
+func (h *Handler) QueryByPage(localSize, localPage, remoteSize, remotePage int) (
+	map[uint64][]*cc.CrossTransactionWithSignatures, map[uint64][]*cc.CrossTransactionWithSignatures, int, int) {
 	if !h.pm.CanAcceptTxs() {
 		return nil, nil, 0, 0
 	}
@@ -76,15 +79,18 @@ func (h *Handler) QueryByPage(localSize, localPage, remoteSize, remotePage int) 
 		orderBy        = []crossdb.FieldName{crossdb.PriceIndex}
 		reverse        = false
 	)
-	local := map[uint64][]*cc.CrossTransactionWithSignatures{h.RemoteID(): query(localStore, localSize, localPage, orderBy, reverse, condition...)}
-	remote := map[uint64][]*cc.CrossTransactionWithSignatures{h.RemoteID(): query(remoteStore, remoteSize, remotePage, orderBy, reverse, condition...)}
+	local := map[uint64][]*cc.CrossTransactionWithSignatures{h.RemoteID(): query(localStore, localSize, localPage,
+		orderBy, reverse, condition...)}
+	remote := map[uint64][]*cc.CrossTransactionWithSignatures{h.RemoteID(): query(remoteStore, remoteSize, remotePage,
+		orderBy, reverse, condition...)}
 	localStats := count(localStore, condition...)
 	remoteStats := count(remoteStore, condition...)
 
 	return local, remote, localStats, remoteStats
 }
 
-func (h *Handler) QueryLocalBySenderAndPage(from common.Address, pageSize, startPage int) (map[uint64][]*cc.OwnerCrossTransactionWithSignatures, int) {
+func (h *Handler) QueryLocalBySenderAndPage(from common.Address, pageSize, startPage int) (
+	map[uint64][]*cc.OwnerCrossTransactionWithSignatures, int) {
 	if !h.pm.CanAcceptTxs() {
 		return nil, 0
 	}
@@ -109,14 +115,15 @@ func (h *Handler) QueryLocalBySenderAndPage(from common.Address, pageSize, start
 	return locals, total
 }
 
-func (h *Handler) QueryRemoteByTakerAndPage(to common.Address, pageSize, startPage int) (map[uint64][]*cc.OwnerCrossTransactionWithSignatures, int) {
+func (h *Handler) QueryRemoteByTakerAndPage(to common.Address, pageSize, startPage int) (
+	map[uint64][]*cc.OwnerCrossTransactionWithSignatures, int) {
 	if !h.pm.CanAcceptTxs() {
 		return nil, 0
 	}
 	var (
-		store, _  = h.store.GetStore(h.remoteID)
 		condition = []q.Matcher{q.Eq(crossdb.StatusField, cc.CtxStatusWaiting), q.Eq(crossdb.ToField, to)}
 		orderBy   = []crossdb.FieldName{crossdb.PriceIndex}
+		store, _  = h.store.GetStore(h.remoteID)
 		reverse   = false
 	)
 
@@ -145,5 +152,5 @@ func (h *Handler) StoreStats() map[uint64]map[cc.CtxStatus]int {
 	if !h.pm.CanAcceptTxs() {
 		return nil
 	}
-	return h.store.Stats(h.chainID)
+	return h.store.Stats()
 }

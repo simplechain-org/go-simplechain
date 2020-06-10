@@ -29,12 +29,12 @@ import (
 	"github.com/simplechain-org/go-simplechain/cmd/utils"
 	"github.com/simplechain-org/go-simplechain/common"
 	raftBackend "github.com/simplechain-org/go-simplechain/consensus/raft/backend"
+	"github.com/simplechain-org/go-simplechain/cross/trigger/simpletrigger/subscriber"
 	"github.com/simplechain-org/go-simplechain/eth"
 	"github.com/simplechain-org/go-simplechain/node"
 	"github.com/simplechain-org/go-simplechain/p2p/enode"
 	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/sub"
-	"github.com/simplechain-org/go-simplechain/cross/trigger/simpletrigger/subscriber"
 	whisper "github.com/simplechain-org/go-simplechain/whisper/whisperv6"
 	"gopkg.in/urfave/cli.v1"
 )

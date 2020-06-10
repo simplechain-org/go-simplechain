@@ -72,7 +72,6 @@ func (v *SimpleValidator) ExpireNumber() int {
 }
 
 func (v *SimpleValidator) VerifyCtx(ctx *cc.CrossTransaction) error {
-	//if v.chainConfig.ChainID.Cmp(ctx.ChainId()) == 0 {
 	if v.IsLocalCtx(ctx) {
 		if old := v.store.Get(v.chainID, ctx.ID()); old != nil && old.Status != cc.CtxStatusPending {
 			v.logger.Debug("ctx is already signatured", "ctxID", ctx.ID().String())
