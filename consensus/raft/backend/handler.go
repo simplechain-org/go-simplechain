@@ -762,7 +762,11 @@ func (pm *ProtocolManager) eventLoop() {
 						headBlockHash := pm.blockchain.CurrentBlock().Hash()
 						log.Warn("not applying already-applied block", "block hash", block.Hash(), "parent", block.ParentHash(), "head", headBlockHash)
 					} else {
-						pm.applyNewChainHead(&block)
+						if !pm.applyNewChainHead(&block) {
+							// return false only if insert chain is interrupted
+							// stop eventloop
+							return
+						}
 					}
 
 				case raftpb.EntryConfChange:
@@ -882,7 +886,7 @@ func blockExtendsChain(block *types.Block, chain *core.BlockChain) bool {
 	return block.ParentHash() == chain.CurrentBlock().Hash()
 }
 
-func (pm *ProtocolManager) applyNewChainHead(block *types.Block) {
+func (pm *ProtocolManager) applyNewChainHead(block *types.Block) bool {
 	if !blockExtendsChain(block, pm.blockchain) {
 		headBlock := pm.blockchain.CurrentBlock()
 		log.Info("Non-extending block", "block", block.Hash(), "parent", block.ParentHash(), "head", headBlock.Hash())
@@ -898,9 +902,15 @@ func (pm *ProtocolManager) applyNewChainHead(block *types.Block) {
 		_, err := pm.blockchain.InsertChain([]*types.Block{block})
 
 		if err != nil {
+			if err == core.ErrAbortBlocksProcessing {
+				log.Error(fmt.Sprintf("failed to extend chain: %s", err.Error()))
+				return false
+			}
 			panic(fmt.Sprintf("failed to extend chain: %s", err.Error()))
 		}
 	}
+
+	return true
 }
 
 // Sets new appliedIndex in-memory, *and* writes this appliedIndex to LevelDB.

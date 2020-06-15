@@ -1280,6 +1280,12 @@ func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.
 	return bc.writeBlockWithState(block, receipts, logs, state, emitHeadEvent)
 }
 
+// QUORUM
+// checks if the consensus engine is Rfat
+func (bc *BlockChain) isRaft() bool {
+	return bc.chainConfig.Raft && bc.chainConfig.Istanbul == nil && bc.chainConfig.Clique == nil
+}
+
 // writeBlockWithState writes the block and all associated state to the database,
 // but is expects the chain mutex to be held.
 func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool) (status WriteStatus, err error) {
@@ -1497,6 +1503,12 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, error) {
 	// If the chain is terminating, don't even bother starting up
 	if atomic.LoadInt32(&bc.procInterrupt) == 1 {
+		log.Debug("Premature abort during blocks processing")
+		// QUORUM
+		if bc.isRaft() {
+			// Only returns an error for raft mode
+			return 0, ErrAbortBlocksProcessing
+		}
 		return 0, nil
 	}
 	// Start a parallel signature recovery (signer will fluke on fork transition, minimal perf loss)
