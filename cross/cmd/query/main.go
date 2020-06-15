@@ -39,7 +39,7 @@ func query() {
 	}
 
 	var signatures map[string]map[uint64][]*RPCCrossTransaction
-	if err = client.CallContext(context.Background(), &signatures, "eth_ctxContent"); err != nil {
+	if err = client.CallContext(context.Background(), &signatures, "cross_ctxContent"); err != nil {
 		fmt.Println("CallContext", "err", err)
 		return
 	}
