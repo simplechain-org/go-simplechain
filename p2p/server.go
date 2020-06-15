@@ -200,6 +200,9 @@ type Server struct {
 
 	// State of run loop and listenLoop.
 	inboundHistory expHeap
+
+	// raft peers info
+	checkPeerInRaft func(*enode.Node) bool
 }
 
 type peerOpFunc func(map[enode.ID]*Peer)
@@ -987,6 +990,15 @@ func (srv *Server) setupConn(c *conn, flags connFlag, dialDest *enode.Node) erro
 		return err
 	}
 
+	// If raft is running, check if the dialing node is in the raft cluster
+	// Node doesn't belong to raft cluster is not allowed to join the p2p network
+	if srv.checkPeerInRaft != nil && !srv.checkPeerInRaft(c.node) {
+		log.Trace("incoming connection peer is not in the raft cluster", "enode.id", c.node.ID())
+		return nil
+	}
+
+	//TODO: support QUORUM Permissioning
+
 	// Run the capability negotiation handshake.
 	phs, err := c.doProtoHandshake(srv.ourHandshake)
 	if err != nil {
@@ -1133,4 +1145,8 @@ func (srv *Server) PeersInfo() []*PeerInfo {
 		}
 	}
 	return infos
+}
+
+func (srv *Server) SetCheckPeerInRaft(f func(*enode.Node) bool) {
+	srv.checkPeerInRaft = f
 }
