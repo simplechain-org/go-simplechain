@@ -1,15 +1,13 @@
 package backend
 
-import "github.com/simplechain-org/go-simplechain/consensus/raft"
-
 type RaftNodeInfo struct {
-	ClusterSize    int             `json:"clusterSize"`
-	Role           string          `json:"role"`
-	Address        *raft.Address   `json:"address"`
-	PeerAddresses  []*raft.Address `json:"peerAddresses"`
-	RemovedPeerIds []uint16        `json:"removedPeerIds"`
-	AppliedIndex   uint64          `json:"appliedIndex"`
-	SnapshotIndex  uint64          `json:"snapshotIndex"`
+	ClusterSize    int        `json:"clusterSize"`
+	Role           string     `json:"role"`
+	Address        *Address   `json:"address"`
+	PeerAddresses  []*Address `json:"peerAddresses"`
+	RemovedPeerIds []uint16   `json:"removedPeerIds"`
+	AppliedIndex   uint64     `json:"appliedIndex"`
+	SnapshotIndex  uint64     `json:"snapshotIndex"`
 }
 
 type PublicRaftAPI struct {
@@ -41,7 +39,7 @@ func (s *PublicRaftAPI) Leader() (string, error) {
 	return addr.NodeId.String(), nil
 }
 
-func (s *PublicRaftAPI) Cluster() []*raft.Address {
+func (s *PublicRaftAPI) Cluster() []*Address {
 	nodeInfo := s.raftService.raftProtocolManager.NodeInfo()
 	return append(nodeInfo.PeerAddresses, nodeInfo.Address)
 }

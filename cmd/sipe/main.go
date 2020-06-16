@@ -159,6 +159,8 @@ var (
 		utils.RaftModeFlag,
 		utils.RaftJoinExistingFlag,
 		utils.RaftPortFlag,
+		utils.RaftBlockTimeFlag,
+		utils.RaftDNSEnabledFlag,
 		utils.IstanbulRequestTimeoutFlag,
 		utils.IstanbulBlockPeriodFlag,
 		utils.ConfirmDepthFlag,

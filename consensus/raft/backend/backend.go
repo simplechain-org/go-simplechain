@@ -4,6 +4,7 @@ import (
 	"crypto/ecdsa"
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/simplechain-org/go-simplechain/accounts"
 	"github.com/simplechain-org/go-simplechain/consensus/raft"
@@ -37,7 +38,7 @@ type RaftService struct {
 	nodeKey  *ecdsa.PrivateKey
 }
 
-func New(ctx *node.ServiceContext, raftId, raftPort uint16, joinExisting bool, e *sub.Ethereum, startPeers []*enode.Node, datadir string) (*RaftService, error) {
+func New(ctx *node.ServiceContext, raftId, raftPort uint16, joinExisting bool, e *sub.Ethereum, startPeers []*enode.Node, datadir string, blockTime time.Duration, useDns bool) (*RaftService, error) {
 	service := &RaftService{
 		eventMux:       ctx.EventMux,
 		chainDb:        e.ChainDb(),
@@ -55,10 +56,14 @@ func New(ctx *node.ServiceContext, raftId, raftPort uint16, joinExisting bool, e
 	}
 	engine.SetId(raftId)
 
-	service.minter = miner.New(service, &e.Config().Miner, e.ChainConfig(), service.eventMux, engine, nil)
+	minerConfig := &e.Config().Miner
+	// Reuse Recommit
+	minerConfig.Recommit = blockTime
+
+	service.minter = miner.New(service, minerConfig, e.ChainConfig(), service.eventMux, engine, nil)
 
 	var err error
-	if service.raftProtocolManager, err = NewProtocolManager(raftId, raftPort, service.blockchain, service.eventMux, startPeers, joinExisting, datadir, service.minter, service.downloader); err != nil {
+	if service.raftProtocolManager, err = NewProtocolManager(raftId, raftPort, service.blockchain, service.eventMux, startPeers, joinExisting, datadir, service.minter, service.downloader, useDns); err != nil {
 		return nil, err
 	}
 

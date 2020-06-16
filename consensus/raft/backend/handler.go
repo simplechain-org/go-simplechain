@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -48,18 +49,19 @@ type ProtocolManager struct {
 	raftPort       uint16
 
 	// Local peer state (protected by mu vs concurrent access via JS)
-	address       *raft.Address
+	address       *Address
 	role          int    // Role: minter or verifier
 	appliedIndex  uint64 // The index of the last-applied raft entry
 	snapshotIndex uint64 // The index of the latest snapshot.
 
 	// Remote peer state (protected by mu vs concurrent access via JS)
 	leader       uint16
-	peers        map[uint16]*raft.Peer
+	peers        map[uint16]*Peer
 	removedPeers mapset.Set // *Permanently removed* peers
 
 	// P2P transport
 	p2pServer *p2p.Server // Initialized in start()
+	useDns    bool
 
 	// Blockchain services
 	blockchain *core.BlockChain
@@ -98,14 +100,14 @@ type ProtocolManager struct {
 // Public interface
 //
 
-func NewProtocolManager(raftId uint16, raftPort uint16, blockchain *core.BlockChain, mux *event.TypeMux, bootstrapNodes []*enode.Node, joinExisting bool, datadir string, minter *miner.Miner, downloader *downloader.Downloader) (*ProtocolManager, error) {
+func NewProtocolManager(raftId uint16, raftPort uint16, blockchain *core.BlockChain, mux *event.TypeMux, bootstrapNodes []*enode.Node, joinExisting bool, datadir string, minter *miner.Miner, downloader *downloader.Downloader, useDns bool) (*ProtocolManager, error) {
 	waldir := fmt.Sprintf("%s/raft-wal", datadir)
 	snapdir := fmt.Sprintf("%s/raft-snap", datadir)
 	raftDbLoc := fmt.Sprintf("%s/raft-state", datadir)
 
 	manager := &ProtocolManager{
 		bootstrapNodes:      bootstrapNodes,
-		peers:               make(map[uint16]*raft.Peer),
+		peers:               make(map[uint16]*Peer),
 		leader:              uint16(etcdRaft.None),
 		removedPeers:        mapset.NewSet(),
 		joinExisting:        joinExisting,
@@ -124,6 +126,7 @@ func NewProtocolManager(raftId uint16, raftPort uint16, blockchain *core.BlockCh
 		raftStorage:         etcdRaft.NewMemoryStorage(),
 		minter:              minter,
 		downloader:          downloader,
+		useDns:              useDns,
 	}
 
 	if db, err := openRaftDb(raftDbLoc); err != nil {
@@ -196,7 +199,7 @@ func (pm *ProtocolManager) NodeInfo() *RaftNodeInfo {
 		roleDescription = "verifier"
 	}
 
-	peerAddresses := make([]*raft.Address, len(pm.peers))
+	peerAddresses := make([]*Address, len(pm.peers))
 	peerIdx := 0
 	for _, peer := range pm.peers {
 		peerAddresses[peerIdx] = peer.Address
@@ -323,8 +326,14 @@ func (pm *ProtocolManager) ProposeNewPeer(enodeId string) (uint16, error) {
 		return 0, err
 	}
 
-	if len(node.IP()) != 4 {
-		return 0, fmt.Errorf("expected IPv4 address (with length 4), but got IP of length %v", len(node.IP()))
+	if !pm.useDns {
+		// hostname is not allowed if DNS is not enabled
+		if node.Host() != "" {
+			return 0, fmt.Errorf("raft must enable dns to use hostname")
+		}
+		if len(node.IP()) != 4 {
+			return 0, fmt.Errorf("expected IPv4 address (with length 4), but got IP of length %v", len(node.IP()))
+		}
 	}
 
 	if !node.HasRaftPort() {
@@ -336,12 +345,12 @@ func (pm *ProtocolManager) ProposeNewPeer(enodeId string) (uint16, error) {
 	}
 
 	raftId := pm.nextRaftId()
-	address := raft.NewAddress(raftId, node.RaftPort(), node)
+	address := NewAddress(raftId, node.RaftPort(), node, pm.useDns)
 
 	pm.confChangeProposalC <- raftpb.ConfChange{
 		Type:    raftpb.ConfChangeAddNode,
 		NodeID:  uint64(raftId),
-		Context: address.ToBytes(),
+		Context: address.toBytes(),
 	}
 
 	return raftId, nil
@@ -516,7 +525,7 @@ func (pm *ProtocolManager) startRaft() {
 	go pm.handleRoleChange(pm.rawNode().RoleChan().Out())
 }
 
-func (pm *ProtocolManager) setLocalAddress(addr *raft.Address) {
+func (pm *ProtocolManager) setLocalAddress(addr *Address) {
 	pm.mu.Lock()
 	pm.address = addr
 	pm.mu.Unlock()
@@ -524,7 +533,7 @@ func (pm *ProtocolManager) setLocalAddress(addr *raft.Address) {
 	// By setting `URLs` on the raft transport, we advertise our URL (in an HTTP
 	// header) to any recipient. This is necessary for a newcomer to the cluster
 	// to be able to accept a snapshot from us to bootstrap them.
-	if urls, err := raftTypes.NewURLs([]string{raftUrl(addr)}); err == nil {
+	if urls, err := raftTypes.NewURLs([]string{pm.raftUrl(addr)}); err == nil {
 		pm.transport.URLs = urls
 	} else {
 		panic(fmt.Sprintf("error: could not create URL from local address: %v", addr))
@@ -651,11 +660,19 @@ func (pm *ProtocolManager) entriesToApply(allEntries []raftpb.Entry) (entriesToA
 	return
 }
 
-func raftUrl(address *raft.Address) string {
-	return fmt.Sprintf("http://%s:%d", address.Ip, address.RaftPort)
+func (pm *ProtocolManager) raftUrl(address *Address) string {
+	if parsedIp := net.ParseIP(address.Hostname); parsedIp != nil {
+		if ipv4 := parsedIp.To4(); ipv4 != nil {
+			//this is an IPv4 address
+			return fmt.Sprintf("http://%s:%d", ipv4, address.RaftPort)
+		}
+		//this is an IPv6 address
+		return fmt.Sprintf("http://[%s]:%d", parsedIp, address.RaftPort)
+	}
+	return fmt.Sprintf("http://%s:%d", address.Hostname, address.RaftPort)
 }
 
-func (pm *ProtocolManager) addPeer(address *raft.Address) {
+func (pm *ProtocolManager) addPeer(address *Address) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
@@ -669,15 +686,15 @@ func (pm *ProtocolManager) addPeer(address *raft.Address) {
 	}
 
 	// Add P2P connection:
-	p2pNode := enode.NewV4WithRaft(pubKey, address.Ip, int(address.P2pPort), 0, int(address.RaftPort))
+	p2pNode := enode.NewV4Hostname(pubKey, address.Ip.String(), int(address.P2pPort), 0, int(address.RaftPort))
 	pm.p2pServer.AddPeer(p2pNode)
 
 	// Add raft transport connection:
-	pm.transport.AddPeer(raftTypes.ID(raftId), []string{raftUrl(address)})
-	pm.peers[raftId] = &raft.Peer{Address: address, P2pNode: p2pNode}
+	pm.transport.AddPeer(raftTypes.ID(raftId), []string{pm.raftUrl(address)})
+	pm.peers[raftId] = &Peer{Address: address, P2pNode: p2pNode}
 }
 
-func (pm *ProtocolManager) disconnectFromPeer(raftId uint16, peer *raft.Peer) {
+func (pm *ProtocolManager) disconnectFromPeer(raftId uint16, peer *Peer) {
 	pm.p2pServer.RemovePeer(peer.P2pNode)
 	pm.transport.RemovePeer(raftTypes.ID(raftId))
 }
@@ -794,7 +811,7 @@ func (pm *ProtocolManager) eventLoop() {
 							log.Info("adding peer due to ConfChangeAddNode", "raft id", raftId)
 
 							forceSnapshot = true
-							pm.addPeer(raft.BytesToAddress(cc.Context))
+							pm.addPeer(BytesToAddress(cc.Context))
 						}
 
 					case raftpb.ConfChangeRemoveNode:
@@ -854,10 +871,10 @@ func (pm *ProtocolManager) eventLoop() {
 	}
 }
 
-func (pm *ProtocolManager) makeInitialRaftPeers() (raftPeers []etcdRaft.Peer, peerAddresses []*raft.Address, localAddress *raft.Address) {
+func (pm *ProtocolManager) makeInitialRaftPeers() (raftPeers []etcdRaft.Peer, peerAddresses []*Address, localAddress *Address) {
 	initialNodes := pm.bootstrapNodes
-	raftPeers = make([]etcdRaft.Peer, len(initialNodes))       // Entire cluster
-	peerAddresses = make([]*raft.Address, len(initialNodes)-1) // Cluster without *this* node
+	raftPeers = make([]etcdRaft.Peer, len(initialNodes))  // Entire cluster
+	peerAddresses = make([]*Address, len(initialNodes)-1) // Cluster without *this* node
 
 	peersSeen := 0
 	for i, node := range initialNodes {
@@ -865,10 +882,10 @@ func (pm *ProtocolManager) makeInitialRaftPeers() (raftPeers []etcdRaft.Peer, pe
 		// We initially get the raftPort from the enode ID's query string. As an alternative, we can move away from
 		// requiring the use of static peers for the initial set, and load them from e.g. another JSON file which
 		// contains pairs of enodes and raft ports, or we can get this initial peer list from commandline flags.
-		address := raft.NewAddress(raftId, node.RaftPort(), node)
+		address := NewAddress(raftId, node.RaftPort(), node, pm.useDns)
 		raftPeers[i] = etcdRaft.Peer{
 			ID:      uint64(raftId),
-			Context: address.ToBytes(),
+			Context: address.toBytes(),
 		}
 
 		if raftId == pm.raftId {
@@ -930,7 +947,7 @@ func (pm *ProtocolManager) updateLeader(leader uint64) {
 }
 
 // The Address for the current leader, or an error if no leader is elected.
-func (pm *ProtocolManager) LeaderAddress() (*raft.Address, error) {
+func (pm *ProtocolManager) LeaderAddress() (*Address, error) {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 
