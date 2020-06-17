@@ -984,20 +984,22 @@ func (srv *Server) setupConn(c *conn, flags connFlag, dialDest *enode.Node) erro
 		c.node = nodeFromConn(remotePubkey, c.fd)
 	}
 	clog := srv.log.New("id", c.node.ID(), "addr", c.fd.RemoteAddr(), "conn", c.flags)
+
+	// If raft is running, check if the dialing node is in the raft cluster
+	// Node doesn't belong to raft cluster is not allowed to join the p2p network
+	if srv.checkPeerInRaft != nil && !srv.checkPeerInRaft(c.node) {
+		node := c.node.ID().String()
+		log.Trace("incoming connection peer is not in the raft cluster", "enode.id", node)
+		return newPeerError(errNotInRaftCluster, "id=%s…%s", node[:4], node[len(node)-4:])
+	}
+
+	//TODO: support QUORUM Permissioning
+
 	err = srv.checkpoint(c, srv.checkpointPostHandshake)
 	if err != nil {
 		clog.Trace("Rejected peer", "err", err)
 		return err
 	}
-
-	// If raft is running, check if the dialing node is in the raft cluster
-	// Node doesn't belong to raft cluster is not allowed to join the p2p network
-	if srv.checkPeerInRaft != nil && !srv.checkPeerInRaft(c.node) {
-		log.Trace("incoming connection peer is not in the raft cluster", "enode.id", c.node.ID())
-		return nil
-	}
-
-	//TODO: support QUORUM Permissioning
 
 	// Run the capability negotiation handshake.
 	phs, err := c.doProtoHandshake(srv.ourHandshake)
