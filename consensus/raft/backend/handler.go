@@ -96,6 +96,8 @@ type ProtocolManager struct {
 	raftStorage *etcdRaft.MemoryStorage // Volatile raft storage
 }
 
+var errNoLeaderElected = errors.New("no leader is currently elected")
+
 //
 // Public interface
 //
@@ -192,11 +194,13 @@ func (pm *ProtocolManager) NodeInfo() *RaftNodeInfo {
 	pm.mu.RLock() // as we read role and peers
 	defer pm.mu.RUnlock()
 
-	var roleDescription string
+	roleDescription := ""
 	if pm.role == raft.MinterRole {
 		roleDescription = "minter"
-	} else {
+	} else if pm.isVerifierNode() {
 		roleDescription = "verifier"
+	} else if pm.isLearnerNode() {
+		roleDescription = "learner"
 	}
 
 	peerAddresses := make([]*Address, len(pm.peers))
@@ -320,7 +324,10 @@ func (pm *ProtocolManager) peerExist(node *enode.Node) bool {
 	return false
 }
 
-func (pm *ProtocolManager) ProposeNewPeer(enodeId string) (uint16, error) {
+func (pm *ProtocolManager) ProposeNewPeer(enodeId string, isLearner bool) (uint16, error) {
+	if pm.isLearnerNode() {
+		return 0, errors.New("learner node can't add peer or learner")
+	}
 	node, err := enode.ParseV4(enodeId)
 	if err != nil {
 		return 0, err
@@ -347,8 +354,14 @@ func (pm *ProtocolManager) ProposeNewPeer(enodeId string) (uint16, error) {
 	raftId := pm.nextRaftId()
 	address := NewAddress(raftId, node.RaftPort(), node, pm.useDns)
 
+	confChangeType := raftpb.ConfChangeAddNode
+
+	if isLearner {
+		confChangeType = raftpb.ConfChangeAddLearnerNode
+	}
+
 	pm.confChangeProposalC <- raftpb.ConfChange{
-		Type:    raftpb.ConfChangeAddNode,
+		Type:    confChangeType,
 		NodeID:  uint64(raftId),
 		Context: address.toBytes(),
 	}
@@ -356,11 +369,31 @@ func (pm *ProtocolManager) ProposeNewPeer(enodeId string) (uint16, error) {
 	return raftId, nil
 }
 
-func (pm *ProtocolManager) ProposePeerRemoval(raftId uint16) {
+func (pm *ProtocolManager) ProposePeerRemoval(raftId uint16) error {
+	if pm.isLearnerNode() && raftId != pm.raftId {
+		return errors.New("learner node can't remove other peer")
+	}
 	pm.confChangeProposalC <- raftpb.ConfChange{
 		Type:   raftpb.ConfChangeRemoveNode,
 		NodeID: uint64(raftId),
 	}
+	return nil
+}
+
+func (pm *ProtocolManager) PromoteToPeer(raftId uint16) (bool, error) {
+	if pm.isLearnerNode() {
+		return false, errors.New("learner node can't promote to peer")
+	}
+
+	if !pm.isLearner(raftId) {
+		return false, fmt.Errorf("%d is not a learner. only learner can be promoted to peer", raftId)
+	}
+
+	pm.confChangeProposalC <- raftpb.ConfChange{
+		Type:   raftpb.ConfChangeAddNode,
+		NodeID: uint64(raftId),
+	}
+	return true, nil
 }
 
 //
@@ -416,8 +449,8 @@ func (pm *ProtocolManager) startRaft() {
 	walExisted := wal.Exist(pm.waldir)
 	lastAppliedIndex := pm.loadAppliedIndex()
 
-	ss := &stats.ServerStats{}
-	ss.Initialize()
+	id := raftTypes.ID(pm.raftId).String()
+	ss := stats.NewServerStats(id, id)
 	pm.transport = &rafthttp.Transport{
 		ID:          raftTypes.ID(pm.raftId),
 		ClusterID:   0x1000,
@@ -549,6 +582,8 @@ func (pm *ProtocolManager) startRaft() {
 		pm.unsafeRawNode = etcdRaft.StartNode(raftConfig, raftPeers)
 	}
 
+	log.Info("raft node started")
+
 	go pm.serveRaft()
 	go pm.serveLocalProposals()
 	go pm.eventLoop()
@@ -588,6 +623,36 @@ func (pm *ProtocolManager) serveRaft() {
 		raft.Fatalf("Failed to serve rafthttp (%v)", err)
 	}
 	close(pm.httpdonec)
+}
+
+func (pm *ProtocolManager) isLearner(rid uint16) bool {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	for _, n := range pm.confState.Learners {
+		if uint16(n) == rid {
+			return true
+		}
+	}
+	return false
+}
+
+func (pm *ProtocolManager) isLearnerNode() bool {
+	return pm.isLearner(pm.raftId)
+}
+
+func (pm *ProtocolManager) isVerifierNode() bool {
+	return pm.isVerifier(pm.raftId)
+}
+
+func (pm *ProtocolManager) isVerifier(rid uint16) bool {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	for _, n := range pm.confState.Nodes {
+		if uint16(n) == rid {
+			return true
+		}
+	}
+	return false
 }
 
 func (pm *ProtocolManager) handleRoleChange(roleC <-chan interface{}) {
@@ -822,26 +887,30 @@ func (pm *ProtocolManager) eventLoop() {
 					raftId := uint16(cc.NodeID)
 
 					pm.confState = *pm.rawNode().ApplyConfChange(cc)
-
+					log.Info("confChange", "confState", pm.confState)
 					forceSnapshot := false
 
 					switch cc.Type {
-					case raftpb.ConfChangeAddNode:
+					case raftpb.ConfChangeAddNode, raftpb.ConfChangeAddLearnerNode:
+						confChangeTypeName := raftpb.ConfChangeType_name[int32(cc.Type)]
+						log.Info(confChangeTypeName, "raft id", raftId)
 						if pm.isRaftIdRemoved(raftId) {
-							log.Info("ignoring ConfChangeAddNode for permanently-removed peer", "raft id", raftId)
+							log.Info("ignoring "+confChangeTypeName+" for permanently-removed peer", "raft id", raftId)
 						} else if pm.isRaftIdUsed(raftId) && raftId <= uint16(len(pm.bootstrapNodes)) {
 							// See initial cluster logic in startRaft() for more information.
-							log.Info("ignoring expected ConfChangeAddNode for initial peer", "raft id", raftId)
-
+							log.Info("ignoring expected "+confChangeTypeName+" for initial peer", "raft id", raftId)
 							// We need a snapshot to exist to reconnect to peers on start-up after a crash.
 							forceSnapshot = true
-						} else if pm.isRaftIdUsed(raftId) {
-							log.Info("ignoring ConfChangeAddNode for already-used raft ID", "raft id", raftId)
-						} else {
-							log.Info("adding peer due to ConfChangeAddNode", "raft id", raftId)
-
+						} else { // add peer or add learner or promote learner to voter
 							forceSnapshot = true
-							pm.addPeer(BytesToAddress(cc.Context))
+							//if raft id exists as peer, you are promoting learner to peer
+							if pm.isRaftIdUsed(raftId) {
+								log.Info("promote learner node to voter node", "raft id", raftId)
+							} else {
+								//if raft id does not exist, you are adding peer/learner
+								log.Info("add peer/learner -> "+confChangeTypeName, "raft id", raftId)
+								pm.addPeer(BytesToAddress(cc.Context))
+							}
 						}
 
 					case raftpb.ConfChangeRemoveNode:
@@ -987,7 +1056,7 @@ func (pm *ProtocolManager) LeaderAddress() (*Address, error) {
 		return l.Address, nil
 	}
 	// We expect to reach this if pm.leader is 0, which is how etcd denotes the lack of a leader.
-	return nil, errors.New("no leader is currently elected")
+	return nil, errNoLeaderElected
 }
 
 // Returns the raft id for a given enodeId

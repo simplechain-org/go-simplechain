@@ -26,6 +26,11 @@ type Address struct {
 	Rest []rlp.RawValue `json:"-" rlp:"tail"`
 }
 
+type ClusterInfo struct {
+	Address
+	Role string `json:"role"`
+}
+
 func NewAddress(raftId uint16, raftPort int, node *enode.Node, useDns bool) *Address {
 	// derive 64 byte nodeID from 128 byte enodeID
 	id, err := enode.RaftHexID(node.EnodeID())

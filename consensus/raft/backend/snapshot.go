@@ -54,7 +54,7 @@ func (pm *ProtocolManager) buildSnapshot() *SnapshotWithHostnames {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 
-	numNodes := len(pm.confState.Nodes)
+	numNodes := len(pm.confState.Nodes) + len(pm.confState.Learners)
 	numRemovedNodes := pm.removedPeers.Cardinality()
 
 	snapshot := &SnapshotWithHostnames{
@@ -65,7 +65,7 @@ func (pm *ProtocolManager) buildSnapshot() *SnapshotWithHostnames {
 
 	// Populate addresses
 
-	for i, rawRaftId := range pm.confState.Nodes {
+	for i, rawRaftId := range append(pm.confState.Nodes, pm.confState.Learners...) {
 		raftId := uint16(rawRaftId)
 
 		if raftId == pm.raftId {
@@ -119,7 +119,7 @@ func (pm *ProtocolManager) triggerSnapshot(index uint64) {
 
 func confStateIdSet(confState raftpb.ConfState) mapset.Set {
 	set := mapset.NewSet()
-	for _, rawRaftId := range confState.Nodes {
+	for _, rawRaftId := range append(confState.Nodes, confState.Learners...) {
 		set.Add(uint16(rawRaftId))
 	}
 	return set
