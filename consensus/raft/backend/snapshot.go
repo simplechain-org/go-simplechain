@@ -386,4 +386,10 @@ func (pm *ProtocolManager) logNewlyAcceptedTransactions(preSyncHead *types.Block
 		blocksSeen += 1
 		currBlock = pm.blockchain.GetBlockByHash(currBlock.ParentHash())
 	}
+
+	for _, block := range blocks {
+		for _, tx := range block.Transactions() {
+			log.EmitCheckpoint(log.TxAccepted, "tx", tx.Hash().Hex())
+		}
+	}
 }

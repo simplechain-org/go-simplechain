@@ -666,8 +666,14 @@ func (pm *ProtocolManager) handleRoleChange(roleC <-chan interface{}) {
 			}
 
 			if intRole == raft.MinterRole {
+				log.EmitCheckpoint(log.BecameMinter)
 				pm.minter.Start(common.Address{})
 			} else { // verifier
+				if pm.isVerifierNode() {
+					log.EmitCheckpoint(log.BecameVerifier)
+				} else {
+					log.EmitCheckpoint(log.BecameLearner)
+				}
 				pm.minter.Stop()
 			}
 
@@ -857,7 +863,7 @@ func (pm *ProtocolManager) eventLoop() {
 					var block types.Block
 					err := rlp.DecodeBytes(entry.Data, &block)
 					if err != nil {
-						log.Error("error decoding block: ", err)
+						log.Error("error decoding block: ", "err", err)
 					}
 
 					if pm.blockchain.HasBlock(block.Hash(), block.NumberU64()) {
@@ -1015,6 +1021,10 @@ func (pm *ProtocolManager) applyNewChainHead(block *types.Block) bool {
 			}
 		}
 
+		for _, tx := range block.Transactions() {
+			log.EmitCheckpoint(log.TxAccepted, "tx", tx.Hash().Hex())
+		}
+
 		_, err := pm.blockchain.InsertChain([]*types.Block{block})
 
 		if err != nil {
@@ -1024,6 +1034,8 @@ func (pm *ProtocolManager) applyNewChainHead(block *types.Block) bool {
 			}
 			panic(fmt.Sprintf("failed to extend chain: %s", err.Error()))
 		}
+
+		log.EmitCheckpoint(log.BlockCreated, "block", fmt.Sprintf("%x", block.Hash()))
 	}
 
 	return true

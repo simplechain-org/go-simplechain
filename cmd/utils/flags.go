@@ -805,6 +805,10 @@ var (
 		Name:  "raftdnsenable",
 		Usage: "Enable DNS resolution of peers",
 	}
+	RaftEmitCheckpointsFlag = cli.BoolFlag{
+		Name:  "raftcheckpoints",
+		Usage: "If enabled, emit specially formatted logging checkpoints",
+	}
 
 	// Istanbul settings
 	IstanbulRequestTimeoutFlag = cli.Uint64Flag{
