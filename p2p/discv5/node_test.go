@@ -141,12 +141,15 @@ var parseNodeTests = []struct {
 	{
 		// This test checks that errors from url.Parse are handled.
 		rawurl:    "://foo",
-		wantError: `parse ://foo: missing protocol scheme`,
+		wantError: `missing protocol scheme`,//新版本的go url.Parse时为parse "://foo"与老版本parse ://foo:不兼容
 	},
 }
 
+
+
 func TestParseNode(t *testing.T) {
 	for _, test := range parseNodeTests {
+
 		n, err := ParseNode(test.rawurl)
 		if test.wantError != "" {
 			if err == nil {
