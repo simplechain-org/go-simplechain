@@ -28,7 +28,8 @@ type Address struct {
 
 type ClusterInfo struct {
 	Address
-	Role string `json:"role"`
+	Role       string `json:"role"`
+	NodeActive bool   `json:"nodeActive"`
 }
 
 func NewAddress(raftId uint16, raftPort int, node *enode.Node, useDns bool) *Address {
