@@ -104,10 +104,12 @@ func (v *SimpleValidator) VerifySigner(ctx *cc.CrossTransaction, signChain, stor
 			return cross.ErrInternal
 		}
 		anchors, signedCount := QueryAnchor(v.chainConfig, v.chain, statedb, newHead, v.contract, storeChainID.Uint64())
-		v.config.Anchors = anchors
-		v.requireSignature = signedCount
-		anchorSet = NewAnchorSet(v.config.Anchors)
-		v.anchors[storeChainID.Uint64()] = anchorSet
+		if anchors != nil {
+			v.config.Anchors = anchors
+			v.requireSignature = signedCount
+			anchorSet = NewAnchorSet(v.config.Anchors)
+			v.anchors[storeChainID.Uint64()] = anchorSet
+		}
 	}
 	if !anchorSet.IsAnchorSignedCtx(ctx, cc.NewEIP155CtxSigner(signChain)) {
 		v.logger.Warn("invalid signature", "ctxID", ctx.ID().String())
@@ -178,8 +180,10 @@ func (v *SimpleValidator) UpdateAnchors(info *cc.RemoteChainInfo) error {
 		return cross.ErrInternal
 	}
 	anchors, signedCount := QueryAnchor(v.chainConfig, v.chain, statedb, newHead, v.contract, info.RemoteChainId)
-	v.config.Anchors = anchors
-	v.requireSignature = signedCount
-	v.anchors[info.RemoteChainId] = NewAnchorSet(v.config.Anchors)
+	if anchors != nil {
+		v.config.Anchors = anchors
+		v.requireSignature = signedCount
+		v.anchors[info.RemoteChainId] = NewAnchorSet(v.config.Anchors)
+	}
 	return nil
 }

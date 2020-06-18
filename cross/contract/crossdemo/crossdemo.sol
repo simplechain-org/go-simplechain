@@ -11,6 +11,7 @@ contract crossDemo{
     struct Chain{
         uint remoteChainId;
         uint8 signConfirmCount;//最少签名数量
+        uint maxValue;
         uint64 anchorsPositionBit;// 锚定节点 二进制表示 例如 1101001010, 最多62个锚定节点，空余位置0由外部计算
         address[] anchorAddress;
         mapping(address=>Anchor) anchors;   //锚定矿工列表 address => Anchor
@@ -27,6 +28,9 @@ contract crossDemo{
     struct Anchor {
         uint remoteChainId;
         uint8 position; // anchorsPositionBit
+        bool status;//true Available
+        uint signCount;
+        uint finishCount;
     }
 
     struct MakerInfo {
@@ -51,6 +55,8 @@ contract crossDemo{
 
     event AccumulateRewards(uint remoteChainId, address indexed anchor, uint reward);
 
+    event SetAnchorStatus(uint remoteChainId);
+
     modifier onlyAnchor(uint remoteChainId) {
         require(crossChains[remoteChainId].remoteChainId > 0,"remoteChainId not exist");
         require(crossChains[remoteChainId].anchors[msg.sender].remoteChainId == remoteChainId,"not anchors");
@@ -71,6 +77,10 @@ contract crossDemo{
 
     function getTotalReward(uint remoteChainId) public view returns(uint) { return crossChains[remoteChainId].totalReward; }
 
+    function getChainReward(uint remoteChainId) public view returns(uint) { return crossChains[remoteChainId].reward; }
+
+    function getMaxValue(uint remoteChainId) public view returns(uint) { return crossChains[remoteChainId].maxValue; }
+
     function accumulateRewards(uint remoteChainId, address payable anchor, uint reward) public onlyOwner {
         require(reward <= crossChains[remoteChainId].totalReward, "must less then totalReward");
         require(crossChains[remoteChainId].anchors[anchor].remoteChainId == remoteChainId, "illegal anchor");
@@ -80,7 +90,7 @@ contract crossDemo{
     }
 
     //登记链信息 管理员操作
-    function chainRegister(uint remoteChainId, uint8 signConfirmCount, address[] memory _anchors) public onlyOwner returns(bool) {
+    function chainRegister(uint remoteChainId,uint maxValue, uint8 signConfirmCount, address[] memory _anchors) public onlyOwner returns(bool) {
         require (crossChains[remoteChainId].remoteChainId == 0,"remoteChainId already exist");
         require (_anchors.length <= 64,"bigger then 64");
         uint64 temp = 0;
@@ -90,6 +100,7 @@ contract crossDemo{
         //初始化信息
         crossChains[remoteChainId] = Chain({
             remoteChainId: remoteChainId,
+            maxValue: maxValue,
             signConfirmCount: signConfirmCount,
             anchorsPositionBit: (temp - 1) >> (64 - _anchors.length),
             anchorAddress:newAnchors,
@@ -106,7 +117,7 @@ contract crossDemo{
                 revert();
             }
             crossChains[remoteChainId].anchorAddress.push(_anchors[i]);
-            crossChains[remoteChainId].anchors[_anchors[i]] = Anchor({remoteChainId:remoteChainId,position:i});
+            crossChains[remoteChainId].anchors[_anchors[i]] = Anchor({remoteChainId:remoteChainId,position:i,status:true,signCount:0,finishCount:0});
         }
 
         return true;
@@ -130,7 +141,7 @@ contract crossDemo{
                 revert();
             }
 
-            crossChains[remoteChainId].anchors[_anchors[i]] = Anchor({remoteChainId:remoteChainId, position:uint8(crossChains[remoteChainId].anchorAddress.length)});
+            crossChains[remoteChainId].anchors[_anchors[i]] = Anchor({remoteChainId:remoteChainId, position:uint8(crossChains[remoteChainId].anchorAddress.length),status:true,signCount:0,finishCount:0});
             crossChains[remoteChainId].anchorAddress.push(_anchors[i]);
         }
 
@@ -172,17 +183,34 @@ contract crossDemo{
         if(crossChains[remoteChainId].delsAddress.length < 64){
             uint64 temp = 0;
             crossChains[remoteChainId].delsPositionBit = (temp - 1) >> (64 - crossChains[remoteChainId].delsAddress.length - 1);
-            crossChains[remoteChainId].delAnchors[del] = Anchor({remoteChainId:remoteChainId, position:uint8(crossChains[remoteChainId].delsAddress.length)});
+            crossChains[remoteChainId].delAnchors[del] = Anchor({remoteChainId:remoteChainId, position:uint8(crossChains[remoteChainId].delsAddress.length),status:false,signCount:0,finishCount:0});
             crossChains[remoteChainId].delsAddress.push(del);
 
         }else{ //bitLen == 64 （处理环）
             delete crossChains[remoteChainId].delAnchors[crossChains[remoteChainId].delsAddress[crossChains[remoteChainId].delId]];
             crossChains[remoteChainId].delsAddress[crossChains[remoteChainId].delId] = del;
-            crossChains[remoteChainId].delAnchors[del] = Anchor({remoteChainId:remoteChainId, position:crossChains[remoteChainId].delId});
+            crossChains[remoteChainId].delAnchors[del] = Anchor({remoteChainId:remoteChainId, position:crossChains[remoteChainId].delId,status:false,signCount:0,finishCount:0});
             crossChains[remoteChainId].delId ++;
             if(crossChains[remoteChainId].delId == 64){
                 crossChains[remoteChainId].delId = 0;
             }
+        }
+    }
+
+    function setAnchorStatus(uint remoteChainId, address _anchor,bool status) public onlyOwner {
+        if (!status) {
+            uint8 j=0;
+            for (uint8 i=0; i<crossChains[remoteChainId].anchorAddress.length; i++) {
+                if (crossChains[remoteChainId].anchors[crossChains[remoteChainId].anchorAddress[i]].status) {
+                    j++;
+                }
+            }
+            require(j > crossChains[remoteChainId].signConfirmCount);
+            crossChains[remoteChainId].anchors[_anchor].status = status; //true Available
+            emit SetAnchorStatus(remoteChainId);
+        } else {
+            crossChains[remoteChainId].anchors[_anchor].status = status; //true Available
+            emit SetAnchorStatus(remoteChainId);
         }
     }
 
@@ -193,6 +221,13 @@ contract crossDemo{
         crossChains[remoteChainId].signConfirmCount = count;
     }
 
+    function setMaxValue(uint remoteChainId,uint maxValue) public onlyOwner {
+        require (crossChains[remoteChainId].remoteChainId > 0,"remoteChainId not exist");
+        require (maxValue != 0,"can not be zero");
+        require (maxValue > crossChains[remoteChainId].reward,"too less");
+        crossChains[remoteChainId].maxValue = maxValue;
+    }
+
     function getMakerTx(bytes32 txId, uint remoteChainId) public view returns(uint){
         return crossChains[remoteChainId].makerTxs[txId].value;
     }
@@ -201,13 +236,35 @@ contract crossDemo{
         return crossChains[remoteChainId].takerTxs[txId];
     }
 
-    function getAnchors(uint remoteChainId) public view returns(address[] memory,uint8){
-        return (crossChains[remoteChainId].anchorAddress,crossChains[remoteChainId].signConfirmCount);
+    function getAnchors(uint remoteChainId) public view returns(address[] memory _anchors,uint8){
+        uint8 j=0;
+        for (uint8 i=0; i<crossChains[remoteChainId].anchorAddress.length; i++) {
+            if (crossChains[remoteChainId].anchors[crossChains[remoteChainId].anchorAddress[i]].status) {
+                j++;
+            }
+        }
+        _anchors = new address[](j);
+        uint8 k=0;
+        for (uint8 i=0; i<crossChains[remoteChainId].anchorAddress.length; i++) {
+            if (crossChains[remoteChainId].anchors[crossChains[remoteChainId].anchorAddress[i]].status) {
+                _anchors[k]=crossChains[remoteChainId].anchorAddress[i];
+                k++;
+            }
+        }
+        return (_anchors,crossChains[remoteChainId].signConfirmCount);
+    }
+
+    function getAnchorWorkCount(uint remoteChainId,address _anchor) public view returns (uint,uint){
+        return (crossChains[remoteChainId].anchors[_anchor].signCount,crossChains[remoteChainId].anchors[_anchor].finishCount);
+    }
+
+    function getDelAnchorSignCount(uint remoteChainId,address _anchor) public view returns (uint){
+        return (crossChains[remoteChainId].delAnchors[_anchor].signCount);
     }
 
     //增加跨链交易
     function makerStart(uint remoteChainId, uint destValue, address payable focus, bytes memory data) public payable {
-        require(msg.value > crossChains[remoteChainId].reward,"value too low");
+        require(msg.value > crossChains[remoteChainId].reward && msg.value < crossChains[remoteChainId].maxValue,"value out of range");
         require(crossChains[remoteChainId].remoteChainId > 0,"chainId not exist"); //是否支持的跨链
         bytes32 txId = keccak256(abi.encodePacked(msg.sender, list(), remoteChainId));
         assert(crossChains[remoteChainId].makerTxs[txId].value == 0);
@@ -232,6 +289,7 @@ contract crossDemo{
     }
     //锚定节点执行,防作恶
     function makerFinish(Recept memory rtx,uint remoteChainId) public onlyAnchor(remoteChainId) payable {
+        require(crossChains[remoteChainId].anchors[msg.sender].status);
         require(crossChains[remoteChainId].makerTxs[rtx.txId].signatures[msg.sender] != 1);
         require(crossChains[remoteChainId].makerTxs[rtx.txId].value > 0);
         require(crossChains[remoteChainId].makerTxs[rtx.txId].to == address(0x0) || crossChains[remoteChainId].makerTxs[rtx.txId].to == rtx.to,"to is error");
@@ -240,6 +298,7 @@ contract crossDemo{
         crossChains[remoteChainId].makerTxs[rtx.txId].signatureCount ++;
         crossChains[remoteChainId].makerTxs[rtx.txId].to = rtx.to;
         crossChains[remoteChainId].makerTxs[rtx.txId].takerHash = rtx.txHash;
+        crossChains[remoteChainId].anchors[msg.sender].finishCount ++;
 
         if (crossChains[remoteChainId].makerTxs[rtx.txId].signatureCount >= crossChains[remoteChainId].signConfirmCount){
             rtx.to.transfer(crossChains[remoteChainId].makerTxs[rtx.txId].value);
@@ -248,21 +307,22 @@ contract crossDemo{
         }
     }
 
-    function verifySignAndCount(bytes32 hash, uint remoteChainId, uint[] memory v, bytes32[] memory r, bytes32[] memory s) private view returns (uint8) {
+    function verifySignAndCount(bytes32 hash, uint remoteChainId, uint[] memory v, bytes32[] memory r, bytes32[] memory s) private returns (uint8) {
         uint64 ret = 0;
         uint64 base = 1;
         for (uint i = 0; i < v.length; i++){
             v[i] -= remoteChainId*2;
             v[i] -= 8;
             address temp = ecrecover(hash, uint8(v[i]), r[i], s[i]);
-            if (crossChains[remoteChainId].anchors[temp].remoteChainId == remoteChainId){
+            if (crossChains[remoteChainId].anchors[temp].remoteChainId == remoteChainId && crossChains[remoteChainId].anchors[temp].status){
+                crossChains[remoteChainId].anchors[temp].signCount ++;
                 ret = ret | (base << crossChains[remoteChainId].anchors[temp].position);
             }
         }
         return uint8(bitCount(ret));
     }
 
-    function verifyOwnerSignAndCount(bytes32 hash, uint remoteChainId, uint[] memory v, bytes32[] memory r, bytes32[] memory s) private view returns (uint8) {
+    function verifyOwnerSignAndCount(bytes32 hash, uint remoteChainId, uint[] memory v, bytes32[] memory r, bytes32[] memory s) private returns (uint8) {
         uint64 ret = 0;
         uint64 base = 1;
         uint64 delRet = 0;
@@ -272,9 +332,11 @@ contract crossDemo{
             v[i] -= 8;
             address temp = ecrecover(hash, uint8(v[i]), r[i], s[i]);
             if (crossChains[remoteChainId].anchors[temp].remoteChainId == remoteChainId){
+                crossChains[remoteChainId].anchors[temp].signCount ++;
                 ret = ret | (base << crossChains[remoteChainId].anchors[temp].position);
             }
             if (crossChains[remoteChainId].delAnchors[temp].remoteChainId == remoteChainId){
+                crossChains[remoteChainId].delAnchors[temp].signCount ++;
                 delRet = delRet | (delBase << crossChains[remoteChainId].delAnchors[temp].position);
             }
         }

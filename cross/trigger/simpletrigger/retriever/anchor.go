@@ -58,5 +58,5 @@ func QueryAnchor(config *params.ChainConfig, bc core.ChainContext, statedb *stat
 			return anchors, int(signConfirmCount)
 		}
 	}
-	return anchors, minRequireSignature
+	return nil, minRequireSignature
 }
