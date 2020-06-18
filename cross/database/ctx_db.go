@@ -2,12 +2,13 @@ package db
 
 import (
 	"fmt"
-	"github.com/simplechain-org/go-simplechain/common"
-	cc "github.com/simplechain-org/go-simplechain/cross/core"
-	"github.com/simplechain-org/go-simplechain/ethdb"
 	"io"
 	"math/big"
 	"os"
+
+	"github.com/simplechain-org/go-simplechain/common"
+	cc "github.com/simplechain-org/go-simplechain/cross/core"
+	"github.com/simplechain-org/go-simplechain/ethdb"
 
 	"github.com/asdine/storm/v3"
 	"github.com/asdine/storm/v3/q"
@@ -52,12 +53,6 @@ type CtxDB interface {
 func OpenStormDB(ctx ServiceContext, name string) (*storm.DB, error) {
 	if ctx == nil || len(ctx.ResolvePath(name)) == 0 {
 		return storm.Open(os.TempDir()+name, storm.BoltOptions(0700, nil))
-		//dump, err := ioutil.TempFile(os.TempDir(), name)
-		//if err != nil {
-		//	return nil, err
-		//}
-		//return storm.Open(dump.Name())
-
 	}
 	return storm.Open(ctx.ResolvePath(name))
 }
