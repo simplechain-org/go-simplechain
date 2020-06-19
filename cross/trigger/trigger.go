@@ -26,7 +26,7 @@ type Validator interface {
 	VerifyCtx(ctx *core.CrossTransaction) error
 	VerifyContract(cws Transaction) error
 	VerifyReorg(ctx Transaction) error
-	VerifySigner(ctx *core.CrossTransaction, signChain, storeChainID *big.Int) error
+	VerifySigner(ctx *core.CrossTransaction, signChain, storeChainID *big.Int) (common.Address, error)
 	UpdateAnchors(info *core.RemoteChainInfo) error
 	RequireSignatures() int
 	ExpireNumber() int // return -1 if never expired

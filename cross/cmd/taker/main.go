@@ -24,6 +24,8 @@ var (
 	fromVar = flag.String("from", "0xb9d7df1a34a28c7b82acc841c12959ba00b51131", "接单人地址")
 
 	gaslimitVar = flag.Uint64("gaslimit", 200000, "gas最大值")
+
+	limit = flag.Uint64("count", 1000, "接单数量")
 )
 
 type SendTxArgs struct {
@@ -52,6 +54,11 @@ type RPCCrossTransaction struct {
 	S                []*hexutil.Big `json:"S"`
 }
 
+type RPCPageCrossTransactions struct {
+	Data map[uint64][]*RPCCrossTransaction `json:"data"`
+	//Total int                               `json:"total"`
+}
+
 type Order struct {
 	Value            *big.Int
 	TxId             common.Hash
@@ -66,7 +73,7 @@ type Order struct {
 	S                [][32]byte
 }
 
-var signatures map[string]map[uint64][]*RPCCrossTransaction
+var signatures map[string]RPCPageCrossTransactions
 
 func main() {
 	flag.Parse()
@@ -98,13 +105,13 @@ func taker() {
 		return
 	}
 
-	err = client.CallContext(context.Background(), &signatures, "eth_ctxContent")
+	err = client.CallContext(context.Background(), &signatures, "eth_ctxContentByPage", 0, 0, limit, 1)
 	if err != nil {
 		fmt.Println("CallContext", "err", err)
 		return
 	}
 
-	for remoteId, value := range signatures["remote"] {
+	for remoteId, value := range signatures["remote"].Data {
 		for i, v := range value {
 			if i <= 10000 { //自动最多接10000单交易
 				if v.To != (common.Address{}) && v.To != from { //指定了接单地址并且不是from的直接跳过

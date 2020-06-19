@@ -8,6 +8,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/core/vm"
 	"github.com/simplechain-org/go-simplechain/cross"
 	cc "github.com/simplechain-org/go-simplechain/cross/core"
+	"github.com/simplechain-org/go-simplechain/cross/metric"
 	"github.com/simplechain-org/go-simplechain/cross/trigger"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/params"
@@ -75,46 +76,54 @@ func (v *SimpleValidator) VerifyCtx(ctx *cc.CrossTransaction) error {
 	//if v.chainConfig.ChainID.Cmp(ctx.ChainId()) == 0 {
 	if v.IsLocalCtx(ctx) {
 		if old := v.store.Get(v.chainID, ctx.ID()); old != nil && old.Status != cc.CtxStatusPending {
-			v.logger.Debug("ctx is already signatured", "ctxID", ctx.ID().String())
+			v.logger.Debug("ctx is already signed", "ctxID", ctx.ID().String())
 			return cross.ErrAlreadyExistCtx
 		}
 	}
 
 	// discard if expired
-	if v.IsTransactionInExpiredBlock(ctx, expireNumber) {
+	if v.ExpireNumber() >= 0 && v.IsTransactionInExpiredBlock(ctx, uint64(v.ExpireNumber())) {
 		v.logger.Debug("ctx is already expired", "ctxID", ctx.ID().String())
 		return cross.ErrExpiredCtx
 	}
-	// check signer
-	return v.VerifySigner(ctx, ctx.ChainId(), ctx.DestinationId())
+	//// check signer TODO-D
+	//return v.VerifySigner(ctx, ctx.ChainId(), ctx.DestinationId())
+	return nil
 }
 
-// validate ctx signed by anchor
-func (v *SimpleValidator) VerifySigner(ctx *cc.CrossTransaction, signChain, storeChainID *big.Int) error {
-	v.logger.Debug("verify ctx signer", "ctx", ctx.ID(), "signChain", signChain, "storeChainID", storeChainID)
+/** validate ctx signed by anchor
+ * 	signChain:  交易签名的链ID
+ *  validChain: 验证链ID，即本链跨链合约保存的其他链ID，需要验证签名的anchor是否与这条链需要的anchor相同
+ */
+func (v *SimpleValidator) VerifySigner(ctx *cc.CrossTransaction, signChain, validChain *big.Int) (common.Address, error) {
+	v.logger.Debug("verify ctx signer", "ctx", ctx.ID(), "signChain", signChain, "validChain", validChain)
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	var anchorSet *AnchorSet
-	if as, ok := v.anchors[storeChainID.Uint64()]; ok {
+	if as, ok := v.anchors[validChain.Uint64()]; ok {
+		// 存在出目的链的anchor
 		anchorSet = as
+
 	} else { // ctx receive from remote, signChain == storeChainID
+		// 从合约里找目的链的anchor
 		newHead := v.chain.CurrentBlock().Header() // Special case during testing
 		statedb, err := v.chain.StateAt(newHead.Root)
 		if err != nil {
 			v.logger.Warn("get current state failed", "err", err)
-			return cross.ErrInternal
+			return common.Address{}, cross.ErrInternal
 		}
-		anchors, signedCount := QueryAnchor(v.chainConfig, v.chain, statedb, newHead, v.contract, storeChainID.Uint64())
+		anchors, signedCount := QueryAnchor(v.chainConfig, v.chain, statedb, newHead, v.contract, validChain.Uint64())
 		v.config.Anchors = anchors
 		v.requireSignature = signedCount
 		anchorSet = NewAnchorSet(v.config.Anchors)
-		v.anchors[storeChainID.Uint64()] = anchorSet
+		v.anchors[validChain.Uint64()] = anchorSet
 	}
-	if !anchorSet.IsAnchorSignedCtx(ctx, cc.NewEIP155CtxSigner(signChain)) {
+	signer, ok := anchorSet.IsAnchorSignedCtx(ctx, cc.NewEIP155CtxSigner(signChain))
+	if !ok {
 		v.logger.Warn("invalid signature", "ctxID", ctx.ID().String())
-		return cross.ErrInvalidSignCtx
+		return signer, cross.ErrInvalidSignCtx
 	}
-	return nil
+	return signer, nil
 }
 
 //send message to verify ctx in the cross contract
@@ -161,7 +170,7 @@ func (v *SimpleValidator) VerifyReorg(ctx trigger.Transaction) error {
 		}
 		if ctx.BlockHash() != old.BlockHash() {
 			v.logger.Warn("blockchain reorg,txId:%s,old:%s,new:%s", ctx.ID().String(), old.BlockHash().String(), ctx.BlockHash().String())
-			cross.Report(v.chainConfig.ChainID.Uint64(), "blockchain reorg", "ctxID", ctx.ID().String(),
+			metric.Report(v.chainConfig.ChainID.Uint64(), "blockchain reorg", "ctxID", ctx.ID().String(),
 				"old", old.BlockHash().String(), "new", ctx.BlockHash().String())
 			return cross.ErrReorgCtx
 		}

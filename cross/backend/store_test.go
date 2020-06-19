@@ -9,12 +9,13 @@ import (
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"
-	cc "github.com/simplechain-org/go-simplechain/cross/core"
-	db "github.com/simplechain-org/go-simplechain/cross/database"
-	"github.com/simplechain-org/go-simplechain/cross/trigger"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/rlp"
+
+	cc "github.com/simplechain-org/go-simplechain/cross/core"
+	cdb "github.com/simplechain-org/go-simplechain/cross/database"
+	"github.com/simplechain-org/go-simplechain/cross/trigger"
 
 	"github.com/asdine/storm/v3/q"
 	"github.com/stretchr/testify/assert"
@@ -22,7 +23,7 @@ import (
 
 func TestCrossStore(t *testing.T) {
 	chainID := params.TestChainConfig.ChainID
-	ctxStore, err := setupCtxStore(chainID)
+	ctxStore, err := newStoreTester(chainID)
 	assert.NoError(t, err)
 	defer ctxStore.Close()
 
@@ -34,7 +35,7 @@ func TestCrossStore(t *testing.T) {
 	ev := <-signedCh
 	ev.CallBack(ev.Tx)
 
-	assert.Equal(t, 1, ctxStore.stores[chainID.Uint64()].Count(q.Eq(db.StatusField, cc.CtxStatusWaiting)))
+	assert.Equal(t, 1, ctxStore.stores[chainID.Uint64()].Count(q.Eq(cdb.StatusField, cc.CtxStatusWaiting)))
 
 	// test get
 	{
@@ -60,10 +61,9 @@ func TestCrossStore(t *testing.T) {
 		assert.Equal(t, big.NewInt(99), tx.Data.DestinationValue)
 		assert.Equal(t, 1, tx.SignaturesLength())
 	}
-
 }
 
-func setupCtxStore(chainID *big.Int) (*CrossStore, error) {
+func newStoreTester(chainID *big.Int) (*CrossStore, error) {
 	store, err := NewCrossStore(nil, "testing-cross-store")
 	if err != nil {
 		return nil, err

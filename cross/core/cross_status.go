@@ -5,15 +5,17 @@ type CtxStatus uint8
 const (
 	// unsigned transaction
 	CtxStatusPending CtxStatus = iota
-	// CtxStatusWaiting is the status code of a rtx transaction if waiting for orders.
+	// CtxStatusWaiting is the status code of a cross transaction if waiting for orders.
 	CtxStatusWaiting
-	// CtxStatusExecuting is the status code of a rtx transaction if taker executing.
+	// CtxStatusIllegal is the status code of a cross transaction if waiting for orders.
+	CtxStatusIllegal
+	// CtxStatusExecuting is the status code of a cross transaction if taker executing.
 	CtxStatusExecuting
-	// CtxStatusExecuted is the status code of a rtx transaction if taker confirmed.
+	// CtxStatusExecuted is the status code of a cross transaction if taker confirmed.
 	CtxStatusExecuted
-	// CtxStatusFinished is the status code of a rtx transaction if make finishing.
+	// CtxStatusFinished is the status code of a cross transaction if make finishing.
 	CtxStatusFinishing
-	// CtxStatusFinished is the status code of a rtx transaction if make finish confirmed.
+	// CtxStatusFinished is the status code of a cross transaction if make finish confirmed.
 	CtxStatusFinished
 )
 
@@ -38,6 +40,7 @@ const (
 var ctxStatusToString = map[CtxStatus]string{
 	CtxStatusPending:   "pending",
 	CtxStatusWaiting:   "waiting",
+	CtxStatusIllegal:   "illegal",
 	CtxStatusExecuting: "executing",
 	CtxStatusExecuted:  "executed",
 	CtxStatusFinishing: "finishing",

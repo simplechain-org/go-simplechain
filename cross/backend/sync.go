@@ -7,8 +7,9 @@ import (
 	"time"
 
 	"github.com/simplechain-org/go-simplechain/common"
-	"github.com/simplechain-org/go-simplechain/cross/core"
 	"github.com/simplechain-org/go-simplechain/log"
+
+	"github.com/simplechain-org/go-simplechain/cross/core"
 )
 
 type SyncReq struct {
@@ -36,6 +37,13 @@ type SortedTxByBlockNum []*core.CrossTransactionWithSignatures
 func (s SortedTxByBlockNum) Len() int           { return len(s) }
 func (s SortedTxByBlockNum) Less(i, j int) bool { return s[i].BlockNum < s[j].BlockNum }
 func (s SortedTxByBlockNum) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+
+func (s SortedTxByBlockNum) LastNumber() uint64 {
+	if len(s) > 0 {
+		return s[len(s)-1].BlockNum
+	}
+	return 0
+}
 
 func (srv *CrossService) sync() {
 	ticker := time.NewTicker(time.Second * 30)
@@ -97,30 +105,28 @@ func (srv *CrossService) syncWithPeer(handler *Handler, peer *anchorPeer, height
 				peer.Log().Debug("sync ctx request completed")
 				return
 			}
-			var mainTxs, subTxs []*core.CrossTransactionWithSignatures
+			var selfTxs []*core.CrossTransactionWithSignatures
 			for _, tx := range txs {
-				if tx.ChainId().Uint64() == srv.main.chainID {
-					mainTxs = append(mainTxs, tx)
+				if tx.ChainId().Cmp(handler.chainID) == 0 {
+					selfTxs = append(selfTxs, tx)
 				}
-				if tx.ChainId().Uint64() == srv.sub.chainID {
-					subTxs = append(subTxs, tx)
-				}
+				//ignore other tx: 子链的tx需要被负责它的handler同步
 			}
-			var main, sub int
-			if mainTxs != nil {
-				sort.Sort(SortedTxByBlockNum(mainTxs))
-				main = srv.main.handler.SyncCrossTransaction(mainTxs)
-			}
-			if subTxs != nil {
-				sort.Sort(SortedTxByBlockNum(subTxs))
-				sub = srv.sub.handler.SyncCrossTransaction(subTxs)
+			var (
+				self       int
+				lastHeight uint64
+			)
+			if selfTxs != nil {
+				sortedTxs := SortedTxByBlockNum(selfTxs)
+				sort.Sort(sortedTxs)
+				self = handler.SyncCrossTransaction(sortedTxs)
+				lastHeight = sortedTxs.LastNumber()
+				go peer.RequestCtxSyncByHeight(handler.chainID.Uint64(), lastHeight+1)
 			}
 
-			log.Info("Import cross transactions", "total", len(txs), "main", main, "sub", sub)
+			log.Info("Import cross transactions", "chainID", handler.chainID.Uint64(), "total", len(txs), "self", self, "lastHeight", lastHeight)
 
 			timeout.Reset(rttMaxEstimate)
-			// send next sync request after last
-			go peer.RequestCtxSyncByHeight(handler.pm.NetworkId(), txs[len(txs)-1].BlockNum+1)
 
 		case <-timeout.C:
 			atomic.StoreUint32(&handler.synchronising, 0)

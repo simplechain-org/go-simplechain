@@ -8,14 +8,17 @@ import (
 	"sync/atomic"
 
 	"github.com/simplechain-org/go-simplechain/common"
-	"github.com/simplechain-org/go-simplechain/cross"
-	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/node"
 	"github.com/simplechain-org/go-simplechain/p2p"
 	"github.com/simplechain-org/go-simplechain/p2p/enode"
 	"github.com/simplechain-org/go-simplechain/rlp"
 	"github.com/simplechain-org/go-simplechain/rpc"
+
+	"github.com/simplechain-org/go-simplechain/cross"
+	cc "github.com/simplechain-org/go-simplechain/cross/core"
+	cdb "github.com/simplechain-org/go-simplechain/cross/database"
+	cm "github.com/simplechain-org/go-simplechain/cross/metric"
 )
 
 // CrossService implements node.Service
@@ -23,6 +26,7 @@ type CrossService struct {
 	main  crossCommons
 	sub   crossCommons
 	store *CrossStore
+	txLog *cm.TransactionLogs
 
 	config *cross.Config
 	peers  *anchorSet
@@ -48,7 +52,16 @@ func NewCrossService(ctx *node.ServiceContext, main, sub cross.SimpleChain, conf
 		quitSync:  make(chan struct{}),
 	}
 
-	cross.Reporter.SetRootPath(ctx.ResolvePath(cross.LogDir))
+	cm.Reporter.SetRootPath(ctx.ResolvePath(cross.LogDir))
+
+	logDB, err := cdb.OpenEtherDB(ctx, cross.TxLogDir)
+	if err != nil {
+		return nil, err
+	}
+	srv.txLog, err = cm.NewTransactionLogs(logDB)
+	if err != nil {
+		return nil, err
+	}
 
 	srv.store, err = NewCrossStore(ctx, cross.DataDir)
 	if err != nil {
@@ -363,7 +376,7 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 			break
 		}
 
-		err := h.AddRemoteCtx(ctx)
+		err := h.AddRemoteCtx(ctx, true)
 		if err == cross.ErrExpiredCtx || err == cross.ErrInvalidSignCtx {
 			break
 		}

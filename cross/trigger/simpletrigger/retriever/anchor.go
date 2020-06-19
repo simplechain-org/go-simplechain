@@ -30,11 +30,11 @@ func (as AnchorSet) IsAnchor(address common.Address) bool {
 	return exist
 }
 
-func (as AnchorSet) IsAnchorSignedCtx(tx *cc.CrossTransaction, signer cc.CtxSigner) bool {
+func (as AnchorSet) IsAnchorSignedCtx(tx *cc.CrossTransaction, signer cc.CtxSigner) (common.Address, bool) {
 	if addr, err := signer.Sender(tx); err == nil {
-		return as.IsAnchor(addr)
+		return addr, as.IsAnchor(addr)
 	}
-	return false
+	return common.Address{}, false
 }
 
 func QueryAnchor(config *params.ChainConfig, bc core.ChainContext, statedb *state.StateDB, header *types.Header,

@@ -5,6 +5,7 @@ import (
 	"io"
 	"math/big"
 	"os"
+	"path/filepath"
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/rawdb"
@@ -39,10 +40,11 @@ type CtxDB interface {
 	Read(ctxId common.Hash) (*cc.CrossTransactionWithSignatures, error)
 	Update(id common.Hash, updater func(ctx *CrossTransactionIndexed)) error
 	Updates(idList []common.Hash, updaters []func(ctx *CrossTransactionIndexed)) error
+	Deletes(idList []common.Hash) error
 	Has(id common.Hash) bool
 
 	One(field FieldName, key interface{}) *cc.CrossTransactionWithSignatures
-	Find(field FieldName, key interface{}) []*cc.CrossTransactionWithSignatures
+	//Find(field FieldName, key interface{}) []*cc.CrossTransactionWithSignatures
 	Query(pageSize int, startPage int, orderBy []FieldName, reverse bool, filter ...q.Matcher) []*cc.CrossTransactionWithSignatures
 	RangeByNumber(begin, end uint64, limit int) []*cc.CrossTransactionWithSignatures
 
@@ -53,7 +55,7 @@ type CtxDB interface {
 
 func OpenStormDB(ctx ServiceContext, name string) (*storm.DB, error) {
 	if ctx == nil || len(ctx.ResolvePath(name)) == 0 {
-		return storm.Open(os.TempDir() + name)
+		return storm.Open(filepath.Join(os.TempDir(), name))
 	}
 	return storm.Open(ctx.ResolvePath(name))
 }

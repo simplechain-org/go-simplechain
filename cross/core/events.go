@@ -39,6 +39,8 @@ type CrossTransactionModifier struct {
 	ID            common.Hash
 	Status        CtxStatus
 	AtBlockNumber uint64
+	IsRemote      bool
+	IsReorg       bool
 }
 
 type CrossBlockEvent struct {

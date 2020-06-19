@@ -53,6 +53,16 @@ web3._extend({
 			call: 'cross_syncStore',
 			params: 0,
 		}),
+		new web3._extend.Method({
+			name: 'setStoreDelay',
+			call: 'cross_setStoreDelay',
+			params: 2,
+		}),
+		new web3._extend.Method({
+			name: 'remove',
+			call: 'cross_remove',
+			params: 2,
+		}),
 	],
 	properties: [
 		new web3._extend.Property({

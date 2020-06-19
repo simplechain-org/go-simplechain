@@ -27,10 +27,6 @@ type SimpleSubscriber struct {
 	scope               event.SubscriptionScope
 }
 
-func (t *SimpleSubscriber) Stop() {
-	t.scope.Close()
-}
-
 func NewSimpleSubscriber(contract common.Address, chain chainRetriever) *SimpleSubscriber {
 	return &SimpleSubscriber{
 		contract: contract,
@@ -39,6 +35,10 @@ func NewSimpleSubscriber(contract common.Address, chain chainRetriever) *SimpleS
 			depth: uint(DefaultConfirmDepth),
 		},
 	}
+}
+
+func (t *SimpleSubscriber) Stop() {
+	t.scope.Close()
 }
 
 func (t *SimpleSubscriber) StoreCrossContractLog(blockNumber uint64, hash common.Hash, logs []*types.Log) {
@@ -57,8 +57,10 @@ func (t *SimpleSubscriber) StoreCrossContractLog(blockNumber uint64, hash common
 				case params.TakerTopic:
 					if len(v.Topics) >= 3 && len(v.Data) >= common.HashLength*4 {
 						takers = append(takers, &cc.CrossTransactionModifier{
-							ID:     v.Topics[1],
-							Status: cc.CtxStatusExecuting,
+							ID: v.Topics[1],
+							// update remote wouldn't modify blockNumber
+							IsRemote: true,
+							Status:   cc.CtxStatusExecuting,
 						})
 						unconfirmedLogs = append(unconfirmedLogs, v)
 					}
@@ -102,16 +104,18 @@ func (t *SimpleSubscriber) NotifyBlockReorg(logs []*types.Log) {
 			case params.TakerTopic: // remote ctx taken
 				if len(l.Topics) >= 3 && len(l.Data) >= common.HashLength {
 					reorgEvent.ReorgTaker.Takers = append(reorgEvent.ReorgTaker.Takers, &cc.CrossTransactionModifier{
-						ID:     l.Topics[1],
-						Status: cc.CtxStatusWaiting,
+						ID:      l.Topics[1],
+						Status:  cc.CtxStatusWaiting,
+						IsReorg: true,
 					})
 				}
 
 			case params.MakerFinishTopic: // local ctx finished
 				if len(l.Topics) >= 3 {
 					reorgEvent.ReorgFinish.Finishes = append(reorgEvent.ReorgFinish.Finishes, &cc.CrossTransactionModifier{
-						ID:     l.Topics[1],
-						Status: cc.CtxStatusWaiting,
+						ID:      l.Topics[1],
+						Status:  cc.CtxStatusExecuted,
+						IsReorg: true,
 					})
 				}
 			}
@@ -137,5 +141,4 @@ func (t *SimpleSubscriber) SubscribeCrossBlockEvent(ch chan<- cc.CrossBlockEvent
 
 func (t *SimpleSubscriber) SubscribeReorgBlockEvent(ch chan<- cc.ReorgBlockEvent) event.Subscription {
 	return t.scope.Track(t.reorgBlockFeed.Subscribe(ch))
-
 }

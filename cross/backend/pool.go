@@ -5,19 +5,23 @@ import (
 	"sync"
 	"time"
 
-	"github.com/asdine/storm/v3"
-	lru "github.com/hashicorp/golang-lru"
 	"github.com/simplechain-org/go-simplechain/common"
-	"github.com/simplechain-org/go-simplechain/cross"
-	cc "github.com/simplechain-org/go-simplechain/cross/core"
-	crossdb "github.com/simplechain-org/go-simplechain/cross/database"
-	"github.com/simplechain-org/go-simplechain/cross/trigger"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/log"
+
+	"github.com/simplechain-org/go-simplechain/cross"
+	cc "github.com/simplechain-org/go-simplechain/cross/core"
+	db "github.com/simplechain-org/go-simplechain/cross/database"
+	"github.com/simplechain-org/go-simplechain/cross/metric"
+	"github.com/simplechain-org/go-simplechain/cross/trigger"
+
+	"github.com/asdine/storm/v3"
+	"github.com/asdine/storm/v3/q"
+	lru "github.com/hashicorp/golang-lru"
 )
 
 type store interface {
-	GetStore(chainID *big.Int) (crossdb.CtxDB, error)
+	GetStore(chainID *big.Int) (db.CtxDB, error)
 	Add(ctx *cc.CrossTransactionWithSignatures) error
 	Get(chainID *big.Int, ctxID common.Hash) *cc.CrossTransactionWithSignatures
 	Update(ctx *cc.CrossTransactionWithSignatures) error
@@ -29,9 +33,9 @@ type CrossPool struct {
 
 	store        store
 	retriever    trigger.ChainRetriever
-	pending      *crossdb.CtxSortedByBlockNum //带有local签名
-	queued       *crossdb.CtxSortedByBlockNum //网络其他节点签名
-	pendingCache *lru.Cache                   // cache signed pending ctx
+	pending      *db.CtxSortedByBlockNum //带有local签名
+	queued       *db.CtxSortedByBlockNum //网络其他节点签名
+	pendingCache *lru.Cache              // cache signed pending ctx
 
 	commitFeed  event.Feed
 	commitScope event.SubscriptionScope
@@ -55,8 +59,8 @@ func NewCrossPool(chainID *big.Int, store store, retriever trigger.ChainRetrieve
 		chainID:      chainID,
 		store:        store,
 		retriever:    retriever,
-		pending:      crossdb.NewCtxSortedMap(),
-		queued:       crossdb.NewCtxSortedMap(),
+		pending:      db.NewCtxSortedMap(),
+		queued:       db.NewCtxSortedMap(),
 		pendingCache: pendingCache,
 		signer:       cc.MakeCtxSigner(chainID),
 		signHash:     signHash,
@@ -77,7 +81,9 @@ func (pool *CrossPool) load() error {
 	if err != nil {
 		return err
 	}
-	for _, pendingTX := range store.Find(crossdb.StatusField, cc.CtxStatusPending) {
+	pending := store.Query(0, 0, []db.FieldName{db.BlockNumField}, false, q.Eq(db.StatusField, uint8(cc.CtxStatusPending)))
+	log.Error("[debug] load pending", "chainID", pool.chainID, "count", len(pending))
+	for _, pendingTX := range pending {
 		pool.pending.Put(pendingTX)
 	}
 	return nil
@@ -105,7 +111,7 @@ func (pool *CrossPool) loop() {
 				removed = append(removed, pool.queued.RemoveUnderNum(currentNum-uint64(expireNum))...)
 			}
 			if len(removed) > 0 {
-				cross.Report(pool.chainID.Uint64(), "txs expired", "ids", removed.String())
+				metric.Report(pool.chainID.Uint64(), "txs expired", "ids", removed.String())
 			}
 		}
 	}
@@ -121,6 +127,10 @@ func (pool *CrossPool) AddLocals(txs ...*cc.CrossTransaction) (signed []*cc.Cros
 	for _, ctx := range txs {
 		if err := pool.retriever.VerifyReorg(ctx); err != nil {
 			errs = append(errs, err)
+			continue
+		}
+		if pool.store.Get(pool.chainID, ctx.ID()) != nil {
+			// already exist in store, ignore
 			continue
 		}
 		// make signature first for local ctx
@@ -250,7 +260,7 @@ func (pool *CrossPool) Rollback(cws *cc.CrossTransactionWithSignatures, invalidS
 		cws.RemoveSignature(invalid)
 	}
 	pool.pending.Put(cws)
-	cross.Report(pool.chainID.Uint64(), "pending rollback for invalid signature", "ctxID", cws.ID(), "invalidSigIndex", invalidSigIndex)
+	metric.Report(pool.chainID.Uint64(), "pending rollback for invalid signature", "ctxID", cws.ID(), "invalidSigIndex", invalidSigIndex)
 }
 
 func (pool *CrossPool) Stats() (int, int) {

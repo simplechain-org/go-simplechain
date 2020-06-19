@@ -128,6 +128,28 @@ type CrossTransactionIndexed struct {
 	S []*big.Int
 }
 
+//type CrossTransactionIndexed struct {
+//	PK       uint64 `storm:"id,increment"`
+//	CtxId    common.Hash `storm:"unique"`
+//	From     common.Address
+//	To       common.Address
+//	TxHash   common.Hash
+//	Price    *big.Float
+//	BlockNum uint64
+//	// normal field
+//	Status uint8
+//
+//	Value            *big.Int
+//	BlockHash        common.Hash
+//	DestinationId    *big.Int
+//	DestinationValue *big.Int
+//	Input            []byte
+//
+//	V []*big.Int
+//	R []*big.Int
+//	S []*big.Int
+//}
+
 func NewCrossTransactionIndexed(ctx *cc.CrossTransactionWithSignatures) *CrossTransactionIndexed {
 	return &CrossTransactionIndexed{
 		CtxId:            ctx.ID(),
@@ -187,9 +209,9 @@ func indexCacheKey(index FieldName, value interface{}) interface{} {
 	}{index, value}
 }
 
-func (m *IndexDbCache) Has(index FieldName, key interface{}) bool {
-	return (*lru.ARCCache)(m).Contains(indexCacheKey(index, key))
-}
+//func (m *IndexDbCache) Has(index FieldName, key interface{}) bool {
+//	return (*lru.ARCCache)(m).Contains(indexCacheKey(index, key))
+//}
 
 func (m *IndexDbCache) Get(index FieldName, key interface{}) *CrossTransactionIndexed {
 	item, ok := (*lru.ARCCache)(m).Get(indexCacheKey(index, key))

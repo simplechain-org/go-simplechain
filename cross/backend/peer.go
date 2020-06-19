@@ -7,8 +7,9 @@ import (
 	"time"
 
 	"github.com/simplechain-org/go-simplechain/common"
-	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	"github.com/simplechain-org/go-simplechain/p2p"
+
+	cc "github.com/simplechain-org/go-simplechain/cross/core"
 
 	mapset "github.com/deckarep/golang-set"
 )
