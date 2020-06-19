@@ -2,13 +2,14 @@ package db
 
 import (
 	"fmt"
-	"github.com/simplechain-org/go-simplechain/common"
-	cc "github.com/simplechain-org/go-simplechain/cross/core"
-	"github.com/simplechain-org/go-simplechain/ethdb"
 	"io"
 	"math/big"
 	"os"
 	"path"
+
+	"github.com/simplechain-org/go-simplechain/common"
+	cc "github.com/simplechain-org/go-simplechain/cross/core"
+	"github.com/simplechain-org/go-simplechain/ethdb"
 
 	"github.com/asdine/storm/v3"
 	"github.com/asdine/storm/v3/q"
