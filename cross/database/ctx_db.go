@@ -53,7 +53,7 @@ type CtxDB interface {
 
 func OpenStormDB(ctx ServiceContext, name string) (*storm.DB, error) {
 	if ctx == nil || len(ctx.ResolvePath(name)) == 0 {
-		return storm.Open(path.Join(os.TempDir(), name), storm.BoltOptions(0700, nil))
+		return storm.Open(path.Join(os.TempDir(), name))
 	}
 
 	return storm.Open(ctx.ResolvePath(name))
