@@ -50,7 +50,9 @@ type CrossPool struct {
 	logger log.Logger
 }
 
-func NewCrossPool(chainID *big.Int, store store, retriever trigger.ChainRetriever, signHash cc.SignHash, chain cross.BlockChain) *CrossPool {
+func NewCrossPool(chainID *big.Int, store store, retriever trigger.ChainRetriever, signHash cc.SignHash,
+	chain cross.BlockChain) *CrossPool {
+
 	pendingCache, _ := lru.New(signedPendingSize)
 	logger := log.New("X-module", "pool")
 
@@ -69,7 +71,7 @@ func NewCrossPool(chainID *big.Int, store store, retriever trigger.ChainRetrieve
 	}
 
 	if err := pool.load(); err != nil {
-		logger.Warn("Load pending transaction failed", "error", err)
+		logger.Error("Load pending transaction failed", "error", err)
 	}
 
 	return pool

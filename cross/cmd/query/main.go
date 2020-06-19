@@ -47,7 +47,7 @@ func query() {
 
 	var signatures map[string]RPCPageCrossTransactions
 	if err = client.CallContext(context.Background(), &signatures,
-		"eth_ctxContentByPage", 0, 0, pageSize, pageNum); err != nil {
+		"cross_ctxContentByPage", 0, 0, pageSize, pageNum); err != nil {
 		fmt.Println("CallContext", "err", err)
 		return
 	}

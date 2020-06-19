@@ -14,6 +14,15 @@ import (
 	mapset "github.com/deckarep/golang-set"
 )
 
+// statusData is the network packet for the status message for eth/64 and later.
+type crossStatusData struct {
+	ProtocolVersion             uint32
+	MainNetworkID, SubNetworkID uint64
+	MainGenesis, SubGenesis     common.Hash
+	MainHeight, SubHeight       *big.Int
+	MainContract, SubContract   common.Address
+}
+
 type anchorPeer struct {
 	*p2p.Peer
 	version     int
@@ -41,12 +50,9 @@ func newAnchorPeer(p *p2p.Peer, rw p2p.MsgReadWriter) *anchorPeer {
 	}
 }
 
-func (p *anchorPeer) Handshake(
-	mainNetwork, subNetwork uint64,
-	mainGenesis, subGenesis common.Hash,
-	mainHeight, subHeight *big.Int,
-	mainContract, subContract common.Address,
-) error {
+func (p *anchorPeer) Handshake(mainNetwork, subNetwork uint64, mainGenesis, subGenesis common.Hash,
+	mainHeight, subHeight *big.Int, mainContract, subContract common.Address) error {
+
 	errc := make(chan error, 2)
 	go func() {
 		errc <- p2p.Send(p.rw, StatusMsg, &crossStatusData{
@@ -69,6 +75,7 @@ func (p *anchorPeer) Handshake(
 
 	timeout := time.NewTimer(handshakeTimeout)
 	defer timeout.Stop()
+
 	for i := 0; i < 2; i++ {
 		select {
 		case err := <-errc:
@@ -83,7 +90,9 @@ func (p *anchorPeer) Handshake(
 	return nil
 }
 
-func (p *anchorPeer) readStatus(mainNetwork, subNetwork uint64, mainGenesis, subGenesis common.Hash, mainContract, subContract common.Address, status *crossStatusData) error {
+func (p *anchorPeer) readStatus(mainNetwork, subNetwork uint64, mainGenesis, subGenesis common.Hash, mainContract,
+	subContract common.Address, status *crossStatusData) error {
+
 	msg, err := p.rw.ReadMsg()
 	if err != nil {
 		return err
@@ -305,13 +314,4 @@ func (ps *anchorSet) PeersWithoutCtx(hash common.Hash) []*anchorPeer {
 		}
 	}
 	return list
-}
-
-// statusData is the network packet for the status message for eth/64 and later.
-type crossStatusData struct {
-	ProtocolVersion             uint32
-	MainNetworkID, SubNetworkID uint64
-	MainGenesis, SubGenesis     common.Hash
-	MainHeight, SubHeight       *big.Int
-	MainContract, SubContract   common.Address
 }

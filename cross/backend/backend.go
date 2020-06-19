@@ -23,13 +23,14 @@ import (
 
 // CrossService implements node.Service
 type CrossService struct {
-	main  crossCommons
-	sub   crossCommons
 	store *CrossStore
 	txLog *cm.TransactionLogs
 
 	config *cross.Config
 	peers  *anchorSet
+
+	main crossCommons
+	sub  crossCommons
 
 	newPeerCh chan *anchorPeer
 	quitSync  chan struct{}
@@ -70,7 +71,6 @@ func NewCrossService(ctx *node.ServiceContext, main, sub cross.SimpleChain, conf
 
 	mainCh, subCh := make(chan interface{}, defaultCrossChSize), make(chan interface{}, defaultCrossChSize)
 
-	// construct cross handler
 	mainHandler, err := NewCrossHandler(main, srv, *config, config.MainContract, mainCh, subCh)
 	if err != nil {
 		return nil, err
@@ -81,14 +81,12 @@ func NewCrossService(ctx *node.ServiceContext, main, sub cross.SimpleChain, conf
 		return nil, err
 	}
 
-	// register crosschain
 	mainHandler.RegisterChain(sub.ChainConfig().ChainID)
 	subHandler.RegisterChain(main.ChainConfig().ChainID)
 
-	// register apis
 	main.RegisterAPIs([]rpc.API{
 		{
-			Namespace: "eth",
+			Namespace: "cross",
 			Version:   "1.0",
 			Service:   NewPublicCrossChainAPI(mainHandler),
 			Public:    true,
@@ -96,7 +94,7 @@ func NewCrossService(ctx *node.ServiceContext, main, sub cross.SimpleChain, conf
 	})
 	sub.RegisterAPIs([]rpc.API{
 		{
-			Namespace: "eth",
+			Namespace: "cross",
 			Version:   "1.0",
 			Service:   NewPublicCrossChainAPI(subHandler),
 			Public:    true,
@@ -157,7 +155,6 @@ func (srv *CrossService) Protocols() []p2p.Protocol {
 }
 
 func (srv *CrossService) APIs() []rpc.API {
-	// APIs are registered to SimpleChain service
 	return []rpc.API{
 		{
 			Namespace: "cross",
@@ -199,21 +196,14 @@ func (srv *CrossService) handle(p *anchorPeer) error {
 	var (
 		mainNetworkID = srv.main.chainID
 		subNetworkID  = srv.sub.chainID
-		//mainHead      = srv.main.bc.CurrentHeader()
-		//subHead       = srv.sub.bc.CurrentHeader()
-		//mainTD        = srv.main.bc.GetTd(mainHead.Hash(), mainHead.Number.Uint64())
-		//subTD         = srv.sub.bc.GetTd(subHead.Hash(), subHead.Number.Uint64())
-		mainGenesis = srv.main.genesis
-		subGenesis  = srv.sub.genesis
-		mainHeight  = srv.main.handler.Height()
-		subHeight   = srv.sub.handler.Height()
-		main        = srv.config.MainContract
-		sub         = srv.config.SubContract
+		mainGenesis   = srv.main.genesis
+		subGenesis    = srv.sub.genesis
+		mainHeight    = srv.main.handler.Height()
+		subHeight     = srv.sub.handler.Height()
+		main          = srv.config.MainContract
+		sub           = srv.config.SubContract
 	)
-	if err := p.Handshake(mainNetworkID, subNetworkID,
-		//mainTD, subTD, mainHead.Hash(), subHead.Hash(),
-		mainGenesis, subGenesis, mainHeight, subHeight, main, sub,
-	); err != nil {
+	if err := p.Handshake(mainNetworkID, subNetworkID, mainGenesis, subGenesis, mainHeight, subHeight, main, sub); err != nil {
 		log.Debug("anchor handshake failed", "err", err)
 		return err
 	}

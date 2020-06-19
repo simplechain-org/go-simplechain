@@ -11,7 +11,8 @@ import (
 	"github.com/asdine/storm/v3/q"
 )
 
-func query(db cdb.CtxDB, pageSize, startPage int, orderBy []cdb.FieldName, reverse bool, condition ...q.Matcher) []*cc.CrossTransactionWithSignatures {
+func query(db cdb.CtxDB, pageSize, startPage int, orderBy []cdb.FieldName, reverse bool,
+	condition ...q.Matcher) []*cc.CrossTransactionWithSignatures {
 	return db.Query(pageSize, startPage, orderBy, reverse, condition...)
 }
 
@@ -51,7 +52,8 @@ func (h *Handler) FindByTxHash(hash common.Hash) *cc.CrossTransactionWithSignatu
 	return nil
 }
 
-func (h *Handler) QueryRemoteByDestinationValueAndPage(value *big.Int, pageSize, startPage int) (remoteID uint64, txs []*cc.CrossTransactionWithSignatures, total int) {
+func (h *Handler) QueryRemoteByDestinationValueAndPage(value *big.Int, pageSize,
+	startPage int) (remoteID uint64, txs []*cc.CrossTransactionWithSignatures, total int) {
 	if !h.pm.CanAcceptTxs() {
 		return 0, nil, 0
 	}
@@ -66,7 +68,8 @@ func (h *Handler) QueryRemoteByDestinationValueAndPage(value *big.Int, pageSize,
 	return h.RemoteID(), txs, total
 }
 
-func (h *Handler) QueryByPage(localSize, localPage, remoteSize, remotePage int) (locals map[uint64][]*cc.CrossTransactionWithSignatures, remotes map[uint64][]*cc.CrossTransactionWithSignatures, lt int, rt int) {
+func (h *Handler) QueryByPage(localSize, localPage, remoteSize, remotePage int) (
+	locals map[uint64][]*cc.CrossTransactionWithSignatures, remotes map[uint64][]*cc.CrossTransactionWithSignatures, lt int, rt int) {
 	if !h.pm.CanAcceptTxs() {
 		return nil, nil, 0, 0
 	}
@@ -100,7 +103,8 @@ func (h *Handler) QueryLocalIllegalByPage(pageSize, startPage int) []*cc.CrossTr
 	return query(store, pageSize, startPage, orderBy, reverse, condition...)
 }
 
-func (h *Handler) QueryLocalBySenderAndPage(from common.Address, pageSize, startPage int) (locals map[uint64][]*cc.OwnerCrossTransactionWithSignatures, total int) {
+func (h *Handler) QueryLocalBySenderAndPage(from common.Address, pageSize, startPage int) (
+	locals map[uint64][]*cc.OwnerCrossTransactionWithSignatures, total int) {
 	if !h.pm.CanAcceptTxs() {
 		return nil, 0
 	}
@@ -130,14 +134,15 @@ func (h *Handler) QueryLocalBySenderAndPage(from common.Address, pageSize, start
 	return locals, total
 }
 
-func (h *Handler) QueryRemoteByTakerAndPage(to common.Address, pageSize, startPage int) (remotes map[uint64][]*cc.OwnerCrossTransactionWithSignatures, total int) {
+func (h *Handler) QueryRemoteByTakerAndPage(to common.Address, pageSize, startPage int) (
+	remotes map[uint64][]*cc.OwnerCrossTransactionWithSignatures, total int) {
 	if !h.pm.CanAcceptTxs() {
 		return nil, 0
 	}
 	var (
-		store, _  = h.store.GetStore(h.remoteID)
 		condition = []q.Matcher{q.Eq(cdb.StatusField, cc.CtxStatusWaiting), q.Eq(cdb.ToField, to)}
 		orderBy   = []cdb.FieldName{cdb.PriceIndex}
+		store, _  = h.store.GetStore(h.remoteID)
 		reverse   = false
 	)
 
@@ -166,5 +171,5 @@ func (h *Handler) StoreStats() map[uint64]map[cc.CtxStatus]int {
 	if !h.pm.CanAcceptTxs() {
 		return nil
 	}
-	return h.store.Stats(h.chainID)
+	return h.store.Stats()
 }

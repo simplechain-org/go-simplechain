@@ -228,7 +228,7 @@ func (h *Handler) TakerEvent(chain *Chain, ctx context.Context, event *types.Log
 			log.Error("sub chain SendTransaction failed", "err", err, "hash", tx.Hash())
 			return
 		}
-		log.Info("SendTransaction sub", "txHash", tx.Hash().String(), "ctxID", rtx.CTxId.String())
+		log.Info("SendTransaction sub", "ctxID", rtx.CTxId.String())
 	}
 }
 

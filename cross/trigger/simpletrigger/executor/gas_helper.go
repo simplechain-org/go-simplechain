@@ -48,8 +48,12 @@ func (h *GasHelper) GetBalance(addr common.Address) (*big.Int, error) {
 	return state.GetBalance(addr), nil
 }
 
-func (this *GasHelper) doCall(ctx context.Context, args CallArgs, blockNr rpc.BlockNumber, vmCfg vm.Config, timeout time.Duration) ([]byte, uint64, bool, error) {
-	defer func(start time.Time) { log.Debug("Executing EVM call finished", "runtime", time.Since(start)) }(time.Now())
+func (this *GasHelper) doCall(ctx context.Context, args CallArgs, blockNr rpc.BlockNumber, vmCfg vm.Config,
+	timeout time.Duration) ([]byte, uint64, bool, error) {
+
+	defer func(start time.Time) {
+		log.Debug("Executing EVM call finished", "runtime", time.Since(start))
+	}(time.Now())
 
 	state, header, err := this.chain.StateAndHeaderByNumber(ctx, blockNr)
 	if state == nil || err != nil {

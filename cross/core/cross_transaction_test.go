@@ -51,15 +51,6 @@ func TestCrossTransactionSigHash(t *testing.T) {
 }
 
 func TestCrossTransactionEncode(t *testing.T) {
-	//signer := NewEIP155CtxSigner(big.NewInt(1))
-	//txHash := signer.Hash(rightvrsCtx)
-	//key, _ := defaultTestKey()
-	//sig, err := crypto.Sign(txHash[:], key)
-	//if err !=nil{
-	//	fmt.Println("err: ",err)
-	//}
-	//fmt.Println(common.Bytes2Hex(sig))
-
 	ctxb, err := rlp.EncodeToBytes(rightvrsCtx)
 	if err != nil {
 		t.Fatalf("encode error: %v", err)
