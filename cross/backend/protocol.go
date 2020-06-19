@@ -9,10 +9,6 @@ import (
 )
 
 const (
-	StatusMsg = 0x00
-)
-
-const (
 	protocolVersion    = 1
 	protocolMaxMsgSize = 10 * 1024 * 1024
 	handshakeTimeout   = 5 * time.Second

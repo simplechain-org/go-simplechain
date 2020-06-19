@@ -8,8 +8,10 @@ import (
 	"path/filepath"
 
 	"github.com/simplechain-org/go-simplechain/common"
-	cc "github.com/simplechain-org/go-simplechain/cross/core"
+	"github.com/simplechain-org/go-simplechain/core/rawdb"
 	"github.com/simplechain-org/go-simplechain/ethdb"
+
+	cc "github.com/simplechain-org/go-simplechain/cross/core"
 
 	"github.com/asdine/storm/v3"
 	"github.com/asdine/storm/v3/q"
@@ -57,4 +59,16 @@ func OpenStormDB(ctx ServiceContext, name string) (*storm.DB, error) {
 		return storm.Open(filepath.Join(os.TempDir(), name))
 	}
 	return storm.Open(ctx.ResolvePath(name))
+}
+
+func OpenEtherDB(ctx ServiceContext, name string) (ethdb.Database, error) {
+	if ctx == nil {
+		return rawdb.NewMemoryDatabase(), nil
+	}
+	//TODO: cache & handles
+	db, err := ctx.OpenDatabase(name, 16, 256, "")
+	if err != nil {
+		return nil, ErrCtxDbFailure{msg: "OpenEtherDB fail", err: err}
+	}
+	return db, nil
 }

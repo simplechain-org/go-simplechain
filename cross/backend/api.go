@@ -168,7 +168,7 @@ func (s *PublicCrossChainAPI) CtxContentByPage(localSize, localPage, remoteSize,
 	return content
 }
 
-func (s *PublicCrossChainAPI) CtxIllegalByPage(ctx context.Context, pageSize, startPage int) *RPCPageCrossTransactions {
+func (s *PublicCrossChainAPI) CtxIllegalByPage(pageSize, startPage int) *RPCPageCrossTransactions {
 	txs := s.handler.QueryLocalIllegalByPage(pageSize, startPage)
 	list := make([]*RPCCrossTransaction, len(txs))
 	for _, tx := range txs {

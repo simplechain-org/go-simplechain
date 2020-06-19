@@ -25,6 +25,9 @@ const (
 	txChanSize        = 4096
 	rmLogsChanSize    = 10
 	signedPendingSize = 256
+
+	defaultStoreDelay  = 2048
+	intervalStoreDelay = time.Minute * 10
 )
 
 type Handler struct {
@@ -78,7 +81,7 @@ func NewCrossHandler(chain cross.SimpleChain, service *CrossService, config cros
 		chainID:            chain.ChainConfig().ChainID,
 		service:            service,
 		store:              service.store,
-		storeDelayCleanNum: big.NewInt(1024),
+		storeDelayCleanNum: big.NewInt(defaultStoreDelay),
 		contract:           contract,
 		crossMsgReader:     crossMsgReader,
 		crossMsgWriter:     crossMsgWriter,
@@ -136,7 +139,9 @@ func (h *Handler) Stop() {
 }
 
 func (h *Handler) loop() {
-	ticker := time.NewTicker(time.Minute)
+	ticker := time.NewTicker(intervalStoreDelay)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case ev := <-h.crossBlockCh:
@@ -178,7 +183,8 @@ func (h *Handler) handle(current cc.CrossBlockEvent) {
 		"taker", len(current.NewTaker.Takers), "confTaker", len(current.ConfirmedTaker.Txs),
 		"finish", len(current.NewFinish.Finishes), "confFinish", len(current.ConfirmedFinish.Finishes))
 
-	startTime := time.Now() //TODO-D:debug
+	startTime := time.Now()
+
 	var local, remote []*cc.CrossTransactionModifier
 
 	// handle confirmed maker
@@ -250,7 +256,7 @@ func (h *Handler) handle(current cc.CrossBlockEvent) {
 		}
 	}
 
-	log.Warn("[debug] X handle crosschain block", "timeUsed", time.Since(startTime).String())
+	log.Trace("X handle crosschain block complete", "timeUsed", time.Since(startTime).String())
 }
 
 func (h *Handler) reorg(reorg cc.ReorgBlockEvent) {

@@ -84,7 +84,6 @@ func (pool *CrossPool) load() error {
 		return err
 	}
 	pending := store.Query(0, 0, []db.FieldName{db.BlockNumField}, false, q.Eq(db.StatusField, uint8(cc.CtxStatusPending)))
-	log.Error("[debug] load pending", "chainID", pool.chainID, "count", len(pending))
 	for _, pendingTX := range pending {
 		pool.pending.Put(pendingTX)
 	}
