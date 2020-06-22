@@ -2,6 +2,7 @@ package backend
 
 import (
 	"math/big"
+	"sync"
 	"time"
 
 	"github.com/simplechain-org/go-simplechain/accounts"
@@ -49,7 +50,9 @@ type Handler struct {
 	monitor *cm.CrossMonitor
 	txLog   *cm.TransactionLog
 
-	quitSync       chan struct{}
+	quitSync chan struct{}
+	wg       sync.WaitGroup
+
 	crossMsgReader <-chan interface{} // Channel to read  cross-chain message
 	crossMsgWriter chan<- interface{} // Channel to write cross-chain message
 
@@ -124,6 +127,7 @@ func (h *Handler) Start() {
 
 	h.executor.Start()
 
+	h.wg.Add(2)
 	go h.loop()
 	go h.readCrossMessage()
 }
@@ -131,14 +135,16 @@ func (h *Handler) Start() {
 func (h *Handler) Stop() {
 	h.rmLogsSub.Unsubscribe()
 	h.signedCtxSub.Unsubscribe()
-
-	h.pool.Stop()
-	h.executor.Stop()
-	h.store.Close()
 	close(h.quitSync)
+	h.wg.Wait()
+	//先停止executor，再停pool最后停store
+	h.executor.Stop()
+	h.pool.Stop()
+	h.store.Close()
 }
 
 func (h *Handler) loop() {
+	defer h.wg.Done()
 	ticker := time.NewTicker(intervalStoreDelay)
 	defer ticker.Stop()
 
@@ -165,6 +171,9 @@ func (h *Handler) loop() {
 				h.log.Info("regular remove finished tx", "height", height,
 					"removed", h.RemoveCrossTransactionBefore(height.Uint64()-h.storeDelayCleanNum.Uint64()))
 			}
+
+		case <-h.quitSync:
+			return
 		}
 	}
 }
@@ -311,6 +320,7 @@ func (h *Handler) writeCrossMessage(v interface{}) {
 }
 
 func (h *Handler) readCrossMessage() {
+	defer h.wg.Done()
 	for {
 		select {
 		case v := <-h.crossMsgReader:

@@ -72,12 +72,21 @@ func (srv *CrossService) sync() {
 }
 
 func (srv *CrossService) synchronise(main, sub *anchorPeer) {
-	go srv.syncWithPeer(srv.main.handler, main, main.crossStatus.MainHeight)
-	go srv.syncWithPeer(srv.sub.handler, sub, sub.crossStatus.SubHeight)
+	srv.main.handler.syncWithPeer(main, main.crossStatus.MainHeight)
+	srv.sub.handler.syncWithPeer(sub, sub.crossStatus.SubHeight)
 }
 
-func (srv *CrossService) syncWithPeer(handler *Handler, peer *anchorPeer, height *big.Int) {
-	if !atomic.CompareAndSwapUint32(&handler.synchronising, 0, 1) {
+func (h *Handler) SyncWithPeer(peer *anchorPeer, height *big.Int) {
+	h.log.Info("start sync cross transactions", "peer", peer.String(), "height", height)
+	h.wg.Add(1)
+	go func() {
+		defer h.wg.Done()
+		h.syncWithPeer(peer, height)
+	}()
+}
+
+func (h *Handler) syncWithPeer(peer *anchorPeer, peerHeight *big.Int) {
+	if !atomic.CompareAndSwapUint32(&h.synchronising, 0, 1) {
 		peer.Log().Debug("sync busy")
 		return
 	}
@@ -85,29 +94,29 @@ func (srv *CrossService) syncWithPeer(handler *Handler, peer *anchorPeer, height
 	// ignore prev sync
 	for empty := false; !empty; {
 		select {
-		case <-handler.synchronizeCh:
+		case <-h.synchronizeCh:
 		default:
 			empty = true
 		}
 	}
 
-	if h := handler.Height(); h.Cmp(height) <= 0 {
-		go peer.RequestCtxSyncByHeight(handler.pm.NetworkId(), h.Uint64())
+	if height := h.Height(); height.Cmp(peerHeight) <= 0 {
+		go peer.RequestCtxSyncByHeight(h.pm.NetworkId(), height.Uint64())
 	}
 
 	timeout := time.NewTimer(rttMaxEstimate)
 	defer timeout.Stop()
 	for {
 		select {
-		case txs := <-handler.synchronizeCh:
+		case txs := <-h.synchronizeCh:
 			if len(txs) == 0 {
-				atomic.StoreUint32(&handler.synchronising, 0)
+				atomic.StoreUint32(&h.synchronising, 0)
 				peer.Log().Debug("sync ctx request completed")
 				return
 			}
 			var selfTxs []*core.CrossTransactionWithSignatures
 			for _, tx := range txs {
-				if tx.ChainId().Cmp(handler.chainID) == 0 {
+				if tx.ChainId().Cmp(h.chainID) == 0 {
 					selfTxs = append(selfTxs, tx)
 				}
 				//ignore other tx: 子链的tx需要被负责它的handler同步
@@ -119,18 +128,21 @@ func (srv *CrossService) syncWithPeer(handler *Handler, peer *anchorPeer, height
 			if selfTxs != nil {
 				sortedTxs := SortedTxByBlockNum(selfTxs)
 				sort.Sort(sortedTxs)
-				self = handler.SyncCrossTransaction(sortedTxs)
+				self = h.SyncCrossTransaction(sortedTxs)
 				lastHeight = sortedTxs.LastNumber()
-				go peer.RequestCtxSyncByHeight(handler.chainID.Uint64(), lastHeight+1)
+				go peer.RequestCtxSyncByHeight(h.chainID.Uint64(), lastHeight+1)
 			}
 
-			log.Info("Import cross transactions", "chainID", handler.chainID.Uint64(), "total", len(txs), "self", self, "lastHeight", lastHeight)
+			log.Info("Import cross transactions", "chainID", h.chainID.Uint64(), "total", len(txs), "self", self, "lastHeight", lastHeight)
 
 			timeout.Reset(rttMaxEstimate)
 
 		case <-timeout.C:
-			atomic.StoreUint32(&handler.synchronising, 0)
+			atomic.StoreUint32(&h.synchronising, 0)
 			peer.Log().Debug("sync ctx request timed out")
+			return
+
+		case <-h.quitSync:
 			return
 		}
 	}
