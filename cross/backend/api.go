@@ -70,6 +70,10 @@ func (s *PrivateCrossAdminAPI) Height() map[string]hexutil.Uint64 {
 	}
 }
 
+func (s *PrivateCrossAdminAPI) Stats() map[uint64]map[cc.CtxStatus]int {
+	return s.service.main.handler.StoreStats()
+}
+
 func (s *PrivateCrossAdminAPI) SetStoreDelay(chainID *hexutil.Big, number hexutil.Uint64) bool {
 	handler := s.service.getCrossHandler(chainID.ToInt())
 	if handler == nil {
@@ -254,9 +258,9 @@ func (s *PublicCrossChainAPI) CtxGetByNumber(begin, end hexutil.Uint64) map[cc.C
 	return result
 }
 
-func (s *PublicCrossChainAPI) CtxStats() map[uint64]map[cc.CtxStatus]int {
-	return s.handler.StoreStats()
-}
+//func (s *PublicCrossChainAPI) CtxStats() map[uint64]map[cc.CtxStatus]int {
+//	return s.handler.StoreStats()
+//}
 
 func (s *PublicCrossChainAPI) PoolStats() map[string]int {
 	pending, queue := s.handler.PoolStats()
