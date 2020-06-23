@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/consensus/raft"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/types"
@@ -666,8 +665,8 @@ func (pm *ProtocolManager) handleRoleChange(roleC <-chan interface{}) {
 			}
 
 			if intRole == raft.MinterRole {
-				log.EmitCheckpoint(log.BecameMinter)
-				pm.minter.Start(common.Address{})
+				log.EmitCheckpoint(log.BecameMinter, "coinbase", pm.minter.GetCoinBase().String())
+				pm.minter.Start(pm.minter.GetCoinBase())
 			} else { // verifier
 				if pm.isVerifierNode() {
 					log.EmitCheckpoint(log.BecameVerifier)

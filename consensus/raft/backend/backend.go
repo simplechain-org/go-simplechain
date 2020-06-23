@@ -60,7 +60,11 @@ func New(ctx *node.ServiceContext, raftId, raftPort uint16, joinExisting bool, e
 	// Reuse Recommit
 	minerConfig.Recommit = blockTime
 
+	// Configure the local mining address
+	eb, _ := e.Etherbase()
+
 	service.minter = miner.New(service, minerConfig, e.ChainConfig(), service.eventMux, engine, nil)
+	service.minter.SetEtherbase(eb)
 
 	var err error
 	if service.raftProtocolManager, err = NewProtocolManager(raftId, raftPort, service.blockchain, service.eventMux, startPeers, joinExisting, datadir, service.minter, service.downloader, useDns); err != nil {
