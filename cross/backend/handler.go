@@ -232,8 +232,8 @@ func (h *Handler) handle(current cc.CrossBlockEvent) {
 				remote = append(remote, &cc.CrossTransactionModifier{
 					ID: tx.CTxId,
 					// update remote wouldn't modify blockNumber
-					IsRemote: true,
-					Status:   cc.CtxStatusExecuted,
+					Type:   cc.Remote,
+					Status: cc.CtxStatusExecuted,
 				})
 			}
 			h.writeCrossMessage(current.ConfirmedTaker)
@@ -283,6 +283,7 @@ func (h *Handler) reorg(reorg cc.ReorgBlockEvent) {
 	}
 }
 
+// number高度anchor发生变化时，检查之前的跨链交易签名是否已经失效
 func (h *Handler) handleAnchorChange(number *big.Int) []*cc.CrossTransactionModifier {
 	store, err := h.store.GetStore(h.chainID)
 	if err != nil {
@@ -292,7 +293,7 @@ func (h *Handler) handleAnchorChange(number *big.Int) []*cc.CrossTransactionModi
 	conditions := []q.Matcher{q.Eq(cdb.StatusField, cc.CtxStatusWaiting), q.Lte(cdb.BlockNumField, number.Uint64())}
 	txm := make([]*cc.CrossTransactionModifier, 0)
 	for _, cws := range store.Query(0, 0, []cdb.FieldName{cdb.BlockNumField}, false, conditions...) {
-		for _, ctx := range cws.Resolution() {
+		for _, ctx := range cws.Resolution() { // verify each signature
 			if _, err := h.retriever.VerifySigner(ctx, ctx.ChainId(), ctx.DestinationId()); err != nil {
 				txm = append(txm, &cc.CrossTransactionModifier{
 					ID:            ctx.ID(),
@@ -397,32 +398,6 @@ func (h *Handler) Pending(start uint64, limit int) (ids []common.Hash) {
 	return ids
 }
 
-// 通过id获取交易，并添加自己的签名
-func (h *Handler) GetSyncPending(ids []common.Hash) []*cc.CrossTransaction {
-	results := make([]*cc.CrossTransaction, 0, len(ids))
-	for _, id := range ids {
-		if ctx := h.pool.GetLocal(id); ctx != nil {
-			results = append(results, ctx)
-		}
-	}
-	h.log.Debug("GetSyncPending", "req", len(ids), "result", len(results))
-	return results
-}
-
-// 批量同步其他节点的签名跨链交易
-func (h *Handler) SyncPending(ctxList []*cc.CrossTransaction) (lastNumber uint64) {
-	for _, ctx := range ctxList {
-		// 同步pending时像单节点请求签名，所以不监控漏签
-		if err := h.AddRemoteCtx(ctx, false); err != nil {
-			h.log.Trace("SyncPending failed", "id", ctx.ID(), "err", err)
-		}
-		if num := h.retriever.GetConfirmedTransactionNumberOnChain(ctx); num > lastNumber {
-			lastNumber = num
-		}
-	}
-	return lastNumber
-}
-
 func (h *Handler) RegisterChain(chainID *big.Int) {
 	h.remoteID = chainID
 	h.store.RegisterChain(chainID)
@@ -434,54 +409,6 @@ func (h *Handler) RemoteID() uint64 { return h.remoteID.Uint64() }
 // for cross store sync
 func (h *Handler) Height() *big.Int {
 	return new(big.Int).SetUint64(h.store.Height(h.chainID))
-}
-
-func (h *Handler) GetSyncCrossTransaction(height uint64, syncSize int) []*cc.CrossTransactionWithSignatures {
-	return h.store.stores[h.chainID.Uint64()].RangeByNumber(height, h.chain.BlockChain().CurrentBlock().NumberU64(), syncSize)
-}
-
-func (h *Handler) SyncCrossTransaction(ctxList []*cc.CrossTransactionWithSignatures) int {
-	var localList []*cc.CrossTransactionWithSignatures
-
-	synchronise := func(syncList *[]*cc.CrossTransactionWithSignatures, ctx *cc.CrossTransactionWithSignatures) (result []*cc.CrossTransactionWithSignatures) {
-		if len(*syncList) > 0 && ctx.BlockNum != (*syncList)[len(*syncList)-1].BlockNum {
-			result = make([]*cc.CrossTransactionWithSignatures, len(*syncList))
-			copy(result, *syncList)
-			*syncList = (*syncList)[:0]
-		}
-		*syncList = append(*syncList, ctx)
-		return result
-	}
-
-	var success int
-	for _, ctx := range ctxList {
-		if ctx.Status == cc.CtxStatusPending { // pending的交易不存store，放入交易池等待多签
-			for _, tx := range ctx.Resolution() {
-				h.pool.AddRemote(tx) // ignore errors, unnecessary
-			}
-			continue
-		}
-		syncList := synchronise(&localList, ctx) // 把同高度的ctx统一处理
-		if syncList == nil {
-			continue
-		}
-		if err := h.store.Adds(h.chainID, syncList, true); err != nil {
-			h.log.Warn("sync local ctx failed", "err", err)
-			continue
-		}
-		success += len(syncList)
-	}
-
-	// add remains
-	if len(localList) > 0 {
-		if err := h.store.Adds(h.chainID, localList, true); err == nil {
-			success += len(localList)
-		} else {
-			h.log.Warn("sync local ctx failed", "err", err)
-		}
-	}
-
-	return success
 }
 
 // 设置store定期清除finished的交易

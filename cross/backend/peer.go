@@ -152,6 +152,10 @@ func (p *anchorPeer) MarkCrossTransaction(hash common.Hash) {
 	p.knownCTxs.Add(hash)
 }
 
+func (p *anchorPeer) HasCrossTransaction(hash common.Hash) bool {
+	return p.knownCTxs.Contains(hash)
+}
+
 func (p *anchorPeer) SendCrossTransaction(ctx *cc.CrossTransaction) error {
 	return p2p.Send(p.rw, CtxSignMsg, ctx)
 }

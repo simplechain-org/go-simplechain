@@ -4,7 +4,7 @@ import "github.com/simplechain-org/go-simplechain/common"
 
 const (
 	LogDir   = "crosslog"
-	TxLogDir = "crosstx"
+	TxLogDir = "crosstxlog"
 	DataDir  = "crossdata"
 )
 

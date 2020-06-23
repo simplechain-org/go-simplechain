@@ -21,8 +21,8 @@ func NewPrivateCrossAdminAPI(service *CrossService) *PrivateCrossAdminAPI {
 }
 
 func (s *PrivateCrossAdminAPI) SyncPending() (bool, error) {
-	go s.service.syncPending(s.service.main.handler, s.service.peers.peers)
-	go s.service.syncPending(s.service.sub.handler, s.service.peers.peers)
+	go s.service.main.handler.syncPending(s.service.peers.peers)
+	go s.service.sub.handler.syncPending(s.service.peers.peers)
 	return s.service.peers.Len() > 0, nil
 }
 

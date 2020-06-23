@@ -55,15 +55,15 @@ func (srv *CrossService) sync() {
 			}
 
 			peers := map[string]*anchorPeer{p.id: p}
-			go srv.syncPending(srv.main.handler, peers)
-			go srv.syncPending(srv.sub.handler, peers)
+			go srv.main.handler.syncPending(peers)
+			go srv.sub.handler.syncPending(peers)
 
 		case <-ticker.C:
 			if srv.peers.Len() == 0 {
 				break
 			}
-			go srv.syncPending(srv.main.handler, srv.peers.peers)
-			go srv.syncPending(srv.sub.handler, srv.peers.peers)
+			go srv.main.handler.syncPending(srv.peers.peers)
+			go srv.sub.handler.syncPending(srv.peers.peers)
 
 		case <-srv.quitSync:
 			return
@@ -148,8 +148,8 @@ func (h *Handler) syncWithPeer(peer *anchorPeer, peerHeight *big.Int) {
 	}
 }
 
-func (srv *CrossService) syncPending(handler *Handler, peers map[string]*anchorPeer) {
-	pending := handler.Pending(0, defaultMaxSyncSize)
+func (h *Handler) syncPending(peers map[string]*anchorPeer) {
+	pending := h.Pending(0, defaultMaxSyncSize)
 	peerWithPending := make(map[string][]common.Hash)
 	for _, id := range pending {
 		for pid, p := range peers {
@@ -159,15 +159,89 @@ func (srv *CrossService) syncPending(handler *Handler, peers map[string]*anchorP
 		}
 	}
 	for pid, pending := range peerWithPending {
-		peer := srv.peers.Peer(pid)
-		srv.syncPendingWithPeer(handler, peer, pending)
+		peer := peers[pid]
+		h.syncPendingWithPeer(peer, pending)
 	}
 }
 
-func (srv *CrossService) syncPendingWithPeer(handler *Handler, p *anchorPeer, pending []common.Hash) {
+func (h *Handler) syncPendingWithPeer(p *anchorPeer, pending []common.Hash) {
 	if p == nil || pending == nil {
 		return
 	}
-	go p.SendSyncPendingRequest(handler.pm.NetworkId(), pending)
-	p.Log().Info("start sync pending cross transaction", "chainID", handler.pm.NetworkId(), "pending", len(pending), "peer", p.id)
+	go p.SendSyncPendingRequest(h.pm.NetworkId(), pending)
+	p.Log().Info("start sync pending cross transaction", "chainID", h.pm.NetworkId(), "pending", len(pending), "peer", p.id)
+}
+
+// 通过id获取本地pool.pending或store中的交易，并添加自己的签名
+func (h *Handler) GetSyncPending(ids []common.Hash) []*core.CrossTransaction {
+	results := make([]*core.CrossTransaction, 0, len(ids))
+	for _, id := range ids {
+		if ctx := h.pool.GetLocal(id); ctx != nil {
+			results = append(results, ctx)
+		}
+	}
+	h.log.Debug("GetSyncPending", "req", len(ids), "result", len(results))
+	return results
+}
+
+// 批量同步其他节点的签名跨链交易
+func (h *Handler) SyncPending(ctxList []*core.CrossTransaction) (lastNumber uint64) {
+	for _, ctx := range ctxList {
+		// 同步pending时像单节点请求签名，所以不监控漏签
+		if err := h.AddRemoteCtx(ctx, false); err != nil {
+			h.log.Trace("SyncPending failed", "id", ctx.ID(), "err", err)
+		}
+		if num := h.retriever.GetConfirmedTransactionNumberOnChain(ctx); num > lastNumber {
+			lastNumber = num
+		}
+	}
+	return lastNumber
+}
+
+func (h *Handler) GetSyncCrossTransaction(height uint64, limit int) []*core.CrossTransactionWithSignatures {
+	return h.store.stores[h.chainID.Uint64()].RangeByNumber(height, h.chain.BlockChain().CurrentBlock().NumberU64(), limit)
+}
+
+func (h *Handler) SyncCrossTransaction(ctxList []*core.CrossTransactionWithSignatures) int {
+	var localList []*core.CrossTransactionWithSignatures
+
+	synchronise := func(syncList *[]*core.CrossTransactionWithSignatures, ctx *core.CrossTransactionWithSignatures) (result []*core.CrossTransactionWithSignatures) {
+		if len(*syncList) > 0 && ctx.BlockNum != (*syncList)[len(*syncList)-1].BlockNum {
+			result = make([]*core.CrossTransactionWithSignatures, len(*syncList))
+			copy(result, *syncList)
+			*syncList = (*syncList)[:0]
+		}
+		*syncList = append(*syncList, ctx)
+		return result
+	}
+
+	var success int
+	for _, ctx := range ctxList {
+		if ctx.Status == core.CtxStatusPending { // pending的交易不存store，放入交易池等待多签
+			for _, tx := range ctx.Resolution() {
+				h.pool.AddRemote(tx) // ignore errors, unnecessary
+			}
+			continue
+		}
+		syncList := synchronise(&localList, ctx) // 把同高度的ctx统一处理
+		if syncList == nil {
+			continue
+		}
+		if err := h.store.Adds(h.chainID, syncList, true); err != nil {
+			h.log.Warn("sync local ctx failed", "err", err)
+			continue
+		}
+		success += len(syncList)
+	}
+
+	// add remains
+	if len(localList) > 0 {
+		if err := h.store.Adds(h.chainID, localList, true); err == nil {
+			success += len(localList)
+		} else {
+			h.log.Warn("sync local ctx failed", "err", err)
+		}
+	}
+
+	return success
 }

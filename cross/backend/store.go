@@ -141,10 +141,10 @@ func (s *CrossStore) Updates(chainID *big.Int, txmList []*cc.CrossTransactionMod
 		updaters = append(updaters, func(ctx *cdb.CrossTransactionIndexed) {
 			switch {
 			// force update if tx status is changed by block reorg
-			case txm.IsReorg:
+			case txm.Type == cc.Reorg:
 				ctx.Status = uint8(txm.Status)
 			// update from remote
-			case txm.IsRemote && uint8(txm.Status) > ctx.Status:
+			case txm.Type == cc.Remote && uint8(txm.Status) > ctx.Status:
 				ctx.Status = uint8(txm.Status)
 			// update from local
 			case txm.AtBlockNumber >= ctx.BlockNum && uint8(txm.Status) > ctx.Status:

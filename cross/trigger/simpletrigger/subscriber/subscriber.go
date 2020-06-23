@@ -62,8 +62,8 @@ func (t *SimpleSubscriber) StoreCrossContractLog(blockNumber uint64, hash common
 						takers = append(takers, &cc.CrossTransactionModifier{
 							ID: v.Topics[1],
 							// update remote wouldn't modify blockNumber
-							IsRemote: true,
-							Status:   cc.CtxStatusExecuting,
+							Type:   cc.Remote,
+							Status: cc.CtxStatusExecuting,
 						})
 						unconfirmedLogs = append(unconfirmedLogs, v)
 					}
@@ -107,18 +107,18 @@ func (t *SimpleSubscriber) NotifyBlockReorg(logs []*types.Log) {
 			case params.TakerTopic: // remote ctx taken
 				if len(l.Topics) >= 3 && len(l.Data) >= common.HashLength {
 					reorgEvent.ReorgTaker.Takers = append(reorgEvent.ReorgTaker.Takers, &cc.CrossTransactionModifier{
-						ID:      l.Topics[1],
-						Status:  cc.CtxStatusWaiting,
-						IsReorg: true,
+						ID:     l.Topics[1],
+						Status: cc.CtxStatusWaiting,
+						Type:   cc.Reorg,
 					})
 				}
 
 			case params.MakerFinishTopic: // local ctx finished
 				if len(l.Topics) >= 3 {
 					reorgEvent.ReorgFinish.Finishes = append(reorgEvent.ReorgFinish.Finishes, &cc.CrossTransactionModifier{
-						ID:      l.Topics[1],
-						Status:  cc.CtxStatusExecuted,
-						IsReorg: true,
+						ID:     l.Topics[1],
+						Status: cc.CtxStatusExecuted,
+						Type:   cc.Reorg,
 					})
 				}
 			}
