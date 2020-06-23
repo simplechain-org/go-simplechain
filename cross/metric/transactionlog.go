@@ -7,6 +7,7 @@ import (
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/ethdb"
+	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/trie"
 )
 
@@ -41,6 +42,12 @@ func (l *TransactionLogs) Get(chainID *big.Int) *TransactionLog {
 	return &TransactionLog{
 		TransactionLogs: l,
 		chainID:         chainID,
+	}
+}
+
+func (l *TransactionLogs) Close() {
+	if err := l.diskDB.Close(); err != nil {
+		log.Warn("transaction logs close failed", "error", err)
 	}
 }
 

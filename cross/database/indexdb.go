@@ -19,6 +19,7 @@ type indexDB struct {
 	root    *storm.DB // root db of stormDB
 	db      storm.Node
 	cache   *IndexDbCache
+	logger  log.Logger
 }
 
 type FieldName = string
@@ -42,6 +43,7 @@ func NewIndexDB(chainID *big.Int, rootDB *storm.DB, cacheSize uint64) *indexDB {
 		chainID: chainID,
 		db:      rootDB.From(dbName).WithBatch(true),
 		cache:   newIndexDbCache(int(cacheSize)),
+		logger:  log.New("name", dbName),
 	}
 }
 
@@ -88,22 +90,17 @@ func (d *indexDB) Close() error {
 //}
 
 func (d *indexDB) Write(ctx *cc.CrossTransactionWithSignatures) error {
-	persist := NewCrossTransactionIndexed(ctx)
-	err := d.db.Save(persist)
-	if err != nil {
-		if err == storm.ErrAlreadyExists {
-			return err
-		}
-		return ErrCtxDbFailure{fmt.Sprintf("Write:%s save fail", ctx.ID().String()), err}
+	if err := d.Writes([]*cc.CrossTransactionWithSignatures{ctx}, true); err != nil {
+		return err
 	}
-
 	if d.cache != nil {
-		d.cache.Put(CtxIdIndex, ctx.ID(), persist)
+		d.cache.Put(CtxIdIndex, ctx.ID(), NewCrossTransactionIndexed(ctx))
 	}
 	return nil
 }
 
 func (d *indexDB) Writes(ctxList []*cc.CrossTransactionWithSignatures, replaceable bool) (err error) {
+	d.logger.Debug("write cross transaction", "count", len(ctxList), "replaceable", replaceable)
 	tx, err := d.db.Begin(true)
 	if err != nil {
 		return ErrCtxDbFailure{"begin transaction failed", err}
@@ -125,27 +122,35 @@ func (d *indexDB) Writes(ctxList []*cc.CrossTransactionWithSignatures, replaceab
 
 	for _, ctx := range ctxList {
 		new := NewCrossTransactionIndexed(ctx)
-		var (
-			old   CrossTransactionIndexed
-			saved bool
-		)
+		var old CrossTransactionIndexed
 		err = tx.One(CtxIdIndex, ctx.ID(), &old)
-		switch {
-		case err == storm.ErrNotFound:
+		if err == storm.ErrNotFound {
+			d.logger.Debug("add new cross transaction",
+				"id", ctx.ID().String(), "status", ctx.Status.String(), "number", ctx.BlockNum)
+
 			if err = tx.Save(new); err != nil {
 				return err
 			}
-			saved = true
 
-		case canReplace(&old, new):
+		} else if canReplace(&old, new) {
+			d.logger.Debug("replace cross transaction", "id", ctx.ID().String(),
+				"old_status", cc.CtxStatus(old.Status).String(), "new_status", ctx.Status.String(),
+				"old_height", old.BlockNum, "new_height", ctx.BlockNum)
+
 			new.PK = old.PK
 			if err = tx.Update(new); err != nil {
 				return err
 			}
-			saved = true
+
+		} else {
+			d.logger.Debug("can't add or replace cross transaction", "id", ctx.ID().String(),
+				"old_status", cc.CtxStatus(old.Status).String(), "new_status", ctx.Status.String(),
+				"old_height", old.BlockNum, "new_height", ctx.BlockNum, "replaceable", replaceable)
+
+			continue
 		}
 
-		if saved && d.cache != nil {
+		if d.cache != nil {
 			d.cache.Remove(CtxIdIndex, ctx.ID())
 			d.cache.Remove(CtxIdIndex, ctx.Data.TxHash)
 		}
@@ -200,19 +205,7 @@ func (d *indexDB) get(ctxId common.Hash) (*CrossTransactionIndexed, error) {
 }
 
 func (d *indexDB) Update(id common.Hash, updater func(ctx *CrossTransactionIndexed)) error {
-	ctx, err := d.get(id)
-	if err != nil {
-		return err
-	}
-	updater(ctx) // updater should never be allowed to modify PK or ctxID!
-	if err := d.db.Update(ctx); err != nil {
-		return ErrCtxDbFailure{"Update save fail", err}
-	}
-	if d.cache != nil {
-		d.cache.Remove(CtxIdIndex, id)
-		d.cache.Remove(TxHashIndex, ctx.TxHash)
-	}
-	return nil
+	return d.Updates([]common.Hash{id}, []func(ctx *CrossTransactionIndexed){updater})
 }
 
 func (d *indexDB) Updates(idList []common.Hash, updaters []func(ctx *CrossTransactionIndexed)) (err error) {

@@ -6,11 +6,10 @@ import (
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	cc "github.com/simplechain-org/go-simplechain/cross/core"
+	"github.com/simplechain-org/go-simplechain/cross/trigger/simpletrigger"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/params"
 )
-
-var DefaultConfirmDepth = 12
 
 type SimpleSubscriber struct {
 	unconfirmedBlockLogs
@@ -32,7 +31,7 @@ func NewSimpleSubscriber(contract common.Address, chain chainRetriever) *SimpleS
 		contract: contract,
 		unconfirmedBlockLogs: unconfirmedBlockLogs{
 			chain: chain,
-			depth: uint(DefaultConfirmDepth),
+			depth: uint(simpletrigger.DefaultConfirmDepth),
 		},
 	}
 }
@@ -40,6 +39,10 @@ func NewSimpleSubscriber(contract common.Address, chain chainRetriever) *SimpleS
 func (t *SimpleSubscriber) Stop() {
 	t.scope.Close()
 }
+
+//func (t *SimpleSubscriber) ConfirmNumber() uint64 {
+//	return uint64(simpletrigger.DefaultConfirmDepth)
+//}
 
 func (t *SimpleSubscriber) StoreCrossContractLog(blockNumber uint64, hash common.Hash, logs []*types.Log) {
 	var unconfirmedLogs []*types.Log

@@ -41,7 +41,8 @@ type Transaction interface {
 
 type ChainRetriever interface {
 	Validator
-	GetTransactionNumberOnChain(tx Transaction) uint64
-	GetTransactionTimeOnChain(tx Transaction) uint64
+	GetTransactionNumberOnChain(Transaction) uint64
+	GetConfirmedTransactionNumberOnChain(Transaction) uint64
+	GetTransactionTimeOnChain(Transaction) uint64
 	IsTransactionInExpiredBlock(tx Transaction, expiredHeight uint64) bool
 }

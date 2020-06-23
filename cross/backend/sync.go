@@ -72,8 +72,8 @@ func (srv *CrossService) sync() {
 }
 
 func (srv *CrossService) synchronise(main, sub *anchorPeer) {
-	srv.main.handler.syncWithPeer(main, main.crossStatus.MainHeight)
-	srv.sub.handler.syncWithPeer(sub, sub.crossStatus.SubHeight)
+	srv.main.handler.SyncWithPeer(main, main.crossStatus.MainHeight)
+	srv.sub.handler.SyncWithPeer(sub, sub.crossStatus.SubHeight)
 }
 
 func (h *Handler) SyncWithPeer(peer *anchorPeer, height *big.Int) {

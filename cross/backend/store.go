@@ -45,7 +45,9 @@ func NewCrossStore(ctx cdb.ServiceContext, makerDb string) (*CrossStore, error) 
 }
 
 func (s *CrossStore) Close() {
-	s.db.Close()
+	if err := s.db.Close(); err != nil {
+		s.logger.Warn("close store failed", "error", err)
+	}
 }
 
 func (s *CrossStore) RegisterChain(chainID *big.Int) {

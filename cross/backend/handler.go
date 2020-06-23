@@ -27,7 +27,7 @@ const (
 	rmLogsChanSize    = 10
 	signedPendingSize = 256
 
-	defaultStoreDelay  = 2048
+	defaultStoreDelay  = 1024
 	intervalStoreDelay = time.Minute * 10
 )
 
@@ -95,7 +95,7 @@ func NewCrossHandler(chain cross.SimpleChain, service *CrossService, config cros
 
 	//initialize metric
 	h.monitor = cm.NewCrossMonitor()
-	h.txLog = service.txLog.Get(h.chainID)
+	h.txLog = service.txLogs.Get(h.chainID)
 
 	{ // TODO: 将由chain本身提供这些组件
 		h.subscriber = subscriber.NewSimpleSubscriber(contract, chain.BlockChain())
@@ -108,7 +108,7 @@ func NewCrossHandler(chain cross.SimpleChain, service *CrossService, config cros
 	}
 
 	h.store.RegisterChain(h.chainID)
-	h.pool = NewCrossPool(h.chainID, h.store, h.retriever, h.signHash, chain.BlockChain())
+	h.pool = NewCrossPool(h.chainID, h.store, h.txLog, h.retriever, h.signHash, chain.BlockChain())
 
 	return h, nil
 }
@@ -179,78 +179,75 @@ func (h *Handler) loop() {
 }
 
 func (h *Handler) handle(current cc.CrossBlockEvent) {
-	if height := h.store.Height(h.chainID); current.Number.Uint64() < height {
-		// ignore expired block logs
-		if current.Number.Uint64()%10 == 0 {
-			h.log.Info("X handle crosschain block ignore early logs", "number", current.Number)
-		}
-		return
-	}
-
-	h.log.Info("X handle crosschain block", "number", current.Number,
-		"newAnchor", len(current.NewAnchor.ChainInfo), "confMaker", len(current.ConfirmedMaker.Txs),
-		"taker", len(current.NewTaker.Takers), "confTaker", len(current.ConfirmedTaker.Txs),
-		"finish", len(current.NewFinish.Finishes), "confFinish", len(current.ConfirmedFinish.Finishes))
-
-	startTime := time.Now()
-
-	var local, remote []*cc.CrossTransactionModifier
-
-	// handle confirmed maker
-	if makers := current.ConfirmedMaker.Txs; len(makers) > 0 {
-		signed, errs := h.pool.AddLocals(makers...)
-		for _, err := range errs {
-			h.log.Warn("Add local ctx failed", "err", err)
-		}
-		// assemble signed local and add them to store with pending status
-		cws := make([]*cc.CrossTransactionWithSignatures, len(signed))
-		for i, ctx := range signed {
-			cws[i] = cc.NewCrossTransactionWithSignatures(ctx, current.Number.Uint64())
-		}
-		if err := h.store.Adds(h.chainID, cws, false); err != nil {
-			h.log.Warn("Store pending ctx failed", "err", err)
-		}
-		h.service.BroadcastCrossTx(signed, true)
-	}
-
-	// handle new taker
-	if takers := current.NewTaker.Takers; len(takers) > 0 {
-		remote = append(remote, takers...)
-	}
-
-	// handle confirmed taker
-	if takers := current.ConfirmedTaker.Txs; len(takers) > 0 {
-		for _, tx := range takers {
-			remote = append(remote, &cc.CrossTransactionModifier{
-				ID: tx.CTxId,
-				// update remote wouldn't modify blockNumber
-				IsRemote: true,
-				Status:   cc.CtxStatusExecuted,
-			})
-		}
-		h.writeCrossMessage(current.ConfirmedTaker)
-	}
-
-	// handle new finish
-	if finishes := current.NewFinish.Finishes; len(finishes) > 0 {
-		local = append(local, finishes...)
-	}
-
-	// handle confirmed finish
-	if finishes := current.ConfirmedFinish.Finishes; len(finishes) > 0 {
-		local = append(local, finishes...)
-	}
+	var (
+		local, remote []*cc.CrossTransactionModifier
+		startTime     = time.Now()
+	)
 
 	// handle anchor update
 	if updates := current.NewAnchor.ChainInfo; len(updates) > 0 {
+		h.log.Info("X handle new anchor", "number", current.Number, "newAnchor", len(current.NewAnchor.ChainInfo))
 		for _, v := range updates {
 			if err := h.retriever.UpdateAnchors(v); err != nil {
-				h.log.Warn("UpdateAnchors failed", "err", err)
+				h.log.Warn("UpdateAnchors failed", "error", err)
 				continue
 			}
 		}
 		// fetch illegal tx after anchor updating
 		local = append(local, h.handleAnchorChange(current.Number)...)
+	}
+
+	// ignore early block logs
+	if height := h.store.Height(h.chainID); current.Number.Uint64() >= height {
+		h.log.Info("X handle crosschain block", "number", current.Number,
+			"newAnchor", len(current.NewAnchor.ChainInfo), "confMaker", len(current.ConfirmedMaker.Txs),
+			"taker", len(current.NewTaker.Takers), "confTaker", len(current.ConfirmedTaker.Txs),
+			"finish", len(current.NewFinish.Finishes), "confFinish", len(current.ConfirmedFinish.Finishes))
+
+		// handle confirmed maker
+		if makers := current.ConfirmedMaker.Txs; len(makers) > 0 {
+			signed, errs := h.pool.AddLocals(makers...)
+			for _, err := range errs {
+				h.log.Warn("Add local ctx failed", "error", err)
+			}
+			// assemble signed local and add them to store with pending status
+			cws := make([]*cc.CrossTransactionWithSignatures, len(signed))
+			for i, ctx := range signed {
+				cws[i] = cc.NewCrossTransactionWithSignatures(ctx, current.Number.Uint64())
+			}
+			if err := h.store.Adds(h.chainID, cws, false); err != nil {
+				h.log.Warn("Store pending ctx failed", "error", err)
+			}
+			h.service.BroadcastCrossTx(signed, true)
+		}
+
+		// handle new taker
+		if takers := current.NewTaker.Takers; len(takers) > 0 {
+			remote = append(remote, takers...)
+		}
+
+		// handle confirmed taker
+		if takers := current.ConfirmedTaker.Txs; len(takers) > 0 {
+			for _, tx := range takers {
+				remote = append(remote, &cc.CrossTransactionModifier{
+					ID: tx.CTxId,
+					// update remote wouldn't modify blockNumber
+					IsRemote: true,
+					Status:   cc.CtxStatusExecuted,
+				})
+			}
+			h.writeCrossMessage(current.ConfirmedTaker)
+		}
+
+		// handle new finish
+		if finishes := current.NewFinish.Finishes; len(finishes) > 0 {
+			local = append(local, finishes...)
+		}
+
+		// handle confirmed finish
+		if finishes := current.ConfirmedFinish.Finishes; len(finishes) > 0 {
+			local = append(local, finishes...)
+		}
 	}
 
 	if len(local) > 0 {
@@ -363,7 +360,11 @@ func (h *Handler) readCrossMessage() {
 	}
 }
 
+// 往pool里添加从P2P网络接收的ctx与节点签名信息
 func (h *Handler) AddRemoteCtx(ctx *cc.CrossTransaction, monitoring bool) error {
+	if !h.pm.CanAcceptTxs() { // wait until block synchronize completely
+		return nil
+	}
 	signer, err := h.retriever.VerifySigner(ctx, ctx.ChainId(), ctx.DestinationId())
 	if err != nil {
 		return err
@@ -373,6 +374,7 @@ func (h *Handler) AddRemoteCtx(ctx *cc.CrossTransaction, monitoring bool) error 
 		return nil
 	}
 	if monitoring {
+		h.log.Debug("add remote ctx signer monitor", "ctxID", ctx.ID(), "signer", signer.String())
 		go h.monitor.PushSigner(ctx.ID(), signer)
 	}
 
@@ -385,7 +387,9 @@ func (h *Handler) AddRemoteCtx(ctx *cc.CrossTransaction, monitoring bool) error 
 	return nil
 }
 
-// for ctx pending sync
+// 获取未共识完成的跨链交易
+//@start 起始交易所在区块高度
+//@limit 限制一次性取的交易条数
 func (h *Handler) Pending(start uint64, limit int) (ids []common.Hash) {
 	for _, ctx := range h.pool.Pending(start, h.blockChain.CurrentBlock().NumberU64(), limit) {
 		ids = append(ids, ctx.ID())
@@ -393,6 +397,7 @@ func (h *Handler) Pending(start uint64, limit int) (ids []common.Hash) {
 	return ids
 }
 
+// 通过id获取交易，并添加自己的签名
 func (h *Handler) GetSyncPending(ids []common.Hash) []*cc.CrossTransaction {
 	results := make([]*cc.CrossTransaction, 0, len(ids))
 	for _, id := range ids {
@@ -404,13 +409,14 @@ func (h *Handler) GetSyncPending(ids []common.Hash) []*cc.CrossTransaction {
 	return results
 }
 
+// 批量同步其他节点的签名跨链交易
 func (h *Handler) SyncPending(ctxList []*cc.CrossTransaction) (lastNumber uint64) {
 	for _, ctx := range ctxList {
 		// 同步pending时像单节点请求签名，所以不监控漏签
 		if err := h.AddRemoteCtx(ctx, false); err != nil {
 			h.log.Trace("SyncPending failed", "id", ctx.ID(), "err", err)
 		}
-		if num := h.retriever.GetTransactionNumberOnChain(ctx); num > lastNumber {
+		if num := h.retriever.GetConfirmedTransactionNumberOnChain(ctx); num > lastNumber {
 			lastNumber = num
 		}
 	}
@@ -437,7 +443,7 @@ func (h *Handler) GetSyncCrossTransaction(height uint64, syncSize int) []*cc.Cro
 func (h *Handler) SyncCrossTransaction(ctxList []*cc.CrossTransactionWithSignatures) int {
 	var localList []*cc.CrossTransactionWithSignatures
 
-	sync := func(syncList *[]*cc.CrossTransactionWithSignatures, ctx *cc.CrossTransactionWithSignatures) (result []*cc.CrossTransactionWithSignatures) {
+	synchronise := func(syncList *[]*cc.CrossTransactionWithSignatures, ctx *cc.CrossTransactionWithSignatures) (result []*cc.CrossTransactionWithSignatures) {
 		if len(*syncList) > 0 && ctx.BlockNum != (*syncList)[len(*syncList)-1].BlockNum {
 			result = make([]*cc.CrossTransactionWithSignatures, len(*syncList))
 			copy(result, *syncList)
@@ -451,11 +457,11 @@ func (h *Handler) SyncCrossTransaction(ctxList []*cc.CrossTransactionWithSignatu
 	for _, ctx := range ctxList {
 		if ctx.Status == cc.CtxStatusPending { // pending的交易不存store，放入交易池等待多签
 			for _, tx := range ctx.Resolution() {
-				h.pool.AddRemote(tx) // ignore errors
+				h.pool.AddRemote(tx) // ignore errors, unnecessary
 			}
 			continue
 		}
-		syncList := sync(&localList, ctx) // 把同高度的ctx统一处理
+		syncList := synchronise(&localList, ctx) // 把同高度的ctx统一处理
 		if syncList == nil {
 			continue
 		}
@@ -478,14 +484,13 @@ func (h *Handler) SyncCrossTransaction(ctxList []*cc.CrossTransactionWithSignatu
 	return success
 }
 
-/**
- * 设置store定期清除finished的交易
- * number: 在number高度以下的交易会被定期清理
- */
+// 设置store定期清除finished的交易
+//@number: 在number高度以下的交易会被定期清理
 func (h *Handler) SetStoreDelay(number uint64) {
 	h.storeDelayCleanNum.SetUint64(number)
 }
 
+// 在store删除number区块高度之前的finished状态的跨链交易，并持久化到txLog中
 func (h *Handler) RemoveCrossTransactionBefore(number uint64) int {
 	store, _ := h.store.GetStore(h.chainID)
 	var (
@@ -504,7 +509,9 @@ func (h *Handler) RemoveCrossTransactionBefore(number uint64) int {
 				h.txLog.AddFinish(ctx.ID(), ctx.BlockNum)
 			}
 		}
-		h.txLog.Commit()
+		if _, err := h.txLog.Commit(); err != nil {
+			h.log.Warn("transaction log commit failed", "error", err)
+		}
 		if err := store.Deletes(deletes); err != nil {
 			h.log.Warn("remove ctx failed", "number", number, "error", err)
 			break

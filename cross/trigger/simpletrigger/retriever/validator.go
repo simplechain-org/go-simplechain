@@ -52,7 +52,7 @@ func NewSimpleValidator(store crossStore, contract common.Address, chain cross.B
 		chainConfig:      chainConfig,
 		chain:            chain,
 		contract:         contract,
-		logger:           log.New("X-module", "validator"),
+		logger:           log.New("X-module", "validator", "chainID", chainConfig.ChainID),
 	}
 }
 
@@ -119,7 +119,7 @@ func (v *SimpleValidator) VerifySigner(ctx *cc.CrossTransaction, signChain, vali
 	}
 	signer, ok := anchorSet.IsAnchorSignedCtx(ctx, cc.NewEIP155CtxSigner(signChain))
 	if !ok {
-		v.logger.Warn("invalid signature", "ctxID", ctx.ID().String())
+		v.logger.Warn("invalid signature", "ctxID", ctx.ID().String(), "signer", signer.String())
 		return signer, cross.ErrInvalidSignCtx
 	}
 	return signer, nil

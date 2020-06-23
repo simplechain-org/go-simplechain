@@ -21,6 +21,7 @@ import (
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/types"
+	"github.com/simplechain-org/go-simplechain/cross/trigger/simpletrigger"
 	"github.com/simplechain-org/go-simplechain/params"
 )
 
@@ -37,8 +38,8 @@ func (r *noopChainRetriever) GetChainConfig() *params.ChainConfig { return nil }
 // Tests that inserting blocks into the unconfirmed set accumulates them until
 // the desired depth is reached, after which they begin to be dropped.
 func TestUnconfirmedInsertBounds(t *testing.T) {
-	DefaultConfirmDepth = 12
-	limit := DefaultConfirmDepth
+	simpletrigger.DefaultConfirmDepth = 12
+	limit := simpletrigger.DefaultConfirmDepth
 
 	pool := NewSimpleSubscriber(common.Address{}, new(noopChainRetriever))
 	for depth := uint64(0); depth < 2*uint64(limit); depth++ {
@@ -59,7 +60,7 @@ func TestUnconfirmedInsertBounds(t *testing.T) {
 // cases as well as for corner cases such as empty sets, empty shifts or full
 // shifts.
 func TestUnconfirmedShifts(t *testing.T) {
-	DefaultConfirmDepth = 12
+	simpletrigger.DefaultConfirmDepth = 12
 	// Create a pool with a few blocks on various depths
 	limit, start := uint(12), uint64(25)
 

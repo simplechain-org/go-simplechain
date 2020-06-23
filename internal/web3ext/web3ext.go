@@ -141,7 +141,7 @@ web3._extend({
 		new web3._extend.Method({
 			name: 'propose',
 			call: 'clique_propose',
-			params: 2、
+			params: 2
 		}),
 		new web3._extend.Method({
 			name: 'discard',

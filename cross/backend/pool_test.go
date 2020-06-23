@@ -39,7 +39,7 @@ func newPoolTester(store store) *poolTester {
 	blockchain := &testBlockChain{statedb, 1000000, new(event.Feed)}
 
 	return &poolTester{
-		CrossPool: *NewCrossPool(params.TestChainConfig.ChainID, store, testChainRetriever{}, fromSigner, blockchain),
+		CrossPool: *NewCrossPool(params.TestChainConfig.ChainID, store, testFinishLog{}, testChainRetriever{}, fromSigner, blockchain),
 		store:     store,
 		chainID:   chainID,
 		localKey:  localKey,
@@ -157,10 +157,16 @@ func (s *testMemoryStore) Update(ctx *cc.CrossTransactionWithSignatures) error {
 	return nil
 }
 
+type testFinishLog struct {
+}
+
+func (l testFinishLog) IsFinish(hash common.Hash) bool { return false }
+
 type testChainRetriever struct{}
 
-func (r testChainRetriever) GetTransactionNumberOnChain(tx trigger.Transaction) uint64 { return 0 }
-func (r testChainRetriever) GetTransactionTimeOnChain(tx trigger.Transaction) uint64   { return 0 }
+func (r testChainRetriever) GetTransactionNumberOnChain(tx trigger.Transaction) uint64       { return 0 }
+func (r testChainRetriever) GetConfirmedTransactionNumberOnChain(trigger.Transaction) uint64 { return 1 }
+func (r testChainRetriever) GetTransactionTimeOnChain(tx trigger.Transaction) uint64         { return 0 }
 func (r testChainRetriever) IsTransactionInExpiredBlock(tx trigger.Transaction, _ uint64) bool {
 	return false
 }

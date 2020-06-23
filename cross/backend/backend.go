@@ -23,8 +23,8 @@ import (
 
 // CrossService implements node.Service
 type CrossService struct {
-	store *CrossStore
-	txLog *cm.TransactionLogs
+	store  *CrossStore
+	txLogs *cm.TransactionLogs
 
 	config *cross.Config
 	peers  *anchorSet
@@ -59,7 +59,7 @@ func NewCrossService(ctx *node.ServiceContext, main, sub cross.SimpleChain, conf
 	if err != nil {
 		return nil, err
 	}
-	srv.txLog, err = cm.NewTransactionLogs(logDB)
+	srv.txLogs, err = cm.NewTransactionLogs(logDB)
 	if err != nil {
 		return nil, err
 	}
@@ -188,6 +188,7 @@ func (srv *CrossService) Stop() error {
 	close(srv.quitSync)
 	srv.peers.Close()
 	srv.wg.Wait()
+	srv.txLogs.Close()
 	log.Info("CrossChain Service Stopped")
 	return nil
 }

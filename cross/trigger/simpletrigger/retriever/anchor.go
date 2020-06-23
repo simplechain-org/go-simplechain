@@ -1,6 +1,7 @@
 package retriever
 
 import (
+	"bytes"
 	"math/big"
 
 	"github.com/simplechain-org/go-simplechain/common"
@@ -25,12 +26,22 @@ func NewAnchorSet(anchors []Anchor) *AnchorSet {
 	return &s
 }
 
-func (as AnchorSet) IsAnchor(address common.Address) bool {
-	_, exist := as[address]
+func (as AnchorSet) String() string {
+	var buffer bytes.Buffer
+	for a := range as {
+		buffer.WriteString(a.String())
+		buffer.WriteByte(' ')
+	}
+	return buffer.String()
+}
+
+func (as *AnchorSet) IsAnchor(address common.Address) bool {
+	_, exist := (*as)[address]
 	return exist
 }
 
-func (as AnchorSet) IsAnchorSignedCtx(tx *cc.CrossTransaction, signer cc.CtxSigner) (common.Address, bool) {
+func (as *AnchorSet) IsAnchorSignedCtx(tx *cc.CrossTransaction, signer cc.CtxSigner) (common.Address, bool) {
+	//log.Error("[debug] anchor signer check >>>>>", "anchors", as.String()) TODO-D
 	if addr, err := signer.Sender(tx); err == nil {
 		return addr, as.IsAnchor(addr)
 	}
