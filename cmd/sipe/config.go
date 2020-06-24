@@ -20,6 +20,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"github.com/simplechain-org/go-simplechain/cross/trigger/simpletrigger/executor"
 	"math/big"
 	"os"
 	"reflect"
@@ -203,6 +204,9 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 	}
 	if ctx.GlobalIsSet(utils.ConfirmDepthFlag.Name) {
 		subscriber.DefaultConfirmDepth = ctx.GlobalInt(utils.ConfirmDepthFlag.Name)
+	}
+	if ctx.GlobalIsSet(utils.AnchorMaxGasPriceFlag.Name) {
+		executor.MaxGasPrice = big.NewInt(ctx.GlobalInt64(utils.AnchorMaxGasPriceFlag.Name) * 1e9)
 	}
 	// Add the Ethereum Stats daemon if requested.
 	if cfg.Ethstats.URL != "" {
