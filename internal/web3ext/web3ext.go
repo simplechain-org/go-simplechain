@@ -59,11 +59,6 @@ web3._extend({
 				params: 3,
 		}),
 		new web3._extend.Method({
-				name: 'getCtxContent',
-				call: 'cross_ctxContent',
-				params: 0,
-		}),
-		new web3._extend.Method({
 				name: 'getCtxContentByPage',
 				call: 'cross_ctxContentByPage',
 				params: 4,
