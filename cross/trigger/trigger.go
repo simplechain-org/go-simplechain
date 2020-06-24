@@ -26,7 +26,7 @@ type Validator interface {
 	VerifyCtx(ctx *core.CrossTransaction) error
 	VerifyContract(cws Transaction) error
 	VerifyReorg(ctx Transaction) error
-	VerifySigner(ctx *core.CrossTransaction, signChain, storeChainID *big.Int) error
+	VerifySigner(ctx *core.CrossTransaction, signChain, storeChainID *big.Int) (common.Address, error)
 	UpdateAnchors(info *core.RemoteChainInfo) error
 	RequireSignatures() int
 	ExpireNumber() int // return -1 if never expired
@@ -41,7 +41,8 @@ type Transaction interface {
 
 type ChainRetriever interface {
 	Validator
-	GetTransactionNumberOnChain(tx Transaction) uint64
-	GetTransactionTimeOnChain(tx Transaction) uint64
+	GetTransactionNumberOnChain(Transaction) uint64
+	GetConfirmedTransactionNumberOnChain(Transaction) uint64
+	GetTransactionTimeOnChain(Transaction) uint64
 	IsTransactionInExpiredBlock(tx Transaction, expiredHeight uint64) bool
 }

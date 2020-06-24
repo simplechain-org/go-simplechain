@@ -6,39 +6,28 @@ import (
 	"math/big"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/simplechain-org/go-simplechain/common"
-	"github.com/simplechain-org/go-simplechain/cross"
-	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/node"
 	"github.com/simplechain-org/go-simplechain/p2p"
 	"github.com/simplechain-org/go-simplechain/p2p/enode"
 	"github.com/simplechain-org/go-simplechain/rlp"
 	"github.com/simplechain-org/go-simplechain/rpc"
-)
 
-const (
-	CtxSignMsg        = 0x31
-	GetCtxSyncMsg     = 0x32
-	CtxSyncMsg        = 0x33
-	GetPendingSyncMsg = 0x34
-	PendingSyncMsg    = 0x35
-
-	protocolVersion    = 1
-	protocolMaxMsgSize = 10 * 1024 * 1024
-	handshakeTimeout   = 5 * time.Second
-	rttMaxEstimate     = 20 * time.Second // Maximum round-trip time to target for download requests
-	defaultMaxSyncSize = 100
-	defaultCrossChSize = 100
+	"github.com/simplechain-org/go-simplechain/cross"
+	cc "github.com/simplechain-org/go-simplechain/cross/core"
+	cdb "github.com/simplechain-org/go-simplechain/cross/database"
+	cm "github.com/simplechain-org/go-simplechain/cross/metric"
 )
 
 // CrossService implements node.Service
 type CrossService struct {
+	store  *CrossStore
+	txLogs *cm.TransactionLogs
+
 	config *cross.Config
 	peers  *anchorSet
-	store  *CrossStore
 
 	main crossCommons
 	sub  crossCommons
@@ -64,7 +53,16 @@ func NewCrossService(ctx *node.ServiceContext, main, sub cross.SimpleChain, conf
 		quitSync:  make(chan struct{}),
 	}
 
-	cross.Reporter.SetRootPath(ctx.ResolvePath(cross.LogDir))
+	cm.Reporter.SetRootPath(ctx.ResolvePath(cross.LogDir))
+
+	logDB, err := cdb.OpenEtherDB(ctx, cross.TxLogDir)
+	if err != nil {
+		return nil, err
+	}
+	srv.txLogs, err = cm.NewTransactionLogs(logDB)
+	if err != nil {
+		return nil, err
+	}
 
 	srv.store, err = NewCrossStore(ctx, cross.DataDir)
 	if err != nil {
@@ -190,6 +188,7 @@ func (srv *CrossService) Stop() error {
 	close(srv.quitSync)
 	srv.peers.Close()
 	srv.wg.Wait()
+	srv.txLogs.Close()
 	log.Info("CrossChain Service Stopped")
 	return nil
 }
@@ -368,7 +367,7 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 			break
 		}
 
-		err := h.AddRemoteCtx(ctx)
+		err := h.AddRemoteCtx(ctx, true)
 		if err == cross.ErrExpiredCtx || err == cross.ErrInvalidSignCtx {
 			break
 		}

@@ -25,17 +25,18 @@ import (
 	"reflect"
 	"unicode"
 
-	"github.com/naoina/toml"
 	"github.com/simplechain-org/go-simplechain/cmd/utils"
 	"github.com/simplechain-org/go-simplechain/common"
 	raftBackend "github.com/simplechain-org/go-simplechain/consensus/raft/backend"
-	"github.com/simplechain-org/go-simplechain/cross/trigger/simpletrigger/subscriber"
+	"github.com/simplechain-org/go-simplechain/cross/trigger/simpletrigger"
 	"github.com/simplechain-org/go-simplechain/eth"
 	"github.com/simplechain-org/go-simplechain/node"
 	"github.com/simplechain-org/go-simplechain/p2p/enode"
 	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/sub"
 	whisper "github.com/simplechain-org/go-simplechain/whisper/whisperv6"
+
+	"github.com/naoina/toml"
 	"gopkg.in/urfave/cli.v1"
 )
 
@@ -202,7 +203,7 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 		utils.RegisterGraphQLService(stack, cfg.Node.GraphQLEndpoint(), cfg.Node.GraphQLCors, cfg.Node.GraphQLVirtualHosts, cfg.Node.HTTPTimeouts)
 	}
 	if ctx.GlobalIsSet(utils.ConfirmDepthFlag.Name) {
-		subscriber.DefaultConfirmDepth = ctx.GlobalInt(utils.ConfirmDepthFlag.Name)
+		simpletrigger.DefaultConfirmDepth = ctx.GlobalInt(utils.ConfirmDepthFlag.Name)
 	}
 	// Add the Ethereum Stats daemon if requested.
 	if cfg.Ethstats.URL != "" {

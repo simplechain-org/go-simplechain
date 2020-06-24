@@ -503,15 +503,6 @@ func (pool *TxPool) Locals() []common.Address {
 func (pool *TxPool) local() map[common.Address]types.Transactions {
 	txs := make(map[common.Address]types.Transactions)
 	for addr := range pool.locals.accounts {
-		//var exit bool
-		//for _, anchors := range pool.anchors {
-		//	for _, v := range anchors {
-		//		if v == addr {
-		//			exit = true
-		//		}
-		//	}
-		//}
-		//if !exit {
 		if pending := pool.pending[addr]; pending != nil {
 			txs[addr] = append(txs[addr], pending.Flatten()...)
 		}
@@ -519,7 +510,6 @@ func (pool *TxPool) local() map[common.Address]types.Transactions {
 			txs[addr] = append(txs[addr], queued.Flatten()...)
 		}
 	}
-	//}
 	return txs
 }
 

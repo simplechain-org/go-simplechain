@@ -7,8 +7,9 @@ import (
 	"time"
 
 	"github.com/simplechain-org/go-simplechain/common"
-	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	"github.com/simplechain-org/go-simplechain/p2p"
+
+	cc "github.com/simplechain-org/go-simplechain/cross/core"
 
 	mapset "github.com/deckarep/golang-set"
 )
@@ -149,6 +150,10 @@ func (p *anchorPeer) MarkCrossTransaction(hash common.Hash) {
 		p.knownCTxs.Pop()
 	}
 	p.knownCTxs.Add(hash)
+}
+
+func (p *anchorPeer) HasCrossTransaction(hash common.Hash) bool {
+	return p.knownCTxs.Contains(hash)
 }
 
 func (p *anchorPeer) SendCrossTransaction(ctx *cc.CrossTransaction) error {

@@ -1,4 +1,4 @@
-package cross
+package metric
 
 import (
 	"fmt"

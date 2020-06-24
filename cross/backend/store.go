@@ -7,9 +7,10 @@ import (
 	"time"
 
 	"github.com/simplechain-org/go-simplechain/common"
-	cc "github.com/simplechain-org/go-simplechain/cross/core"
-	crossdb "github.com/simplechain-org/go-simplechain/cross/database"
 	"github.com/simplechain-org/go-simplechain/log"
+
+	cc "github.com/simplechain-org/go-simplechain/cross/core"
+	cdb "github.com/simplechain-org/go-simplechain/cross/database"
 
 	"github.com/asdine/storm/v3"
 	"github.com/asdine/storm/v3/q"
@@ -23,35 +24,37 @@ const (
 var ErrInvalidChainStore = errors.New("invalid chain store, chainID can not be nil")
 
 type CrossStore struct {
-	stores map[uint64]crossdb.CtxDB
+	stores map[uint64]cdb.CtxDB
 	db     *storm.DB // database to store cws
 	mu     sync.Mutex
 	logger log.Logger
 }
 
-func NewCrossStore(ctx crossdb.ServiceContext, makerDb string) (*CrossStore, error) {
+func NewCrossStore(ctx cdb.ServiceContext, makerDb string) (*CrossStore, error) {
 	store := &CrossStore{
 		logger: log.New("X-module", "store"),
 	}
 
-	db, err := crossdb.OpenStormDB(ctx, makerDb)
+	db, err := cdb.OpenStormDB(ctx, makerDb)
 	if err != nil {
 		return nil, err
 	}
 	store.db = db
-	store.stores = make(map[uint64]crossdb.CtxDB)
+	store.stores = make(map[uint64]cdb.CtxDB)
 	return store, nil
 }
 
 func (s *CrossStore) Close() {
-	s.db.Close()
+	if err := s.db.Close(); err != nil {
+		s.logger.Warn("close store failed", "error", err)
+	}
 }
 
 func (s *CrossStore) RegisterChain(chainID *big.Int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.stores[chainID.Uint64()] == nil {
-		s.stores[chainID.Uint64()] = crossdb.NewIndexDB(chainID, s.db, defaultCacheSize)
+		s.stores[chainID.Uint64()] = cdb.NewIndexDB(chainID, s.db, defaultCacheSize)
 		s.logger.New("remote", chainID)
 		s.logger.Info("Register chain successfully")
 	}
@@ -90,7 +93,7 @@ func (s *CrossStore) Get(chainID *big.Int, ctxID common.Hash) *cc.CrossTransacti
 	return ctx
 }
 
-func (s *CrossStore) GetStore(chainID *big.Int) (crossdb.CtxDB, error) {
+func (s *CrossStore) GetStore(chainID *big.Int) (cdb.CtxDB, error) {
 	if chainID == nil {
 		return nil, ErrInvalidChainStore
 	}
@@ -100,12 +103,13 @@ func (s *CrossStore) GetStore(chainID *big.Int) (crossdb.CtxDB, error) {
 	return s.stores[chainID.Uint64()], nil
 }
 
+// Update only be used at pool committing
 func (s *CrossStore) Update(cws *cc.CrossTransactionWithSignatures) error {
 	store, err := s.GetStore(cws.ChainId())
 	if err != nil {
 		return err
 	}
-	return store.Update(cws.ID(), func(ctx *crossdb.CrossTransactionIndexed) {
+	return store.Update(cws.ID(), func(ctx *cdb.CrossTransactionIndexed) {
 		ctx.Status = uint8(cws.Status)
 		ctx.BlockNum = cws.BlockNum
 		ctx.From = cws.Data.From
@@ -121,6 +125,7 @@ func (s *CrossStore) Update(cws *cc.CrossTransactionWithSignatures) error {
 	})
 }
 
+// Updates change tx status by block logs
 func (s *CrossStore) Updates(chainID *big.Int, txmList []*cc.CrossTransactionModifier) error {
 	store, err := s.GetStore(chainID)
 	if err != nil {
@@ -129,15 +134,20 @@ func (s *CrossStore) Updates(chainID *big.Int, txmList []*cc.CrossTransactionMod
 
 	var (
 		ids      []cc.CtxID
-		updaters []func(ctx *crossdb.CrossTransactionIndexed)
+		updaters []func(ctx *cdb.CrossTransactionIndexed)
 	)
 	for _, txm := range txmList {
 		ids = append(ids, txm.ID)
-		updaters = append(updaters, func(ctx *crossdb.CrossTransactionIndexed) {
-			if txm.AtBlockNumber == 0 { // modify from remote or reorg logs
+		updaters = append(updaters, func(ctx *cdb.CrossTransactionIndexed) {
+			switch {
+			// force update if tx status is changed by block reorg
+			case txm.Type == cc.Reorg:
 				ctx.Status = uint8(txm.Status)
-			}
-			if txm.AtBlockNumber >= ctx.BlockNum {
+			// update from remote
+			case txm.Type == cc.Remote && uint8(txm.Status) > ctx.Status:
+				ctx.Status = uint8(txm.Status)
+			// update from local
+			case txm.AtBlockNumber >= ctx.BlockNum && uint8(txm.Status) > ctx.Status:
 				ctx.Status = uint8(txm.Status)
 				ctx.BlockNum = txm.AtBlockNumber
 			}
@@ -155,18 +165,20 @@ func (s *CrossStore) Height(chainID *big.Int) uint64 {
 }
 
 func (s *CrossStore) Stats() map[uint64]map[cc.CtxStatus]int {
-	waiting := q.Eq(crossdb.StatusField, cc.CtxStatusWaiting)
-	executing := q.Eq(crossdb.StatusField, cc.CtxStatusExecuting)
-	executed := q.Eq(crossdb.StatusField, cc.CtxStatusExecuted)
-	finishing := q.Eq(crossdb.StatusField, cc.CtxStatusFinishing)
-	finished := q.Eq(crossdb.StatusField, cc.CtxStatusFinished)
-	pending := q.Eq(crossdb.StatusField, cc.CtxStatusPending)
+	waiting := q.Eq(cdb.StatusField, cc.CtxStatusWaiting)
+	illegal := q.Eq(cdb.StatusField, cc.CtxStatusIllegal)
+	executing := q.Eq(cdb.StatusField, cc.CtxStatusExecuting)
+	executed := q.Eq(cdb.StatusField, cc.CtxStatusExecuted)
+	finishing := q.Eq(cdb.StatusField, cc.CtxStatusFinishing)
+	finished := q.Eq(cdb.StatusField, cc.CtxStatusFinished)
+	pending := q.Eq(cdb.StatusField, cc.CtxStatusPending)
 
 	results := make(map[uint64]map[cc.CtxStatus]int, len(s.stores))
 
-	stats := func(db crossdb.CtxDB) map[cc.CtxStatus]int {
+	stats := func(db cdb.CtxDB) map[cc.CtxStatus]int {
 		return map[cc.CtxStatus]int{
 			cc.CtxStatusWaiting:   db.Count(waiting),
+			cc.CtxStatusIllegal:   db.Count(illegal),
 			cc.CtxStatusExecuting: db.Count(executing),
 			cc.CtxStatusExecuted:  db.Count(executed),
 			cc.CtxStatusFinishing: db.Count(finishing),
