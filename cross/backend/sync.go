@@ -168,7 +168,7 @@ func (h *Handler) syncPendingWithPeer(p *anchorPeer, pending []common.Hash) {
 	if p == nil || pending == nil {
 		return
 	}
-	go p.SendSyncPendingRequest(h.pm.NetworkId(), pending)
+	go p.RequestPendingSync(h.pm.NetworkId(), pending)
 	p.Log().Info("start sync pending cross transaction", "chainID", h.pm.NetworkId(), "pending", len(pending), "peer", p.id)
 }
 
@@ -188,7 +188,7 @@ func (h *Handler) GetSyncPending(ids []common.Hash) []*core.CrossTransaction {
 func (h *Handler) SyncPending(ctxList []*core.CrossTransaction) (lastNumber uint64) {
 	for _, ctx := range ctxList {
 		// 同步pending时像单节点请求签名，所以不监控漏签
-		if err := h.AddRemoteCtx(ctx, false); err != nil {
+		if _, err := h.pool.AddRemote(ctx); err != nil {
 			h.log.Trace("SyncPending failed", "id", ctx.ID(), "err", err)
 		}
 		if num := h.retriever.GetConfirmedTransactionNumberOnChain(ctx); num > lastNumber {
@@ -198,8 +198,35 @@ func (h *Handler) SyncPending(ctxList []*core.CrossTransaction) (lastNumber uint
 	return lastNumber
 }
 
+func (h *Handler) DeliverPending(p *anchorPeer, pending []*core.CrossTransaction) error {
+	if len(pending) == 0 {
+		return nil
+	}
+	synced := h.SyncPending(pending)
+	p.Log().Info("sync pending cross transactions", "total", len(pending))
+
+	request := h.Pending(synced, defaultMaxSyncSize)
+	if len(request) > 0 {
+		// send next sync pending request
+		return p.RequestPendingSync(h.chainID.Uint64(), request)
+	}
+	return nil
+}
+
 func (h *Handler) GetSyncCrossTransaction(height uint64, limit int) []*core.CrossTransactionWithSignatures {
 	return h.store.stores[h.chainID.Uint64()].RangeByNumber(height, h.chain.BlockChain().CurrentBlock().NumberU64(), limit)
+}
+
+func (h *Handler) DeliverCrossTransactions(pid string, ctxList []*core.CrossTransactionWithSignatures) error {
+	if len(ctxList) == 0 {
+		return nil
+	}
+	select {
+	case h.synchronizeCh <- ctxList:
+	case <-h.quitSync:
+		break
+	}
+	return nil
 }
 
 func (h *Handler) SyncCrossTransaction(ctxList []*core.CrossTransactionWithSignatures) int {

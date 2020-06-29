@@ -34,6 +34,7 @@ type finishedLog interface {
 type CrossPool struct {
 	chain   cross.BlockChain
 	chainID *big.Int
+	config  cross.Config
 
 	store        store
 	retriever    trigger.ChainRetriever
@@ -55,7 +56,7 @@ type CrossPool struct {
 	logger log.Logger
 }
 
-func NewCrossPool(chainID *big.Int, store store, txLog finishedLog,
+func NewCrossPool(chainID *big.Int, config cross.Config, store store, txLog finishedLog,
 	retriever trigger.ChainRetriever, signHash cc.SignHash, chain cross.BlockChain) *CrossPool {
 
 	pendingCache, _ := lru.New(signedPendingSize)
@@ -64,6 +65,7 @@ func NewCrossPool(chainID *big.Int, store store, txLog finishedLog,
 	pool := &CrossPool{
 		chain:        chain,
 		chainID:      chainID,
+		config:       config,
 		store:        store,
 		txLog:        txLog,
 		retriever:    retriever,
@@ -145,7 +147,7 @@ func (pool *CrossPool) AddLocals(txs ...*cc.CrossTransaction) (signed []*cc.Cros
 			continue
 		}
 		// make signature first for local ctx
-		signedTx, err := cc.SignCtx(ctx, pool.signer, pool.signHash)
+		signedTx, err := pool.signTx(ctx)
 		if err != nil {
 			errs = append(errs, err)
 			continue
@@ -162,31 +164,51 @@ func (pool *CrossPool) AddLocals(txs ...*cc.CrossTransaction) (signed []*cc.Cros
 }
 
 func (pool *CrossPool) GetLocal(ctxID common.Hash) *cc.CrossTransaction {
-	resign := func(cws *cc.CrossTransactionWithSignatures) *cc.CrossTransaction {
-		ctx, err := cc.SignCtx(cws.CrossTransaction(), pool.signer, pool.signHash)
-		if err != nil {
-			return nil
-		}
-		pool.pendingCache.Add(ctxID, ctx) // add to cache
-		return ctx
-	}
 	// find in cache
 	if ctx, ok := pool.pendingCache.Get(ctxID); ok {
 		return ctx.(*cc.CrossTransaction)
 	}
 	// find in pending
 	if cws := pool.pending.Get(ctxID); cws != nil {
-		return resign(cws)
+		if ctx, _ := pool.signTx(cws.CrossTransaction()); ctx != nil {
+			return ctx
+		}
 	}
 	// find in localStore
 	if cws := pool.store.Get(pool.chainID, ctxID); cws != nil {
-		return resign(cws)
+		if ctx, _ := pool.signTx(cws.CrossTransaction()); ctx != nil {
+			return ctx
+		}
 	}
 	return nil
 }
 
-func (pool *CrossPool) AddRemote(ctx *cc.CrossTransaction) error {
-	return pool.addTx(ctx, false)
+//func (pool *CrossPool) AddRemote(ctx *cc.CrossTransaction) error {
+//	return pool.addTx(ctx, false)
+//}
+
+func (pool *CrossPool) AddRemote(ctx *cc.CrossTransaction) (signer common.Address, err error) {
+	signer, err = pool.retriever.VerifySigner(ctx, ctx.ChainId(), ctx.DestinationId())
+	if err != nil {
+		return signer, err
+	}
+	// self signer ignore
+	if signer == pool.config.Signer {
+		return signer, nil
+	}
+	if err := pool.retriever.VerifyCtx(ctx); err != nil {
+		return signer, err
+	}
+	return signer, pool.addTx(ctx, false)
+}
+
+func (pool *CrossPool) signTx(ctx *cc.CrossTransaction) (*cc.CrossTransaction, error) {
+	ctx, err := cc.SignCtx(ctx, pool.signer, pool.signHash)
+	if err != nil {
+		return nil, err
+	}
+	pool.pendingCache.Add(ctx.ID(), ctx) // add to cache
+	return ctx, nil
 }
 
 func (pool *CrossPool) addTx(ctx *cc.CrossTransaction, local bool) error {
@@ -272,22 +294,19 @@ func (pool *CrossPool) Stats() (int, int) {
 	return pool.pending.Len(), pool.queued.Len()
 }
 
-func (pool *CrossPool) Pending(startNumber, lastNumber uint64, limit int) []*cc.CrossTransactionWithSignatures {
-	var pending []*cc.CrossTransactionWithSignatures
+func (pool *CrossPool) Pending(startNumber uint64, limit int) (ids []common.Hash, pending []*cc.CrossTransactionWithSignatures) {
 	pool.pending.Map(func(ctx *cc.CrossTransactionWithSignatures) bool {
-		if expireNum := pool.retriever.ExpireNumber(); expireNum >= 0 && ctx.BlockNum+uint64(expireNum) <= lastNumber { // 过期pending不取
-			return false
-		}
 		if ctx.BlockNum <= startNumber { // 低于起始高度的pending不取
 			return false
 		}
 		if pending != nil && len(pending) >= limit && pending[len(pending)-1].BlockNum != ctx.BlockNum {
 			return true
 		}
+		ids = append(ids, ctx.ID())
 		pending = append(pending, ctx)
 		return false
 	})
-	return pending
+	return ids, pending
 }
 
 func (pool *CrossPool) SubscribeSignedCtxEvent(ch chan<- cc.SignedCtxEvent) event.Subscription {

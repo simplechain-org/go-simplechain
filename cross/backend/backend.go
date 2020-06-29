@@ -291,11 +291,7 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 			ctxList = append(ctxList, &ctx)
 		}
 
-		if len(ctxList) == 0 {
-			break
-		}
-
-		h.synchronizeCh <- ctxList
+		h.DeliverCrossTransactions(p.id, ctxList)
 
 	case msg.Code == GetPendingSyncMsg:
 		var req SyncPendingReq
@@ -342,18 +338,20 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 			ctxList = append(ctxList, &ctx)
 		}
 
-		if len(ctxList) == 0 {
-			break
-		}
+		h.DeliverPending(p, ctxList)
 
-		synced := h.SyncPending(ctxList)
-		p.Log().Info("sync pending cross transactions", "total", len(ctxList))
-		pending := h.Pending(synced, defaultMaxSyncSize)
-
-		if len(pending) > 0 {
-			// send next sync pending request
-			return p.SendSyncPendingRequest(resp.Chain, pending)
-		}
+		//if len(ctxList) == 0 {
+		//	break
+		//}
+		//
+		//synced := h.SyncPending(ctxList)
+		//p.Log().Info("sync pending cross transactions", "total", len(ctxList))
+		//pending := h.Pending(synced, defaultMaxSyncSize)
+		//
+		//if len(pending) > 0 {
+		//	// send next sync pending request
+		//	return p.RequestPendingSync(resp.Chain, pending)
+		//}
 
 	case msg.Code == CtxSignMsg:
 		var ctx *cc.CrossTransaction
@@ -367,7 +365,7 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 			break
 		}
 
-		err := h.AddRemoteCtx(ctx, true)
+		err := h.AddRemoteCtx(ctx)
 		if err == cross.ErrExpiredCtx || err == cross.ErrInvalidSignCtx {
 			break
 		}

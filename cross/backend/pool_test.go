@@ -15,6 +15,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/params"
 
+	"github.com/simplechain-org/go-simplechain/cross"
 	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	cdb "github.com/simplechain-org/go-simplechain/cross/database"
 	"github.com/simplechain-org/go-simplechain/cross/trigger"
@@ -39,7 +40,7 @@ func newPoolTester(store store) *poolTester {
 	blockchain := &testBlockChain{statedb, 1000000, new(event.Feed)}
 
 	return &poolTester{
-		CrossPool: *NewCrossPool(params.TestChainConfig.ChainID, store, testFinishLog{}, testChainRetriever{}, fromSigner, blockchain),
+		CrossPool: *NewCrossPool(params.TestChainConfig.ChainID, cross.Config{}, store, testFinishLog{}, testChainRetriever{}, fromSigner, blockchain),
 		store:     store,
 		chainID:   chainID,
 		localKey:  localKey,
@@ -118,8 +119,7 @@ func (p *poolTester) addRemote(t *testing.T) {
 	toSigner := func(hash []byte) ([]byte, error) { return crypto.Sign(hash, p.remoteKey) }
 	tx1, err := cc.SignCtx(ctx, signer, toSigner)
 	assert.NoError(t, err)
-
-	assert.NoError(t, p.AddRemote(tx1))
+	assert.NoError(t, p.addTx(tx1, false))
 }
 
 func (p *poolTester) add(t *testing.T) {

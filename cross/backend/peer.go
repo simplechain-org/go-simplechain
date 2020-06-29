@@ -134,7 +134,7 @@ func (p *anchorPeer) SendSyncResponse(chain uint64, data [][]byte) error {
 	return p2p.Send(p.rw, CtxSyncMsg, &SyncResp{chain, data})
 }
 
-func (p *anchorPeer) SendSyncPendingRequest(chain uint64, ids []common.Hash) error {
+func (p *anchorPeer) RequestPendingSync(chain uint64, ids []common.Hash) error {
 	p.Log().Debug("Sending batch of ctx pending sync request", "chain", chain, "count", len(ids))
 	return p2p.Send(p.rw, GetPendingSyncMsg, &SyncPendingReq{chain, ids})
 }

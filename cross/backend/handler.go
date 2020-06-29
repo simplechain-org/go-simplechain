@@ -108,7 +108,7 @@ func NewCrossHandler(chain cross.SimpleChain, service *CrossService, config cros
 	}
 
 	h.store.RegisterChain(h.chainID)
-	h.pool = NewCrossPool(h.chainID, h.store, h.txLog, h.retriever, h.signHash, chain.BlockChain())
+	h.pool = NewCrossPool(h.chainID, config, h.store, h.txLog, h.retriever, h.signHash, chain.BlockChain())
 
 	return h, nil
 }
@@ -362,28 +362,32 @@ func (h *Handler) readCrossMessage() {
 }
 
 // 往pool里添加从P2P网络接收的ctx与节点签名信息
-func (h *Handler) AddRemoteCtx(ctx *cc.CrossTransaction, monitoring bool) error {
+func (h *Handler) AddRemoteCtx(ctx *cc.CrossTransaction) error {
 	if !h.pm.CanAcceptTxs() { // wait until block synchronize completely
 		return nil
 	}
-	signer, err := h.retriever.VerifySigner(ctx, ctx.ChainId(), ctx.DestinationId())
-	if err != nil {
-		return err
-	}
+	//signer, err := h.retriever.VerifySigner(ctx, ctx.ChainId(), ctx.DestinationId())
+	//if err != nil {
+	//	return err
+	//}
 	// self signer ignore
-	if signer == h.config.Signer {
-		return nil
+	//if signer == h.config.Signer {
+	//	return nil
+	//}
+	//if monitoring {
+
+	//}
+	//
+	//if err := h.retriever.VerifyCtx(ctx); err != nil {
+	//	return err
+	//}
+	signer, err := h.pool.AddRemote(ctx)
+	if err != nil && err != cc.ErrDuplicateSign {
+		h.log.Warn("Add remote ctx", "id", ctx.ID().String(), "err", err)
 	}
-	if monitoring {
+	if err != cross.ErrInvalidSignCtx {
 		h.log.Debug("add remote ctx signer monitor", "ctxID", ctx.ID(), "signer", signer.String())
 		go h.monitor.PushSigner(ctx.ID(), signer)
-	}
-
-	if err := h.retriever.VerifyCtx(ctx); err != nil {
-		return err
-	}
-	if err := h.pool.AddRemote(ctx); err != nil && err != cc.ErrDuplicateSign {
-		h.log.Warn("Add remote ctx", "id", ctx.ID().String(), "err", err)
 	}
 	return nil
 }
@@ -392,9 +396,7 @@ func (h *Handler) AddRemoteCtx(ctx *cc.CrossTransaction, monitoring bool) error 
 //@start 起始交易所在区块高度
 //@limit 限制一次性取的交易条数
 func (h *Handler) Pending(start uint64, limit int) (ids []common.Hash) {
-	for _, ctx := range h.pool.Pending(start, h.blockChain.CurrentBlock().NumberU64(), limit) {
-		ids = append(ids, ctx.ID())
-	}
+	ids, _ = h.pool.Pending(start, limit)
 	return ids
 }
 
