@@ -15,10 +15,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func setupIndexDB(t *testing.T) *storm.DB {
+func setupIndexDB(t interface{}) *storm.DB {
 	rootDB, err := OpenStormDB(nil, "testing-cross-db")
 	if err != nil {
-		t.Fatal(err)
+		t.(interface{ Fatal(args ...interface{}) }).Fatal(err)
 	}
 	return rootDB
 }
@@ -259,12 +259,12 @@ func TestIndexDB_Writes(t *testing.T) {
 	// replace to finishing with number++
 	for _, ctx := range ctxList[0:3] {
 		ctx.Status = cc.CtxStatusFinishing
-		ctx.BlockNum++
 	}
 
 	// replace to finishing without number
 	for _, ctx := range ctxList[3:6] {
 		ctx.Status = cc.CtxStatusFinishing
+		ctx.BlockNum--
 	}
 
 	assert.NoError(t, db.Writes(ctxList, true))

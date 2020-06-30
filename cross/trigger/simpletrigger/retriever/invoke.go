@@ -13,6 +13,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/core/vm"
 	"github.com/simplechain-org/go-simplechain/cross"
 	"github.com/simplechain-org/go-simplechain/cross/trigger"
+	"github.com/simplechain-org/go-simplechain/cross/trigger/simpletrigger"
 	"github.com/simplechain-org/go-simplechain/params"
 )
 
@@ -27,6 +28,14 @@ func NewChainInvoke(chain cross.BlockChain) *ChainInvoke {
 func (c ChainInvoke) GetTransactionNumberOnChain(tx trigger.Transaction) uint64 {
 	if num := c.bc.GetBlockNumber(tx.BlockHash()); num != nil {
 		return *num
+	}
+	//TODO return current for invisible block?
+	return c.bc.CurrentBlock().NumberU64()
+}
+
+func (c ChainInvoke) GetConfirmedTransactionNumberOnChain(tx trigger.Transaction) uint64 {
+	if num := c.bc.GetBlockNumber(tx.BlockHash()); num != nil {
+		return *num + uint64(simpletrigger.DefaultConfirmDepth)
 	}
 	//TODO return current for invisible block?
 	return c.bc.CurrentBlock().NumberU64()

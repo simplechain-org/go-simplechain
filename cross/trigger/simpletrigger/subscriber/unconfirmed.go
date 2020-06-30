@@ -121,7 +121,7 @@ func (t *SimpleSubscriber) shift(height uint64, currentEvent *cc.CrossBlockEvent
 						if len(v.Topics) >= 3 && v.Topics[0] == params.MakerFinishTopic {
 							finishModifiers = append(finishModifiers, &cc.CrossTransactionModifier{
 								ID:            v.Topics[1],
-								AtBlockNumber: v.BlockNumber,
+								AtBlockNumber: v.BlockNumber + uint64(t.depth),
 								Status:        cc.CtxStatusFinished,
 							})
 						}
