@@ -7,17 +7,19 @@ import (
 	"sync"
 	"time"
 
+	"github.com/simplechain-org/go-simplechain/accounts"
 	"github.com/simplechain-org/go-simplechain/accounts/abi"
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/types"
-	"github.com/simplechain-org/go-simplechain/cross"
-	cc "github.com/simplechain-org/go-simplechain/cross/core"
-	"github.com/simplechain-org/go-simplechain/cross/metric"
 	"github.com/simplechain-org/go-simplechain/eth"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/params"
+
+	cc "github.com/simplechain-org/go-simplechain/cross/core"
+	"github.com/simplechain-org/go-simplechain/cross/metric"
+	"github.com/simplechain-org/go-simplechain/cross/trigger/simpletrigger"
 )
 
 const maxFinishGasLimit = 250000
@@ -31,9 +33,10 @@ type TranParam struct {
 type SimpleExecutor struct {
 	anchor    common.Address
 	gasHelper *GasHelper
-	signHash  cc.SignHash
-	pm        cross.ProtocolManager
-	gpo       cross.GasPriceOracle
+
+	chain simpletrigger.SimpleChain
+	pm    simpletrigger.ProtocolManager
+	gpo   simpletrigger.GasPriceOracle
 
 	contract    common.Address
 	contractABI abi.ABI
@@ -43,7 +46,7 @@ type SimpleExecutor struct {
 	log    log.Logger
 }
 
-func NewSimpleExecutor(chain cross.SimpleChain, anchor common.Address, contract common.Address, signHash cc.SignHash) (
+func NewSimpleExecutor(chain simpletrigger.SimpleChain, anchor common.Address, contract common.Address) (
 	*SimpleExecutor, error) {
 	logger := log.New("module", "executor", "chainID", chain.ChainConfig().ChainID)
 	data, err := hexutil.Decode(params.CrossDemoAbi)
@@ -58,10 +61,10 @@ func NewSimpleExecutor(chain cross.SimpleChain, anchor common.Address, contract 
 	}
 
 	return &SimpleExecutor{
+		chain:       chain,
 		pm:          chain.ProtocolManager(),
 		gpo:         chain.GasOracle(),
 		anchor:      anchor,
-		signHash:    signHash,
 		gasHelper:   NewGasHelper(chain.BlockChain(), chain),
 		contract:    contract,
 		contractABI: abi,
@@ -93,6 +96,16 @@ func (exe *SimpleExecutor) loop() {
 func (exe *SimpleExecutor) Stop() {
 	close(exe.stopCh)
 	exe.wg.Wait()
+}
+
+func (exe *SimpleExecutor) SignHash(hash []byte) ([]byte, error) {
+	account := accounts.Account{Address: exe.anchor}
+	wallet, err := exe.chain.AccountManager().Find(account)
+	if err != nil {
+		exe.log.Error("account not found ", "address", exe.anchor)
+		return nil, err
+	}
+	return wallet.SignHash(account, hash)
 }
 
 func (exe *SimpleExecutor) SubmitTransaction(rtxs []*cc.ReceptTransaction) {
@@ -128,8 +141,7 @@ func (exe *SimpleExecutor) getTxForLockOut(rwss []*cc.ReceptTransaction) ([]*typ
 				continue
 			}
 
-			tx, err = newSignedTransaction(nonce+count, tokenAddress, param.gasLimit, param.gasPrice, param.data,
-				exe.pm.NetworkId(), exe.signHash)
+			tx, err = newSignedTransaction(nonce+count, tokenAddress, param.gasLimit, param.gasPrice, param.data, exe.pm.NetworkId(), exe.SignHash)
 			if err != nil {
 				exe.log.Warn("GetTxForLockOut newSignedTransaction", "id", rws.CTxId, "err", err)
 				return nil, err
@@ -219,8 +231,7 @@ func (exe *SimpleExecutor) promoteTransaction() {
 						gasPrice.Set(maxGasPrice)
 					}
 
-					tx, err := newSignedTransaction(nonceBegin+count, *v.To(), v.Gas(), gasPrice, v.Data(),
-						exe.pm.NetworkId(), exe.signHash)
+					tx, err := newSignedTransaction(nonceBegin+count, *v.To(), v.Gas(), gasPrice, v.Data(), exe.pm.NetworkId(), exe.SignHash)
 					if err != nil {
 						exe.log.Info("promoteTransaction", "err", err)
 					}

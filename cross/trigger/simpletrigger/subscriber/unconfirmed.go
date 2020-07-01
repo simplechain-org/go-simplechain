@@ -7,9 +7,11 @@ import (
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/types"
-	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/params"
+
+	cc "github.com/simplechain-org/go-simplechain/cross/core"
+	"github.com/simplechain-org/go-simplechain/cross/trigger"
 )
 
 type chainRetriever interface {
@@ -17,6 +19,7 @@ type chainRetriever interface {
 	GetHeaderByNumber(number uint64) *types.Header
 	GetTransactionByTxHash(hash common.Hash) (*types.Transaction, common.Hash, uint64)
 	GetChainConfig() *params.ChainConfig
+	SetCrossSubscriber(s trigger.Subscriber)
 }
 
 // unconfirmedBlockLog is a small collection of metadata about a locally mined block

@@ -6,8 +6,9 @@ import (
 	"math/big"
 
 	"github.com/simplechain-org/go-simplechain/common"
-	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	"github.com/simplechain-org/go-simplechain/log"
+
+	cc "github.com/simplechain-org/go-simplechain/cross/core"
 
 	"github.com/asdine/storm/v3"
 	"github.com/asdine/storm/v3/index"
@@ -79,15 +80,6 @@ func (d *indexDB) Clean() error {
 func (d *indexDB) Close() error {
 	return d.db.Commit()
 }
-
-//func (d *indexDB) rollback(cachedIds []common.Hash) {
-//	// rollback cache
-//	if d.cache != nil {
-//		for _, cached := range cachedIds {
-//			d.cache.Remove(CtxIdIndex, cached)
-//		}
-//	}
-//}
 
 func (d *indexDB) Write(ctx *cc.CrossTransactionWithSignatures) error {
 	if err := d.Writes([]*cc.CrossTransactionWithSignatures{ctx}, true); err != nil {

@@ -20,9 +20,17 @@ func NewPrivateCrossAdminAPI(service *CrossService) *PrivateCrossAdminAPI {
 	return &PrivateCrossAdminAPI{service}
 }
 
+func (s *PrivateCrossAdminAPI) Anchors() map[uint64][]common.Address {
+	return map[uint64][]common.Address{
+		s.service.main.chainID: s.service.main.handler.config.Anchors,
+		s.service.sub.chainID:  s.service.sub.handler.config.Anchors,
+	}
+}
+
 func (s *PrivateCrossAdminAPI) SyncPending() (bool, error) {
-	go s.service.main.handler.syncPending(s.service.peers.peers)
-	go s.service.sub.handler.syncPending(s.service.peers.peers)
+	for _, peer := range s.service.peers.peers {
+		go s.service.syncPending(peer)
+	}
 	return s.service.peers.Len() > 0, nil
 }
 

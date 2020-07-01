@@ -6,23 +6,19 @@ import (
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/vm"
-	"github.com/simplechain-org/go-simplechain/cross"
-	cc "github.com/simplechain-org/go-simplechain/cross/core"
-	"github.com/simplechain-org/go-simplechain/cross/metric"
-	"github.com/simplechain-org/go-simplechain/cross/trigger"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/params"
+
+	"github.com/simplechain-org/go-simplechain/cross"
+	cc "github.com/simplechain-org/go-simplechain/cross/core"
+	"github.com/simplechain-org/go-simplechain/cross/trigger"
+	"github.com/simplechain-org/go-simplechain/cross/trigger/simpletrigger"
 )
 
 const (
 	minRequireSignature = 2
-	expireNumber        = 180 //pending rtx expired after block num
+	expireNumber        = -1 //pending rtx expired after block num (-1 if never expired)
 )
-
-type crossStore interface {
-	Has(chainID *big.Int, txID common.Hash) bool
-	Get(chainID *big.Int, txID common.Hash) *cc.CrossTransactionWithSignatures
-}
 
 type SimpleValidator struct {
 	*SimpleRetriever
@@ -30,11 +26,10 @@ type SimpleValidator struct {
 	requireSignature int
 
 	chainID *big.Int
-	chain   cross.BlockChain
+	chain   simpletrigger.BlockChain
 
-	config      cross.Config
+	config      *cross.Config
 	chainConfig *params.ChainConfig
-	store       crossStore
 	contract    common.Address
 
 	mu sync.RWMutex
@@ -42,12 +37,11 @@ type SimpleValidator struct {
 	logger log.Logger
 }
 
-func NewSimpleValidator(store crossStore, contract common.Address, chain cross.BlockChain, config cross.Config, chainConfig *params.ChainConfig) *SimpleValidator {
+func NewSimpleValidator(contract common.Address, chain simpletrigger.BlockChain, config *cross.Config, chainConfig *params.ChainConfig) *SimpleValidator {
 	return &SimpleValidator{
 		anchors:          make(map[uint64]*AnchorSet),
 		requireSignature: minRequireSignature,
 		chainID:          chainConfig.ChainID,
-		store:            store,
 		config:           config,
 		chainConfig:      chainConfig,
 		chain:            chain,
@@ -72,21 +66,12 @@ func (v *SimpleValidator) ExpireNumber() int {
 	return expireNumber
 }
 
-func (v *SimpleValidator) VerifyCtx(ctx *cc.CrossTransaction) error {
-	if v.IsLocalCtx(ctx) {
-		if old := v.store.Get(v.chainID, ctx.ID()); old != nil && old.Status != cc.CtxStatusPending {
-			v.logger.Debug("ctx is already signed", "ctxID", ctx.ID().String())
-			return cross.ErrAlreadyExistCtx
-		}
-	}
-
+func (v *SimpleValidator) VerifyExpire(ctx *cc.CrossTransaction) error {
 	// discard if expired
-	if v.ExpireNumber() >= 0 && v.IsTransactionInExpiredBlock(ctx, uint64(v.ExpireNumber())) {
+	if v.ExpireNumber() >= 0 && v.IsTransactionExpired(ctx, uint64(v.ExpireNumber())) {
 		v.logger.Debug("ctx is already expired", "ctxID", ctx.ID().String())
 		return cross.ErrExpiredCtx
 	}
-	//// check signer TODO-D
-	//return v.VerifySigner(ctx, ctx.ChainId(), ctx.DestinationId())
 	return nil
 }
 
@@ -108,10 +93,14 @@ func (v *SimpleValidator) VerifySigner(ctx *cc.CrossTransaction, signChain, vali
 		newHead := v.chain.CurrentBlock().Header() // Special case during testing
 		statedb, err := v.chain.StateAt(newHead.Root)
 		if err != nil {
-			v.logger.Warn("get current state failed", "err", err)
+			v.logger.Warn("get current state failed", "hash", newHead.Hash(), "err", err)
 			return common.Address{}, cross.ErrInternal
 		}
 		anchors, signedCount := QueryAnchor(v.chainConfig, v.chain, statedb, newHead, v.contract, validChain.Uint64())
+		if len(anchors) == 0 {
+			v.logger.Warn("empty anchors in current state", "hash", newHead.Hash(), "height", newHead.Number)
+			return common.Address{}, cross.ErrInvalidSignCtx
+		}
 		v.config.Anchors = anchors
 		v.requireSignature = signedCount
 		anchorSet = NewAnchorSet(v.config.Anchors)
@@ -119,6 +108,7 @@ func (v *SimpleValidator) VerifySigner(ctx *cc.CrossTransaction, signChain, vali
 	}
 	signer, ok := anchorSet.IsAnchorSignedCtx(ctx, cc.NewEIP155CtxSigner(signChain))
 	if !ok {
+		log.Error("[debug] VerifySigner", "anchorSet", anchorSet.String())
 		v.logger.Warn("invalid signature", "ctxID", ctx.ID().String(), "signer", signer.String())
 		return signer, cross.ErrInvalidSignCtx
 	}
@@ -160,22 +150,22 @@ func (v *SimpleValidator) VerifyContract(cws trigger.Transaction) error {
 	return nil
 }
 
-func (v *SimpleValidator) VerifyReorg(ctx trigger.Transaction) error {
-	if v.store.Has(v.chainID, ctx.ID()) {
-		old := v.store.Get(v.chainID, ctx.ID())
-		if old == nil {
-			v.logger.Warn("VerifyReorg failed, can't load ctx")
-			return cross.ErrInternal
-		}
-		if ctx.BlockHash() != old.BlockHash() {
-			v.logger.Warn("blockchain reorg,txId:%s,old:%s,new:%s", ctx.ID().String(), old.BlockHash().String(), ctx.BlockHash().String())
-			metric.Report(v.chainConfig.ChainID.Uint64(), "blockchain reorg", "ctxID", ctx.ID().String(),
-				"old", old.BlockHash().String(), "new", ctx.BlockHash().String())
-			return cross.ErrReorgCtx
-		}
-	}
-	return nil
-}
+//func (v *SimpleValidator) VerifyReorg(ctx trigger.Transaction) error {
+//	if v.store.Has(v.chainID, ctx.ID()) {
+//		old := v.store.Get(v.chainID, ctx.ID())
+//		if old == nil {
+//			v.logger.Warn("VerifyReorg failed, can't load ctx")
+//			return cross.ErrInternal
+//		}
+//		if ctx.BlockHash() != old.BlockHash() {
+//			v.logger.Warn("blockchain reorg,txId:%s,old:%s,new:%s", ctx.ID().String(), old.BlockHash().String(), ctx.BlockHash().String())
+//			metric.Report(v.chainConfig.ChainID.Uint64(), "blockchain reorg", "ctxID", ctx.ID().String(),
+//				"old", old.BlockHash().String(), "new", ctx.BlockHash().String())
+//			return cross.ErrReorgCtx
+//		}
+//	}
+//	return nil
+//}
 
 func (v *SimpleValidator) UpdateAnchors(info *cc.RemoteChainInfo) error {
 	v.mu.Lock()

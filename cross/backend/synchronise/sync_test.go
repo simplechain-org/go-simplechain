@@ -239,15 +239,19 @@ func TestEncodeDecode(t *testing.T) {
 	assert.Equal(t, number, dcNumber)
 }
 
-type chainTester struct {
-}
+type chainTester struct{}
 
 func (*chainTester) GetConfirmedTransactionNumberOnChain(tx trigger.Transaction) uint64 {
 	return decodeBlockNumber(tx.ID())
 }
 
+func (*chainTester) CanAcceptTxs() bool {
+	return true
+}
+
 func TestSync_Synchronise(t *testing.T) {
 	sc := newTester()
+	defer sc.synchronize.Terminate()
 	store := newStoreTester()
 	assert.NoError(t, sc.newPeer("pa", store))
 
@@ -286,6 +290,7 @@ func TestSync_Synchronise(t *testing.T) {
 
 func TestSync_SynchronisePending(t *testing.T) {
 	sc := newTester()
+	defer sc.synchronize.Terminate()
 	store := newStoreTester()
 	assert.NoError(t, sc.newPeer("pa", store))
 
@@ -325,6 +330,7 @@ func TestSync_SynchronisePending(t *testing.T) {
 
 func TestSync_SynchronisePendingMultiPeers(t *testing.T) {
 	sc := newTester()
+	defer sc.synchronize.Terminate()
 	store := newStoreTester()
 	assert.NoError(t, sc.newPeer("pa", store))
 	assert.NoError(t, sc.newPeer("pb", store))

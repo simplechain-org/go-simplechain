@@ -5,19 +5,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/simplechain-org/go-simplechain/accounts"
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/log"
 
 	"github.com/simplechain-org/go-simplechain/cross"
+	"github.com/simplechain-org/go-simplechain/cross/backend/synchronise"
 	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	cdb "github.com/simplechain-org/go-simplechain/cross/database"
 	cm "github.com/simplechain-org/go-simplechain/cross/metric"
 	"github.com/simplechain-org/go-simplechain/cross/trigger"
-	"github.com/simplechain-org/go-simplechain/cross/trigger/simpletrigger/executor"
-	"github.com/simplechain-org/go-simplechain/cross/trigger/simpletrigger/retriever"
-	"github.com/simplechain-org/go-simplechain/cross/trigger/simpletrigger/subscriber"
 
 	"github.com/asdine/storm/v3/q"
 )
@@ -32,20 +29,19 @@ const (
 )
 
 type Handler struct {
-	blockChain cross.BlockChain
-	pm         cross.ProtocolManager
-	config     cross.Config
-	chainID    *big.Int
-	remoteID   *big.Int
+	config   *cross.Config
+	chainID  *big.Int
+	remoteID *big.Int
 
 	service            *CrossService
+	synchronise        *synchronise.Sync
 	store              *CrossStore
-	storeDelayCleanNum *big.Int
 	pool               *CrossPool
-	contract           common.Address
-	subscriber         trigger.Subscriber
-	executor           trigger.Executor
-	retriever          trigger.ChainRetriever
+	storeDelayCleanNum *big.Int
+
+	subscriber trigger.Subscriber
+	executor   trigger.Executor
+	retriever  trigger.ChainRetriever
 
 	monitor *cm.CrossMonitor
 	txLog   *cm.TransactionLog
@@ -56,9 +52,6 @@ type Handler struct {
 	crossMsgReader <-chan interface{} // Channel to read  cross-chain message
 	crossMsgWriter chan<- interface{} // Channel to write cross-chain message
 
-	synchronising uint32 // Flag whether cross sync is running
-	synchronizeCh chan []*cc.CrossTransactionWithSignatures
-
 	crossBlockCh  chan cc.CrossBlockEvent
 	crossBlockSub event.Subscription
 
@@ -68,54 +61,43 @@ type Handler struct {
 	rmLogsCh  chan cc.ReorgBlockEvent // Channel to receive removed log event
 	rmLogsSub event.Subscription      // Subscription for removed log event
 
-	chain cross.SimpleChain
+	//chain cross.ProtocolChain
 
 	log log.Logger
 }
 
-func NewCrossHandler(chain cross.SimpleChain, service *CrossService, config cross.Config, contract common.Address,
+func NewCrossHandler(ctx *cross.ServiceContext, service *CrossService,
 	crossMsgReader <-chan interface{}, crossMsgWriter chan<- interface{}) (h *Handler, err error) {
 
 	h = &Handler{
-		chain:              chain,
-		blockChain:         chain.BlockChain(),
-		pm:                 chain.ProtocolManager(),
-		config:             config,
-		chainID:            chain.ChainConfig().ChainID,
+		config:             ctx.Config,
+		chainID:            ctx.ProtocolChain.ChainID(),
 		service:            service,
 		store:              service.store,
 		storeDelayCleanNum: big.NewInt(defaultStoreDelay),
-		contract:           contract,
 		crossMsgReader:     crossMsgReader,
 		crossMsgWriter:     crossMsgWriter,
-		synchronizeCh:      make(chan []*cc.CrossTransactionWithSignatures, 1),
 		quitSync:           make(chan struct{}),
-		log:                log.New("X-module", "handler", "chainID", chain.ChainConfig().ChainID),
+		log:                log.New("X-module", "handler", "chainID", ctx.ProtocolChain.ChainID()),
 	}
 
 	//initialize metric
 	h.monitor = cm.NewCrossMonitor()
 	h.txLog = service.txLogs.Get(h.chainID)
 
-	{ // TODO: 将由chain本身提供这些组件
-		h.subscriber = subscriber.NewSimpleSubscriber(contract, chain.BlockChain())
-		h.retriever = retriever.NewSimpleRetriever(chain.BlockChain(), h.store, contract, config, chain.ChainConfig())
-		h.executor, err = executor.NewSimpleExecutor(chain, config.Signer, contract, h.signHash)
-	}
+	// 将由chain本身提供这些组件
+	h.subscriber = ctx.Subscriber
+	h.retriever = ctx.Retriever
+	h.executor = ctx.Executor
 
-	if err != nil {
-		return nil, err
-	}
-
-	h.store.RegisterChain(h.chainID)
-	h.pool = NewCrossPool(h.chainID, config, h.store, h.txLog, h.retriever, h.signHash, chain.BlockChain())
+	db := h.store.RegisterChain(h.chainID)
+	h.pool = NewCrossPool(h.chainID, h.config, h.store, h.txLog, h.retriever, h.executor.SignHash)
+	h.synchronise = synchronise.New(h.chainID, h.pool, db, h.retriever)
 
 	return h, nil
 }
 
 func (h *Handler) Start() {
-	h.blockChain.SetCrossTrigger(h.subscriber)
-
 	h.signedCtxCh = make(chan cc.SignedCtxEvent, txChanSize)
 	h.signedCtxSub = h.pool.SubscribeSignedCtxEvent(h.signedCtxCh)
 
@@ -133,6 +115,8 @@ func (h *Handler) Start() {
 }
 
 func (h *Handler) Stop() {
+	//先停止synchronise
+	h.synchronise.Terminate()
 	h.rmLogsSub.Unsubscribe()
 	h.signedCtxSub.Unsubscribe()
 	close(h.quitSync)
@@ -325,7 +309,7 @@ func (h *Handler) readCrossMessage() {
 			switch ev := v.(type) {
 			case cc.SignedCtxEvent: // 对面链签名完成的跨链交易消息，需要在此链验证anchor是否一致
 				cws := ev.Tx
-				if cws.DestinationId().Uint64() == h.pm.NetworkId() {
+				if cws.DestinationId().Cmp(h.chainID) == 0 {
 					var invalidSigIndex []int
 					for i, ctx := range cws.Resolution() {
 						chainID := ctx.ChainId()
@@ -340,13 +324,13 @@ func (h *Handler) readCrossMessage() {
 
 					if invalidSigIndex != nil {
 						h.log.Warn("invalid signature remote chain ctx", "ctxID", cws.ID().String(), "sigIndex", invalidSigIndex)
-						cm.Report(h.chain.ChainConfig().ChainID.Uint64(), "VerifyContract failed", "ctxID", cws.ID().String(), "sigIndex", invalidSigIndex)
+						cm.Report(h.chainID.Uint64(), "VerifyContract failed", "ctxID", cws.ID().String(), "sigIndex", invalidSigIndex)
 						break
 					}
 
 					if err := h.retriever.VerifyContract(cws); err != nil {
 						h.log.Warn("invoking verify failed", "ctxID", cws.ID().String(), "error", err)
-						cm.Report(h.chain.ChainConfig().ChainID.Uint64(), "VerifyContract failed", "ctxID", cws.ID().String(), "error", err)
+						cm.Report(h.chainID.Uint64(), "VerifyContract failed", "ctxID", cws.ID().String(), "error", err)
 						break
 					}
 				}
@@ -363,33 +347,21 @@ func (h *Handler) readCrossMessage() {
 
 // 往pool里添加从P2P网络接收的ctx与节点签名信息
 func (h *Handler) AddRemoteCtx(ctx *cc.CrossTransaction) error {
-	if !h.pm.CanAcceptTxs() { // wait until block synchronize completely
+	if !h.retriever.CanAcceptTxs() { // wait until block synchronize completely
 		return nil
 	}
-	//signer, err := h.retriever.VerifySigner(ctx, ctx.ChainId(), ctx.DestinationId())
-	//if err != nil {
-	//	return err
-	//}
-	// self signer ignore
-	//if signer == h.config.Signer {
-	//	return nil
-	//}
-	//if monitoring {
-
-	//}
-	//
-	//if err := h.retriever.VerifyCtx(ctx); err != nil {
-	//	return err
-	//}
 	signer, err := h.pool.AddRemote(ctx)
-	if err != nil && err != cc.ErrDuplicateSign {
+	switch err {
+	case nil:
+	case cc.ErrDuplicateSign, cross.ErrAlreadyExistCtx:
+	default:
 		h.log.Warn("Add remote ctx", "id", ctx.ID().String(), "err", err)
 	}
-	if err != cross.ErrInvalidSignCtx {
+	if err != cross.ErrInvalidSignCtx && signer != h.config.Signer {
 		h.log.Debug("add remote ctx signer monitor", "ctxID", ctx.ID(), "signer", signer.String())
 		go h.monitor.PushSigner(ctx.ID(), signer)
 	}
-	return nil
+	return err
 }
 
 // 获取未共识完成的跨链交易
@@ -455,12 +427,18 @@ func (h *Handler) RemoveCrossTransactionBefore(number uint64) int {
 	return removed
 }
 
-func (h *Handler) signHash(hash []byte) ([]byte, error) {
-	account := accounts.Account{Address: h.config.Signer}
-	wallet, err := h.chain.AccountManager().Find(account)
-	if err != nil {
-		log.Error("account not found ", "address", h.config.Signer)
-		return nil, err
+// 通过id获取本地pool.pending或store中的交易，并添加自己的签名
+func (h *Handler) GetPending(ids []common.Hash) []*cc.CrossTransaction {
+	results := make([]*cc.CrossTransaction, 0, len(ids))
+	for _, id := range ids {
+		if ctx := h.pool.GetLocal(id); ctx != nil {
+			results = append(results, ctx)
+		}
 	}
-	return wallet.SignHash(account, hash)
+	h.log.Debug("GetSyncPending", "req", len(ids), "result", len(results))
+	return results
+}
+
+func (h *Handler) GetCrossTransactionByHeight(height uint64, limit int) []*cc.CrossTransactionWithSignatures {
+	return h.store.stores[h.chainID.Uint64()].RangeByNumber(height, h.retriever.CurrentBlockNumber(), limit)
 }

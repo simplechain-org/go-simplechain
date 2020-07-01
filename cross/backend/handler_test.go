@@ -31,7 +31,7 @@ func newHandlerTester(chainID *big.Int) (*Handler, error) {
 	}, nil
 }
 
-func generateCtx(n int) []*cc.CrossTransactionWithSignatures {
+func generateCtx(n int, status cc.CtxStatus) []*cc.CrossTransactionWithSignatures {
 	ctxList := make([]*cc.CrossTransactionWithSignatures, n)
 	for i := 0; i < n; i++ {
 		bigI := big.NewInt(int64(i + 1))
@@ -50,6 +50,7 @@ func generateCtx(n int) []*cc.CrossTransactionWithSignatures {
 				S:                nil,
 			},
 			BlockNum: uint64(i),
+			Status:   status,
 		}
 	}
 	return ctxList
@@ -60,7 +61,7 @@ func TestHandler_RemoveCrossTransactionBefore(t *testing.T) {
 	assert.NoError(t, err)
 	defer handler.store.Close()
 
-	ctxList := generateCtx(100)
+	ctxList := generateCtx(100, 0)
 	for i := 20; i < 30; i++ {
 		ctxList[i].Status = cc.CtxStatusFinished
 	}

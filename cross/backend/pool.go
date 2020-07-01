@@ -24,7 +24,6 @@ type store interface {
 	GetStore(chainID *big.Int) (db.CtxDB, error)
 	Add(ctx *cc.CrossTransactionWithSignatures) error
 	Get(chainID *big.Int, ctxID common.Hash) *cc.CrossTransactionWithSignatures
-	Update(ctx *cc.CrossTransactionWithSignatures) error
 }
 
 type finishedLog interface {
@@ -32,9 +31,8 @@ type finishedLog interface {
 }
 
 type CrossPool struct {
-	chain   cross.BlockChain
 	chainID *big.Int
-	config  cross.Config
+	config  *cross.Config
 
 	store        store
 	retriever    trigger.ChainRetriever
@@ -56,14 +54,13 @@ type CrossPool struct {
 	logger log.Logger
 }
 
-func NewCrossPool(chainID *big.Int, config cross.Config, store store, txLog finishedLog,
-	retriever trigger.ChainRetriever, signHash cc.SignHash, chain cross.BlockChain) *CrossPool {
+func NewCrossPool(chainID *big.Int, config *cross.Config, store store, txLog finishedLog,
+	retriever trigger.ChainRetriever, signHash cc.SignHash) *CrossPool {
 
 	pendingCache, _ := lru.New(signedPendingSize)
 	logger := log.New("X-module", "pool")
 
 	pool := &CrossPool{
-		chain:        chain,
 		chainID:      chainID,
 		config:       config,
 		store:        store,
@@ -114,7 +111,7 @@ func (pool *CrossPool) loop() {
 				break
 			}
 			var removed cc.CtxIDs
-			currentNum := pool.chain.CurrentBlock().NumberU64()
+			currentNum := pool.retriever.CurrentBlockNumber()
 			if currentNum > uint64(expireNum) {
 				removed = append(removed, pool.pending.RemoveUnderNum(currentNum-uint64(expireNum))...)
 				removed = append(removed, pool.queued.RemoveUnderNum(currentNum-uint64(expireNum))...)
@@ -138,7 +135,7 @@ func (pool *CrossPool) AddLocals(txs ...*cc.CrossTransaction) (signed []*cc.Cros
 			// already exist in finished log, ignore
 			continue
 		}
-		if err := pool.retriever.VerifyReorg(ctx); err != nil {
+		if err := pool.verifyReorg(ctx); err != nil {
 			errs = append(errs, err)
 			continue
 		}
@@ -183,10 +180,6 @@ func (pool *CrossPool) GetLocal(ctxID common.Hash) *cc.CrossTransaction {
 	return nil
 }
 
-//func (pool *CrossPool) AddRemote(ctx *cc.CrossTransaction) error {
-//	return pool.addTx(ctx, false)
-//}
-
 func (pool *CrossPool) AddRemote(ctx *cc.CrossTransaction) (signer common.Address, err error) {
 	signer, err = pool.retriever.VerifySigner(ctx, ctx.ChainId(), ctx.DestinationId())
 	if err != nil {
@@ -196,7 +189,11 @@ func (pool *CrossPool) AddRemote(ctx *cc.CrossTransaction) (signer common.Addres
 	if signer == pool.config.Signer {
 		return signer, nil
 	}
-	if err := pool.retriever.VerifyCtx(ctx); err != nil {
+	if old := pool.store.Get(pool.chainID, ctx.ID()); old != nil && old.Status != cc.CtxStatusPending {
+		pool.logger.Debug("ctx is already signed", "ctxID", ctx.ID().String())
+		return signer, cross.ErrAlreadyExistCtx
+	}
+	if err := pool.retriever.VerifyExpire(ctx); err != nil {
 		return signer, err
 	}
 	return signer, pool.addTx(ctx, false)
@@ -252,6 +249,18 @@ func (pool *CrossPool) addTx(ctx *cc.CrossTransaction, local bool) error {
 		}
 	} else {
 		pool.queued.Put(cc.NewCrossTransactionWithSignatures(ctx, pool.retriever.GetConfirmedTransactionNumberOnChain(ctx)))
+	}
+	return nil
+}
+
+func (pool *CrossPool) verifyReorg(ctx *cc.CrossTransaction) error {
+	if old := pool.store.Get(pool.chainID, ctx.ID()); old != nil {
+		if ctx.BlockHash() != old.BlockHash() {
+			pool.logger.Warn("blockchain reorg,txId:%s,old:%s,new:%s", ctx.ID().String(), old.BlockHash().String(), ctx.BlockHash().String())
+			cm.Report(pool.chainID.Uint64(), "blockchain reorg", "ctxID", ctx.ID().String(),
+				"old", old.BlockHash().String(), "new", ctx.BlockHash().String())
+			return cross.ErrReorgCtx
+		}
 	}
 	return nil
 }

@@ -28,7 +28,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	lru "github.com/hashicorp/golang-lru"
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/mclock"
 	"github.com/simplechain-org/go-simplechain/common/prque"
@@ -37,8 +36,6 @@ import (
 	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/core/vm"
-	"github.com/simplechain-org/go-simplechain/cross/trigger"
-	"github.com/simplechain-org/go-simplechain/cross/trigger/simpletrigger/subscriber"
 	"github.com/simplechain-org/go-simplechain/ethdb"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/log"
@@ -46,6 +43,10 @@ import (
 	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/rlp"
 	"github.com/simplechain-org/go-simplechain/trie"
+
+	lru "github.com/hashicorp/golang-lru"
+	"github.com/simplechain-org/go-simplechain/cross/core"
+	"github.com/simplechain-org/go-simplechain/cross/trigger"
 )
 
 var (
@@ -179,7 +180,7 @@ type BlockChain struct {
 	badBlocks       *lru.Cache                     // Bad block cache
 	shouldPreserve  func(*types.Block) bool        // Function used to determine whether should preserve the given block.
 	terminateInsert func(common.Hash, uint64) bool // Testing hook used to terminate ancient receipt chain insertion.
-	crossTrigger    *subscriber.SimpleSubscriber
+	crossTrigger    simpleSubscriber
 }
 
 // NewBlockChain returns a fully initialised block chain using information
@@ -2281,6 +2282,14 @@ func (bc *BlockChain) GetChainConfig() *params.ChainConfig {
 	return bc.chainConfig
 }
 
-func (bc *BlockChain) SetCrossTrigger(s trigger.Subscriber) {
-	bc.crossTrigger = s.(*subscriber.SimpleSubscriber) // panic if failed
+type simpleSubscriber interface {
+	StoreCrossContractLog(blockNumber uint64, hash common.Hash, logs []*types.Log)
+	NotifyBlockReorg(logs []*types.Log)
+	SubscribeCrossBlockEvent(ch chan<- core.CrossBlockEvent) event.Subscription
+	SubscribeReorgBlockEvent(ch chan<- core.ReorgBlockEvent) event.Subscription
+	Stop()
+}
+
+func (bc *BlockChain) SetCrossSubscriber(s trigger.Subscriber) {
+	bc.crossTrigger = s.(simpleSubscriber) // panic if failed
 }

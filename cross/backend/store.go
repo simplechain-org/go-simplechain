@@ -50,7 +50,7 @@ func (s *CrossStore) Close() {
 	}
 }
 
-func (s *CrossStore) RegisterChain(chainID *big.Int) {
+func (s *CrossStore) RegisterChain(chainID *big.Int) cdb.CtxDB {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.stores[chainID.Uint64()] == nil {
@@ -58,6 +58,7 @@ func (s *CrossStore) RegisterChain(chainID *big.Int) {
 		s.logger.New("remote", chainID)
 		s.logger.Info("Register chain successfully")
 	}
+	return s.stores[chainID.Uint64()]
 }
 
 func (s *CrossStore) Add(ctx *cc.CrossTransactionWithSignatures) error {
@@ -74,14 +75,6 @@ func (s *CrossStore) Adds(chainID *big.Int, ctxList []*cc.CrossTransactionWithSi
 		return err
 	}
 	return store.Writes(ctxList, replaceable)
-}
-
-func (s *CrossStore) Has(chainID *big.Int, ctxID common.Hash) bool {
-	store, err := s.GetStore(chainID)
-	if err != nil {
-		return false
-	}
-	return store.Has(ctxID)
 }
 
 func (s *CrossStore) Get(chainID *big.Int, ctxID common.Hash) *cc.CrossTransactionWithSignatures {
@@ -103,28 +96,6 @@ func (s *CrossStore) GetStore(chainID *big.Int) (cdb.CtxDB, error) {
 	return s.stores[chainID.Uint64()], nil
 }
 
-// Update only be used at pool committing
-func (s *CrossStore) Update(cws *cc.CrossTransactionWithSignatures) error {
-	store, err := s.GetStore(cws.ChainId())
-	if err != nil {
-		return err
-	}
-	return store.Update(cws.ID(), func(ctx *cdb.CrossTransactionIndexed) {
-		ctx.Status = uint8(cws.Status)
-		ctx.BlockNum = cws.BlockNum
-		ctx.From = cws.Data.From
-		ctx.To = cws.Data.To
-		ctx.BlockHash = cws.Data.BlockHash
-		ctx.DestinationId = cws.Data.DestinationId
-		ctx.Value = cws.Data.Value
-		ctx.DestinationValue = cws.Data.DestinationValue
-		ctx.Input = cws.Data.Input
-		ctx.V = cws.Data.V
-		ctx.R = cws.Data.R
-		ctx.S = cws.Data.S
-	})
-}
-
 // Updates change tx status by block logs
 func (s *CrossStore) Updates(chainID *big.Int, txmList []*cc.CrossTransactionModifier) error {
 	store, err := s.GetStore(chainID)
@@ -137,19 +108,20 @@ func (s *CrossStore) Updates(chainID *big.Int, txmList []*cc.CrossTransactionMod
 		updaters []func(ctx *cdb.CrossTransactionIndexed)
 	)
 	for _, txm := range txmList {
+		upType, upStatus, upNumber := txm.Type, uint8(txm.Status), txm.AtBlockNumber //必须复制变量，迭代器引用会产生的问题
 		ids = append(ids, txm.ID)
 		updaters = append(updaters, func(ctx *cdb.CrossTransactionIndexed) {
 			switch {
 			// force update if tx status is changed by block reorg
-			case txm.Type == cc.Reorg:
-				ctx.Status = uint8(txm.Status)
+			case upType == cc.Reorg:
+				ctx.Status = upStatus
 			// update from remote
-			case txm.Type == cc.Remote && uint8(txm.Status) > ctx.Status:
-				ctx.Status = uint8(txm.Status)
+			case upType == cc.Remote && upStatus > ctx.Status:
+				ctx.Status = upStatus
 			// update from local
-			case txm.AtBlockNumber >= ctx.BlockNum && uint8(txm.Status) > ctx.Status:
-				ctx.Status = uint8(txm.Status)
-				ctx.BlockNum = txm.AtBlockNumber
+			case upType == cc.Normal && upStatus > ctx.Status: // 正常情况下，status更大则状态变更的高度更高，但是回滚时就不一定，所以不限制高度大小
+				ctx.Status = upStatus
+				ctx.BlockNum = upNumber
 			}
 		})
 	}

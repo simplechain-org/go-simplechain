@@ -4,11 +4,12 @@ import (
 	"math/big"
 
 	"github.com/simplechain-org/go-simplechain/common"
+	"github.com/simplechain-org/go-simplechain/event"
+	"github.com/simplechain-org/go-simplechain/params"
+
 	"github.com/simplechain-org/go-simplechain/core/types"
 	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	"github.com/simplechain-org/go-simplechain/cross/trigger/simpletrigger"
-	"github.com/simplechain-org/go-simplechain/event"
-	"github.com/simplechain-org/go-simplechain/params"
 )
 
 type SimpleSubscriber struct {
@@ -27,13 +28,15 @@ type SimpleSubscriber struct {
 }
 
 func NewSimpleSubscriber(contract common.Address, chain chainRetriever) *SimpleSubscriber {
-	return &SimpleSubscriber{
+	s := &SimpleSubscriber{
 		contract: contract,
 		unconfirmedBlockLogs: unconfirmedBlockLogs{
 			chain: chain,
 			depth: uint(simpletrigger.DefaultConfirmDepth),
 		},
 	}
+	chain.SetCrossSubscriber(s)
+	return s
 }
 
 func (t *SimpleSubscriber) Stop() {

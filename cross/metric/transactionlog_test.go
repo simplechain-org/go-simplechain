@@ -30,5 +30,4 @@ func TestTransactionLog_AddFinish(t *testing.T) {
 		l := txLogs.Get(big.NewInt(1))
 		assert.True(t, l.IsFinish(common.BytesToHash([]byte("1"))))
 	}
-
 }

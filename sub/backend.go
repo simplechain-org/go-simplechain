@@ -40,7 +40,6 @@ import (
 	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/core/vm"
-	"github.com/simplechain-org/go-simplechain/cross"
 	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/eth"
 	"github.com/simplechain-org/go-simplechain/eth/downloader"
@@ -57,6 +56,8 @@ import (
 	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/rlp"
 	"github.com/simplechain-org/go-simplechain/rpc"
+
+	"github.com/simplechain-org/go-simplechain/cross/trigger/simpletrigger"
 )
 
 type LesServer interface {
@@ -493,20 +494,20 @@ func (s *Ethereum) StopMining() {
 func (s *Ethereum) IsMining() bool      { return s.miner.Mining() }
 func (s *Ethereum) Miner() *miner.Miner { return s.miner }
 
-func (s *Ethereum) ProtocolManager() cross.ProtocolManager { return s.protocolManager }
-func (s *Ethereum) AccountManager() *accounts.Manager      { return s.accountManager }
-func (s *Ethereum) BlockChain() *core.BlockChain           { return s.blockchain }
-func (s *Ethereum) TxPool() *core.TxPool                   { return s.txPool }
-func (s *Ethereum) EventMux() *event.TypeMux               { return s.eventMux }
-func (s *Ethereum) Engine() consensus.Engine               { return s.engine }
-func (s *Ethereum) ChainDb() ethdb.Database                { return s.chainDb }
-func (s *Ethereum) IsListening() bool                      { return true } // Always listening
-func (s *Ethereum) EthVersion() int                        { return int(ProtocolVersions[0]) }
-func (s *Ethereum) NetVersion() uint64                     { return s.networkID }
-func (s *Ethereum) Downloader() *downloader.Downloader     { return s.protocolManager.downloader }
-func (s *Ethereum) Synced() bool                           { return atomic.LoadUint32(&s.protocolManager.acceptTxs) == 1 }
-func (s *Ethereum) ArchiveMode() bool                      { return s.config.NoPruning }
-func (s *Ethereum) GetSynced() func() bool                 { return s.Synced }
+func (s *Ethereum) ProtocolManager() simpletrigger.ProtocolManager { return s.protocolManager }
+func (s *Ethereum) AccountManager() *accounts.Manager              { return s.accountManager }
+func (s *Ethereum) BlockChain() *core.BlockChain                   { return s.blockchain }
+func (s *Ethereum) TxPool() *core.TxPool                           { return s.txPool }
+func (s *Ethereum) EventMux() *event.TypeMux                       { return s.eventMux }
+func (s *Ethereum) Engine() consensus.Engine                       { return s.engine }
+func (s *Ethereum) ChainDb() ethdb.Database                        { return s.chainDb }
+func (s *Ethereum) IsListening() bool                              { return true } // Always listening
+func (s *Ethereum) EthVersion() int                                { return int(ProtocolVersions[0]) }
+func (s *Ethereum) NetVersion() uint64                             { return s.networkID }
+func (s *Ethereum) Downloader() *downloader.Downloader             { return s.protocolManager.downloader }
+func (s *Ethereum) Synced() bool                                   { return atomic.LoadUint32(&s.protocolManager.acceptTxs) == 1 }
+func (s *Ethereum) ArchiveMode() bool                              { return s.config.NoPruning }
+func (s *Ethereum) GetSynced() func() bool                         { return s.Synced }
 func (s *Ethereum) GasOracle() *gasprice.Oracle {
 	return s.APIBackend.gpo
 }

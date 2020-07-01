@@ -21,14 +21,17 @@ import (
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/types"
-	"github.com/simplechain-org/go-simplechain/cross/trigger/simpletrigger"
 	"github.com/simplechain-org/go-simplechain/params"
+
+	"github.com/simplechain-org/go-simplechain/cross/trigger"
+	"github.com/simplechain-org/go-simplechain/cross/trigger/simpletrigger"
 )
 
 // noopChainRetriever is an implementation of headerRetriever that always
 // returns nil for any requested headers.
 type noopChainRetriever struct{}
 
+func (r *noopChainRetriever) SetCrossSubscriber(s trigger.Subscriber)       {}
 func (r *noopChainRetriever) GetHeaderByNumber(number uint64) *types.Header { return nil }
 func (r *noopChainRetriever) GetTransactionByTxHash(hash common.Hash) (*types.Transaction, common.Hash, uint64) {
 	return nil, common.Hash{}, 0
