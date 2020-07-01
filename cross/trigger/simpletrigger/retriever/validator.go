@@ -108,8 +108,7 @@ func (v *SimpleValidator) VerifySigner(ctx *cc.CrossTransaction, signChain, vali
 	}
 	signer, ok := anchorSet.IsAnchorSignedCtx(ctx, cc.NewEIP155CtxSigner(signChain))
 	if !ok {
-		log.Error("[debug] VerifySigner", "anchorSet", anchorSet.String())
-		v.logger.Warn("invalid signature", "ctxID", ctx.ID().String(), "signer", signer.String())
+		v.logger.Warn("invalid signature", "anchors", anchorSet.String(), "ctxID", ctx.ID().String(), "signer", signer.String())
 		return signer, cross.ErrInvalidSignCtx
 	}
 	return signer, nil
