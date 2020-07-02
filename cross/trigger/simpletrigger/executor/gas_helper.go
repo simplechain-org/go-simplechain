@@ -17,8 +17,9 @@ import (
 	"github.com/simplechain-org/go-simplechain/rpc"
 )
 
-const (
-	defaultGasPrice = params.GWei
+var (
+	defaultGasPrice = big.NewInt(params.GWei)
+	MaxGasPrice     = big.NewInt(500 * params.GWei)
 )
 
 type CallArgs struct {
@@ -66,7 +67,7 @@ func (this *GasHelper) doCall(ctx context.Context, args CallArgs, blockNr rpc.Bl
 		gas = math.MaxUint64 / 2
 	}
 	if gasPrice.Sign() == 0 {
-		gasPrice = new(big.Int).SetUint64(defaultGasPrice)
+		gasPrice.Set(defaultGasPrice)
 	}
 
 	// Create new call message

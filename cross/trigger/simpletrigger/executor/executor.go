@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"math/big"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -14,12 +15,15 @@ import (
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/cross"
 	cc "github.com/simplechain-org/go-simplechain/cross/core"
+	"github.com/simplechain-org/go-simplechain/cross/metric"
 	"github.com/simplechain-org/go-simplechain/eth"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/params"
 )
 
 const maxFinishGasLimit = 250000
+
+//var MaxGasPrice = big.NewInt(100e9)
 
 type TranParam struct {
 	gasLimit uint64
@@ -147,7 +151,7 @@ func (exe *SimpleExecutor) createTransaction(rws *cc.ReceptTransaction) (*TranPa
 		return nil, err
 	}
 	if gasPrice.Cmp(eth.DefaultConfig.Miner.GasPrice) < 0 {
-		gasPrice = eth.DefaultConfig.Miner.GasPrice
+		gasPrice.Set(eth.DefaultConfig.Miner.GasPrice)
 	}
 	data, err := rws.ConstructData(exe.contractABI)
 	if err != nil {
@@ -158,7 +162,7 @@ func (exe *SimpleExecutor) createTransaction(rws *cc.ReceptTransaction) (*TranPa
 		balance.Cmp(new(big.Int).Mul(gasPrice, new(big.Int).SetUint64(maxFinishGasLimit))) < 0 {
 		log.Warn("insufficient balance for finishing", "ctxID", rws.CTxId.String(),
 			"chainID", rws.ChainId, "error", err, "balance", balance, "price", gasPrice)
-		cross.Report(exe.gasHelper.chain.ChainConfig().ChainID.Uint64(), "insufficient balance",
+		metric.Report(exe.gasHelper.chain.ChainConfig().ChainID.Uint64(), "insufficient balance",
 			"ctxID", rws.CTxId.String())
 	}
 
@@ -212,6 +216,11 @@ func (exe *SimpleExecutor) promoteTransaction() {
 					}
 					gasPrice := new(big.Int).Div(new(big.Int).Mul(
 						v.GasPrice(), big.NewInt(100+int64(core.DefaultTxPoolConfig.PriceBump))), big.NewInt(100))
+
+					if gasPrice.Cmp(MaxGasPrice) > 0 {
+						exe.log.Info("overflow max gas price, set to max", "tx", v.Hash().String())
+						gasPrice = new(big.Int).Sub(MaxGasPrice, big.NewInt(rand.Int63n(1e9)))
+					}
 
 					tx, err := newSignedTransaction(nonceBegin+count, *v.To(), v.Gas(), gasPrice, v.Data(),
 						exe.pm.NetworkId(), exe.signHash)

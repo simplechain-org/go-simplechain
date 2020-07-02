@@ -11,12 +11,13 @@ import (
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/rawdb"
 	"github.com/simplechain-org/go-simplechain/core/state"
-	cc "github.com/simplechain-org/go-simplechain/cross/core"
-	crossdb "github.com/simplechain-org/go-simplechain/cross/database"
-	"github.com/simplechain-org/go-simplechain/cross/trigger"
 	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/params"
+
+	cc "github.com/simplechain-org/go-simplechain/cross/core"
+	cdb "github.com/simplechain-org/go-simplechain/cross/database"
+	"github.com/simplechain-org/go-simplechain/cross/trigger"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -38,7 +39,7 @@ func newPoolTester(store store) *poolTester {
 	blockchain := &testBlockChain{statedb, 1000000, new(event.Feed)}
 
 	return &poolTester{
-		CrossPool: *NewCrossPool(params.TestChainConfig.ChainID, store, testChainRetriever{}, fromSigner, blockchain),
+		CrossPool: *NewCrossPool(params.TestChainConfig.ChainID, store, testFinishLog{}, testChainRetriever{}, fromSigner, blockchain),
 		store:     store,
 		chainID:   chainID,
 		localKey:  localKey,
@@ -71,7 +72,8 @@ func TestCrossPool_AddLocals(t *testing.T) {
 }
 
 func TestCrossPool_AddRemote(t *testing.T) {
-	p := newPoolTester(newTestMemoryStore())
+	s := newTestMemoryStore()
+	p := newPoolTester(s)
 	p.addRemote(t)
 	assert.Equal(t, 1, p.queued.Len())
 	assert.Equal(t, 0, p.pending.Len())
@@ -134,7 +136,7 @@ func newTestMemoryStore() *testMemoryStore {
 	return &testMemoryStore{db: make(map[common.Hash]*cc.CrossTransactionWithSignatures)}
 }
 
-func (s *testMemoryStore) GetStore(chainID *big.Int) (crossdb.CtxDB, error) {
+func (s *testMemoryStore) GetStore(chainID *big.Int) (cdb.CtxDB, error) {
 	return nil, errors.New("memory store")
 }
 func (s *testMemoryStore) Add(ctx *cc.CrossTransactionWithSignatures) error {
@@ -155,10 +157,18 @@ func (s *testMemoryStore) Update(ctx *cc.CrossTransactionWithSignatures) error {
 	return nil
 }
 
+type testFinishLog struct {
+}
+
+func (l testFinishLog) IsFinish(hash common.Hash) bool { return false }
+
 type testChainRetriever struct{}
 
 func (r testChainRetriever) GetTransactionNumberOnChain(tx trigger.Transaction) uint64 { return 0 }
-func (r testChainRetriever) GetTransactionTimeOnChain(tx trigger.Transaction) uint64   { return 0 }
+func (r testChainRetriever) GetConfirmedTransactionNumberOnChain(trigger.Transaction) uint64 {
+	return 1
+}
+func (r testChainRetriever) GetTransactionTimeOnChain(tx trigger.Transaction) uint64 { return 0 }
 func (r testChainRetriever) IsTransactionInExpiredBlock(tx trigger.Transaction, _ uint64) bool {
 	return false
 }
@@ -168,8 +178,8 @@ func (r testChainRetriever) IsRemoteCtx(ctx trigger.Transaction) bool     { retu
 func (r testChainRetriever) VerifyCtx(ctx *cc.CrossTransaction) error     { return nil }
 func (r testChainRetriever) VerifyContract(cws trigger.Transaction) error { return nil }
 func (r testChainRetriever) VerifyReorg(ctx trigger.Transaction) error    { return nil }
-func (r testChainRetriever) VerifySigner(ctx *cc.CrossTransaction, signChain, storeChainID *big.Int) error {
-	return nil
+func (r testChainRetriever) VerifySigner(ctx *cc.CrossTransaction, signChain, storeChainID *big.Int) (common.Address, error) {
+	return common.Address{}, nil
 }
 func (r testChainRetriever) UpdateAnchors(info *cc.RemoteChainInfo) error { return nil }
 func (r testChainRetriever) RequireSignatures() int                       { return 2 }

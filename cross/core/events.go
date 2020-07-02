@@ -35,7 +35,16 @@ type NewAnchorEvent struct {
 	ChainInfo []*RemoteChainInfo
 }
 
+type ModType uint8
+
+const (
+	Normal = ModType(iota)
+	Remote
+	Reorg
+)
+
 type CrossTransactionModifier struct {
+	Type          ModType
 	ID            common.Hash
 	Status        CtxStatus
 	AtBlockNumber uint64

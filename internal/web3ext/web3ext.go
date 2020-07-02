@@ -93,7 +93,26 @@ web3._extend({
 				call: 'cross_poolStats',
 				params: 0,
 		}),
-
+		new web3._extend.Method({
+			name: 'setStoreDelay',
+			call: 'cross_setStoreDelay',
+			params: 2,
+		}),
+		new web3._extend.Method({
+			name: 'remove',
+			call: 'cross_remove',
+			params: 2,
+		}),
+	    new web3._extend.Method({
+			name: 'syncPending',
+			call: 'cross_syncPending',
+			params: 0,
+		}),
+		new web3._extend.Method({
+			name: 'syncStore',
+			call: 'cross_syncStore',
+			params: 0,
+		}),
 	],
 	properties: [
 		new web3._extend.Property({
@@ -103,6 +122,10 @@ web3._extend({
 		new web3._extend.Property({
 			name: 'height',
 			getter: 'cross_height'
+		}),
+		new web3._extend.Property({
+			name: 'stats',
+			getter: 'cross_stats'
 		}),
 	]
 });

@@ -38,6 +38,7 @@ type ChainConfig struct {
 	ContractAddr string
 	FromBlock    uint64
 	EndBlock     uint64
+	ConfirmNum   uint64
 }
 type Config struct {
 	Anchor    string
@@ -92,11 +93,12 @@ func main() {
 }
 
 type Chain struct {
-	Url          string
-	Client       *ethclient.Client
-	ChainID      *big.Int
-	ContractAddr common.Address
-	IsMain       bool
+	Url           string
+	Client        *ethclient.Client
+	ChainID       *big.Int
+	ContractAddr  common.Address
+	IsMain        bool
+	ConfirmNumber uint64
 
 	MakerEvents map[common.Hash]*types.Log
 	TakerEvents map[common.Hash]*types.Log
@@ -142,22 +144,24 @@ func NewHandler(config *Config) *Handler {
 		AnchorAddr: common.HexToAddress(config.Anchor),
 		AnchorKey:  privateKey,
 		MainChain: Chain{
-			Url:          config.Main.Url,
-			Client:       mainClient,
-			ChainID:      new(big.Int).SetUint64(config.Main.ChainID),
-			ContractAddr: common.HexToAddress(config.Main.ContractAddr),
-			IsMain:       true,
-			MakerEvents:  make(map[common.Hash]*types.Log),
-			TakerEvents:  make(map[common.Hash]*types.Log),
+			Url:           config.Main.Url,
+			Client:        mainClient,
+			ChainID:       new(big.Int).SetUint64(config.Main.ChainID),
+			ContractAddr:  common.HexToAddress(config.Main.ContractAddr),
+			IsMain:        true,
+			MakerEvents:   make(map[common.Hash]*types.Log),
+			TakerEvents:   make(map[common.Hash]*types.Log),
+			ConfirmNumber: config.Main.ConfirmNum,
 		},
 		SubChain: Chain{
-			Url:          config.Sub.Url,
-			Client:       subClient,
-			ChainID:      new(big.Int).SetUint64(config.Sub.ChainID),
-			ContractAddr: common.HexToAddress(config.Sub.ContractAddr),
-			IsMain:       false,
-			MakerEvents:  make(map[common.Hash]*types.Log),
-			TakerEvents:  make(map[common.Hash]*types.Log),
+			Url:           config.Sub.Url,
+			Client:        subClient,
+			ChainID:       new(big.Int).SetUint64(config.Sub.ChainID),
+			ContractAddr:  common.HexToAddress(config.Sub.ContractAddr),
+			IsMain:        false,
+			MakerEvents:   make(map[common.Hash]*types.Log),
+			TakerEvents:   make(map[common.Hash]*types.Log),
+			ConfirmNumber: config.Sub.ConfirmNum,
 		},
 	}
 }
@@ -263,10 +267,11 @@ func (h *Handler) MakeEvent(chain *Chain, event *types.Log, crossTxBytes hexutil
 		panic(err)
 	}
 
+	//todo 签名要求是>2的情况；如果finish的交易补签会成功？
 	if len(crossTxBytes) > 0 {
 		var addTx cc.CrossTransaction
 
-		crossTxWithSign := cc.NewCrossTransactionWithSignatures(signedTx, event.BlockNumber)
+		crossTxWithSign := cc.NewCrossTransactionWithSignatures(signedTx, event.BlockNumber+chain.ConfirmNumber)
 		crossTxWithSign.SetStatus(cc.CtxStatusWaiting)
 
 		if err := rlp.DecodeBytes(crossTxBytes, &addTx); err != nil {

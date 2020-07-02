@@ -5,22 +5,30 @@ import (
 	"sync"
 	"time"
 
-	"github.com/asdine/storm/v3"
-	lru "github.com/hashicorp/golang-lru"
 	"github.com/simplechain-org/go-simplechain/common"
-	"github.com/simplechain-org/go-simplechain/cross"
-	cc "github.com/simplechain-org/go-simplechain/cross/core"
-	crossdb "github.com/simplechain-org/go-simplechain/cross/database"
-	"github.com/simplechain-org/go-simplechain/cross/trigger"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/log"
+
+	"github.com/simplechain-org/go-simplechain/cross"
+	cc "github.com/simplechain-org/go-simplechain/cross/core"
+	db "github.com/simplechain-org/go-simplechain/cross/database"
+	cm "github.com/simplechain-org/go-simplechain/cross/metric"
+	"github.com/simplechain-org/go-simplechain/cross/trigger"
+
+	"github.com/asdine/storm/v3"
+	"github.com/asdine/storm/v3/q"
+	lru "github.com/hashicorp/golang-lru"
 )
 
 type store interface {
-	GetStore(chainID *big.Int) (crossdb.CtxDB, error)
+	GetStore(chainID *big.Int) (db.CtxDB, error)
 	Add(ctx *cc.CrossTransactionWithSignatures) error
 	Get(chainID *big.Int, ctxID common.Hash) *cc.CrossTransactionWithSignatures
 	Update(ctx *cc.CrossTransactionWithSignatures) error
+}
+
+type finishedLog interface {
+	IsFinish(cc.CtxID) bool
 }
 
 type CrossPool struct {
@@ -29,15 +37,16 @@ type CrossPool struct {
 
 	store        store
 	retriever    trigger.ChainRetriever
-	pending      *crossdb.CtxSortedByBlockNum //带有local签名
-	queued       *crossdb.CtxSortedByBlockNum //网络其他节点签名
-	pendingCache *lru.Cache                   // cache signed pending ctx
+	pending      *db.CtxSortedByBlockNum //带有local签名
+	queued       *db.CtxSortedByBlockNum //网络其他节点签名
+	pendingCache *lru.Cache              // cache signed pending ctx
 
 	commitFeed  event.Feed
 	commitScope event.SubscriptionScope
 
 	signer   cc.CtxSigner
 	signHash cc.SignHash
+	txLog    finishedLog
 
 	mu     sync.RWMutex
 	wg     sync.WaitGroup // for shutdown sync
@@ -46,8 +55,8 @@ type CrossPool struct {
 	logger log.Logger
 }
 
-func NewCrossPool(chainID *big.Int, store store, retriever trigger.ChainRetriever, signHash cc.SignHash,
-	chain cross.BlockChain) *CrossPool {
+func NewCrossPool(chainID *big.Int, store store, txLog finishedLog,
+	retriever trigger.ChainRetriever, signHash cc.SignHash, chain cross.BlockChain) *CrossPool {
 
 	pendingCache, _ := lru.New(signedPendingSize)
 	logger := log.New("X-module", "pool")
@@ -56,9 +65,10 @@ func NewCrossPool(chainID *big.Int, store store, retriever trigger.ChainRetrieve
 		chain:        chain,
 		chainID:      chainID,
 		store:        store,
+		txLog:        txLog,
 		retriever:    retriever,
-		pending:      crossdb.NewCtxSortedMap(),
-		queued:       crossdb.NewCtxSortedMap(),
+		pending:      db.NewCtxSortedMap(),
+		queued:       db.NewCtxSortedMap(),
 		pendingCache: pendingCache,
 		signer:       cc.MakeCtxSigner(chainID),
 		signHash:     signHash,
@@ -79,7 +89,8 @@ func (pool *CrossPool) load() error {
 	if err != nil {
 		return err
 	}
-	for _, pendingTX := range store.Find(crossdb.StatusField, cc.CtxStatusPending) {
+	pending := store.Query(0, 0, []db.FieldName{db.BlockNumField}, false, q.Eq(db.StatusField, uint8(cc.CtxStatusPending)))
+	for _, pendingTX := range pending {
 		pool.pending.Put(pendingTX)
 	}
 	return nil
@@ -107,7 +118,7 @@ func (pool *CrossPool) loop() {
 				removed = append(removed, pool.queued.RemoveUnderNum(currentNum-uint64(expireNum))...)
 			}
 			if len(removed) > 0 {
-				cross.Report(pool.chainID.Uint64(), "txs expired", "ids", removed.String())
+				cm.Report(pool.chainID.Uint64(), "txs expired", "ids", removed.String())
 			}
 		}
 	}
@@ -121,8 +132,16 @@ func (pool *CrossPool) Stop() {
 
 func (pool *CrossPool) AddLocals(txs ...*cc.CrossTransaction) (signed []*cc.CrossTransaction, errs []error) {
 	for _, ctx := range txs {
+		if pool.txLog.IsFinish(ctx.ID()) {
+			// already exist in finished log, ignore
+			continue
+		}
 		if err := pool.retriever.VerifyReorg(ctx); err != nil {
 			errs = append(errs, err)
+			continue
+		}
+		if pool.store.Get(pool.chainID, ctx.ID()) != nil {
+			// already exist in store, ignore
 			continue
 		}
 		// make signature first for local ctx
@@ -190,7 +209,7 @@ func (pool *CrossPool) addTx(ctx *cc.CrossTransaction, local bool) error {
 
 	// add new local ctx, move queued signatures of this ctx to pending
 	if local {
-		pendingRws := cc.NewCrossTransactionWithSignatures(ctx, pool.retriever.GetTransactionNumberOnChain(ctx))
+		pendingRws := cc.NewCrossTransactionWithSignatures(ctx, pool.retriever.GetConfirmedTransactionNumberOnChain(ctx))
 		// promote queued ctx to pending, update to number received by local
 		// move cws from queued to pending
 		if queuedRws := pool.queued.Get(id); queuedRws != nil {
@@ -210,7 +229,7 @@ func (pool *CrossPool) addTx(ctx *cc.CrossTransaction, local bool) error {
 			return err
 		}
 	} else {
-		pool.queued.Put(cc.NewCrossTransactionWithSignatures(ctx, pool.retriever.GetTransactionNumberOnChain(ctx)))
+		pool.queued.Put(cc.NewCrossTransactionWithSignatures(ctx, pool.retriever.GetConfirmedTransactionNumberOnChain(ctx)))
 	}
 	return nil
 }
@@ -235,12 +254,6 @@ func (pool *CrossPool) Commit(cws *cc.CrossTransactionWithSignatures) {
 func (pool *CrossPool) Store(cws *cc.CrossTransactionWithSignatures) {
 	cws.SetStatus(cc.CtxStatusWaiting)
 	// if pending exist, update to waiting
-	if pendingTx := pool.store.Get(pool.chainID, cws.ID()); pendingTx != nil && pendingTx.Status == cc.CtxStatusPending {
-		if err := pool.store.Update(cws); err != nil {
-			pool.logger.Warn("Store local ctx failed", "txID", cws.ID(), "err", err)
-		}
-		return
-	}
 	if err := pool.store.Add(cws); err != nil && err != storm.ErrAlreadyExists {
 		pool.logger.Warn("Store local ctx failed", "txID", cws.ID(), "err", err)
 	}
@@ -252,7 +265,7 @@ func (pool *CrossPool) Rollback(cws *cc.CrossTransactionWithSignatures, invalidS
 		cws.RemoveSignature(invalid)
 	}
 	pool.pending.Put(cws)
-	cross.Report(pool.chainID.Uint64(), "pending rollback for invalid signature", "ctxID", cws.ID(), "invalidSigIndex", invalidSigIndex)
+	cm.Report(pool.chainID.Uint64(), "pending rollback for invalid signature", "ctxID", cws.ID(), "invalidSigIndex", invalidSigIndex)
 }
 
 func (pool *CrossPool) Stats() (int, int) {

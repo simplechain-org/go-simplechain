@@ -6,11 +6,10 @@ import (
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	cc "github.com/simplechain-org/go-simplechain/cross/core"
+	"github.com/simplechain-org/go-simplechain/cross/trigger/simpletrigger"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/params"
 )
-
-var DefaultConfirmDepth = 12
 
 type SimpleSubscriber struct {
 	unconfirmedBlockLogs
@@ -27,19 +26,23 @@ type SimpleSubscriber struct {
 	scope               event.SubscriptionScope
 }
 
-func (t *SimpleSubscriber) Stop() {
-	t.scope.Close()
-}
-
 func NewSimpleSubscriber(contract common.Address, chain chainRetriever) *SimpleSubscriber {
 	return &SimpleSubscriber{
 		contract: contract,
 		unconfirmedBlockLogs: unconfirmedBlockLogs{
 			chain: chain,
-			depth: uint(DefaultConfirmDepth),
+			depth: uint(simpletrigger.DefaultConfirmDepth),
 		},
 	}
 }
+
+func (t *SimpleSubscriber) Stop() {
+	t.scope.Close()
+}
+
+//func (t *SimpleSubscriber) ConfirmNumber() uint64 {
+//	return uint64(simpletrigger.DefaultConfirmDepth)
+//}
 
 func (t *SimpleSubscriber) StoreCrossContractLog(blockNumber uint64, hash common.Hash, logs []*types.Log) {
 	var unconfirmedLogs []*types.Log
@@ -57,7 +60,9 @@ func (t *SimpleSubscriber) StoreCrossContractLog(blockNumber uint64, hash common
 				case params.TakerTopic:
 					if len(v.Topics) >= 3 && len(v.Data) >= common.HashLength*4 {
 						takers = append(takers, &cc.CrossTransactionModifier{
-							ID:     v.Topics[1],
+							ID: v.Topics[1],
+							// update remote wouldn't modify blockNumber
+							Type:   cc.Remote,
 							Status: cc.CtxStatusExecuting,
 						})
 						unconfirmedLogs = append(unconfirmedLogs, v)
@@ -73,7 +78,7 @@ func (t *SimpleSubscriber) StoreCrossContractLog(blockNumber uint64, hash common
 						unconfirmedLogs = append(unconfirmedLogs, v)
 					}
 
-				case params.AddAnchorsTopic, params.RemoveAnchorsTopic:
+				case params.AddAnchorsTopic, params.RemoveAnchorsTopic, params.UpdateAnchorTopic:
 					updates = append(updates,
 						&cc.RemoteChainInfo{
 							RemoteChainId: common.BytesToHash(v.Data[:common.HashLength]).Big().Uint64(),
@@ -104,6 +109,7 @@ func (t *SimpleSubscriber) NotifyBlockReorg(logs []*types.Log) {
 					reorgEvent.ReorgTaker.Takers = append(reorgEvent.ReorgTaker.Takers, &cc.CrossTransactionModifier{
 						ID:     l.Topics[1],
 						Status: cc.CtxStatusWaiting,
+						Type:   cc.Reorg,
 					})
 				}
 
@@ -111,7 +117,8 @@ func (t *SimpleSubscriber) NotifyBlockReorg(logs []*types.Log) {
 				if len(l.Topics) >= 3 {
 					reorgEvent.ReorgFinish.Finishes = append(reorgEvent.ReorgFinish.Finishes, &cc.CrossTransactionModifier{
 						ID:     l.Topics[1],
-						Status: cc.CtxStatusWaiting,
+						Status: cc.CtxStatusExecuted,
+						Type:   cc.Reorg,
 					})
 				}
 			}
@@ -137,5 +144,4 @@ func (t *SimpleSubscriber) SubscribeCrossBlockEvent(ch chan<- cc.CrossBlockEvent
 
 func (t *SimpleSubscriber) SubscribeReorgBlockEvent(ch chan<- cc.ReorgBlockEvent) event.Subscription {
 	return t.scope.Track(t.reorgBlockFeed.Subscribe(ch))
-
 }

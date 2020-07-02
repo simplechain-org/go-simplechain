@@ -11,6 +11,8 @@ import (
 )
 
 var rawurlVar = flag.String("rawurl", "http://127.0.0.1:8556", "rpc url")
+var pageSize = flag.Uint64("limit", 200, "每页条数")
+var pageNum = flag.Uint64("page", 1, "页数")
 
 type RPCCrossTransaction struct {
 	Value            *hexutil.Big   `json:"Value"`
@@ -26,6 +28,11 @@ type RPCCrossTransaction struct {
 	S                []*hexutil.Big `json:"S"`
 }
 
+type RPCPageCrossTransactions struct {
+	Data map[uint64][]*RPCCrossTransaction `json:"data"`
+	//Total int                               `json:"total"`
+}
+
 func main() {
 	flag.Parse()
 	query()
@@ -38,13 +45,14 @@ func query() {
 		return
 	}
 
-	var signatures map[string]map[uint64][]*RPCCrossTransaction
-	if err = client.CallContext(context.Background(), &signatures, "cross_ctxContent"); err != nil {
+	var signatures map[string]RPCPageCrossTransactions
+	if err = client.CallContext(context.Background(), &signatures,
+		"cross_ctxContentByPage", 0, 0, pageSize, pageNum); err != nil {
 		fmt.Println("CallContext", "err", err)
 		return
 	}
 
-	for remoteId, value := range signatures["remote"] {
+	for remoteId, value := range signatures["remote"].Data {
 		for i, v := range value {
 			fmt.Println("remoteId=", remoteId, " i=", i, " hash=", v.TxHash.String())
 		}
