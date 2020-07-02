@@ -112,10 +112,12 @@ func (v *SimpleValidator) VerifySigner(ctx *cc.CrossTransaction, signChain, vali
 			return common.Address{}, cross.ErrInternal
 		}
 		anchors, signedCount := QueryAnchor(v.chainConfig, v.chain, statedb, newHead, v.contract, validChain.Uint64())
-		v.config.Anchors = anchors
-		v.requireSignature = signedCount
-		anchorSet = NewAnchorSet(v.config.Anchors)
-		v.anchors[validChain.Uint64()] = anchorSet
+		if anchors != nil {
+			v.config.Anchors = anchors
+			v.requireSignature = signedCount
+			anchorSet = NewAnchorSet(v.config.Anchors)
+			v.anchors[validChain.Uint64()] = anchorSet
+		}
 	}
 	signer, ok := anchorSet.IsAnchorSignedCtx(ctx, cc.NewEIP155CtxSigner(signChain))
 	if !ok {
@@ -187,8 +189,10 @@ func (v *SimpleValidator) UpdateAnchors(info *cc.RemoteChainInfo) error {
 		return cross.ErrInternal
 	}
 	anchors, signedCount := QueryAnchor(v.chainConfig, v.chain, statedb, newHead, v.contract, info.RemoteChainId)
-	v.config.Anchors = anchors
-	v.requireSignature = signedCount
-	v.anchors[info.RemoteChainId] = NewAnchorSet(v.config.Anchors)
+	if anchors != nil {
+		v.config.Anchors = anchors
+		v.requireSignature = signedCount
+		v.anchors[info.RemoteChainId] = NewAnchorSet(v.config.Anchors)
+	}
 	return nil
 }

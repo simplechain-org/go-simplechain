@@ -112,9 +112,9 @@ func taker() {
 	}
 
 	for remoteId, value := range signatures["remote"].Data {
-		for i, v := range value {
-			if i <= 10000 { //自动最多接10000单交易
-				if v.To != (common.Address{}) && v.To != from { //指定了接单地址并且不是from的直接跳过
+		for _, v := range value {
+			//if i <= 50 { //自动最多接10000单交易
+				if v.To != (common.Address{}) && (v.To != from && v.From != from) { //指定了接单地址并且不是from的直接跳过
 					fmt.Printf("tx: %s need taker: %s\n", v.TxHash.String(), v.To.String())
 					continue
 				}
@@ -175,7 +175,7 @@ func taker() {
 				fmt.Printf("eth_sendTransaction result=%s, ctxID=%s\n", result.Hex(), v.CTxId.String())
 			}
 
-		}
+		//}
 
 	}
 

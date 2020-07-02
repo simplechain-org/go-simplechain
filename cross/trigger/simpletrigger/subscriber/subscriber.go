@@ -78,7 +78,7 @@ func (t *SimpleSubscriber) StoreCrossContractLog(blockNumber uint64, hash common
 						unconfirmedLogs = append(unconfirmedLogs, v)
 					}
 
-				case params.AddAnchorsTopic, params.RemoveAnchorsTopic:
+				case params.AddAnchorsTopic, params.RemoveAnchorsTopic, params.UpdateAnchorTopic:
 					updates = append(updates,
 						&cc.RemoteChainInfo{
 							RemoteChainId: common.BytesToHash(v.Data[:common.HashLength]).Big().Uint64(),

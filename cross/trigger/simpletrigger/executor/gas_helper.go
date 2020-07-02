@@ -19,7 +19,7 @@ import (
 
 var (
 	defaultGasPrice = big.NewInt(params.GWei)
-	maxGasPrice     = big.NewInt(500 * params.GWei)
+	MaxGasPrice     = big.NewInt(500 * params.GWei)
 )
 
 type CallArgs struct {

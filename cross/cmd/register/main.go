@@ -74,11 +74,13 @@ func register() {
 	}
 	remoteChainId := new(big.Int).SetUint64(*chainId)
 
+	maxValue := new(big.Int).SetUint64(1e22)
+
 	signConfirmCount := uint8(*signConfirm)
 
 	anchors := []common.Address{common.HexToAddress(*anchor1), common.HexToAddress(*anchor2), common.HexToAddress(*anchor3)}
 
-	out, err := abi.Pack("chainRegister", remoteChainId, signConfirmCount, anchors)
+	out, err := abi.Pack("chainRegister", remoteChainId, maxValue, signConfirmCount, anchors)
 	if err != nil {
 		fmt.Println(err)
 		return
