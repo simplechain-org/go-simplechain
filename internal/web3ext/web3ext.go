@@ -44,14 +44,54 @@ web3._extend({
 	property: 'cross',
 	methods: [
 		new web3._extend.Method({
-			name: 'syncPending',
-			call: 'cross_syncPending',
-			params: 0,
+			name: 'getCtxQuery',
+			call: 'cross_ctxQuery',
+			params: 1,
 		}),
 		new web3._extend.Method({
-			name: 'syncStore',
-			call: 'cross_syncStore',
-			params: 0,
+				name: 'getCtxOwner',
+				call: 'cross_ctxOwner',
+				params: 1,
+		}),
+		new web3._extend.Method({
+				name: 'getCtxOwnerByPage',
+				call: 'cross_ctxOwnerByPage',
+				params: 3,
+		}),
+		new web3._extend.Method({
+				name: 'getCtxContentByPage',
+				call: 'cross_ctxContentByPage',
+				params: 4,
+		}),
+		new web3._extend.Method({
+				name: 'ctxGet',
+				call: 'cross_ctxGet',
+				params: 1,
+		}),
+		new web3._extend.Method({
+				name: 'ctxGetByNumber',
+				call: 'cross_ctxGetByNumber',
+				params: 2,
+		}),
+		new web3._extend.Method({
+				name: 'ctxQueryDestValue',
+				call: 'cross_ctxQueryDestValue',
+				params: 3,
+		}),
+		new web3._extend.Method({
+				name: 'getCtxTakerByPage',
+				call: 'cross_ctxTakerByPage',
+				params: 3,
+		}),
+		new web3._extend.Method({
+				name: 'getCtxStats',
+				call: 'cross_ctxStats',
+				params: 0,
+		}),
+		new web3._extend.Method({
+				name: 'getPoolStats',
+				call: 'cross_poolStats',
+				params: 0,
 		}),
 		new web3._extend.Method({
 			name: 'setStoreDelay',
@@ -62,6 +102,16 @@ web3._extend({
 			name: 'remove',
 			call: 'cross_remove',
 			params: 2,
+		}),
+	    new web3._extend.Method({
+			name: 'syncPending',
+			call: 'cross_syncPending',
+			params: 0,
+		}),
+		new web3._extend.Method({
+			name: 'syncStore',
+			call: 'cross_syncStore',
+			params: 0,
 		}),
 	],
 	properties: [
