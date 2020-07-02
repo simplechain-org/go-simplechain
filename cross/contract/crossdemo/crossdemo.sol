@@ -292,7 +292,7 @@ contract crossDemo{
         require(crossChains[remoteChainId].anchors[msg.sender].status);
         require(crossChains[remoteChainId].makerTxs[rtx.txId].signatures[msg.sender] != 1);
         require(crossChains[remoteChainId].makerTxs[rtx.txId].value > 0);
-        require(crossChains[remoteChainId].makerTxs[rtx.txId].to == address(0x0) || crossChains[remoteChainId].makerTxs[rtx.txId].to == rtx.to,"to is error");
+        require(crossChains[remoteChainId].makerTxs[rtx.txId].to == address(0x0) || crossChains[remoteChainId].makerTxs[rtx.txId].to == rtx.to || crossChains[remoteChainId].makerTxs[rtx.txId].from == rtx.to,"to is error");
         require(crossChains[remoteChainId].makerTxs[rtx.txId].takerHash == bytes32(0x0) || crossChains[remoteChainId].makerTxs[rtx.txId].takerHash == rtx.txHash,"txHash is error");
         crossChains[remoteChainId].makerTxs[rtx.txId].signatures[msg.sender] = 1;
         crossChains[remoteChainId].makerTxs[rtx.txId].signatureCount ++;
@@ -365,7 +365,7 @@ contract crossDemo{
     function taker(Order memory ctx,uint remoteChainId) payable public{
         require(ctx.v.length == ctx.r.length,"length error");
         require(ctx.v.length == ctx.s.length,"length error");
-        require(ctx.to == address(0x0) || ctx.to == msg.sender,"to is err");
+        require(ctx.to == address(0x0) || ctx.to == msg.sender || ctx.from == msg.sender,"to is err");
         require(crossChains[remoteChainId].takerTxs[ctx.txId] == 0,"txId exist");
         if(msg.sender == ctx.from){
             require(verifyOwnerSignAndCount(keccak256(abi.encodePacked(ctx.value, ctx.txId, ctx.txHash, ctx.from, ctx.blockHash, chainId(), ctx.destinationValue,ctx.data)), remoteChainId,ctx.v,ctx.r,ctx.s) >= crossChains[remoteChainId].signConfirmCount,"sign error");
