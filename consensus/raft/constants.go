@@ -1,11 +1,11 @@
 package raft
 
 import (
-	etcdRaft "github.com/coreos/etcd/raft"
+	"github.com/coreos/etcd/raft"
 )
 
 const (
-	MinterRole     = etcdRaft.LEADER
+	MinterRole     = raft.LEADER
 	TickerMS       = 100 // Raft's ticker interval
 	SnapshotPeriod = 250 // Snapshot after this many raft messages
 )

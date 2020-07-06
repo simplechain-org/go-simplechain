@@ -32,7 +32,7 @@ type Recept struct {
 	TxHash common.Hash
 	From   common.Address
 	To     common.Address
-	Input  []byte
+	Input  []byte //TODO delete
 }
 
 func (rws *ReceptTransaction) ConstructData(crossContract abi.ABI) ([]byte, error) {
