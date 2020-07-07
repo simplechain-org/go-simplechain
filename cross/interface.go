@@ -12,7 +12,7 @@ import (
 type ProtocolChain interface {
 	ChainID() *big.Int
 	GenesisHash() common.Hash
-	RegisterAPIs([]rpc.API) //TODO-D: 改成由backend自己注册API
+	RegisterAPIs([]rpc.API) //TODO: 改成由backend自己注册API
 }
 
 type ServiceContext struct {

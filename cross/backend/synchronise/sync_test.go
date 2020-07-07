@@ -40,7 +40,7 @@ func newTester() *syncTester {
 		peers:   make(map[string]*syncTesterPeer),
 	}
 	tester.store = newStoreTester()
-	tester.synchronize = New(chainID, tester, tester, &chainTester{})
+	tester.synchronize = New(chainID, tester, tester, &chainTester{}, 0)
 	return tester
 }
 

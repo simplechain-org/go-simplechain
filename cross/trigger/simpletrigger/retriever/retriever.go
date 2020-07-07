@@ -28,3 +28,7 @@ func NewSimpleRetriever(bc simpletrigger.BlockChain, pm simpletrigger.ProtocolMa
 func (s *SimpleRetriever) CanAcceptTxs() bool {
 	return s.pm.CanAcceptTxs()
 }
+
+func (s *SimpleRetriever) ConfirmedDepth() uint64 {
+	return uint64(simpletrigger.DefaultConfirmDepth)
+}

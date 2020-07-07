@@ -45,7 +45,6 @@ import (
 	"github.com/simplechain-org/go-simplechain/trie"
 
 	lru "github.com/hashicorp/golang-lru"
-	"github.com/simplechain-org/go-simplechain/cross/core"
 	"github.com/simplechain-org/go-simplechain/cross/trigger"
 )
 
@@ -180,7 +179,7 @@ type BlockChain struct {
 	badBlocks       *lru.Cache                     // Bad block cache
 	shouldPreserve  func(*types.Block) bool        // Function used to determine whether should preserve the given block.
 	terminateInsert func(common.Hash, uint64) bool // Testing hook used to terminate ancient receipt chain insertion.
-	crossTrigger    simpleSubscriber
+	crossSubscriber simpleSubscriber
 }
 
 // NewBlockChain returns a fully initialised block chain using information
@@ -830,8 +829,8 @@ func (bc *BlockChain) Stop() {
 
 	bc.wg.Wait()
 
-	if bc.crossTrigger != nil {
-		bc.crossTrigger.Stop()
+	if bc.crossSubscriber != nil {
+		bc.crossSubscriber.Stop()
 	}
 
 	// Ensure the state of a recent block is also stored to disk before exiting.
@@ -1415,8 +1414,8 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 			bc.logsFeed.Send(logs)
 		}
 
-		if bc.chainConfig.IsSingularity(currentBlock.Number()) && bc.crossTrigger != nil {
-			bc.crossTrigger.StoreCrossContractLog(block.NumberU64(), block.Hash(), logs)
+		if bc.chainConfig.IsSingularity(currentBlock.Number()) && bc.crossSubscriber != nil {
+			bc.crossSubscriber.StoreCrossContractLog(block.NumberU64(), block.Hash(), logs)
 		}
 
 		// In theory we should fire a ChainHeadEvent when we inject
@@ -1743,7 +1742,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		stats.usedGas += usedGas
 
 		dirty, _ := bc.stateCache.TrieDB().Size()
-		if bc.crossTrigger != nil { // report chain info for anchor node
+		if bc.crossSubscriber != nil { // report chain info for anchor node
 			stats.report(chain, it.index, dirty, "chainID", bc.chainConfig.ChainID)
 			continue
 		}
@@ -1895,6 +1894,7 @@ func (bc *BlockChain) insertSideChain(block *types.Block, it *insertIterator) (i
 // blocks and inserts them to be part of the new canonical chain and accumulates
 // potential missing transactions and post an event about them.
 func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
+	reorgNumber := newBlock.Number()
 	var (
 		newChain    types.Blocks
 		oldChain    types.Blocks
@@ -2039,20 +2039,22 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 		rawdb.DeleteCanonicalHash(batch, i)
 	}
 	batch.Write()
+
 	// If any logs need to be fired, do it now. In theory we could avoid creating
 	// this goroutine if there are no events to fire, but realistcally that only
 	// ever happens if we're reorging empty blocks, which will only happen on idle
 	// networks where performance is not an issue either way.
 	if len(deletedLogs) > 0 {
-		logs := mergeLogs(deletedLogs, true)
-		bc.rmLogsFeed.Send(RemovedLogsEvent{logs})
-		if bc.chainConfig.IsSingularity(bc.CurrentBlock().Number()) && bc.crossTrigger != nil {
-			bc.crossTrigger.NotifyBlockReorg(logs)
-		}
+		bc.rmLogsFeed.Send(RemovedLogsEvent{mergeLogs(deletedLogs, true)})
 	}
 	if len(rebirthLogs) > 0 {
 		bc.logsFeed.Send(mergeLogs(rebirthLogs, false))
 	}
+
+	if bc.chainConfig.IsSingularity(reorgNumber) && bc.crossSubscriber != nil {
+		bc.crossSubscriber.NotifyBlockReorg(reorgNumber, deletedLogs, rebirthLogs)
+	}
+
 	if len(oldChain) > 0 {
 		for i := len(oldChain) - 1; i >= 0; i-- {
 			bc.chainSideFeed.Send(ChainSideEvent{Block: oldChain[i]})
@@ -2284,12 +2286,10 @@ func (bc *BlockChain) GetChainConfig() *params.ChainConfig {
 
 type simpleSubscriber interface {
 	StoreCrossContractLog(blockNumber uint64, hash common.Hash, logs []*types.Log)
-	NotifyBlockReorg(logs []*types.Log)
-	SubscribeCrossBlockEvent(ch chan<- core.CrossBlockEvent) event.Subscription
-	SubscribeReorgBlockEvent(ch chan<- core.ReorgBlockEvent) event.Subscription
+	NotifyBlockReorg(blockNumber *big.Int, deletedLogs [][]*types.Log, rebirthLogs [][]*types.Log)
 	Stop()
 }
 
 func (bc *BlockChain) SetCrossSubscriber(s trigger.Subscriber) {
-	bc.crossTrigger = s.(simpleSubscriber) // panic if failed
+	bc.crossSubscriber = s.(simpleSubscriber) // panic if failed
 }

@@ -24,7 +24,7 @@ import (
 // CrossService implements node.Service
 type CrossService struct {
 	store  *CrossStore
-	txLogs *cm.TransactionLogs
+	txLogs *cdb.TransactionLogs
 
 	config cross.Config
 	peers  *anchorSet
@@ -59,7 +59,7 @@ func NewCrossService(ctx *node.ServiceContext, main, sub *cross.ServiceContext, 
 	if err != nil {
 		return nil, err
 	}
-	srv.txLogs, err = cm.NewTransactionLogs(logDB)
+	srv.txLogs, err = cdb.NewTransactionLogs(logDB)
 	if err != nil {
 		return nil, err
 	}

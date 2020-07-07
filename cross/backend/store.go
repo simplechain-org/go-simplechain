@@ -4,7 +4,6 @@ import (
 	"errors"
 	"math/big"
 	"sync"
-	"time"
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/log"
@@ -16,10 +15,7 @@ import (
 	"github.com/asdine/storm/v3/q"
 )
 
-const (
-	expireInterval   = time.Second * 60 * 12
-	defaultCacheSize = 4096
-)
+const defaultCacheSize = 4096
 
 var ErrInvalidChainStore = errors.New("invalid chain store, chainID can not be nil")
 
@@ -113,7 +109,7 @@ func (s *CrossStore) Updates(chainID *big.Int, txmList []*cc.CrossTransactionMod
 		updaters = append(updaters, func(ctx *cdb.CrossTransactionIndexed) {
 			switch {
 			// force update if tx status is changed by block reorg
-			case upType == cc.Reorg:
+			case upType == cc.Reorg && upStatus < ctx.Status:
 				ctx.Status = upStatus
 			// update from remote
 			case upType == cc.Remote && upStatus > ctx.Status:

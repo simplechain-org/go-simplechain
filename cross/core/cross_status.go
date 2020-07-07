@@ -22,7 +22,8 @@ const (
 /**
   |------| <-new-- maker         |------|
   |local | (pending->waiting)	 |remote|
-  |      |						 |      |
+  |      | (upAnchor->illegal)   |      |
+  |      |                       |    	|
   |ctxdb |		   taker --mod-> |ctxdb |
   |      |			 (executing) |      |
   |status|						 |status|

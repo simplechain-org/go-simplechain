@@ -1,13 +1,14 @@
-package metric
+package db
 
 import (
-	"encoding/binary"
 	"math/big"
 	"sync"
 
 	"github.com/simplechain-org/go-simplechain/common"
+	"github.com/simplechain-org/go-simplechain/cross/core"
 	"github.com/simplechain-org/go-simplechain/ethdb"
 	"github.com/simplechain-org/go-simplechain/log"
+	"github.com/simplechain-org/go-simplechain/rlp"
 	"github.com/simplechain-org/go-simplechain/trie"
 )
 
@@ -55,36 +56,39 @@ func getKey(chainID *big.Int, hash common.Hash) []byte {
 	return append(chainID.Bytes(), hash.Bytes()...)
 }
 
-func encodeBlockNumber(number uint64) []byte {
-	enc := make([]byte, 8)
-	binary.BigEndian.PutUint64(enc, number)
-	return enc
-}
-
-func (l *TransactionLog) AddFinish(hash common.Hash, number uint64) {
+func (l *TransactionLog) AddFinish(ctx *core.CrossTransactionWithSignatures) error {
 	l.lock.Lock()
 	defer l.lock.Unlock()
 
-	l.finished.Update(getKey(l.chainID, hash), encodeBlockNumber(number))
+	b, err := rlp.EncodeToBytes(ctx)
+	if err != nil {
+		return err
+	}
+	l.finished.Update(getKey(l.chainID, ctx.ID()), b)
+	return nil
 }
 
-func (l *TransactionLog) GetFinish(hash common.Hash) (uint64, bool) {
+func (l *TransactionLog) GetFinish(hash common.Hash) (*core.CrossTransactionWithSignatures, bool) {
 	l.lock.RLock()
 	defer l.lock.RUnlock()
 
-	number, err := l.finished.TryGet(getKey(l.chainID, hash))
-	if err != nil || len(number) < 8 {
-		return 0, false
+	enc, err := l.finished.TryGet(getKey(l.chainID, hash))
+	if err != nil {
+		return nil, false
 	}
-	return binary.BigEndian.Uint64(number), true
+	var ctx core.CrossTransactionWithSignatures
+	if err := rlp.DecodeBytes(enc, &ctx); err != nil {
+		return nil, false
+	}
+	return &ctx, true
 }
 
 func (l *TransactionLog) IsFinish(hash common.Hash) bool {
 	l.lock.RLock()
 	defer l.lock.RUnlock()
 
-	number, err := l.finished.TryGet(getKey(l.chainID, hash))
-	return err == nil && len(number) == 8
+	b, err := l.finished.TryGet(getKey(l.chainID, hash))
+	return err == nil && len(b) > 0
 }
 
 func (l *TransactionLog) Commit() (common.Hash, error) {

@@ -20,7 +20,8 @@ type indexDB struct {
 	root    *storm.DB // root db of stormDB
 	db      storm.Node
 	cache   *IndexDbCache
-	logger  log.Logger
+	//txLog   *TransactionLog
+	logger log.Logger
 }
 
 type FieldName = string
@@ -113,6 +114,9 @@ func (d *indexDB) Writes(ctxList []*cc.CrossTransactionWithSignatures, replaceab
 	}
 
 	for _, ctx := range ctxList {
+		//if d.txLog.IsFinish(ctx.ID()) {
+		//	continue
+		//}
 		new := NewCrossTransactionIndexed(ctx)
 		var old CrossTransactionIndexed
 		err = tx.One(CtxIdIndex, ctx.ID(), &old)

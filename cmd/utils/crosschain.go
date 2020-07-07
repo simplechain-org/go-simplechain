@@ -19,11 +19,11 @@ func RegisterCrossChainService(stack *node.Node, cfg cross.Config, mainCh chan *
 		subNode := <-subCh
 		defer close(mainCh)
 		defer close(subCh)
-		mainCtx, err := newSimpleChainContext(mainNode, cfg, cfg.MainContract)
+		mainCtx, err := newSimpleChainContext(mainNode, cfg, cfg.MainContract, ctx.ResolvePath("mainChain_unconfirmed"))
 		if err != nil {
 			return nil, err
 		}
-		subCtx, err := newSimpleChainContext(subNode, cfg, cfg.SubContract)
+		subCtx, err := newSimpleChainContext(subNode, cfg, cfg.SubContract, ctx.ResolvePath("subChain_unconfirmed"))
 		if err != nil {
 			return nil, err
 		}
@@ -34,13 +34,13 @@ func RegisterCrossChainService(stack *node.Node, cfg cross.Config, mainCh chan *
 	}
 }
 
-func newSimpleChainContext(chain simpletrigger.SimpleChain, config cross.Config, contract common.Address) (ctx *cross.ServiceContext, err error) {
+func newSimpleChainContext(chain simpletrigger.SimpleChain, config cross.Config, contract common.Address, journal string) (ctx *cross.ServiceContext, err error) {
 	ctx = &cross.ServiceContext{ProtocolChain: simpletrigger.NewSimpleProtocolChain(chain), Config: &config}
 	ctx.Executor, err = executor.NewSimpleExecutor(chain, config.Signer, contract)
 	if err != nil {
 		return nil, err
 	}
 	ctx.Retriever = retriever.NewSimpleRetriever(chain.BlockChain(), chain.ProtocolManager(), contract, ctx.Config, chain.ChainConfig())
-	ctx.Subscriber = subscriber.NewSimpleSubscriber(contract, chain.BlockChain())
+	ctx.Subscriber = subscriber.NewSimpleSubscriber(contract, chain.BlockChain(), journal)
 	return ctx, nil
 }

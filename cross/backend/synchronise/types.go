@@ -5,6 +5,15 @@ import (
 	"github.com/simplechain-org/go-simplechain/cross/core"
 )
 
+type SyncMode uint8
+
+const (
+	ALL SyncMode = iota
+	STORE
+	PENDING
+	OFF
+)
+
 type SyncReq struct {
 	Chain  uint64
 	Height uint64

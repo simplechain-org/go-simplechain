@@ -9,8 +9,7 @@ import (
 )
 
 type Subscriber interface {
-	SubscribeCrossBlockEvent(ch chan<- core.CrossBlockEvent) event.Subscription
-	SubscribeReorgBlockEvent(ch chan<- core.ReorgBlockEvent) event.Subscription
+	SubscribeBlockEvent(ch chan<- core.CrossBlockEvent) event.Subscription
 	Stop()
 }
 
@@ -41,8 +40,9 @@ type Transaction interface {
 type ChainRetriever interface {
 	Validator
 	CanAcceptTxs() bool
+	ConfirmedDepth() uint64
 	CurrentBlockNumber() uint64
+	GetTransactionTimeOnChain(Transaction) uint64
 	GetTransactionNumberOnChain(Transaction) uint64
 	GetConfirmedTransactionNumberOnChain(Transaction) uint64
-	GetTransactionTimeOnChain(Transaction) uint64
 }

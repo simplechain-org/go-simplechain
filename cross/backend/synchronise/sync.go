@@ -3,6 +3,7 @@ package synchronise
 import (
 	"errors"
 	"math/big"
+	"math/rand"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -17,7 +18,7 @@ import (
 )
 
 const (
-	rttMaxEstimate         = 20 * time.Second // Maximum round-trip time to target for download requests
+	rttMaxEstimate         = 30 * time.Second // Maximum round-trip time to target for download requests
 	defaultMaxSyncSize     = 100
 	syncChannelSize        = 1
 	syncPendingChannelSize = 1
@@ -38,6 +39,7 @@ type Sync struct {
 	pendingSyncing syncmap.Map // map[string]chan []*cc.CrossTransaction
 
 	peers *peerSet
+	mode  SyncMode
 
 	chainID *big.Int
 	pool    CrossPool
@@ -61,13 +63,15 @@ type CrossStore interface {
 
 type CrossChain interface {
 	CanAcceptTxs() bool
+	RequireSignatures() int
 	GetConfirmedTransactionNumberOnChain(trigger.Transaction) uint64
 }
 
-func New(chainID *big.Int, pool CrossPool, store CrossStore, chain CrossChain) *Sync {
+func New(chainID *big.Int, pool CrossPool, store CrossStore, chain CrossChain, mode SyncMode) *Sync {
 	s := &Sync{
 		chainID:       chainID,
 		peers:         newPeerSet(),
+		mode:          mode,
 		pool:          pool,
 		store:         store,
 		chain:         chain,
@@ -90,10 +94,27 @@ func (s *Sync) loopSync() {
 	for {
 		select {
 		case <-ticker.C:
+			if s.mode == OFF || s.mode == STORE {
+				break
+			}
 			if s.peers.Len() == 0 || !s.chain.CanAcceptTxs() {
 				break
 			}
-			s.synchronisePending(s.peers.AllPeers())
+			var (
+				require = s.chain.RequireSignatures() - 1 // require from other peer
+				all     = s.peers.AllPeers()
+				peers   = make([]*peerConnection, 0, require)
+			)
+			if len(all) < require {
+				s.log.Warn("insufficient pending synchronise peers", "require", require, "actual", len(all))
+			}
+			for _, rd := range rand.Perm(len(all)) { // pick peer randomly
+				peers = append(peers, all[rd])
+				if len(peers) >= require {
+					break
+				}
+			}
+			s.synchronisePending(peers)
 
 		case <-s.quitSync:
 			return
@@ -125,7 +146,9 @@ func (s *Sync) UnregisterPeer(id string) error {
 // cross store synchronize
 
 func (s *Sync) Synchronise(id string, height *big.Int) error {
-
+	if s.mode == OFF || s.mode == PENDING {
+		return nil
+	}
 	s.log.Info("start sync cross transactions", "peer", id, "height", height)
 	err := s.syncWithPeer(id, height)
 	switch err {
@@ -141,7 +164,7 @@ func (s *Sync) Synchronise(id string, height *big.Int) error {
 }
 
 func (s *Sync) SynchronisePending(id string) error {
-	if !s.chain.CanAcceptTxs() {
+	if s.mode == OFF || s.mode == STORE || !s.chain.CanAcceptTxs() {
 		return nil
 	}
 	peer := s.peers.Peer(id)
@@ -231,7 +254,6 @@ func (s *Sync) syncWithPeer(id string, peerHeight *big.Int) error {
 			return errCanceled
 
 		case txs := <-s.synchronizeCh:
-			//fmt.Println("[debug] receive sync ctx", len(txs))
 			var selfTxs []*cc.CrossTransactionWithSignatures
 			for _, tx := range txs {
 				if tx.ChainId().Cmp(s.chainID) == 0 {
@@ -401,7 +423,7 @@ func (s *Sync) syncCrossTransaction(ctxList []*cc.CrossTransactionWithSignatures
 
 func (s *Sync) syncPending(ctxList []*cc.CrossTransaction) (lastNumber uint64) {
 	for _, ctx := range ctxList {
-		// 同步pending时像单节点请求签名，所以不监控漏签
+		// 同步pending时向单节点请求签名，所以不监控漏签
 		if _, err := s.pool.AddRemote(ctx); err != nil {
 			s.log.Trace("SyncPending failed", "id", ctx.ID(), "err", err)
 		}

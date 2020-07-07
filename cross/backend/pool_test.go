@@ -229,6 +229,7 @@ func (l testFinishLog) IsFinish(hash common.Hash) bool { return false }
 type testChainRetriever struct{}
 
 func (r testChainRetriever) CanAcceptTxs() bool                                              { return true }
+func (r testChainRetriever) ConfirmedDepth() uint64                                          { return 1 }
 func (r testChainRetriever) CurrentBlockNumber() uint64                                      { return 1 }
 func (r testChainRetriever) GetTransactionNumberOnChain(tx trigger.Transaction) uint64       { return 0 }
 func (r testChainRetriever) GetConfirmedTransactionNumberOnChain(trigger.Transaction) uint64 { return 1 }

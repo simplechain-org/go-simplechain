@@ -129,7 +129,7 @@ func (v *SimpleValidator) VerifyContract(cws trigger.Transaction) error {
 	if v.IsLocalCtx(cws) {
 		res, err = evmInvoke.CallContract(common.Address{}, &v.contract, params.GetMakerTxFn, paddedCtxId, common.LeftPadBytes(cws.DestinationId().Bytes(), 32))
 		if err != nil {
-			v.logger.Warn("apply getMakerTx transaction failed", "err", err)
+			v.logger.Warn("apply getMakerTx transaction failed", "error", err)
 			return cross.ErrInternal
 		}
 		if new(big.Int).SetBytes(res).Cmp(big.NewInt(0)) == 0 { // error if makerTx is not existed in source-chain
@@ -137,9 +137,9 @@ func (v *SimpleValidator) VerifyContract(cws trigger.Transaction) error {
 		}
 
 	} else if v.IsRemoteCtx(cws) {
-		res, err = evmInvoke.CallContract(common.Address{}, &v.contract, params.GetTakerTxFn, paddedCtxId, common.LeftPadBytes(config.ChainID.Bytes(), 32))
+		res, err = evmInvoke.CallContract(common.Address{}, &v.contract, params.GetTakerTxFn, paddedCtxId, common.LeftPadBytes(cws.ChainId().Bytes(), 32))
 		if err != nil {
-			v.logger.Warn("apply getTakerTx transaction failed", "err", err)
+			v.logger.Warn("apply getTakerTx transaction failed", "error", err)
 			return cross.ErrInternal
 		}
 		if new(big.Int).SetBytes(res).Cmp(big.NewInt(0)) != 0 { // error if takerTx is already taken in destination-chain

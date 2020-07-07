@@ -254,7 +254,11 @@ func (s *PublicCrossChainAPI) CtxTakerByPage(to common.Address, pageSize, startP
 }
 
 func (s *PublicCrossChainAPI) CtxGet(id common.Hash) *RPCCrossTransaction {
-	return newRPCCrossTransaction(s.handler.GetByCtxID(id))
+	ctx, _ := s.handler.txLog.GetFinish(id)
+	if ctx == nil {
+		ctx = s.handler.GetByCtxID(id)
+	}
+	return newRPCCrossTransaction(ctx)
 }
 
 func (s *PublicCrossChainAPI) CtxGetByNumber(begin, end hexutil.Uint64) map[cc.CtxStatus][]common.Hash {
@@ -265,10 +269,6 @@ func (s *PublicCrossChainAPI) CtxGetByNumber(begin, end hexutil.Uint64) map[cc.C
 	}
 	return result
 }
-
-//func (s *PublicCrossChainAPI) CtxStats() map[uint64]map[cc.CtxStatus]int {
-//	return s.handler.StoreStats()
-//}
 
 func (s *PublicCrossChainAPI) PoolStats() map[string]int {
 	pending, queue := s.handler.PoolStats()

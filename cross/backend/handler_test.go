@@ -9,7 +9,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/ethdb/memorydb"
 
 	cc "github.com/simplechain-org/go-simplechain/cross/core"
-	cm "github.com/simplechain-org/go-simplechain/cross/metric"
+	db "github.com/simplechain-org/go-simplechain/cross/database"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -19,7 +19,7 @@ func newHandlerTester(chainID *big.Int) (*Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	memLog, err := cm.NewTransactionLogs(memorydb.New())
+	memLog, err := db.NewTransactionLogs(memorydb.New())
 	if err != nil {
 		return nil, err
 	}

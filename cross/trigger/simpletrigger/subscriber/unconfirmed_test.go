@@ -44,11 +44,11 @@ func TestUnconfirmedInsertBounds(t *testing.T) {
 	simpletrigger.DefaultConfirmDepth = 12
 	limit := simpletrigger.DefaultConfirmDepth
 
-	pool := NewSimpleSubscriber(common.Address{}, new(noopChainRetriever))
+	pool := NewSimpleSubscriber(common.Address{}, new(noopChainRetriever), "")
 	for depth := uint64(0); depth < 2*uint64(limit); depth++ {
 		// Insert multiple blocks for the same level just to stress it
 		for i := 0; i < int(depth); i++ {
-			pool.insert(depth, common.Hash([32]byte{byte(depth), byte(i)}), nil, nil)
+			pool.insert(depth, [32]byte{byte(depth), byte(i)}, nil, nil)
 		}
 		// Validate that no blocks below the depth allowance are left in
 		pool.blocks.Do(func(block interface{}) {
@@ -67,9 +67,9 @@ func TestUnconfirmedShifts(t *testing.T) {
 	// Create a pool with a few blocks on various depths
 	limit, start := uint(12), uint64(25)
 
-	pool := NewSimpleSubscriber(common.Address{}, new(noopChainRetriever))
+	pool := NewSimpleSubscriber(common.Address{}, new(noopChainRetriever), "")
 	for depth := start; depth < start+uint64(limit); depth++ {
-		pool.insert(depth, common.Hash([32]byte{byte(depth)}), nil, nil)
+		pool.insert(depth, [32]byte{byte(depth)}, nil, nil)
 	}
 	// Try to shift below the limit and ensure no blocks are dropped
 	pool.shift(start+uint64(limit)-1, nil)
