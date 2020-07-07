@@ -1,7 +1,6 @@
 package core
 
 import (
-	"fmt"
 	"github.com/simplechain-org/go-simplechain"
 )
 
@@ -61,14 +60,12 @@ func (s CtxStatus) String() string {
 }
 
 func (s CtxStatus) MarshalText() ([]byte, error) {
-	fmt.Println(s,s.String())
 	return []byte(s.String()), nil
 }
 
 func (s CtxStatus) UnmarshalText(input []byte) error {
 	for k,v := range ctxStatusToString {
 		if v == string(input) {
-			fmt.Println(k,v,string(input))
 	 		s = k
 	 		return nil
 		}
