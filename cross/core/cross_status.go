@@ -65,9 +65,9 @@ func (s CtxStatus) MarshalText() ([]byte, error) {
 }
 
 func (s *CtxStatus) UnmarshalText(input []byte) error {
+	fmt.Println(string(input))
 	for k,v := range ctxStatusToString {
 		if v == string(input) {
-			fmt.Println(k,v,string(input))
 	 		*s = k
 	 		return nil
 		}
