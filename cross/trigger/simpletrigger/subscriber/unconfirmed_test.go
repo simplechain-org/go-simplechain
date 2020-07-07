@@ -17,6 +17,7 @@
 package subscriber
 
 import (
+	"math/big"
 	"testing"
 
 	"github.com/simplechain-org/go-simplechain/common"
@@ -29,10 +30,19 @@ import (
 
 // noopChainRetriever is an implementation of headerRetriever that always
 // returns nil for any requested headers.
-type noopChainRetriever struct{}
+type noopChainRetriever struct {
+	chain map[uint64]*types.Header
+}
 
+func newNoopChainRetriever() *noopChainRetriever {
+	return &noopChainRetriever{chain: make(map[uint64]*types.Header)}
+}
+
+func (r *noopChainRetriever) insert(header *types.Header) {
+	r.chain[header.Number.Uint64()] = header
+}
 func (r *noopChainRetriever) SetCrossSubscriber(s trigger.Subscriber)       {}
-func (r *noopChainRetriever) GetHeaderByNumber(number uint64) *types.Header { return nil }
+func (r *noopChainRetriever) GetHeaderByNumber(number uint64) *types.Header { return r.chain[number] }
 func (r *noopChainRetriever) GetTransactionByTxHash(hash common.Hash) (*types.Transaction, common.Hash, uint64) {
 	return nil, common.Hash{}, 0
 }
@@ -44,7 +54,7 @@ func TestUnconfirmedInsertBounds(t *testing.T) {
 	simpletrigger.DefaultConfirmDepth = 12
 	limit := simpletrigger.DefaultConfirmDepth
 
-	pool := NewSimpleSubscriber(common.Address{}, new(noopChainRetriever), "")
+	pool := NewSimpleSubscriber(common.Address{}, newNoopChainRetriever(), "")
 	for depth := uint64(0); depth < 2*uint64(limit); depth++ {
 		// Insert multiple blocks for the same level just to stress it
 		for i := 0; i < int(depth); i++ {
@@ -67,9 +77,15 @@ func TestUnconfirmedShifts(t *testing.T) {
 	// Create a pool with a few blocks on various depths
 	limit, start := uint(12), uint64(25)
 
-	pool := NewSimpleSubscriber(common.Address{}, new(noopChainRetriever), "")
+	chain := newNoopChainRetriever()
+	pool := NewSimpleSubscriber(common.Address{}, chain, "")
 	for depth := start; depth < start+uint64(limit); depth++ {
-		pool.insert(depth, [32]byte{byte(depth)}, nil, nil)
+		header := types.Header{
+			ParentHash: [32]byte{byte(depth)},
+			Number:     new(big.Int).SetUint64(depth),
+		}
+		chain.insert(&header)
+		pool.insert(depth, header.Hash(), nil, nil)
 	}
 	// Try to shift below the limit and ensure no blocks are dropped
 	pool.shift(start+uint64(limit)-1, nil)

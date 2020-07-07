@@ -202,7 +202,7 @@ func (pool *CrossPool) AddRemote(ctx *cc.CrossTransaction) (signer common.Addres
 		return signer, nil
 	}
 	if pool.txLog.IsFinish(ctx.ID()) {
-		// already exist in finished log
+		// already exist in finished log, ignore ctx
 		return signer, cross.ErrFinishedCtx
 	}
 	if old := pool.store.Get(pool.chainID, ctx.ID()); old != nil && old.Status != cc.CtxStatusPending {
@@ -332,6 +332,7 @@ func (pool *CrossPool) Stats() (int, int) {
 
 // Pending return pending ctx by height
 func (pool *CrossPool) Pending(startNumber uint64, limit int) (ids []common.Hash, pending []*cc.CrossTransactionWithSignatures) {
+	var deletes []common.Hash
 	pool.pending.Map(func(ctx *cc.CrossTransactionWithSignatures) bool {
 		if ctx.BlockNum <= startNumber { // 低于起始高度的pending不取
 			return false
@@ -339,10 +340,19 @@ func (pool *CrossPool) Pending(startNumber uint64, limit int) (ids []common.Hash
 		if pending != nil && len(pending) >= limit && pending[len(pending)-1].BlockNum != ctx.BlockNum {
 			return true
 		}
-		ids = append(ids, ctx.ID())
-		pending = append(pending, ctx)
+		txID := ctx.ID()
+		if pool.txLog.IsFinish(txID) {
+			deletes = append(deletes, txID) //TODO: txLog临时解决方案，不应该在这里删除
+		} else {
+			ids = append(ids, txID)
+			pending = append(pending, ctx)
+		}
 		return false
 	})
+	for _, did := range deletes {
+		pool.pending.RemoveByID(did)
+		pool.queued.RemoveByID(did)
+	}
 	return ids, pending
 }
 

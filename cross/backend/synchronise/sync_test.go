@@ -249,6 +249,10 @@ func (*chainTester) CanAcceptTxs() bool {
 	return true
 }
 
+func (*chainTester) RequireSignatures() int {
+	return 3
+}
+
 func TestSync_Synchronise(t *testing.T) {
 	sc := newTester()
 	defer sc.synchronize.Terminate()
