@@ -65,11 +65,11 @@ func (s CtxStatus) MarshalText() ([]byte, error) {
 	return []byte(s.String()), nil
 }
 
-func (s *CtxStatus) UnmarshalText(input []byte) error {
+func (s CtxStatus) UnmarshalText(input []byte) error {
 	for k,v := range ctxStatusToString {
 		if v == string(input) {
 			fmt.Println(k,v,string(input))
-	 		s = &k
+	 		s = k
 	 		return nil
 		}
 	}
