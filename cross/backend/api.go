@@ -270,7 +270,7 @@ func (s *PublicCrossChainAPI) PoolStats() map[string]int {
 type RPCCrossTransaction struct {
 	Value            *hexutil.Big   `json:"value"`
 	CTxId            common.Hash    `json:"ctxId"`
-	Status           hexutil.Uint   `json:"status"`
+	Status           cc.CtxStatus   `json:"status"`
 	TxHash           common.Hash    `json:"txHash"`
 	From             common.Address `json:"from"`
 	To               common.Address `json:"to"`
@@ -293,7 +293,7 @@ func newRPCCrossTransaction(tx *cc.CrossTransactionWithSignatures) *RPCCrossTran
 	result := &RPCCrossTransaction{
 		Value:            (*hexutil.Big)(tx.Data.Value),
 		CTxId:            tx.ID(),
-		Status:           hexutil.Uint(tx.Status),
+		Status:           tx.Status,
 		TxHash:           tx.Data.TxHash,
 		From:             tx.Data.From,
 		To:               tx.Data.To,
@@ -318,7 +318,7 @@ func newRPCCrossTransaction(tx *cc.CrossTransactionWithSignatures) *RPCCrossTran
 
 type RPCOwnerCrossTransaction struct {
 	Value            *hexutil.Big   `json:"value"`
-	Status           hexutil.Uint   `json:"status"`
+	Status           cc.CtxStatus   `json:"status"`
 	CTxId            common.Hash    `json:"ctxId"`
 	TxHash           common.Hash    `json:"txHash"`
 	From             common.Address `json:"from"`
@@ -337,7 +337,7 @@ type RPCOwnerCrossTransaction struct {
 func newOwnerRPCCrossTransaction(tx *cc.OwnerCrossTransactionWithSignatures) *RPCOwnerCrossTransaction {
 	result := &RPCOwnerCrossTransaction{
 		Value:            (*hexutil.Big)(tx.Cws.Data.Value),
-		Status:           hexutil.Uint(tx.Cws.Status),
+		Status:           tx.Cws.Status,
 		CTxId:            tx.Cws.Data.CTxId,
 		TxHash:           tx.Cws.Data.TxHash,
 		From:             tx.Cws.Data.From,
