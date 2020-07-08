@@ -55,6 +55,34 @@ func newJournal(path string) *unconfirmedJournal {
 	}
 }
 
+// add encodable BlockNumber,BlockHash
+type journalLog struct {
+	// Consensus fields:
+	// address of the contract that generated the event
+	Address common.Address `json:"address" gencodec:"required"`
+	// list of topics provided by the contract.
+	Topics []common.Hash `json:"topics" gencodec:"required"`
+	// supplied by the contract, usually ABI-encoded
+	Data []byte `json:"data" gencodec:"required"`
+
+	// Derived fields. These fields are filled in by the node
+	// but not secured by consensus.
+	// block in which the transaction was included
+	BlockNumber uint64 `json:"blockNumber" gencodec:"required"`
+	// hash of the transaction
+	TxHash common.Hash `json:"transactionHash" gencodec:"required"`
+	// index of the transaction in the block
+	TxIndex uint `json:"transactionIndex" gencodec:"required"`
+	// hash of the block in which the transaction was included
+	BlockHash common.Hash `json:"blockHash" gencodec:"required"`
+	// index of the log in the block
+	Index uint `json:"logIndex" gencodec:"required"`
+
+	// The Removed field is true if this log was reverted due to a chain reorganisation.
+	// You must pay attention to this field if you receive logs through a filter query.
+	Removed bool `json:"removed"`
+}
+
 // load parses a transaction journal dump from disk, loading its contents into
 // the specified pool.
 func (journal *unconfirmedJournal) load(add func(uint64, common.Hash, []*types.Log)) error {
@@ -86,22 +114,24 @@ func (journal *unconfirmedJournal) load(add func(uint64, common.Hash, []*types.L
 
 	for {
 		// Parse the next transaction and terminate on error
-		log := new(types.Log)
-		if err = stream.Decode(log); err != nil {
+		lg := new(journalLog)
+		if err = stream.Decode(lg); err != nil {
 			if err != io.EOF {
 				failure = err
 			}
 			break
 		}
+
 		total++
-		if (index > 0 && index != log.BlockNumber) || (hash != common.Hash{} && hash != log.BlockHash) {
+
+		if (index > 0 && index != lg.BlockNumber) || (hash != common.Hash{} && hash != lg.BlockHash) {
 			add(index, hash, batch)
 			batch = batch[:0]
 			blocks++
 		}
-		index = log.BlockNumber
-		hash = log.BlockHash
-		batch = append(batch, log)
+		index = lg.BlockNumber
+		hash = lg.BlockHash
+		batch = append(batch, (*types.Log)(lg))
 	}
 
 	if len(batch) > 0 {
@@ -118,7 +148,7 @@ func (journal *unconfirmedJournal) insert(log *types.Log) error {
 	if journal.writer == nil {
 		return errNoActiveJournal
 	}
-	if err := rlp.Encode(journal.writer, log); err != nil {
+	if err := rlp.Encode(journal.writer, (*journalLog)(log)); err != nil {
 		return err
 	}
 	return nil
@@ -142,8 +172,8 @@ func (journal *unconfirmedJournal) rotate(blocks *ring.Ring) error {
 	journaled, blockCounts := 0, 0
 	for blocks != nil {
 		logs := blocks.Value.(*unconfirmedBlockLog).logs
-		for _, tx := range logs {
-			if err = rlp.Encode(replacement, tx); err != nil {
+		for _, lg := range logs {
+			if err = rlp.Encode(replacement, (*journalLog)(lg)); err != nil {
 				replacement.Close()
 				return err
 			}

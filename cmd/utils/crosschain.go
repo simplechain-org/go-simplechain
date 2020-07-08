@@ -19,11 +19,11 @@ func RegisterCrossChainService(stack *node.Node, cfg cross.Config, mainCh chan *
 		subNode := <-subCh
 		defer close(mainCh)
 		defer close(subCh)
-		mainCtx, err := newSimpleChainContext(mainNode, cfg, cfg.MainContract, ctx.ResolvePath("mainChain_unconfirmed"))
+		mainCtx, err := newSimpleChainContext(mainNode, cfg, cfg.MainContract, ctx.ResolvePath("mainChain_unconfirmed.rlp"))
 		if err != nil {
 			return nil, err
 		}
-		subCtx, err := newSimpleChainContext(subNode, cfg, cfg.SubContract, ctx.ResolvePath("subChain_unconfirmed"))
+		subCtx, err := newSimpleChainContext(subNode, cfg, cfg.SubContract, ctx.ResolvePath("subChain_unconfirmed.rlp"))
 		if err != nil {
 			return nil, err
 		}

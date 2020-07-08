@@ -101,11 +101,10 @@ func (v *SimpleValidator) VerifySigner(ctx *cc.CrossTransaction, signChain, vali
 			v.logger.Warn("empty anchors in current state", "hash", newHead.Hash(), "height", newHead.Number)
 			return common.Address{}, cross.ErrInvalidSignCtx
 		}
-			v.config.Anchors = anchors
-			v.requireSignature = signedCount
-			anchorSet = NewAnchorSet(v.config.Anchors)
-			v.anchors[validChain.Uint64()] = anchorSet
-		}
+		v.config.Anchors = anchors
+		v.requireSignature = signedCount
+		anchorSet = NewAnchorSet(v.config.Anchors)
+		v.anchors[validChain.Uint64()] = anchorSet
 	}
 	signer, ok := anchorSet.IsAnchorSignedCtx(ctx, cc.NewEIP155CtxSigner(signChain))
 	if !ok {
