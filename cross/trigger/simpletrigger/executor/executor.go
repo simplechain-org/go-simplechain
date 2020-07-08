@@ -219,7 +219,7 @@ func (exe *SimpleExecutor) promoteTransaction() {
 
 					if gasPrice.Cmp(MaxGasPrice) > 0 {
 						exe.log.Info("overflow max gas price, set to max", "tx", v.Hash().String())
-						gasPrice = new(big.Int).Sub(MaxGasPrice,big.NewInt(rand.Int63n(1e9)))
+						gasPrice = new(big.Int).Sub(MaxGasPrice, big.NewInt(rand.Int63n(1e9)))
 					}
 
 					tx, err := newSignedTransaction(nonceBegin+count, *v.To(), v.Gas(), gasPrice, v.Data(),
