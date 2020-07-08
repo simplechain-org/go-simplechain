@@ -31,6 +31,7 @@ import (
 	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	"github.com/simplechain-org/go-simplechain/rlp"
 	"github.com/simplechain-org/go-simplechain/rpc"
+	"github.com/simplechain-org/go-simplechain/cross/backend"
 )
 
 // Client defines typed wrappers for the Ethereum RPC API.
@@ -555,4 +556,15 @@ func (ec *Client) SendCrossTxSub(ctx context.Context, tx *cc.CrossTransactionWit
 		return err
 	}
 	return ec.c.CallContext(ctx, nil, "cross_importSubCtx", hexutil.Encode(data))
+}
+
+func (ec *Client) CtxQuery(ctx context.Context,txHash common.Hash) (*backend.RPCCrossTransaction,error) {
+	var r *backend.RPCCrossTransaction
+	err := ec.c.CallContext(ctx, &r, "cross_ctxQuery", txHash)
+	if err == nil {
+		if r == nil {
+			return nil, simplechain.NotFound
+		}
+	}
+	return r, err
 }

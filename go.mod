@@ -76,5 +76,5 @@ require (
 	gopkg.in/oleiade/lane.v1 v1.0.0
 	gopkg.in/sourcemap.v1 v1.0.5 // indirect
 	gopkg.in/urfave/cli.v1 v1.20.0
-	gotest.tools v2.2.0+incompatible
+	gotest.tools v2.2.0+incompatible // indirect
 )

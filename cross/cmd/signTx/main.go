@@ -114,6 +114,8 @@ type Handler struct {
 	SubChain   Chain
 }
 
+//TODO 补签之后未广播到其他节点,判重
+
 func NewHandler(config *Config) *Handler {
 	data, err := hexutil.Decode(params.CrossDemoAbi)
 	if err != nil {
@@ -222,7 +224,7 @@ func (h *Handler) TakerEvent(chain *Chain, ctx context.Context, event *types.Log
 			log.Error("GetTxForLockOut CreateTransaction", "err", err)
 		}
 		tx, err := h.newSignedTransaction(nonce, otherChain.ContractAddr, param.gasLimit, param.gasPrice, param.data,
-			otherChain.ChainID.Uint64())
+			otherChain.ChainID)
 		if err != nil {
 			log.Error("GetTxForLockOut newSignedTransaction", "err", err)
 			panic(err)
@@ -232,7 +234,7 @@ func (h *Handler) TakerEvent(chain *Chain, ctx context.Context, event *types.Log
 			log.Error("sub chain SendTransaction failed", "err", err, "hash", tx.Hash())
 			return
 		}
-		log.Info("SendTransaction sub", "ctxID", rtx.CTxId.String())
+		log.Info("SendTransaction", "ctxID", rtx.CTxId.String())
 	}
 }
 
@@ -328,10 +330,10 @@ func (h *Handler) createTransaction(chain Chain, rws *cc.ReceptTransaction) (*Tr
 }
 
 func (h *Handler) newSignedTransaction(nonce uint64, to common.Address, gasLimit uint64, gasPrice *big.Int,
-	data []byte, networkId uint64) (*types.Transaction, error) {
+	data []byte, networkId *big.Int) (*types.Transaction, error) {
 
 	tx := types.NewTransaction(nonce, to, big.NewInt(0), gasLimit, gasPrice, data)
-	signer := types.NewEIP155Signer(big.NewInt(int64(networkId)))
+	signer := types.NewEIP155Signer(networkId)
 	signedTx, err := types.SignTx(tx, signer, h.AnchorKey)
 	if err != nil {
 		return nil, err
