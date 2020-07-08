@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"math/big"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -23,6 +24,8 @@ import (
 )
 
 const maxFinishGasLimit = 250000
+
+//var MaxGasPrice = big.NewInt(100e9)
 
 type TranParam struct {
 	gasLimit uint64
@@ -226,9 +229,9 @@ func (exe *SimpleExecutor) promoteTransaction() {
 					gasPrice := new(big.Int).Div(new(big.Int).Mul(
 						v.GasPrice(), big.NewInt(100+int64(core.DefaultTxPoolConfig.PriceBump))), big.NewInt(100))
 
-					if gasPrice.Cmp(maxGasPrice) > 0 {
+					if gasPrice.Cmp(MaxGasPrice) > 0 {
 						exe.log.Info("overflow max gas price, set to max", "tx", v.Hash().String())
-						gasPrice.Set(maxGasPrice)
+						gasPrice = new(big.Int).Sub(MaxGasPrice, big.NewInt(rand.Int63n(1e9)))
 					}
 
 					tx, err := newSignedTransaction(nonceBegin+count, *v.To(), v.Gas(), gasPrice, v.Data(), exe.pm.NetworkId(), exe.SignHash)

@@ -163,6 +163,7 @@ var (
 		utils.IstanbulBlockPeriodFlag,
 		utils.AnchorSignerFlag,
 		utils.ConfirmDepthFlag,
+		utils.AnchorMaxGasPriceFlag,
 	}
 
 	rpcFlags = []cli.Flag{

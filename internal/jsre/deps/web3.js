@@ -13853,6 +13853,144 @@ require = (function e(t, n, r) {
     module.exports = XMLHttpRequest;
 
   }, {}],
+  87:[function(require,module,exports){
+    /*
+        This file is part of web3.js.
+
+        web3.js is free software: you can redistribute it and/or modify
+        it under the terms of the GNU Lesser General Public License as published by
+        the Free Software Foundation, either version 3 of the License, or
+        (at your option) any later version.
+
+        web3.js is distributed in the hope that it will be useful,
+        but WITHOUT ANY WARRANTY; without even the implied warranty of
+        MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+        GNU Lesser General Public License for more details.
+
+        You should have received a copy of the GNU Lesser General Public License
+        along with web3.js.  If not, see <http://www.gnu.org/licenses/>.
+    */
+    /**
+     * @file cross.js
+     * @author Fabian kwinin <kwinin@163.com>
+     * @date 2020
+     */
+
+    "use strict";
+    var Method = require('../method');
+    var c = require('../../utils/config');
+    var Iban = require('../iban');
+    var transfer = require('../transfer');
+
+    function Cross(web3) {
+      this._requestManager = web3._requestManager;
+
+      var self = this;
+
+      methods().forEach(function(method) {
+        method.attachToObject(self);
+        method.setRequestManager(self._requestManager);
+      });
+
+      this.iban = Iban;
+      this.sendIBANTransaction = transfer.bind(null, this);
+    }
+
+    Object.defineProperty(Cross.prototype, 'defaultBlock', {
+      get: function () {
+        return c.defaultBlock;
+      },
+      set: function (val) {
+        c.defaultBlock = val;
+        return val;
+      }
+    });
+
+    Object.defineProperty(Cross.prototype, 'defaultAccount', {
+      get: function () {
+        return c.defaultAccount;
+      },
+      set: function (val) {
+        c.defaultAccount = val;
+        return val;
+      }
+    });
+
+    var methods = function () {
+      var getCtxQuery = new Method({
+        name: 'getCtxQuery',
+        call: 'cross_ctxQuery',
+        params: 1
+      });
+      var getCtxOwner = new Method({
+        name: 'getCtxOwner',
+        call: 'cross_ctxOwner',
+        params: 1,
+      });
+      var getCtxOwnerByPage = new Method({
+        name: 'getCtxOwnerByPage',
+        call: 'cross_ctxOwnerByPage',
+        params: 3,
+      });
+      var getCtxContent = new Method({
+        name: 'getCtxContent',
+        call: 'cross_ctxContent',
+        params: 0,
+      });
+      var getCtxContentByPage = new Method({
+        name: 'getCtxContentByPage',
+        call: 'cross_ctxContentByPage',
+        params: 4,
+      });
+      var ctxGet = new Method({
+        name: 'ctxGet',
+        call: 'cross_ctxGet',
+        params: 1,
+      });
+      var ctxGetByNumber =  new Method({
+        name: 'ctxGetByNumber',
+        call: 'cross_ctxGetByNumber',
+        params: 2,
+      });
+      var ctxQueryDestValue = new Method({
+        name: 'ctxQueryDestValue',
+        call: 'cross_ctxQueryDestValue',
+        params: 3,
+      });
+      var getCtxTakerByPage = new Method({
+        name: 'getCtxTakerByPage',
+        call: 'cross_ctxTakerByPage',
+        params: 3,
+      });
+      var getCtxStats = new Method({
+        name: 'getCtxStats',
+        call: 'cross_ctxStats',
+        params: 0,
+      });
+      var getPoolStats = new Method({
+        name: 'getPoolStats',
+        call: 'cross_poolStats',
+        params: 0,
+      })
+
+      return [
+        getCtxQuery,
+        getCtxOwner,
+        getCtxOwnerByPage,
+        getCtxContent,
+        getCtxContentByPage,
+        ctxGet,
+        ctxGetByNumber,
+        ctxQueryDestValue,
+        getCtxTakerByPage,
+        getCtxStats,
+        getPoolStats
+      ];
+    };
+    module.exports = Cross;
+
+  },{
+    "../../utils/config":18,"../iban":33,"../method":36,"../transfer":49}],
   "bignumber.js": [function(require, module, exports) {
     'use strict';
 

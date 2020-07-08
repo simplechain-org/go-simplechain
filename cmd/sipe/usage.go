@@ -85,6 +85,7 @@ var AppHelpFlagGroups = []flagGroup{
 			utils.ContractSubFlag,
 			utils.AnchorSignerFlag,
 			utils.ConfirmDepthFlag,
+			utils.AnchorMaxGasPriceFlag,
 		},
 	},
 	{

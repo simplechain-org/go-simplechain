@@ -884,6 +884,11 @@ var (
 		Usage: "anchor's confirm block depth",
 		Value: 12,
 	}
+	AnchorMaxGasPriceFlag = cli.Int64Flag{
+		Name:  "anchor.maxgasprice",
+		Usage: "anchor's max gasprice(GWei) for cross chain txs",
+		Value: 100,
+	}
 )
 
 // MakeDataDir retrieves the currently requested data directory, terminating

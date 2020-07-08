@@ -231,9 +231,11 @@ type testChainRetriever struct{}
 func (r testChainRetriever) CanAcceptTxs() bool                                              { return true }
 func (r testChainRetriever) ConfirmedDepth() uint64                                          { return 1 }
 func (r testChainRetriever) CurrentBlockNumber() uint64                                      { return 1 }
-func (r testChainRetriever) GetTransactionNumberOnChain(tx trigger.Transaction) uint64       { return 0 }
-func (r testChainRetriever) GetConfirmedTransactionNumberOnChain(trigger.Transaction) uint64 { return 1 }
-func (r testChainRetriever) GetTransactionTimeOnChain(tx trigger.Transaction) uint64         { return 0 }
+func (r testChainRetriever) GetTransactionNumberOnChain(tx trigger.Transaction) uint64 { return 0 }
+func (r testChainRetriever) GetConfirmedTransactionNumberOnChain(trigger.Transaction) uint64 {
+	return 1
+}
+func (r testChainRetriever) GetTransactionTimeOnChain(tx trigger.Transaction) uint64 { return 0 }
 
 func (r testChainRetriever) IsLocalCtx(ctx trigger.Transaction) bool      { return true }
 func (r testChainRetriever) IsRemoteCtx(ctx trigger.Transaction) bool     { return false }

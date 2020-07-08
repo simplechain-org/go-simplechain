@@ -112,70 +112,70 @@ func taker() {
 	}
 
 	for remoteId, value := range signatures["remote"].Data {
-		for i, v := range value {
-			if i <= 10000 { //自动最多接10000单交易
-				if v.To != (common.Address{}) && v.To != from { //指定了接单地址并且不是from的直接跳过
-					fmt.Printf("tx: %s need taker: %s\n", v.TxHash.String(), v.To.String())
-					continue
-				}
-				r := make([][32]byte, 0, len(v.R))
-				s := make([][32]byte, 0, len(v.S))
-				vv := make([]*big.Int, 0, len(v.V))
+		for _, v := range value {
+			//if i <= 50 { //自动最多接10000单交易
+			if v.To != (common.Address{}) && (v.To != from && v.From != from) { //指定了接单地址并且不是from的直接跳过
+				fmt.Printf("tx: %s need taker: %s\n", v.TxHash.String(), v.To.String())
+				continue
+			}
+			r := make([][32]byte, 0, len(v.R))
+			s := make([][32]byte, 0, len(v.S))
+			vv := make([]*big.Int, 0, len(v.V))
 
-				for i := 0; i < len(v.R); i++ {
-					rone := common.LeftPadBytes(v.R[i].ToInt().Bytes(), 32)
-					var a [32]byte
-					copy(a[:], rone)
-					r = append(r, a)
-					sone := common.LeftPadBytes(v.S[i].ToInt().Bytes(), 32)
-					var b [32]byte
-					copy(b[:], sone)
-					s = append(s, b)
-					vv = append(vv, v.V[i].ToInt())
-				}
-				//在调用这个函数中调用的chainId其实就是表示的是发单的链id
-				//也就是maker的源头，那条链调用了maker,这个链id就对应那条链的id
-				chainId := big.NewInt(int64(remoteId))
+			for i := 0; i < len(v.R); i++ {
+				rone := common.LeftPadBytes(v.R[i].ToInt().Bytes(), 32)
+				var a [32]byte
+				copy(a[:], rone)
+				r = append(r, a)
+				sone := common.LeftPadBytes(v.S[i].ToInt().Bytes(), 32)
+				var b [32]byte
+				copy(b[:], sone)
+				s = append(s, b)
+				vv = append(vv, v.V[i].ToInt())
+			}
+			//在调用这个函数中调用的chainId其实就是表示的是发单的链id
+			//也就是maker的源头，那条链调用了maker,这个链id就对应那条链的id
+			chainId := big.NewInt(int64(remoteId))
 
-				ord := Order{
-					Value:            v.Value.ToInt(),
-					TxId:             v.CTxId,
-					TxHash:           v.TxHash,
-					From:             v.From,
-					To:               v.To,
-					BlockHash:        v.BlockHash,
-					DestinationValue: v.DestinationValue.ToInt(),
-					Data:             v.Input,
-					V:                vv,
-					R:                r,
-					S:                s,
-				}
-
-				out, err := abi.Pack("taker", &ord, chainId)
-				if err != nil {
-					fmt.Println("abi.Pack err=", err)
-					continue
-				}
-
-				input := hexutil.Bytes(out)
-
-				var result common.Hash
-				if err := client.CallContext(context.Background(), &result, "eth_sendTransaction", &SendTxArgs{
-					From:     from,
-					To:       &to,
-					Gas:      &gas,
-					GasPrice: &price,
-					Value:    v.DestinationValue,
-					Input:    &input,
-				}); err != nil {
-					fmt.Println("SendTransaction", "err", err)
-					return
-				}
-
-				fmt.Printf("eth_sendTransaction result=%s, ctxID=%s\n", result.Hex(), v.CTxId.String())
+			ord := Order{
+				Value:            v.Value.ToInt(),
+				TxId:             v.CTxId,
+				TxHash:           v.TxHash,
+				From:             v.From,
+				To:               v.To,
+				BlockHash:        v.BlockHash,
+				DestinationValue: v.DestinationValue.ToInt(),
+				Data:             v.Input,
+				V:                vv,
+				R:                r,
+				S:                s,
 			}
 
+			out, err := abi.Pack("taker", &ord, chainId)
+			if err != nil {
+				fmt.Println("abi.Pack err=", err)
+				continue
+			}
+
+			input := hexutil.Bytes(out)
+
+			var result common.Hash
+			if err := client.CallContext(context.Background(), &result, "eth_sendTransaction", &SendTxArgs{
+				From:     from,
+				To:       &to,
+				Gas:      &gas,
+				GasPrice: &price,
+				Value:    v.DestinationValue,
+				Input:    &input,
+			}); err != nil {
+				fmt.Println("SendTransaction", "err", err)
+				return
+			}
+
+			fmt.Printf("eth_sendTransaction result=%s, ctxID=%s\n", result.Hex(), v.CTxId.String())
 		}
+
+		//}
 
 	}
 

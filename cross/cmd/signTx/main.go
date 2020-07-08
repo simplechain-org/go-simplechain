@@ -267,6 +267,7 @@ func (h *Handler) MakeEvent(chain *Chain, event *types.Log, crossTxBytes hexutil
 		panic(err)
 	}
 
+	//todo 签名要求是>2的情况；如果finish的交易补签会成功？
 	if len(crossTxBytes) > 0 {
 		var addTx cc.CrossTransaction
 
