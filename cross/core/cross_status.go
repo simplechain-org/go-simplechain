@@ -1,5 +1,10 @@
 package core
 
+import (
+	"fmt"
+	"github.com/simplechain-org/go-simplechain"
+)
+
 type CtxStatus uint8
 
 const (
@@ -58,4 +63,16 @@ func (s CtxStatus) String() string {
 
 func (s CtxStatus) MarshalText() ([]byte, error) {
 	return []byte(s.String()), nil
+}
+
+func (s *CtxStatus) UnmarshalText(input []byte) error {
+	fmt.Println(string(input))
+	for k,v := range ctxStatusToString {
+		if v == string(input) {
+	 		*s = k
+	 		return nil
+		}
+	}
+	fmt.Println("Not Found")
+	return simplechain.NotFound
 }

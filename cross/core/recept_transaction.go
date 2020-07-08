@@ -1,6 +1,7 @@
 package core
 
 import (
+	"fmt"
 	"math/big"
 
 	"github.com/simplechain-org/go-simplechain/accounts/abi"
@@ -32,7 +33,7 @@ type Recept struct {
 	TxHash common.Hash
 	From   common.Address
 	To     common.Address
-	Input  []byte
+	//Input  []byte //TODO delete
 }
 
 func (rws *ReceptTransaction) ConstructData(crossContract abi.ABI) ([]byte, error) {
@@ -41,8 +42,8 @@ func (rws *ReceptTransaction) ConstructData(crossContract abi.ABI) ([]byte, erro
 		TxHash: rws.TxHash,
 		From:   rws.From,
 		To:     rws.To,
-		Input:  nil,
 	}
+	fmt.Println(rws.ChainId.String())
 
 	return crossContract.Pack("makerFinish", rep, rws.ChainId)
 }
