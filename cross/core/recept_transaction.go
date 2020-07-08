@@ -1,7 +1,6 @@
 package core
 
 import (
-	"fmt"
 	"math/big"
 
 	"github.com/simplechain-org/go-simplechain/accounts/abi"
@@ -43,7 +42,5 @@ func (rws *ReceptTransaction) ConstructData(crossContract abi.ABI) ([]byte, erro
 		From:   rws.From,
 		To:     rws.To,
 	}
-	fmt.Println(rws.ChainId.String())
-
 	return crossContract.Pack("makerFinish", rep, rws.ChainId)
 }

@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	expireInterval    = time.Minute * 5
+	expireInterval    = time.Minute * 6
 	expireQueueNumber = 63
 )
 
@@ -84,6 +84,9 @@ func NewCrossPool(chainID *big.Int, config *cross.Config, store store, txLog fin
 	if err := pool.load(); err != nil {
 		logger.Error("Load pending transaction failed", "error", err)
 	}
+
+	pool.wg.Add(1)
+	go pool.loop()
 
 	return pool
 }
