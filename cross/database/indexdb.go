@@ -6,8 +6,9 @@ import (
 	"math/big"
 
 	"github.com/simplechain-org/go-simplechain/common"
-	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	"github.com/simplechain-org/go-simplechain/log"
+
+	cc "github.com/simplechain-org/go-simplechain/cross/core"
 
 	"github.com/asdine/storm/v3"
 	"github.com/asdine/storm/v3/index"
@@ -19,7 +20,8 @@ type indexDB struct {
 	root    *storm.DB // root db of stormDB
 	db      storm.Node
 	cache   *IndexDbCache
-	logger  log.Logger
+	//txLog   *TransactionLog
+	logger log.Logger
 }
 
 type FieldName = string
@@ -80,15 +82,6 @@ func (d *indexDB) Close() error {
 	return d.db.Commit()
 }
 
-//func (d *indexDB) rollback(cachedIds []common.Hash) {
-//	// rollback cache
-//	if d.cache != nil {
-//		for _, cached := range cachedIds {
-//			d.cache.Remove(CtxIdIndex, cached)
-//		}
-//	}
-//}
-
 func (d *indexDB) Write(ctx *cc.CrossTransactionWithSignatures) error {
 	if err := d.Writes([]*cc.CrossTransactionWithSignatures{ctx}, true); err != nil {
 		return err
@@ -121,6 +114,9 @@ func (d *indexDB) Writes(ctxList []*cc.CrossTransactionWithSignatures, replaceab
 	}
 
 	for _, ctx := range ctxList {
+		//if d.txLog.IsFinish(ctx.ID()) {
+		//	continue
+		//}
 		new := NewCrossTransactionIndexed(ctx)
 		var old CrossTransactionIndexed
 		err = tx.One(CtxIdIndex, ctx.ID(), &old)

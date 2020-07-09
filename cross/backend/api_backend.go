@@ -25,7 +25,7 @@ func one(db cdb.CtxDB, field cdb.FieldName, value interface{}) *cc.CrossTransact
 }
 
 func (h *Handler) GetByCtxID(id common.Hash) *cc.CrossTransactionWithSignatures {
-	if !h.pm.CanAcceptTxs() {
+	if !h.retriever.CanAcceptTxs() {
 		return nil
 	}
 	store, _ := h.store.GetStore(h.chainID)
@@ -33,7 +33,7 @@ func (h *Handler) GetByCtxID(id common.Hash) *cc.CrossTransactionWithSignatures 
 }
 
 func (h *Handler) GetByBlockNumber(begin, end uint64) []*cc.CrossTransactionWithSignatures {
-	if !h.pm.CanAcceptTxs() {
+	if !h.retriever.CanAcceptTxs() {
 		return nil
 	}
 	store, _ := h.store.GetStore(h.chainID)
@@ -41,7 +41,7 @@ func (h *Handler) GetByBlockNumber(begin, end uint64) []*cc.CrossTransactionWith
 }
 
 func (h *Handler) FindByTxHash(hash common.Hash) *cc.CrossTransactionWithSignatures {
-	if !h.pm.CanAcceptTxs() {
+	if !h.retriever.CanAcceptTxs() {
 		return nil
 	}
 	for _, store := range h.store.stores {
@@ -54,7 +54,7 @@ func (h *Handler) FindByTxHash(hash common.Hash) *cc.CrossTransactionWithSignatu
 
 func (h *Handler) QueryRemoteByDestinationValueAndPage(value *big.Int, pageSize,
 	startPage int) (remoteID uint64, txs []*cc.CrossTransactionWithSignatures, total int) {
-	if !h.pm.CanAcceptTxs() {
+	if !h.retriever.CanAcceptTxs() {
 		return 0, nil, 0
 	}
 	var (
@@ -70,7 +70,7 @@ func (h *Handler) QueryRemoteByDestinationValueAndPage(value *big.Int, pageSize,
 
 func (h *Handler) QueryByPage(localSize, localPage, remoteSize, remotePage int) (
 	locals map[uint64][]*cc.CrossTransactionWithSignatures, remotes map[uint64][]*cc.CrossTransactionWithSignatures, lt int, rt int) {
-	if !h.pm.CanAcceptTxs() {
+	if !h.retriever.CanAcceptTxs() {
 		return nil, nil, 0, 0
 	}
 	var (
@@ -89,7 +89,7 @@ func (h *Handler) QueryByPage(localSize, localPage, remoteSize, remotePage int) 
 }
 
 func (h *Handler) QueryLocalIllegalByPage(pageSize, startPage int) []*cc.CrossTransactionWithSignatures {
-	if !h.pm.CanAcceptTxs() {
+	if !h.retriever.CanAcceptTxs() {
 		return nil
 	}
 
@@ -105,7 +105,7 @@ func (h *Handler) QueryLocalIllegalByPage(pageSize, startPage int) []*cc.CrossTr
 
 func (h *Handler) QueryLocalBySenderAndPage(from common.Address, pageSize, startPage int) (
 	locals map[uint64][]*cc.OwnerCrossTransactionWithSignatures, total int) {
-	if !h.pm.CanAcceptTxs() {
+	if !h.retriever.CanAcceptTxs() {
 		return nil, 0
 	}
 	var (
@@ -136,7 +136,7 @@ func (h *Handler) QueryLocalBySenderAndPage(from common.Address, pageSize, start
 
 func (h *Handler) QueryRemoteByTakerAndPage(to common.Address, pageSize, startPage int) (
 	remotes map[uint64][]*cc.OwnerCrossTransactionWithSignatures, total int) {
-	if !h.pm.CanAcceptTxs() {
+	if !h.retriever.CanAcceptTxs() {
 		return nil, 0
 	}
 	var (
@@ -161,14 +161,14 @@ func (h *Handler) QueryRemoteByTakerAndPage(to common.Address, pageSize, startPa
 }
 
 func (h *Handler) PoolStats() (int, int) {
-	if !h.pm.CanAcceptTxs() {
+	if !h.retriever.CanAcceptTxs() {
 		return 0, 0
 	}
 	return h.pool.Stats()
 }
 
 func (h *Handler) StoreStats() map[uint64]map[cc.CtxStatus]int {
-	if !h.pm.CanAcceptTxs() {
+	if !h.retriever.CanAcceptTxs() {
 		return nil
 	}
 	return h.store.Stats()

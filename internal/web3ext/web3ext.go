@@ -127,6 +127,10 @@ web3._extend({
 			name: 'stats',
 			getter: 'cross_stats'
 		}),
+	    new web3._extend.Property({
+			name: 'anchors',
+			getter: 'cross_anchors'
+		}),
 	]
 });
 `

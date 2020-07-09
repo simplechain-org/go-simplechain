@@ -9,6 +9,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/p2p"
 
+	"github.com/simplechain-org/go-simplechain/cross/backend/synchronise"
 	cc "github.com/simplechain-org/go-simplechain/cross/core"
 
 	mapset "github.com/deckarep/golang-set"
@@ -34,7 +35,7 @@ type anchorPeer struct {
 	knownCTxs           mapset.Set
 	queuedLocalCtxSign  chan *cc.CrossTransaction // ctx signed by local anchor
 	queuedRemoteCtxSign chan *cc.CrossTransaction // signed ctx received by others
-	pendingFetchRequest chan *SyncPendingReq
+	pendingFetchRequest chan *synchronise.SyncPendingReq
 }
 
 func newAnchorPeer(p *p2p.Peer, rw p2p.MsgReadWriter) *anchorPeer {
@@ -126,22 +127,22 @@ func (p *anchorPeer) readStatus(mainNetwork, subNetwork uint64, mainGenesis, sub
 
 func (p *anchorPeer) RequestCtxSyncByHeight(chainID uint64, height uint64) error {
 	p.Log().Debug("Sending batch of ctx sync request", "chain", chainID, "height", height)
-	return p2p.Send(p.rw, GetCtxSyncMsg, &SyncReq{chainID, height})
+	return p2p.Send(p.rw, GetCtxSyncMsg, &synchronise.SyncReq{Chain: chainID, Height: height})
 }
 
 func (p *anchorPeer) SendSyncResponse(chain uint64, data [][]byte) error {
 	p.Log().Debug("Sending batch of ctx sync response", "chain", chain, "count", len(data))
-	return p2p.Send(p.rw, CtxSyncMsg, &SyncResp{chain, data})
+	return p2p.Send(p.rw, CtxSyncMsg, &synchronise.SyncResp{Chain: chain, Data: data})
 }
 
-func (p *anchorPeer) SendSyncPendingRequest(chain uint64, ids []common.Hash) error {
+func (p *anchorPeer) RequestPendingSync(chain uint64, ids []common.Hash) error {
 	p.Log().Debug("Sending batch of ctx pending sync request", "chain", chain, "count", len(ids))
-	return p2p.Send(p.rw, GetPendingSyncMsg, &SyncPendingReq{chain, ids})
+	return p2p.Send(p.rw, GetPendingSyncMsg, &synchronise.SyncPendingReq{Chain: chain, Ids: ids})
 }
 
 func (p *anchorPeer) SendSyncPendingResponse(chain uint64, data [][]byte) error {
 	p.Log().Debug("Sending batch of ctx pending sync response", "chain", chain, "count", len(data))
-	return p2p.Send(p.rw, PendingSyncMsg, &SyncPendingResp{chain, data})
+	return p2p.Send(p.rw, PendingSyncMsg, &synchronise.SyncPendingResp{Chain: chain, Data: data})
 }
 
 func (p *anchorPeer) MarkCrossTransaction(hash common.Hash) {

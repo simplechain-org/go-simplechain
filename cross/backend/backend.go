@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math/big"
 	"sync"
-	"sync/atomic"
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/log"
@@ -16,6 +15,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/rpc"
 
 	"github.com/simplechain-org/go-simplechain/cross"
+	"github.com/simplechain-org/go-simplechain/cross/backend/synchronise"
 	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	cdb "github.com/simplechain-org/go-simplechain/cross/database"
 	cm "github.com/simplechain-org/go-simplechain/cross/metric"
@@ -24,9 +24,9 @@ import (
 // CrossService implements node.Service
 type CrossService struct {
 	store  *CrossStore
-	txLogs *cm.TransactionLogs
+	txLogs *cdb.TransactionLogs
 
-	config *cross.Config
+	config cross.Config
 	peers  *anchorSet
 
 	main crossCommons
@@ -45,7 +45,7 @@ type crossCommons struct {
 	channel chan interface{}
 }
 
-func NewCrossService(ctx *node.ServiceContext, main, sub cross.SimpleChain, config *cross.Config) (srv *CrossService, err error) {
+func NewCrossService(ctx *node.ServiceContext, main, sub *cross.ServiceContext, config cross.Config) (srv *CrossService, err error) {
 	srv = &CrossService{
 		config:    config,
 		peers:     newAnchorSet(),
@@ -59,7 +59,7 @@ func NewCrossService(ctx *node.ServiceContext, main, sub cross.SimpleChain, conf
 	if err != nil {
 		return nil, err
 	}
-	srv.txLogs, err = cm.NewTransactionLogs(logDB)
+	srv.txLogs, err = cdb.NewTransactionLogs(logDB)
 	if err != nil {
 		return nil, err
 	}
@@ -71,20 +71,20 @@ func NewCrossService(ctx *node.ServiceContext, main, sub cross.SimpleChain, conf
 
 	mainCh, subCh := make(chan interface{}, defaultCrossChSize), make(chan interface{}, defaultCrossChSize)
 
-	mainHandler, err := NewCrossHandler(main, srv, *config, config.MainContract, mainCh, subCh)
+	mainHandler, err := NewCrossHandler(main, srv, mainCh, subCh)
 	if err != nil {
 		return nil, err
 	}
 
-	subHandler, err := NewCrossHandler(sub, srv, *config, config.SubContract, subCh, mainCh)
+	subHandler, err := NewCrossHandler(sub, srv, subCh, mainCh)
 	if err != nil {
 		return nil, err
 	}
 
-	mainHandler.RegisterChain(sub.ChainConfig().ChainID)
-	subHandler.RegisterChain(main.ChainConfig().ChainID)
+	mainHandler.RegisterChain(sub.ProtocolChain.ChainID())
+	subHandler.RegisterChain(main.ProtocolChain.ChainID())
 
-	main.RegisterAPIs([]rpc.API{
+	main.ProtocolChain.RegisterAPIs([]rpc.API{
 		{
 			Namespace: "cross",
 			Version:   "1.0",
@@ -92,7 +92,7 @@ func NewCrossService(ctx *node.ServiceContext, main, sub cross.SimpleChain, conf
 			Public:    true,
 		},
 	})
-	sub.RegisterAPIs([]rpc.API{
+	sub.ProtocolChain.RegisterAPIs([]rpc.API{
 		{
 			Namespace: "cross",
 			Version:   "1.0",
@@ -102,15 +102,15 @@ func NewCrossService(ctx *node.ServiceContext, main, sub cross.SimpleChain, conf
 	})
 
 	srv.main = crossCommons{
-		genesis: main.BlockChain().Genesis().Hash(),
-		chainID: main.BlockChain().Config().ChainID.Uint64(),
+		genesis: main.ProtocolChain.GenesisHash(),
+		chainID: main.ProtocolChain.ChainID().Uint64(),
 		handler: mainHandler,
 		channel: mainCh,
 	}
 
 	srv.sub = crossCommons{
-		genesis: sub.BlockChain().Genesis().Hash(),
-		chainID: sub.BlockChain().Config().ChainID.Uint64(),
+		genesis: sub.ProtocolChain.GenesisHash(),
+		chainID: sub.ProtocolChain.ChainID().Uint64(),
 		handler: subHandler,
 		channel: subCh,
 	}
@@ -216,6 +216,13 @@ func (srv *CrossService) handle(p *anchorPeer) error {
 	}
 	defer srv.removePeer(p.id)
 
+	if err := srv.main.handler.synchronise.RegisterPeer(p.id, p); err != nil {
+		return err
+	}
+	if err := srv.sub.handler.synchronise.RegisterPeer(p.id, p); err != nil {
+		return err
+	}
+
 	select {
 	case srv.newPeerCh <- p:
 	case <-srv.quitSync:
@@ -247,7 +254,7 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 		return errResp(ErrExtraStatusMsg, "uncontrolled status message")
 
 	case msg.Code == GetCtxSyncMsg:
-		var req SyncReq
+		var req synchronise.SyncReq
 		if err := msg.Decode(&req); err != nil {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
@@ -258,7 +265,7 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 			break
 		}
 
-		ctxList := h.GetSyncCrossTransaction(req.Height, defaultMaxSyncSize)
+		ctxList := h.GetCrossTransactionByHeight(req.Height, defaultMaxSyncSize)
 		var data [][]byte
 		for _, ctx := range ctxList {
 			b, err := rlp.EncodeToBytes(ctx)
@@ -271,14 +278,14 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 		return p.SendSyncResponse(req.Chain, data)
 
 	case msg.Code == CtxSyncMsg:
-		var resp SyncResp
+		var resp synchronise.SyncResp
 		if err := msg.Decode(&resp); err != nil {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
 		p.Log().Debug("receive ctx sync response", "chain", resp.Chain, "len(data)", len(resp.Data))
 
 		h := srv.getCrossHandler(new(big.Int).SetUint64(resp.Chain))
-		if h == nil || atomic.LoadUint32(&h.synchronising) == 0 { // ignore if handler isn't synchronising
+		if h == nil /*|| atomic.LoadUint32(&h.synchronising) == 0*/ { // ignore if handler isn't synchronising
 			break
 		}
 
@@ -291,14 +298,12 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 			ctxList = append(ctxList, &ctx)
 		}
 
-		if len(ctxList) == 0 {
-			break
+		if err := h.synchronise.DeliverCrossTransactions(p.id, ctxList); err != nil {
+			log.Debug("Failed to deliver cross tx", "error", err)
 		}
 
-		h.synchronizeCh <- ctxList
-
 	case msg.Code == GetPendingSyncMsg:
-		var req SyncPendingReq
+		var req synchronise.SyncPendingReq
 		if err := msg.Decode(&req); err != nil {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
@@ -308,7 +313,7 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 			break
 		}
 
-		ctxList := h.GetSyncPending(req.Ids)
+		ctxList := h.GetPending(req.Ids)
 		var data [][]byte
 		for _, ctx := range ctxList {
 			b, err := rlp.EncodeToBytes(ctx)
@@ -317,12 +322,10 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 			}
 			data = append(data, b)
 		}
-		if len(data) > 0 {
-			return p.SendSyncPendingResponse(req.Chain, data)
-		}
+		return p.SendSyncPendingResponse(req.Chain, data)
 
 	case msg.Code == PendingSyncMsg:
-		var resp SyncPendingResp
+		var resp synchronise.SyncPendingResp
 		if err := msg.Decode(&resp); err != nil {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
@@ -342,17 +345,8 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 			ctxList = append(ctxList, &ctx)
 		}
 
-		if len(ctxList) == 0 {
-			break
-		}
-
-		synced := h.SyncPending(ctxList)
-		p.Log().Info("sync pending cross transactions", "total", len(ctxList))
-		pending := h.Pending(synced, defaultMaxSyncSize)
-
-		if len(pending) > 0 {
-			// send next sync pending request
-			return p.SendSyncPendingRequest(resp.Chain, pending)
+		if err := h.synchronise.DeliverPending(p.id, ctxList); err != nil {
+			log.Debug("Failed to deliver pending", "error", err)
 		}
 
 	case msg.Code == CtxSignMsg:
@@ -367,7 +361,7 @@ func (srv *CrossService) handleMsg(p *anchorPeer) error {
 			break
 		}
 
-		err := h.AddRemoteCtx(ctx, true)
+		err := h.AddRemoteCtx(ctx)
 		if err == cross.ErrExpiredCtx || err == cross.ErrInvalidSignCtx {
 			break
 		}
@@ -388,7 +382,9 @@ func (srv *CrossService) removePeer(id string) {
 	}
 	log.Debug("Removing cross anchor peer", "peer", id)
 
-	// Unregister the peer from the downloader and Ethereum peer set
+	// Unregister the peer from the synchronise and anchor peer set
+	srv.main.handler.synchronise.UnregisterPeer(id)
+	srv.sub.handler.synchronise.UnregisterPeer(id)
 	if err := srv.peers.Unregister(id); err != nil {
 		log.Error("Peer removal failed", "peer", id, "err", err)
 	}
@@ -412,6 +408,31 @@ func (srv *CrossService) BroadcastCrossTx(ctxs []*cc.CrossTransaction, local boo
 	}
 }
 
+func (srv *CrossService) sync() {
+	for {
+		select {
+		case p := <-srv.newPeerCh:
+			if srv.peers.Len() > 0 {
+				srv.synchronise(srv.peers.BestPeer())
+			}
+			srv.syncPending(p)
+
+		case <-srv.quitSync:
+			return
+		}
+	}
+}
+
+func (srv *CrossService) synchronise(main, sub *anchorPeer) {
+	go srv.main.handler.synchronise.Synchronise(main.id, main.crossStatus.MainHeight)
+	go srv.sub.handler.synchronise.Synchronise(sub.id, sub.crossStatus.SubHeight)
+}
+
+func (srv *CrossService) syncPending(peer *anchorPeer) {
+	go srv.main.handler.synchronise.SynchronisePending(peer.id)
+	go srv.sub.handler.synchronise.SynchronisePending(peer.id)
+}
+
 type CrossNodeInfo struct {
 	MainChain   uint64       `json:"mainChain"`
 	MainGenesis common.Hash  `json:"mainGenesis"`
@@ -422,7 +443,7 @@ type CrossNodeInfo struct {
 
 func (srv *CrossService) NodeInfo() *CrossNodeInfo {
 	return &CrossNodeInfo{
-		Config:      *srv.config,
+		Config:      srv.config,
 		MainChain:   srv.main.chainID,
 		MainGenesis: srv.main.genesis,
 		SubChain:    srv.sub.chainID,

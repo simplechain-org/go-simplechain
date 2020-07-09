@@ -12,7 +12,7 @@ const (
 	protocolVersion    = 1
 	protocolMaxMsgSize = 10 * 1024 * 1024
 	handshakeTimeout   = 5 * time.Second
-	rttMaxEstimate     = 20 * time.Second // Maximum round-trip time to target for download requests
+	//rttMaxEstimate     = 20 * time.Second // Maximum round-trip time to target for download requests
 	defaultMaxSyncSize = 100
 	defaultCrossChSize = 100
 

@@ -1,7 +1,6 @@
 package core
 
 import (
-	"fmt"
 	"github.com/simplechain-org/go-simplechain"
 )
 
@@ -27,7 +26,8 @@ const (
 /**
   |------| <-new-- maker         |------|
   |local | (pending->waiting)	 |remote|
-  |      |						 |      |
+  |      | (upAnchor->illegal)   |      |
+  |      |                       |    	|
   |ctxdb |		   taker --mod-> |ctxdb |
   |      |			 (executing) |      |
   |status|						 |status|
@@ -65,13 +65,11 @@ func (s CtxStatus) MarshalText() ([]byte, error) {
 }
 
 func (s *CtxStatus) UnmarshalText(input []byte) error {
-	fmt.Println(string(input))
-	for k,v := range ctxStatusToString {
+	for k, v := range ctxStatusToString {
 		if v == string(input) {
-	 		*s = k
-	 		return nil
+			*s = k
+			return nil
 		}
 	}
-	fmt.Println("Not Found")
 	return simplechain.NotFound
 }

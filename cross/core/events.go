@@ -58,19 +58,13 @@ type CrossBlockEvent struct {
 	NewFinish       NewFinishEvent
 	ConfirmedFinish ConfirmedFinishEvent
 	NewAnchor       NewAnchorEvent
+	ReorgTaker      NewTakerEvent
+	ReorgFinish     NewFinishEvent
 }
 
 func (e CrossBlockEvent) IsEmpty() bool {
 	return len(e.ConfirmedMaker.Txs)|len(e.ConfirmedTaker.Txs)|
 		len(e.ConfirmedFinish.Finishes)|len(e.NewTaker.Takers)|
-		len(e.NewFinish.Finishes)|len(e.NewAnchor.ChainInfo) == 0
-}
-
-type ReorgBlockEvent struct {
-	ReorgTaker  NewTakerEvent
-	ReorgFinish NewFinishEvent
-}
-
-func (e ReorgBlockEvent) IsEmpty() bool {
-	return len(e.ReorgTaker.Takers)|len(e.ReorgFinish.Finishes) == 0
+		len(e.NewFinish.Finishes)|len(e.NewAnchor.ChainInfo)|
+		len(e.ReorgTaker.Takers)|len(e.ReorgFinish.Finishes) == 0
 }

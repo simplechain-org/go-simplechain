@@ -11,10 +11,11 @@ import (
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/core/vm"
-	"github.com/simplechain-org/go-simplechain/cross"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/rpc"
+
+	"github.com/simplechain-org/go-simplechain/cross/trigger/simpletrigger"
 )
 
 var (
@@ -33,10 +34,10 @@ type CallArgs struct {
 
 type GasHelper struct {
 	blockchain *core.BlockChain
-	chain      cross.SimpleChain
+	chain      simpletrigger.SimpleChain
 }
 
-func NewGasHelper(blockchain *core.BlockChain, chain cross.SimpleChain) *GasHelper {
+func NewGasHelper(blockchain *core.BlockChain, chain simpletrigger.SimpleChain) *GasHelper {
 	return &GasHelper{blockchain: blockchain, chain: chain}
 }
 

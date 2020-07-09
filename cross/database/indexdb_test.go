@@ -1,7 +1,6 @@
 package db
 
 import (
-	"fmt"
 	"math/big"
 	"math/rand"
 	"sync"
@@ -158,8 +157,8 @@ func TestIndexDB_Update(t *testing.T) {
 	assert.NoError(t, Update(db, cws))
 	{
 		var ctx CrossTransactionIndexed
-		db.db.One(CtxIdIndex, ctxID, &ctx)
-		fmt.Println(ctx.Status)
+		assert.NoError(t, db.db.One(CtxIdIndex, ctxID, &ctx))
+		assert.Equal(t, cc.CtxStatusFinishing, cc.CtxStatus(ctx.Status))
 	}
 	assert.NoError(t, db.Update(ctxID, func(ctx *CrossTransactionIndexed) {
 		ctx.Status = uint8(cws.Status)
@@ -177,8 +176,8 @@ func TestIndexDB_Update(t *testing.T) {
 	}))
 	{
 		var ctx CrossTransactionIndexed
-		db.db.One(CtxIdIndex, ctxID, &ctx)
-		fmt.Println(ctx.Status)
+		assert.NoError(t, db.db.One(CtxIdIndex, ctxID, &ctx))
+		assert.Equal(t, cc.CtxStatusFinishing, cc.CtxStatus(ctx.Status))
 	}
 
 }

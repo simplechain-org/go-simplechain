@@ -31,7 +31,7 @@ func (ids CtxIDs) String() string {
 }
 
 var ErrDuplicateSign = errors.New("signatures already exist")
-var ErrInvalidSign = errors.New("not same ctx")
+var ErrInvalidSign = errors.New("invalid signature, different sign hash")
 
 type CrossTransaction struct {
 	Data ctxdata

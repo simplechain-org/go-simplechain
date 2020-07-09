@@ -74,7 +74,7 @@ func register() {
 	}
 	remoteChainId := new(big.Int).SetUint64(*chainId)
 
-	maxValue := new(big.Int).SetUint64(1e22)
+	maxValue, _ := new(big.Int).SetString("10000000000000000000000", 10)
 
 	signConfirmCount := uint8(*signConfirm)
 
