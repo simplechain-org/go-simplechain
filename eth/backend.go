@@ -224,7 +224,7 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 	eth.bloomIndexer.Start(eth.blockchain)
 
 	if config.TxPool.Journal != "" {
-		config.TxPool.Journal = ctx.ResolvePath(fmt.Sprintf("mainChain_%s", config.TxPool.Journal))
+		config.TxPool.Journal = ctx.ResolvePath(config.TxPool.Journal)
 	}
 	eth.txPool = core.NewTxPool(config.TxPool, chainConfig, eth.blockchain)
 
