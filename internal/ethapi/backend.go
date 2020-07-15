@@ -84,6 +84,12 @@ type Backend interface {
 
 	ChainConfig() *params.ChainConfig
 	CurrentBlock() *types.Block
+
+	//CtxStats() (pending int)
+	//CtxStatus() (pending, queue int)
+	//
+	//CtxPoolContent() (map[uint64][]*types.CrossTransactionWithSignatures, map[uint64][]*types.CrossTransactionWithSignatures)
+	//GetSelfCtx(from common.Address) (map[uint64][]*types.CrossTransactionWithSignatures, map[uint64][]*types.CrossTransactionWithSignatures)
 }
 
 func GetAPIs(apiBackend Backend) []rpc.API {

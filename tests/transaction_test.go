@@ -44,7 +44,7 @@ func TestTransaction(t *testing.T) {
 	// The value is larger than uint64, which according to the test is invalid.
 	// Geth accepts it, which is not a consensus issue since we use big.Int's
 	// internally to calculate the cost
-	txt.skipLoad("^ttValue/TransactionWithHighValueOverflow.json")
+	//txt.skipLoad("^ttValue/TransactionWithHighValueOverflow.json")
 	txt.walk(t, transactionTestDir, func(t *testing.T, name string, test *TransactionTest) {
 		cfg := params.MainnetChainConfig
 		if err := txt.checkFailure(t, name, test.Run(cfg)); err != nil {

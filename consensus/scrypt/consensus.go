@@ -25,7 +25,6 @@ import (
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/consensus"
-	"github.com/simplechain-org/go-simplechain/consensus/misc"
 	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/params"
@@ -274,13 +273,7 @@ func (powScrypt *PowScrypt) verifyHeader(chain consensus.ChainReader, header, pa
 			return err
 		}
 	}
-	// If all checks passed, validate any special fields for hard forks
-	if err := misc.VerifyDAOHeaderExtraData(chain.Config(), header); err != nil {
-		return err
-	}
-	if err := misc.VerifyForkHashes(chain.Config(), header, uncle); err != nil {
-		return err
-	}
+
 	return nil
 }
 
@@ -410,10 +403,11 @@ func (powScrypt *PowScrypt) Prepare(chain consensus.ChainReader, header *types.H
 
 // Finalize implements consensus.Engine, accumulating the block and uncle rewards,
 // setting the final state on the header
-func (powScrypt *PowScrypt) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header) {
+func (powScrypt *PowScrypt) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, _ []*types.Receipt) error {
 	// Accumulate any block and uncle rewards and commit the final state root
 	accumulateRewards(chain.Config(), state, header, uncles)
-	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
+	header.Root = state.IntermediateRoot(true)
+	return nil
 }
 
 // FinalizeAndAssemble implements consensus.Engine, accumulating the block and
@@ -421,7 +415,7 @@ func (powScrypt *PowScrypt) Finalize(chain consensus.ChainReader, header *types.
 func (powScrypt *PowScrypt) FinalizeAndAssemble(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
 	// Accumulate any block and uncle rewards and commit the final state root
 	accumulateRewards(chain.Config(), state, header, uncles)
-	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
+	header.Root = state.IntermediateRoot(true)
 
 	// Header seems complete, assemble into a block and return
 	return types.NewBlock(header, txs, uncles, receipts), nil
@@ -460,7 +454,7 @@ var (
 // reward. The total reward consists of the static block reward and rewards for
 // included uncles. The coinbase of each uncle block is also rewarded.
 func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) {
-	blockReward := CalculateFixedRewards(header.Number)
+	blockReward := calculateFixedRewards(header.Number)
 	uncleReward := big.NewInt(0)
 	r := new(big.Int)
 	for _, uncle := range uncles {
@@ -474,7 +468,7 @@ func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header 
 		uncleReward.Add(uncleReward, r)
 	}
 
-	foundation := CalculateFoundationRewards(header.Number, blockReward)
+	foundation := calculateFoundationRewards(header.Number, blockReward)
 	blockReward.Sub(blockReward, foundation)
 	blockReward.Add(blockReward, uncleReward)
 	state.AddBalance(header.Coinbase, blockReward)
@@ -482,7 +476,7 @@ func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header 
 
 }
 
-func CalculateFixedRewards(blockNumber *big.Int) *big.Int {
+func calculateFixedRewards(blockNumber *big.Int) *big.Int {
 	reward := new(big.Int).Set(BlockReward)
 	number := new(big.Int).Set(blockNumber)
 	if number.Sign() == 1 {
@@ -494,7 +488,7 @@ func CalculateFixedRewards(blockNumber *big.Int) *big.Int {
 	return reward
 }
 
-func CalculateFoundationRewards(blockNumber *big.Int, blockReward *big.Int) *big.Int {
+func calculateFoundationRewards(blockNumber *big.Int, blockReward *big.Int) *big.Int {
 	foundation := new(big.Int).Set(blockReward)
 	foundation.Mul(foundation, big5)
 	number := new(big.Int).Set(blockNumber)

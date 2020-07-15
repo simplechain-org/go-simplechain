@@ -28,7 +28,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	lru "github.com/hashicorp/golang-lru"
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/mclock"
 	"github.com/simplechain-org/go-simplechain/common/prque"
@@ -44,6 +43,9 @@ import (
 	"github.com/simplechain-org/go-simplechain/params"
 	"github.com/simplechain-org/go-simplechain/rlp"
 	"github.com/simplechain-org/go-simplechain/trie"
+
+	lru "github.com/hashicorp/golang-lru"
+	"github.com/simplechain-org/go-simplechain/cross/trigger"
 )
 
 var (
@@ -56,10 +58,10 @@ var (
 	accountUpdateTimer = metrics.NewRegisteredTimer("chain/account/updates", nil)
 	accountCommitTimer = metrics.NewRegisteredTimer("chain/account/commits", nil)
 
-	storageReadTimer   = metrics.NewRegisteredTimer("chain/storage/reads", nil)
-	storageHashTimer   = metrics.NewRegisteredTimer("chain/storage/hashes", nil)
-	storageUpdateTimer = metrics.NewRegisteredTimer("chain/storage/updates", nil)
-	storageCommitTimer = metrics.NewRegisteredTimer("chain/storage/commits", nil)
+	storageReadTimer   = metrics.NewRegisteredTimer("chain/db/reads", nil)
+	storageHashTimer   = metrics.NewRegisteredTimer("chain/db/hashes", nil)
+	storageUpdateTimer = metrics.NewRegisteredTimer("chain/db/updates", nil)
+	storageCommitTimer = metrics.NewRegisteredTimer("chain/db/commits", nil)
 
 	blockInsertTimer     = metrics.NewRegisteredTimer("chain/inserts", nil)
 	blockValidationTimer = metrics.NewRegisteredTimer("chain/validation", nil)
@@ -177,6 +179,7 @@ type BlockChain struct {
 	badBlocks       *lru.Cache                     // Bad block cache
 	shouldPreserve  func(*types.Block) bool        // Function used to determine whether should preserve the given block.
 	terminateInsert func(common.Hash, uint64) bool // Testing hook used to terminate ancient receipt chain insertion.
+	crossSubscriber simpleSubscriber
 }
 
 // NewBlockChain returns a fully initialised block chain using information
@@ -295,6 +298,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 	}
 	// Take ownership of this particular state
 	go bc.update()
+
 	return bc, nil
 }
 
@@ -691,6 +695,11 @@ func (bc *BlockChain) HasBlock(hash common.Hash, number uint64) bool {
 	return rawdb.HasBody(bc.db, hash, number)
 }
 
+// HasBadBlock returns whether the block with the hash is a bad block. dep: Istanbul
+func (bc *BlockChain) HasBadBlock(hash common.Hash) bool {
+	return bc.badBlocks.Contains(hash)
+}
+
 // HasFastBlock checks if a fast block is fully present in the database or not.
 func (bc *BlockChain) HasFastBlock(hash common.Hash, number uint64) bool {
 	if !bc.HasBlock(hash, number) {
@@ -802,7 +811,7 @@ func (bc *BlockChain) GetUnclesInChain(block *types.Block, length int) []*types.
 }
 
 // TrieNode retrieves a blob of data associated with a trie node (or code hash)
-// either from ephemeral in-memory cache, or from persistent storage.
+// either from ephemeral in-memory cache, or from persistent db.
 func (bc *BlockChain) TrieNode(hash common.Hash) ([]byte, error) {
 	return bc.stateCache.TrieDB().Node(hash)
 }
@@ -819,6 +828,10 @@ func (bc *BlockChain) Stop() {
 	atomic.StoreInt32(&bc.procInterrupt, 1)
 
 	bc.wg.Wait()
+
+	if bc.crossSubscriber != nil {
+		bc.crossSubscriber.Stop()
+	}
 
 	// Ensure the state of a recent block is also stored to disk before exiting.
 	// We're writing three different states to catch different restart scenarios:
@@ -1289,7 +1302,7 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	}
 	rawdb.WriteBlock(bc.db, block)
 
-	root, err := state.Commit(bc.chainConfig.IsEIP158(block.Number()))
+	root, err := state.Commit(true)
 	if err != nil {
 		return NonStatTy, err
 	}
@@ -1400,6 +1413,11 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 		if len(logs) > 0 {
 			bc.logsFeed.Send(logs)
 		}
+
+		if bc.chainConfig.IsSingularity(currentBlock.Number()) && bc.crossSubscriber != nil {
+			bc.crossSubscriber.StoreCrossContractLog(block.NumberU64(), block.Hash(), logs)
+		}
+
 		// In theory we should fire a ChainHeadEvent when we inject
 		// a canonical block, but sometimes we can insert a batch of
 		// canonicial blocks. Avoid firing too much ChainHeadEvents,
@@ -1482,7 +1500,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		return 0, nil
 	}
 	// Start a parallel signature recovery (signer will fluke on fork transition, minimal perf loss)
-	senderCacher.recoverFromBlocks(types.MakeSigner(bc.chainConfig, chain[0].Number()), chain)
+	senderCacher.recoverFromBlocks(types.MakeSigner(bc.chainConfig), chain)
 
 	var (
 		stats     = insertStats{startTime: mclock.Now()}
@@ -1627,7 +1645,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 			return it.index, err
 		}
 		// If we have a followup block, run that against the current state to pre-cache
-		// transactions and probabilistically some of the account/storage trie nodes.
+		// transactions and probabilistically some of the account/db trie nodes.
 		var followupInterrupt uint32
 
 		if !bc.cacheConfig.TrieCleanNoPrefetch {
@@ -1724,6 +1742,10 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		stats.usedGas += usedGas
 
 		dirty, _ := bc.stateCache.TrieDB().Size()
+		if bc.crossSubscriber != nil { // report chain info for anchor node
+			stats.report(chain, it.index, dirty, "chainID", bc.chainConfig.ChainID)
+			continue
+		}
 		stats.report(chain, it.index, dirty)
 	}
 	// Any blocks remaining here? The only ones we care about are the future ones
@@ -1872,6 +1894,7 @@ func (bc *BlockChain) insertSideChain(block *types.Block, it *insertIterator) (i
 // blocks and inserts them to be part of the new canonical chain and accumulates
 // potential missing transactions and post an event about them.
 func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
+	reorgNumber := newBlock.Number()
 	var (
 		newChain    types.Blocks
 		oldChain    types.Blocks
@@ -2016,6 +2039,7 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 		rawdb.DeleteCanonicalHash(batch, i)
 	}
 	batch.Write()
+
 	// If any logs need to be fired, do it now. In theory we could avoid creating
 	// this goroutine if there are no events to fire, but realistcally that only
 	// ever happens if we're reorging empty blocks, which will only happen on idle
@@ -2026,6 +2050,11 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 	if len(rebirthLogs) > 0 {
 		bc.logsFeed.Send(mergeLogs(rebirthLogs, false))
 	}
+
+	if bc.chainConfig.IsSingularity(reorgNumber) && bc.crossSubscriber != nil {
+		bc.crossSubscriber.NotifyBlockReorg(reorgNumber, deletedLogs, rebirthLogs)
+	}
+
 	if len(oldChain) > 0 {
 		for i := len(oldChain) - 1; i >= 0; i-- {
 			bc.chainSideFeed.Send(ChainSideEvent{Block: oldChain[i]})
@@ -2228,4 +2257,39 @@ func (bc *BlockChain) SubscribeLogsEvent(ch chan<- []*types.Log) event.Subscript
 // block processing has started while false means it has stopped.
 func (bc *BlockChain) SubscribeBlockProcessingEvent(ch chan<- bool) event.Subscription {
 	return bc.scope.Track(bc.blockProcFeed.Subscribe(ch))
+}
+
+// GetReceiptsByHash retrieves the receipts for all transactions in a given block.
+func (bc *BlockChain) GetReceiptsByTxHash(hash common.Hash) *types.Receipt {
+	rep, _, _, _ := rawdb.ReadReceipt(bc.db, hash, bc.chainConfig)
+	if rep == nil {
+		return nil
+	}
+	return rep
+}
+
+func (bc *BlockChain) GetTransactionByTxHash(hash common.Hash) (*types.Transaction, common.Hash, uint64) {
+	tx, blockHash, blockNumber, _ := rawdb.ReadTransaction(bc.db, hash)
+	if tx == nil {
+		return nil, common.Hash{}, 0
+	}
+	return tx, blockHash, blockNumber
+}
+
+func (bc *BlockChain) GetBlockNumber(hash common.Hash) *uint64 {
+	return bc.hc.GetBlockNumber(hash)
+}
+
+func (bc *BlockChain) GetChainConfig() *params.ChainConfig {
+	return bc.chainConfig
+}
+
+type simpleSubscriber interface {
+	StoreCrossContractLog(blockNumber uint64, hash common.Hash, logs []*types.Log)
+	NotifyBlockReorg(blockNumber *big.Int, deletedLogs [][]*types.Log, rebirthLogs [][]*types.Log)
+	Stop()
+}
+
+func (bc *BlockChain) SetCrossSubscriber(s trigger.Subscriber) {
+	bc.crossSubscriber = s.(simpleSubscriber) // panic if failed
 }

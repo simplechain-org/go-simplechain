@@ -63,7 +63,7 @@ type flagGroup struct {
 // AppHelpFlagGroups is the application flags, grouped by functionality.
 var AppHelpFlagGroups = []flagGroup{
 	{
-		Name: "ETHEREUM",
+		Name: "SIMPLECHAIN",
 		Flags: []cli.Flag{
 			configFileFlag,
 			utils.DataDirFlag,
@@ -80,6 +80,12 @@ var AppHelpFlagGroups = []flagGroup{
 			utils.IdentityFlag,
 			utils.LightKDFFlag,
 			utils.WhitelistFlag,
+			utils.RoleFlag,
+			utils.ContractMainFlag,
+			utils.ContractSubFlag,
+			utils.AnchorSignerFlag,
+			utils.ConfirmDepthFlag,
+			utils.AnchorMaxGasPriceFlag,
 		},
 	},
 	{
@@ -139,6 +145,14 @@ var AppHelpFlagGroups = []flagGroup{
 		},
 	},
 	{
+		Name: "RAFT",
+		Flags: []cli.Flag{
+			utils.RaftModeFlag,
+			utils.RaftJoinExistingFlag,
+			utils.RaftPortFlag,
+		},
+	},
+	{
 		Name: "ACCOUNT",
 		Flags: []cli.Flag{
 			utils.UnlockedAccountFlag,
@@ -172,6 +186,19 @@ var AppHelpFlagGroups = []flagGroup{
 			utils.JSpathFlag,
 			utils.ExecFlag,
 			utils.PreloadJSFlag,
+			utils.SUBRPCEnabledFlag,
+			utils.SUBRPCListenAddrFlag,
+			utils.SUBRPCPortFlag,
+			utils.SUBRPCApiFlag,
+			utils.SUBWSEnabledFlag,
+			utils.SUBWSListenAddrFlag,
+			utils.SUBWSPortFlag,
+			utils.SUBWSApiFlag,
+			utils.SUBWSAllowedOriginsFlag,
+			utils.SUBIPCDisabledFlag,
+			utils.SUBIPCPathFlag,
+			utils.SUBRPCCORSDomainFlag,
+			utils.SUBRPCVirtualHostsFlag,
 		},
 	},
 	{
@@ -258,6 +285,13 @@ var AppHelpFlagGroups = []flagGroup{
 			utils.StratumFanout,
 			utils.MinerType,
 			utils.CPUAgentOff,
+		},
+	},
+	{
+		Name: "ISTANBUL",
+		Flags: []cli.Flag{
+			utils.IstanbulRequestTimeoutFlag,
+			utils.IstanbulBlockPeriodFlag,
 		},
 	},
 	{

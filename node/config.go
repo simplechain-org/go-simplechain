@@ -191,6 +191,73 @@ type Config struct {
 	staticNodesWarning     bool
 	trustedNodesWarning    bool
 	oldGethResourceWarning bool
+
+	Role common.ChainRole
+
+	//for sub
+	// IPCPath is the requested location to place the IPC endpoint. If the path is
+	// a simple file name, it is placed inside the data directory (or on the root
+	// pipe path on Windows), whereas if it's a resolvable path name (absolute or
+	// relative), then that specific path is enforced. An empty path disables IPC.
+	SubIPCPath string `toml:",omitempty"`
+
+	// HTTPHost is the host interface on which to start the HTTP RPC server. If this
+	// field is empty, no HTTP API endpoint will be started.
+	SubHTTPHost string `toml:",omitempty"`
+
+	// HTTPPort is the TCP port number on which to start the HTTP RPC server. The
+	// default zero value is/ valid and will pick a port number randomly (useful
+	// for ephemeral nodes).
+	SubHTTPPort int `toml:",omitempty"`
+
+	// HTTPCors is the Cross-Origin Resource Sharing header to send to requesting
+	// clients. Please be aware that CORS is a browser enforced security, it's fully
+	// useless for custom HTTP clients.
+	SubHTTPCors []string `toml:",omitempty"`
+
+	// HTTPVirtualHosts is the list of virtual hostnames which are allowed on incoming requests.
+	// This is by default {'localhost'}. Using this prevents attacks like
+	// DNS rebinding, which bypasses SOP by simply masquerading as being within the same
+	// origin. These attacks do not utilize CORS, since they are not cross-domain.
+	// By explicitly checking the Host-header, the server will not allow requests
+	// made against the server with a malicious host domain.
+	// Requests using ip address directly are not affected
+	SubHTTPVirtualHosts []string `toml:",omitempty"`
+
+	// HTTPModules is a list of API modules to expose via the HTTP RPC interface.
+	// If the module list is empty, all RPC API endpoints designated public will be
+	// exposed.
+	SubHTTPModules []string `toml:",omitempty"`
+
+	// HTTPTimeouts allows for customization of the timeout values used by the HTTP RPC
+	// interface.
+	SubHTTPTimeouts rpc.HTTPTimeouts
+
+	// WSHost is the host interface on which to start the websocket RPC server. If
+	// this field is empty, no websocket API endpoint will be started.
+	SubWSHost string `toml:",omitempty"`
+
+	// WSPort is the TCP port number on which to start the websocket RPC server. The
+	// default zero value is/ valid and will pick a port number randomly (useful for
+	// ephemeral nodes).
+	SubWSPort int `toml:",omitempty"`
+
+	// WSOrigins is the list of domain to accept websocket requests from. Please be
+	// aware that the server can only act upon the HTTP request the client sends and
+	// cannot verify the validity of the request header.
+	SubWSOrigins []string `toml:",omitempty"`
+
+	// WSModules is a list of API modules to expose via the websocket RPC interface.
+	// If the module list is empty, all RPC API endpoints designated public will be
+	// exposed.
+	SubWSModules []string `toml:",omitempty"`
+
+	// WSExposeAll exposes all API modules via the WebSocket RPC interface rather
+	// than just the public ones.
+	//
+	// *WARNING* Only set this if the node is running in a trusted network, exposing
+	// private APIs to untrusted users is a major security risk.
+	SubWSExposeAll bool `toml:",omitempty"`
 }
 
 // IPCEndpoint resolves an IPC endpoint based on a configured value, taking into
@@ -542,4 +609,43 @@ func (c *Config) warnOnce(w *bool, format string, args ...interface{}) {
 	}
 	l.Warn(fmt.Sprintf(format, args...))
 	*w = true
+}
+func (c *Config) SubIPCEndpoint() string {
+	// Short circuit if IPC has not been enabled
+	if c.SubIPCPath == "" {
+		return ""
+	}
+	// On windows we can only use plain top-level pipes
+	if runtime.GOOS == "windows" {
+		if strings.HasPrefix(c.SubIPCPath, `\\.\pipe\`) {
+			return c.SubIPCPath
+		}
+		return `\\.\pipe\` + c.SubIPCPath
+	}
+	// Resolve names into the data directory full paths otherwise
+	if filepath.Base(c.SubIPCPath) == c.SubIPCPath {
+		if c.DataDir == "" {
+			return filepath.Join(os.TempDir(), c.SubIPCPath)
+		}
+		return filepath.Join(c.DataDir, c.SubIPCPath)
+	}
+	return c.SubIPCPath
+}
+
+// HTTPEndpoint resolves an HTTP endpoint based on the configured host interface
+// and port parameters.
+func (c *Config) SubHTTPEndpoint() string {
+	if c.SubHTTPHost == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s:%d", c.SubHTTPHost, c.SubHTTPPort)
+}
+
+// WSEndpoint resolves a websocket endpoint based on the configured host interface
+// and port parameters.
+func (c *Config) SubWSEndpoint() string {
+	if c.SubWSHost == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s:%d", c.SubWSHost, c.SubWSPort)
 }

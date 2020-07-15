@@ -32,9 +32,9 @@ import (
 )
 
 var (
-	errClosed            = errors.New("peer set is closed")
-	errAlreadyRegistered = errors.New("peer is already registered")
-	errNotRegistered     = errors.New("peer is not registered")
+	ErrClosed            = errors.New("peer set is closed")
+	ErrAlreadyRegistered = errors.New("peer is already registered")
+	ErrNotRegistered     = errors.New("peer is not registered")
 )
 
 const (
@@ -204,7 +204,7 @@ func (p *peer) SendTransactions(txs types.Transactions) error {
 	for p.knownTxs.Cardinality() >= maxKnownTxs {
 		p.knownTxs.Pop()
 	}
-	return p2p.Send(p.rw, TxMsg, txs)
+	return p2p.Send(p.rw, TransactionMsg, txs)
 }
 
 // AsyncSendTransactions queues list of transactions propagation to a remote
@@ -505,10 +505,10 @@ func (ps *peerSet) Register(p *peer) error {
 	defer ps.lock.Unlock()
 
 	if ps.closed {
-		return errClosed
+		return ErrClosed
 	}
 	if _, ok := ps.peers[p.id]; ok {
-		return errAlreadyRegistered
+		return ErrAlreadyRegistered
 	}
 	ps.peers[p.id] = p
 	go p.broadcast()
@@ -524,7 +524,7 @@ func (ps *peerSet) Unregister(id string) error {
 
 	p, ok := ps.peers[id]
 	if !ok {
-		return errNotRegistered
+		return ErrNotRegistered
 	}
 	delete(ps.peers, id)
 	p.close()

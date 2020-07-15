@@ -593,3 +593,6 @@ func (w *wallet) SignTextWithPassphrase(account accounts.Account, passphrase str
 func (w *wallet) SignTxWithPassphrase(account accounts.Account, passphrase string, tx *types.Transaction, chainID *big.Int) (*types.Transaction, error) {
 	return w.SignTx(account, tx, chainID)
 }
+func (w *wallet) SignHash(account accounts.Account, hash []byte) ([]byte, error) {
+	return nil, accounts.ErrNotSupported
+}

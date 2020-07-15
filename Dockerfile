@@ -1,10 +1,11 @@
 # Build Sipe in a stock Go builder container
-FROM golang:1.10-alpine as builder
+FROM golang:1.13-alpine as builder
 
-RUN apk add --no-cache make gcc musl-dev linux-headers
+RUN apk add --no-cache make gcc musl-dev linux-headers git
 
 ADD . /go-simplechain
 RUN cd /go-simplechain && make sipe
+
 
 # Pull Sipe into a second stage deploy alpine container
 FROM alpine:latest

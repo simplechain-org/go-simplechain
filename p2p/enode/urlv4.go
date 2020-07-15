@@ -83,6 +83,14 @@ func ParseV4(rawurl string) (*Node, error) {
 // NewV4 creates a node from discovery v4 node information. The record
 // contained in the node has a zero-length signature.
 func NewV4(pubkey *ecdsa.PublicKey, ip net.IP, tcp, udp int) *Node {
+	return newV4(pubkey, ip, tcp, udp, 0)
+}
+
+func NewV4WithRaft(pubkey *ecdsa.PublicKey, ip net.IP, tcp, udp int, raftPort int) *Node {
+	return newV4(pubkey, ip, tcp, udp, raftPort)
+}
+
+func newV4(pubkey *ecdsa.PublicKey, ip net.IP, tcp, udp int, raftPort int) *Node {
 	var r enr.Record
 	if len(ip) > 0 {
 		r.Set(enr.IP(ip))
@@ -93,6 +101,10 @@ func NewV4(pubkey *ecdsa.PublicKey, ip net.IP, tcp, udp int) *Node {
 	if tcp != 0 {
 		r.Set(enr.TCP(tcp))
 	}
+	if raftPort != 0 {
+		r.Set(enr.RaftPort(raftPort))
+	}
+
 	signV4Compat(&r, pubkey)
 	n, err := New(v4CompatID{}, &r)
 	if err != nil {
@@ -151,7 +163,24 @@ func parseComplete(rawurl string) (*Node, error) {
 			return nil, errors.New("invalid discport in query")
 		}
 	}
+
+	if qv.Get("raftport") != "" {
+		raftPort, err := strconv.ParseUint(qv.Get("raftport"), 10, 16)
+		if err != nil {
+			return nil, errors.New("invalid raftport in query")
+		}
+		return NewV4WithRaft(id, ip, int(tcpPort), int(udpPort), int(raftPort)), nil
+	}
+
 	return NewV4(id, ip, int(tcpPort), int(udpPort)), nil
+}
+
+func HexPubkey(h string) (*ecdsa.PublicKey, error) {
+	k, err := parsePubkey(h)
+	if err != nil {
+		return nil, err
+	}
+	return k, err
 }
 
 // parsePubkey parses a hex-encoded secp256k1 public key.
@@ -189,6 +218,15 @@ func (n *Node) URLv4() string {
 		u.Host = addr.String()
 		if n.UDP() != n.TCP() {
 			u.RawQuery = "discport=" + strconv.Itoa(n.UDP())
+		}
+		raftPort := n.RaftPort()
+		if raftPort != 0 {
+			raftQuery := "raftport=" + strconv.Itoa(raftPort)
+			if len(u.RawQuery) > 0 {
+				u.RawQuery = u.RawQuery + "&" + raftQuery
+			} else {
+				u.RawQuery = raftQuery
+			}
 		}
 	}
 	return u.String()

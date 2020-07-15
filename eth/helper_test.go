@@ -109,6 +109,10 @@ func (p *testTxPool) AddRemotes(txs []*types.Transaction) []error {
 	}
 	return make([]error, len(txs))
 }
+func (p *testTxPool) AddLocal(tx *types.Transaction) error {
+	//TODO
+	return nil
+}
 
 // Pending returns all the transactions known to the pool
 func (p *testTxPool) Pending() (map[common.Address]types.Transactions, error) {
@@ -128,6 +132,18 @@ func (p *testTxPool) Pending() (map[common.Address]types.Transactions, error) {
 
 func (p *testTxPool) SubscribeNewTxsEvent(ch chan<- core.NewTxsEvent) event.Subscription {
 	return p.txFeed.Subscribe(ch)
+}
+func (p *testTxPool) GetCurrentNonce(address common.Address) uint64 {
+	return 0
+}
+
+func (pool *testTxPool) GetAnchorTxs(anchor common.Address) (map[common.Address]types.Transactions, error) {
+	pending := make(map[common.Address]types.Transactions)
+	return pending, nil
+}
+func (pool *testTxPool) Nonce(addr common.Address) uint64 {
+	//TODO
+	return 0
 }
 
 // newTestTransaction create a new dummy transaction.
@@ -191,7 +207,7 @@ func (p *testPeer) handshake(t *testing.T, td *big.Int, head common.Hash, genesi
 			CurrentBlock:    head,
 			GenesisBlock:    genesis,
 		}
-	case p.version == eth64:
+	case p.version == eth64: //p.version == istanbul65
 		msg = &statusData{
 			ProtocolVersion: uint32(p.version),
 			NetworkID:       DefaultConfig.NetworkId,
@@ -215,4 +231,8 @@ func (p *testPeer) handshake(t *testing.T, td *big.Int, head common.Hash, genesi
 // manager of termination.
 func (p *testPeer) close() {
 	p.app.Close()
+}
+func (p *testTxPool) AddRemote(tx *types.Transaction) error {
+	errs := p.AddRemotes([]*types.Transaction{tx})
+	return errs[0]
 }

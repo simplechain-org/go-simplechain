@@ -23,6 +23,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/simplechain-org/go-simplechain/accounts"
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"github.com/simplechain-org/go-simplechain/consensus"
@@ -37,6 +38,7 @@ import (
 
 // Backend wraps all methods required for mining.
 type Backend interface {
+	AccountManager() *accounts.Manager
 	BlockChain() *core.BlockChain
 	TxPool() *core.TxPool
 }
@@ -200,4 +202,14 @@ func (miner *Miner) Register(agent Agent) {
 
 func (miner *Miner) Unregister(agent Agent) {
 	miner.worker.unregister(agent)
+}
+
+func (miner *Miner) IsRegistered() bool {
+	for k := range miner.worker.agents {
+		_, ok := k.(*CpuAgent)
+		if ok {
+			return true
+		}
+	}
+	return false
 }

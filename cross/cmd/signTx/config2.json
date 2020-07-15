@@ -1,0 +1,21 @@
+{
+  "Anchor": "0x8e422d5Aff496974f7FaE17F6848a40C59F8b2E9",
+  "AnchorKey": "0a0da1758e569d1c85e11058106804310bced2f8a66cafe5460920052d1d224b",
+  "Main": {
+    "Url": "/Users/yusheng/Projects/crossTest/1_512_2/sipe.ipc",
+    "ChainID": 1,
+    "ContractAddr": "0xe9AAcB89796AADcC56a44deaFAa1937315483349",
+    "FromBlock": 0,
+    "EndBlock": 100000,
+    "ConfirmNum": 12
+  },
+  "Sub": {
+    "Url": "/Users/yusheng/Projects/crossTest/1_512_2/subsipe.ipc",
+    "ChainID": 512,
+    "ContractAddr": "0x2E56ec385C2F0A48Cd622d0FD532Ba17Abcc1D4C",
+    "FromBlock": 0,
+    "EndBlock": 100000,
+    "ConfirmNum": 12
+  }
+}
+

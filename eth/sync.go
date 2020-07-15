@@ -148,11 +148,15 @@ func (pm *ProtocolManager) syncer() {
 			if pm.peers.Len() < minDesiredPeerCount {
 				break
 			}
-			go pm.synchronise(pm.peers.BestPeer())
+			if !pm.raftMode {
+				go pm.synchronise(pm.peers.BestPeer())
+			}
 
 		case <-forceSync.C:
 			// Force a sync even if not enough peers are present
-			go pm.synchronise(pm.peers.BestPeer())
+			if !pm.raftMode {
+				go pm.synchronise(pm.peers.BestPeer())
+			}
 
 		case <-pm.noMorePeers:
 			return
@@ -171,7 +175,8 @@ func (pm *ProtocolManager) synchronise(peer *peer) {
 	td := pm.blockchain.GetTd(currentBlock.Hash(), currentBlock.NumberU64())
 
 	pHead, pTd := peer.Head()
-	if pTd.Cmp(td) <= 0 {
+
+	if td == nil || pTd.Cmp(td) <= 0 {
 		return
 	}
 	// Otherwise try to sync with the downloader

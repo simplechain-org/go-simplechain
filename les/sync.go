@@ -19,6 +19,7 @@ package les
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/simplechain-org/go-simplechain/common"
@@ -179,7 +180,7 @@ func (h *clientHandler) synchronise(peer *peer) {
 	}
 	// Fetch the remaining block headers based on the current chain header.
 	if err := h.downloader.Synchronise(peer.id, peer.Head(), peer.Td(), downloader.LightSync); err != nil {
-		log.Debug("Synchronise failed", "reason", err)
+		fmt.Println("Synchronise failed", "reason", err)
 		return
 	}
 	log.Debug("Synchronise finished", "elapsed", common.PrettyDuration(time.Since(start)))

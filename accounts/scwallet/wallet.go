@@ -787,6 +787,9 @@ func (w *Wallet) findAccountPath(account accounts.Account) (accounts.DerivationP
 
 	return accounts.ParseDerivationPath(parts[1])
 }
+func (w *Wallet) SignHash(account accounts.Account, hash []byte) ([]byte, error) {
+	return w.signHash(account, hash)
+}
 
 // Session represents a secured communication session with the wallet.
 type Session struct {
