@@ -1554,12 +1554,3 @@ func (t *txLookup) Remove(hash common.Hash) {
 
 	delete(t.all, hash)
 }
-
-func (pool *TxPool) RemoveTx(hashs []common.Hash, outofbound bool) {
-	pool.mu.Lock()
-	defer pool.mu.Unlock()
-	log.Info("RemoveTx Lock", "hashs", len(hashs))
-	for _, hash := range hashs {
-		pool.removeTx(hash, outofbound)
-	}
-}

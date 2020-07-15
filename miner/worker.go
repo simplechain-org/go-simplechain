@@ -777,11 +777,11 @@ func (w *worker) commitTransaction(tx *types.Transaction, coinbase common.Addres
 	return receipt.Logs, nil
 }
 
-func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coinbase common.Address, interrupt *int32) (bool, []common.Hash) {
+func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coinbase common.Address, interrupt *int32) bool {
 	// Short circuit if current is nil
 	if w.current == nil {
 		//log.Info("w.current == nil")
-		return true, nil
+		return true
 	}
 
 	if w.current.gasPool == nil {
@@ -789,7 +789,6 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 	}
 
 	var coalescedLogs []*types.Log
-	var txHashs []common.Hash
 	//Loop:
 	for {
 		// In the following three cases, we will interrupt the execution of the transaction.
@@ -810,7 +809,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 					inc:   true,
 				}
 			}
-			return atomic.LoadInt32(interrupt) == commitInterruptNewHead, nil
+			return atomic.LoadInt32(interrupt) == commitInterruptNewHead
 		}
 		// If we don't have enough gas for any further transactions then we're done
 		if w.current.gasPool.Gas() < params.TxGas {
@@ -847,11 +846,6 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 			log.Trace("Skipping account with hight nonce", "sender", from, "nonce", tx.Nonce())
 			txs.Pop()
 
-		//case core.ErrRepetitionCrossTransaction:
-		//	log.Trace("repetition", "sender", from, "hash", tx.Hash())
-		//	txHashs = append(txHashs, tx.Hash()) //record RepetitionCrossTransaction
-		//	txs.Pop()
-
 		case nil:
 			// Everything ok, collect the logs and shift in the next transaction from the same account
 			coalescedLogs = append(coalescedLogs, logs...)
@@ -886,7 +880,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 	if interrupt != nil {
 		w.resubmitAdjustCh <- &intervalAdjust{inc: false}
 	}
-	return false, txHashs
+	return false
 }
 
 // commitNewWork generates several new sealing tasks based on the parent block.
@@ -986,23 +980,14 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 	}
 	if len(localTxs) > 0 {
 		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, localTxs)
-		if ok, hashs := w.commitTransactions(txs, w.coinbase, interrupt); ok {
+		if w.commitTransactions(txs, w.coinbase, interrupt) {
 			return
-		} else {
-			if len(hashs) > 0 {
-				log.Info("begin RemoveTx", "hashs", len(hashs))
-				w.eth.TxPool().RemoveTx(hashs, true)
-			}
 		}
 	}
 	if len(remoteTxs) > 0 {
 		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, remoteTxs)
-		if ok, hashs := w.commitTransactions(txs, w.coinbase, interrupt); ok {
+		if w.commitTransactions(txs, w.coinbase, interrupt) {
 			return
-		} else {
-			if len(hashs) > 0 {
-				w.eth.TxPool().RemoveTx(hashs, true)
-			}
 		}
 	}
 	w.commit(uncles, w.fullTaskHook, true, tstart)

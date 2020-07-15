@@ -154,10 +154,8 @@ func (w *worker) commitRaftWork() {
 	txs := w.raftCtx.speculativeChain.WithoutProposedTxes(allTxs)
 	transactions := types.NewTransactionsByPriceAndNonce(w.current.signer, txs)
 
-	if ret, crossHashes := w.commitTransactions(transactions, w.coinbase, nil); ret {
+	if w.commitTransactions(transactions, w.coinbase, nil) {
 		return
-	} else {
-		w.eth.TxPool().RemoveTx(crossHashes, true)
 	}
 
 	if w.current.tcount == 0 {

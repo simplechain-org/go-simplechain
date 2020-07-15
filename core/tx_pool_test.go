@@ -373,7 +373,7 @@ func TestTransactionChainFork(t *testing.T) {
 	if _, err := pool.add(tx, false); err != nil {
 		t.Error("didn't expect error", err)
 	}
-	pool.RemoveTx([]common.Hash{tx.Hash()}, true)
+	pool.removeTx(tx.Hash(), true)
 
 	// reset the pool's internal state
 	resetState()
