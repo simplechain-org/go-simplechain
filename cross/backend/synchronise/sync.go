@@ -242,6 +242,8 @@ func (s *Sync) syncWithPeer(id string, peerHeight *big.Int) error {
 		}
 	}
 
+	// 通过区块log标识的跨链交易高度同步store。
+	// TODO:如果在store同步过程中，所在高度H的跨链交易状态被其他链修改(executing,executed)，那么此次状态更新讲无法被同步
 	if height := s.store.Height(); height <= peerHeight.Uint64() {
 		go p.peer.RequestCtxSyncByHeight(s.chainID.Uint64(), height)
 	}

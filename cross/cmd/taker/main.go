@@ -17,7 +17,8 @@ import (
 )
 
 var (
-	rawurlVar = flag.String("rawurl", "http://127.0.0.1:8556", "rpc url")
+	rawurlVar  = flag.String("rawurl", "http://127.0.0.1:8556", "rpc url")
+	sendurlVar = flag.String("sendurl", "http://127.0.0.1:8546", "send rpc url")
 
 	contract = flag.String("contract", "0x8eefA4bFeA64F2A89f3064D48646415168662a1e", "合约地址")
 
@@ -108,6 +109,14 @@ func taker() {
 	err = client.CallContext(context.Background(), &signatures, "cross_ctxContentByPage", 0, 0, limit, 1)
 	if err != nil {
 		fmt.Println("CallContext", "err", err)
+		return
+	}
+
+	client.Close()
+
+	client, err = rpc.Dial(*sendurlVar)
+	if err != nil {
+		fmt.Println("dial", "err", err)
 		return
 	}
 

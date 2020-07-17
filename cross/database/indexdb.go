@@ -20,8 +20,7 @@ type indexDB struct {
 	root    *storm.DB // root db of stormDB
 	db      storm.Node
 	cache   *IndexDbCache
-	//txLog   *TransactionLog
-	logger log.Logger
+	logger  log.Logger
 }
 
 type FieldName = string
@@ -108,6 +107,9 @@ func (d *indexDB) Writes(ctxList []*cc.CrossTransactionWithSignatures, replaceab
 			return false
 		}
 		if new.BlockNum < old.BlockNum {
+			return false
+		}
+		if new.Status <= old.Status { //TODO:无法解决同步其他节点时，其他节点
 			return false
 		}
 		return true
@@ -217,11 +219,11 @@ func (d *indexDB) Updates(idList []common.Hash, updaters []func(ctx *CrossTransa
 	for i, id := range idList {
 		var ctx CrossTransactionIndexed
 		if err = tx.One(CtxIdIndex, id, &ctx); err != nil {
-			return err
+			return ErrCtxDbFailure{"transaction want to be updated is not exist", err}
 		}
 		updaters[i](&ctx)
 		if err = tx.Update(&ctx); err != nil {
-			return err
+			return ErrCtxDbFailure{"transaction update failed", err}
 		}
 		if d.cache != nil {
 			d.cache.Remove(CtxIdIndex, id)
@@ -247,7 +249,7 @@ func (d *indexDB) Deletes(idList []common.Hash) (err error) {
 			d.cache.Remove(TxHashIndex, ctx.TxHash)
 		}
 		if err = tx.DeleteStruct(&ctx); err != nil {
-			return err
+			return ErrCtxDbFailure{"transaction delete failed", err}
 		}
 	}
 

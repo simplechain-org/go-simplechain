@@ -24,7 +24,7 @@ const (
 	blockChanSize     = 1
 	signedPendingSize = 256
 
-	defaultStoreDelay  = 200
+	defaultStoreDelay  = 120
 	intervalStoreDelay = time.Minute * 10
 )
 
@@ -155,8 +155,11 @@ func (h *Handler) loop() {
 func (h *Handler) handle(current *cc.CrossBlockEvent) {
 	var (
 		local, remote []*cc.CrossTransactionModifier
-		startTime     = time.Now()
 	)
+
+	defer func(start time.Time) {
+		log.Debug("X handle crosschain block complete", "runtime", time.Since(start))
+	}(time.Now())
 
 	// handle anchor update
 	if updates := current.NewAnchor.ChainInfo; len(updates) > 0 {
@@ -257,8 +260,6 @@ func (h *Handler) handle(current *cc.CrossBlockEvent) {
 			h.log.Warn("handle cross failed", "error", err)
 		}
 	}
-
-	log.Trace("X handle crosschain block complete", "timeUsed", time.Since(startTime).String())
 }
 
 // number高度anchor发生变化时，检查之前的跨链交易签名是否已经失效

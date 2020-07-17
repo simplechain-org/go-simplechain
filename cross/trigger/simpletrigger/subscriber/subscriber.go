@@ -2,6 +2,8 @@ package subscriber
 
 import (
 	"math/big"
+	"sync"
+	"time"
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/event"
@@ -20,6 +22,8 @@ type SimpleSubscriber struct {
 
 	blockEventFeed event.Feed
 	scope          event.SubscriptionScope
+	stop           chan struct{}
+	wg             sync.WaitGroup
 
 	// Test Hooks
 	newLogHook   func(number uint64, hash common.Hash, logs []*types.Log, unconfirmedLogs *[]*types.Log, current *cc.CrossBlockEvent)
@@ -34,45 +38,71 @@ func NewSimpleSubscriber(contract common.Address, chain chainRetriever, journalP
 			chain: chain,
 			depth: uint(simpletrigger.DefaultConfirmDepth),
 		},
+		stop: make(chan struct{}),
 	}
+
 	if journalPath != "" {
 		s.journal = newJournal(journalPath)
+		if err := s.journal.load(s.add); err != nil {
+			log.Warn("failed to load unconfirmed journal", "error", err)
+		}
+		if err := s.journal.rotate(s.blocks); err != nil {
+			log.Warn("Failed to rotate unconfirmed journal", "err", err)
+		}
 	}
-	if err := s.Load(); err != nil {
-		log.Warn("failed to load unconfirmed journal", "error", err)
-	}
+
 	s.chain.SetCrossSubscriber(s)
+	s.wg.Add(1)
+	go s.loop()
+
 	return s
 }
 
-func (t *SimpleSubscriber) Load() error {
-	if t.journal != nil {
-		return t.journal.load(t.add)
+func (s *SimpleSubscriber) loop() {
+	defer s.wg.Done()
+
+	journal := time.NewTicker(time.Minute * 30)
+	defer journal.Stop()
+
+	for {
+		select {
+		case <-journal.C:
+			s.lock.Lock()
+			if err := s.journal.rotate(s.blocks); err != nil {
+				log.Warn("Failed to rotate local tx journal", "err", err)
+			}
+			s.lock.Unlock()
+
+		case <-s.stop:
+			return
+		}
 	}
-	return nil
 }
 
-func (t *SimpleSubscriber) Stop() {
-	t.scope.Close()
-	if t.journal != nil {
-		if err := t.journal.rotate(t.blocks); err != nil {
+func (s *SimpleSubscriber) Stop() {
+	s.scope.Close()
+	close(s.stop)
+	s.wg.Wait()
+
+	if s.journal != nil {
+		if err := s.journal.rotate(s.blocks); err != nil {
 			log.Warn("Failed to rotate unconfirmed journal", "error", err)
 		}
 	}
 }
 
-func (t *SimpleSubscriber) StoreCrossContractLog(blockNumber uint64, hash common.Hash, logs []*types.Log) {
+func (s *SimpleSubscriber) StoreCrossContractLog(blockNumber uint64, hash common.Hash, logs []*types.Log) {
 	var unconfirmedLogs []*types.Log
 	currentEvent := cc.CrossBlockEvent{Number: new(big.Int).SetUint64(blockNumber)}
-	if t.newLogHook != nil {
-		t.newLogHook(blockNumber, hash, logs, &unconfirmedLogs, &currentEvent)
+	if s.newLogHook != nil {
+		s.newLogHook(blockNumber, hash, logs, &unconfirmedLogs, &currentEvent)
 	}
 	if logs != nil {
 		var takers []*cc.CrossTransactionModifier
 		var finishes []*cc.CrossTransactionModifier
 		var updates []*cc.RemoteChainInfo
 		for _, v := range logs {
-			if t.contract == v.Address && len(v.Topics) > 0 {
+			if s.contract == v.Address && len(v.Topics) > 0 {
 				switch v.Topics[0] {
 				case params.MakerTopic:
 					unconfirmedLogs = append(unconfirmedLogs, v)
@@ -113,20 +143,20 @@ func (t *SimpleSubscriber) StoreCrossContractLog(blockNumber uint64, hash common
 		currentEvent.NewAnchor.ChainInfo = append(currentEvent.NewAnchor.ChainInfo, updates...)
 	}
 
-	t.insert(blockNumber, hash, unconfirmedLogs, &currentEvent)
+	s.insert(blockNumber, hash, unconfirmedLogs, &currentEvent)
 	if !currentEvent.IsEmpty() {
-		t.crossBlockSend(currentEvent)
+		s.crossBlockSend(currentEvent)
 	}
 }
 
-func (t *SimpleSubscriber) NotifyBlockReorg(number *big.Int, deletedLogs [][]*types.Log, rebirthLogs [][]*types.Log) {
+func (s *SimpleSubscriber) NotifyBlockReorg(number *big.Int, deletedLogs [][]*types.Log, rebirthLogs [][]*types.Log) {
 	var reorgEvent cc.CrossBlockEvent
-	if t.reorgHook != nil {
-		t.reorgHook(number, deletedLogs, rebirthLogs)
+	if s.reorgHook != nil {
+		s.reorgHook(number, deletedLogs, rebirthLogs)
 	}
 	for _, deletedLog := range deletedLogs {
 		for _, l := range deletedLog {
-			if t.contract == l.Address && len(l.Topics) > 0 {
+			if s.contract == l.Address && len(l.Topics) > 0 {
 				switch l.Topics[0] {
 				case params.TakerTopic: // reorg executing -> waiting
 					if len(l.Topics) >= 3 && len(l.Data) >= common.HashLength {
@@ -151,21 +181,21 @@ func (t *SimpleSubscriber) NotifyBlockReorg(number *big.Int, deletedLogs [][]*ty
 	}
 	if !reorgEvent.IsEmpty() {
 		reorgEvent.Number = new(big.Int).Set(number)
-		t.crossBlockSend(reorgEvent)
+		s.crossBlockSend(reorgEvent)
 	}
 
 	// restore rebirthLogs to change CrossStore status and insert into unconfirmedLogs
 	for _, rebirthLog := range rebirthLogs { // reverse logs(lowerNum -> higherNum)
 		if len(rebirthLog) > 0 {
-			t.StoreCrossContractLog(rebirthLog[0].BlockNumber, rebirthLog[0].BlockHash, rebirthLog)
+			s.StoreCrossContractLog(rebirthLog[0].BlockNumber, rebirthLog[0].BlockHash, rebirthLog)
 		}
 	}
 }
 
-func (t *SimpleSubscriber) crossBlockSend(ev cc.CrossBlockEvent) int {
-	return t.blockEventFeed.Send(ev)
+func (s *SimpleSubscriber) crossBlockSend(ev cc.CrossBlockEvent) int {
+	return s.blockEventFeed.Send(ev)
 }
 
-func (t *SimpleSubscriber) SubscribeBlockEvent(ch chan<- cc.CrossBlockEvent) event.Subscription {
-	return t.scope.Track(t.blockEventFeed.Subscribe(ch))
+func (s *SimpleSubscriber) SubscribeBlockEvent(ch chan<- cc.CrossBlockEvent) event.Subscription {
+	return s.scope.Track(s.blockEventFeed.Subscribe(ch))
 }
