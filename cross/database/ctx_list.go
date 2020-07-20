@@ -95,7 +95,7 @@ func (m *CtxSortedByBlockNum) RemoveUnderNum(num uint64) (removed cc.CtxIDs) {
 	return
 }
 
-func (m *CtxSortedByBlockNum) Map(do func(*cc.CrossTransactionWithSignatures) bool) {
+func (m *CtxSortedByBlockNum) Do(do func(*cc.CrossTransactionWithSignatures) bool) {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 	for itr := m.index.Begin(); !itr.IsEnd(); itr.Next() {
@@ -126,28 +126,6 @@ type CrossTransactionIndexed struct {
 	R []*big.Int
 	S []*big.Int
 }
-
-//type CrossTransactionIndexed struct {
-//	PK       uint64 `storm:"id,increment"`
-//	CtxId    common.Hash `storm:"unique"`
-//	From     common.Address
-//	To       common.Address
-//	TxHash   common.Hash
-//	Price    *big.Float
-//	BlockNum uint64
-//	// normal field
-//	Status uint8
-//
-//	Value            *big.Int
-//	BlockHash        common.Hash
-//	DestinationId    *big.Int
-//	DestinationValue *big.Int
-//	Input            []byte
-//
-//	V []*big.Int
-//	R []*big.Int
-//	S []*big.Int
-//}
 
 func NewCrossTransactionIndexed(ctx *cc.CrossTransactionWithSignatures) *CrossTransactionIndexed {
 	return &CrossTransactionIndexed{
@@ -207,10 +185,6 @@ func indexCacheKey(index FieldName, value interface{}) interface{} {
 		Value interface{}
 	}{index, value}
 }
-
-//func (m *IndexDbCache) Has(index FieldName, key interface{}) bool {
-//	return (*lru.ARCCache)(m).Contains(indexCacheKey(index, key))
-//}
 
 func (m *IndexDbCache) Get(index FieldName, key interface{}) *CrossTransactionIndexed {
 	item, ok := (*lru.ARCCache)(m).Get(indexCacheKey(index, key))

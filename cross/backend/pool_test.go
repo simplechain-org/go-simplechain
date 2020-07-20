@@ -1,3 +1,19 @@
+// Copyright 2016 The go-simplechain Authors
+// This file is part of the go-simplechain library.
+//
+// The go-simplechain library is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// The go-simplechain library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with the go-simplechain library. If not, see <http://www.gnu.org/licenses/>.
+
 package backend
 
 import (
@@ -61,7 +77,7 @@ func TestCrossPool_AddLocals(t *testing.T) {
 	p.addLocal(t)
 	assert.Equal(t, 1, p.pending.Len())
 	assert.Equal(t, 0, p.queued.Len())
-	p.pending.Map(func(ctx *cc.CrossTransactionWithSignatures) bool {
+	p.pending.Do(func(ctx *cc.CrossTransactionWithSignatures) bool {
 		assert.Equal(t, 1, ctx.SignaturesLength())
 		return true
 	})

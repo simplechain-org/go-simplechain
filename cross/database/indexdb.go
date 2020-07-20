@@ -1,3 +1,19 @@
+// Copyright 2016 The go-simplechain Authors
+// This file is part of the go-simplechain library.
+//
+// The go-simplechain library is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// The go-simplechain library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with the go-simplechain library. If not, see <http://www.gnu.org/licenses/>.
+
 package db
 
 import (
@@ -39,7 +55,7 @@ const (
 
 func NewIndexDB(chainID *big.Int, rootDB *storm.DB, cacheSize uint64) *indexDB {
 	dbName := "chain" + chainID.String()
-	log.Info("New IndexDB", "dbName", dbName, "cacheSize", cacheSize)
+	log.Info("Open IndexDB", "dbName", dbName, "cacheSize", cacheSize)
 	return &indexDB{
 		chainID: chainID,
 		db:      rootDB.From(dbName).WithBatch(true),
@@ -109,7 +125,7 @@ func (d *indexDB) Writes(ctxList []*cc.CrossTransactionWithSignatures, replaceab
 		if new.BlockNum < old.BlockNum {
 			return false
 		}
-		if new.Status <= old.Status { //TODO:无法解决同步其他节点时，其他节点
+		if new.Status <= old.Status { //TODO:无法解决同步其他节点时，其他节点回滚的状态
 			return false
 		}
 		return true
