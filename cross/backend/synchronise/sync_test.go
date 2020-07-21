@@ -60,20 +60,22 @@ func newTester() *syncTester {
 	return tester
 }
 
-func (sc *syncTester) AddRemote(ctx *cc.CrossTransaction) (common.Address, error) {
+func (sc *syncTester) AddRemotes(ctxList []*cc.CrossTransaction) ([]common.Address, []error) {
 	sc.lock.Lock()
 	defer sc.lock.Unlock()
-	if ex := sc.queue.Get(ctx.ID()); ex != nil {
-		ex.Data.V = append(ex.Data.V, bigZero)
-		ex.Data.R = append(ex.Data.R, bigZero)
-		ex.Data.S = append(ex.Data.S, bigZero)
-	} else {
-		ctx.Data.V = bigZero
-		ctx.Data.R = bigZero
-		ctx.Data.S = bigZero
-		sc.queue.Put(cc.NewCrossTransactionWithSignatures(ctx, sc.txs[ctx.ID()]))
+	for _, ctx := range ctxList {
+		if ex := sc.queue.Get(ctx.ID()); ex != nil {
+			ex.Data.V = append(ex.Data.V, bigZero)
+			ex.Data.R = append(ex.Data.R, bigZero)
+			ex.Data.S = append(ex.Data.S, bigZero)
+		} else {
+			ctx.Data.V = bigZero
+			ctx.Data.R = bigZero
+			ctx.Data.S = bigZero
+			sc.queue.Put(cc.NewCrossTransactionWithSignatures(ctx, sc.txs[ctx.ID()]))
+		}
 	}
-	return common.Address{}, nil
+	return nil, nil
 }
 
 func (sc *syncTester) AddLocals(ctxs []*cc.CrossTransactionWithSignatures) {

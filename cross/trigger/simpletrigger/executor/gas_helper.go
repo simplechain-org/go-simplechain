@@ -69,7 +69,7 @@ func (this *GasHelper) doCall(ctx context.Context, args CallArgs, blockNr rpc.Bl
 	timeout time.Duration) ([]byte, uint64, bool, error) {
 
 	defer func(start time.Time) {
-		log.Debug("Executing EVM call finished", "runtime", time.Since(start))
+		log.Trace("Executing EVM call finished", "runtime", time.Since(start))
 	}(time.Now())
 
 	state, header, err := this.chain.StateAndHeaderByNumber(ctx, blockNr)

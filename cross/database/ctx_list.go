@@ -95,6 +95,7 @@ func (m *CtxSortedByBlockNum) RemoveUnderNum(num uint64) (removed cc.CtxIDs) {
 	return
 }
 
+// Do calls function f on each element of the map, in forward order.
 func (m *CtxSortedByBlockNum) Do(do func(*cc.CrossTransactionWithSignatures) bool) {
 	m.lock.RLock()
 	defer m.lock.RUnlock()

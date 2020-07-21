@@ -35,8 +35,13 @@ type ConfirmedTakerEvent struct {
 }
 
 type SignedCtxEvent struct { // pool event
-	Tx       *CrossTransactionWithSignatures
-	CallBack func(cws *CrossTransactionWithSignatures, invalidSigIndex ...int)
+	Txs      []*CrossTransactionWithSignatures
+	CallBack func([]CommitEvent)
+}
+
+type CommitEvent struct {
+	Tx              *CrossTransactionWithSignatures
+	InvalidSigIndex []int
 }
 
 type NewFinishEvent struct {

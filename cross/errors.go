@@ -27,6 +27,7 @@ var (
 	ErrDuplicateSign   = fmt.Errorf("[%w]: signatures already exist", ErrVerifyCtx)
 	ErrExpiredCtx      = fmt.Errorf("[%w]: ctx is expired", ErrVerifyCtx)
 	ErrAlreadyExistCtx = fmt.Errorf("[%w]: ctx is already exist", ErrVerifyCtx)
+	ErrLocalSignCtx    = fmt.Errorf("[%w]: remote ctx signed by local anchor", ErrVerifyCtx)
 	ErrFinishedCtx     = fmt.Errorf("[%w]: ctx is already finished", ErrVerifyCtx)
 	ErrReorgCtx        = fmt.Errorf("[%w]: ctx is on sidechain", ErrVerifyCtx)
 	ErrInternal        = fmt.Errorf("[%w]: internal error", ErrVerifyCtx)

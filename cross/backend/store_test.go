@@ -41,13 +41,13 @@ func TestCrossStore(t *testing.T) {
 	pool.add(t)
 
 	ev := <-signedCh
-	ev.CallBack(ev.Tx)
+	ev.CallBack([]cc.CommitEvent{{Tx: ev.Txs[0]}})
 
 	assert.Equal(t, 1, ctxStore.stores[chainID.Uint64()].Count(q.Eq(cdb.StatusField, cc.CtxStatusWaiting)))
 
 	// test get
 	{
-		ctx := ev.Tx
+		ctx := ev.Txs[0]
 		assert.NotNil(t, ctxStore.Get(chainID, ctx.ID()))
 	}
 }

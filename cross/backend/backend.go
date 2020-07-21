@@ -221,7 +221,7 @@ func (srv *CrossService) handle(p *anchorPeer) error {
 		sub           = srv.config.SubContract
 	)
 	if err := p.Handshake(mainNetworkID, subNetworkID, mainGenesis, subGenesis, mainHeight, subHeight, main, sub); err != nil {
-		log.Debug("anchor handshake failed", "err", err)
+		p.Log().Debug("anchor handshake failed", "err", err)
 		return err
 	}
 

@@ -139,7 +139,7 @@ func (d *indexDB) Writes(ctxList []*cc.CrossTransactionWithSignatures, replaceab
 		var old CrossTransactionIndexed
 		err = tx.One(CtxIdIndex, ctx.ID(), &old)
 		if err == storm.ErrNotFound {
-			d.logger.Debug("add new cross transaction",
+			d.logger.Trace("add new cross transaction",
 				"id", ctx.ID().String(), "status", ctx.Status.String(), "number", ctx.BlockNum)
 
 			if err = tx.Save(new); err != nil {
@@ -147,7 +147,7 @@ func (d *indexDB) Writes(ctxList []*cc.CrossTransactionWithSignatures, replaceab
 			}
 
 		} else if canReplace(&old, new) {
-			d.logger.Debug("replace cross transaction", "id", ctx.ID().String(),
+			d.logger.Trace("replace cross transaction", "id", ctx.ID().String(),
 				"old_status", cc.CtxStatus(old.Status).String(), "new_status", ctx.Status.String(),
 				"old_height", old.BlockNum, "new_height", ctx.BlockNum)
 
@@ -157,7 +157,7 @@ func (d *indexDB) Writes(ctxList []*cc.CrossTransactionWithSignatures, replaceab
 			}
 
 		} else {
-			d.logger.Debug("can't add or replace cross transaction", "id", ctx.ID().String(),
+			d.logger.Trace("can't add or replace cross transaction", "id", ctx.ID().String(),
 				"old_status", cc.CtxStatus(old.Status).String(), "new_status", ctx.Status.String(),
 				"old_height", old.BlockNum, "new_height", ctx.BlockNum, "replaceable", replaceable)
 

@@ -68,7 +68,7 @@ func TestCrossPool_Add(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Error("add timeout")
 	case ev := <-signedCh:
-		assert.Equal(t, 2, ev.Tx.SignaturesLength())
+		assert.Equal(t, 2, ev.Txs[0].SignaturesLength())
 	}
 }
 
@@ -95,8 +95,8 @@ func TestCrossPool_GetLocal(t *testing.T) {
 	p := newPoolTester(newTestMemoryStore())
 	p.addLocal(t)
 	ctxList := generateCtx(2, cc.CtxStatusWaiting)
-	p.Store(ctxList[0])
-	p.Store(ctxList[1])
+	p.Store([]*cc.CrossTransactionWithSignatures{ctxList[0]})
+	p.Store([]*cc.CrossTransactionWithSignatures{ctxList[1]})
 
 	ids, pending := p.Pending(0, 10)
 	assert.Equal(t, 1, len(ids))
@@ -126,11 +126,11 @@ func TestCrossPool_Commit(t *testing.T) {
 		signTx, err := cc.SignCtx(ctx.CrossTransaction(), signer, toSigner)
 		assert.NoError(t, err)
 
-		p.Commit(cc.NewCrossTransactionWithSignatures(signTx, ctx.BlockNum))
+		p.Commit([]*cc.CrossTransactionWithSignatures{cc.NewCrossTransactionWithSignatures(signTx, ctx.BlockNum)})
 		select {
 		case ev := <-signedCh:
 			// success
-			ev.CallBack(ev.Tx)
+			ev.CallBack([]cc.CommitEvent{{Tx: ev.Txs[0]}})
 		case <-time.After(time.Second):
 			t.Error("commit timeout")
 		}
@@ -146,11 +146,11 @@ func TestCrossPool_Commit(t *testing.T) {
 		signTx, err := cc.SignCtx(ctx.CrossTransaction(), signer, toSigner)
 		assert.NoError(t, err)
 
-		p.Commit(cc.NewCrossTransactionWithSignatures(signTx, ctx.BlockNum))
+		p.Commit([]*cc.CrossTransactionWithSignatures{cc.NewCrossTransactionWithSignatures(signTx, ctx.BlockNum)})
 		select {
 		case ev := <-signedCh:
 			// failed
-			ev.CallBack(ev.Tx, 0)
+			ev.CallBack([]cc.CommitEvent{{Tx: ev.Txs[0], InvalidSigIndex: []int{0}}})
 		case <-time.After(time.Second):
 			t.Error("commit timeout")
 		}
@@ -175,7 +175,7 @@ func (p *poolTester) addLocal(t *testing.T) {
 		toAddr,
 		nil)
 
-	_, errs := p.AddLocals(ctx)
+	_, _, errs := p.AddLocals(ctx)
 	assert.Nil(t, errs)
 }
 
@@ -200,7 +200,8 @@ func (p *poolTester) addRemote(t *testing.T) {
 	toSigner := func(hash []byte) ([]byte, error) { return crypto.Sign(hash, p.remoteKey) }
 	tx1, err := cc.SignCtx(ctx, signer, toSigner)
 	assert.NoError(t, err)
-	assert.NoError(t, p.addTx(tx1, false))
+	_, err = p.addTx(tx1, false)
+	assert.NoError(t, err)
 }
 
 func (p *poolTester) add(t *testing.T) {
@@ -220,10 +221,20 @@ func newTestMemoryStore() *testMemoryStore {
 func (s *testMemoryStore) GetStore(chainID *big.Int) (cdb.CtxDB, error) {
 	return nil, errors.New("memory store")
 }
-func (s *testMemoryStore) Add(ctx *cc.CrossTransactionWithSignatures) error {
+
+//func (s *testMemoryStore) Add(ctx *cc.CrossTransactionWithSignatures) error {
+//	s.lock.Lock()
+//	defer s.lock.Unlock()
+//	s.db[ctx.ID()] = ctx
+//	return nil
+//}
+
+func (s *testMemoryStore) Adds(chainID *big.Int, ctxList []*cc.CrossTransactionWithSignatures, replaceable bool) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
-	s.db[ctx.ID()] = ctx
+	for _, ctx := range ctxList {
+		s.db[ctx.ID()] = ctx
+	}
 	return nil
 }
 func (s *testMemoryStore) Get(chainID *big.Int, ctxID common.Hash) *cc.CrossTransactionWithSignatures {

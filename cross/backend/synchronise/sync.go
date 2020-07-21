@@ -68,7 +68,7 @@ type Sync struct {
 }
 
 type CrossPool interface {
-	AddRemote(*cc.CrossTransaction) (common.Address, error)
+	AddRemotes([]*cc.CrossTransaction) ([]common.Address, []error)
 	Pending(startNumber uint64, limit int) (ids []common.Hash, pending []*cc.CrossTransactionWithSignatures)
 }
 
@@ -444,13 +444,13 @@ func (s *Sync) syncCrossTransaction(ctxList []*cc.CrossTransactionWithSignatures
 
 func (s *Sync) syncPending(ctxList []*cc.CrossTransaction) (lastNumber uint64) {
 	for _, ctx := range ctxList {
-		// 同步pending时向单节点请求签名，所以不监控漏签
-		if _, err := s.pool.AddRemote(ctx); err != nil {
-			s.log.Trace("SyncPending failed", "id", ctx.ID(), "err", err)
-		}
 		if num := s.chain.GetConfirmedTransactionNumberOnChain(ctx); num > lastNumber {
 			lastNumber = num
 		}
+	}
+	// 同步pending时向单节点请求签名，所以不监控漏签
+	if _, errs := s.pool.AddRemotes(ctxList); errs != nil {
+		s.log.Trace("SyncPending failed", "err", errs)
 	}
 	return lastNumber
 }

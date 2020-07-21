@@ -211,12 +211,27 @@ func (exe *SimpleExecutor) PromoteTransaction() {
 		exe.log.Warn("promoteTransaction failed", "error", err)
 		return
 	}
+	var (
+		newTxs   types.Transactions
+		promotes types.Transactions
+	)
+
 	txs, ok := pending[exe.anchor]
+
+	var stateNonce uint64
+	state, err := exe.chain.BlockChain().State()
+	if err != nil {
+		exe.log.Warn("get state nonce failed", "error", err)
+	}
+	stateNonce = state.GetNonce(exe.anchor)
+
 	if ok {
 		var count uint64
-		var newTxs []*types.Transaction
 		var nonceBegin uint64
 		for _, v := range txs {
+			if stateNonce > 0 && v.Nonce() < stateNonce { // tx is always packed in state
+				continue
+			}
 			if count < core.DefaultTxPoolConfig.AccountSlots {
 				if count == 0 {
 					nonceBegin = v.Nonce()
@@ -245,17 +260,17 @@ func (exe *SimpleExecutor) PromoteTransaction() {
 				break
 			}
 		}
-		exe.log.Info("promoteTransaction bump gasPrice", "txs", len(newTxs))
 		exe.pm.AddLocals(newTxs)
 	}
 
 	if !ok || txs.Len() < maxFinishTransactions {
-		promotes := exe.promoteIdleTxs(maxFinishTransactions-txs.Len(), exe.pm.GetNonce(exe.anchor))
+		promotes = exe.promoteIdleTxs(maxFinishTransactions-txs.Len(), exe.pm.GetNonce(exe.anchor))
 		if promotes.Len() > 0 {
-			exe.log.Info("promote future txs", "txs", promotes.Len(), "future", exe.future.Size())
 			exe.pm.AddLocals(promotes)
 		}
 	}
+
+	exe.log.Info("Promote Transactions", "bumpPrice", len(newTxs), "promoteFuture", len(promotes), "futures", exe.future.Size())
 }
 
 func (exe *SimpleExecutor) getTxForLockOut(rwss []*cc.ReceptTransaction) []*types.Transaction {
@@ -380,6 +395,6 @@ func (exe *SimpleExecutor) demoteBusyTxs(txs []*cc.ReceptTransaction) []*cc.Rece
 			failure = append(failure, tx)
 		}
 	}
-	exe.log.Info("txpool is busy, demote tx to future", "txs", len(txs), "failure", len(failure), "future", exe.future.Size())
+	exe.log.Info("txpool is busy, demote tx to future queue", "txs", len(txs), "failure", len(failure), "future", exe.future.Size())
 	return failure
 }
