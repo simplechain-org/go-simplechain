@@ -83,6 +83,9 @@ func (s *SimpleSubscriber) loop() {
 	for {
 		select {
 		case <-journal.C:
+			if s.journal == nil {
+				break
+			}
 			s.lock.Lock()
 			if err := s.journal.rotate(s.blocks); err != nil {
 				log.Warn("Failed to rotate unconfirmed journal", "err", err)

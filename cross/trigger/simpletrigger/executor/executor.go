@@ -123,7 +123,7 @@ func (exe *SimpleExecutor) loop() {
 
 		case <-promote.C:
 			//TODO: trigger by txpool reorg event,
-			// 定时触发由于块同步时间差，已经上链的交易为被清楚，替换的新交易会因为nonce已执行被抛弃，所以在promote阶段即使在校验时跨链已经完成，仍要保留这笔解锁交易
+			// 可以将定时触发改成监控chainNewHead事件或者在交易池删除上链的交易后触发
 			exe.PromoteTransaction()
 
 		case <-exe.stopCh:
@@ -229,7 +229,7 @@ func (exe *SimpleExecutor) PromoteTransaction() {
 		var count uint64
 		var nonceBegin uint64
 		for _, v := range txs {
-			if stateNonce > 0 && v.Nonce() < stateNonce { // tx is always packed in state
+			if stateNonce > 0 && v.Nonce() < stateNonce { // tx is already packed in state, will be discard in txPool
 				continue
 			}
 			if count < core.DefaultTxPoolConfig.AccountSlots {
@@ -317,6 +317,8 @@ func (exe *SimpleExecutor) createTransaction(rws *cc.ReceptTransaction) (*TranPa
 		return nil, err
 	}
 	if gasPrice.Cmp(eth.DefaultConfig.Miner.GasPrice) < 0 {
+		exe.log.Info("suggest price is less then miner price, set to miner price",
+			"suggest", gasPrice, "minerPrice", eth.DefaultConfig.Miner.GasPrice)
 		gasPrice.Set(eth.DefaultConfig.Miner.GasPrice)
 	}
 	data, err := rws.ConstructData(exe.contractABI)
@@ -349,6 +351,7 @@ func (exe *SimpleExecutor) checkTransaction(address, contract common.Address, ga
 }
 
 func (exe *SimpleExecutor) promoteIdleTxs(idles int, nonce uint64) types.Transactions {
+	exe.log.Debug("promote idle txs", "idle", idles, "nonce", nonce)
 	var promotes types.Transactions
 	for ; idles > 0; idles-- {
 		buf, err := exe.future.Pop()

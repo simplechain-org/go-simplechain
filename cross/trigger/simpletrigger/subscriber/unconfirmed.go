@@ -171,6 +171,7 @@ loop:
 
 				// add confirmed logs into current block event
 				if currentEvent != nil && currentEvent.Number.Uint64() == confirmNumber {
+					log.Debug("combine currentEvent and confirmedEvent", "number", confirmNumber)
 					currentEvent.ConfirmedMaker.Txs = append(currentEvent.ConfirmedMaker.Txs, ctxs...)
 					currentEvent.ConfirmedTaker.Txs = append(currentEvent.ConfirmedTaker.Txs, rtxs...)
 					currentEvent.ConfirmedFinish.Finishes = append(currentEvent.ConfirmedFinish.Finishes, finishModifiers...)

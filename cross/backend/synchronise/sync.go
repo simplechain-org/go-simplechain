@@ -174,7 +174,7 @@ func (s *Sync) Synchronise(id string, height *big.Int) error {
 	case nil:
 	case errBusy, errCanceled:
 	case errTimeout, errBadPeer:
-		//TODO-U: need to drop peer?
+		//TODO: need to drop peer?
 		fallthrough
 	default:
 		s.log.Warn("Synchronisation failed", "error", err)
@@ -318,10 +318,12 @@ func (s *Sync) syncPendingWithPeer(id string, request []common.Hash) error {
 	}
 
 	if _, loaded := s.pendingSyncing.LoadOrStore(p.id, make(chan []*cc.CrossTransaction, syncPendingChannelSize)); loaded {
-		s.log.Debug("pending sync busy")
+		s.log.Debug("pending sync busy", "pid", p.id)
 		return errBusy
 	}
 	defer s.pendingSyncing.Delete(id)
+
+	s.log.Debug("sync pending from peer", "id", id, "requests", len(request))
 
 	go p.peer.RequestPendingSync(s.chainID.Uint64(), request) //TODO-U:判断是否需要向此节点请求签名(高度？or 历史签名？)
 
@@ -346,7 +348,7 @@ func (s *Sync) syncPendingWithPeer(id string, request []common.Hash) error {
 
 			request, _ := s.pool.Pending(synced, defaultMaxSyncSize)
 			if len(request) == 0 {
-				s.log.Debug("no pending sync request, synchronization completed")
+				s.log.Debug("no pending need sync, synchronization completed")
 				return nil
 			}
 			// send next sync pending request
@@ -370,7 +372,7 @@ func (s *Sync) DeliverCrossTransactions(pid string, ctxList []*cc.CrossTransacti
 
 	select {
 	case s.synchronizeCh <- ctxList:
-		peer.log.Debug("syncing cross transactions", "peer", peer.id)
+		peer.log.Debug("syncing cross transactions", "peer", peer.id, "count", len(ctxList))
 	case <-s.quitSync:
 		return errCanceled
 	}
@@ -390,7 +392,7 @@ func (s *Sync) DeliverPending(pid string, pending []*cc.CrossTransaction) error 
 
 	select {
 	case ch.(chan []*cc.CrossTransaction) <- pending:
-		peer.log.Debug("syncing pending", "peer", peer.id)
+		peer.log.Debug("syncing pending", "peer", peer.id, "count", len(pending))
 	case <-s.quitSync:
 		return errCanceled
 	}

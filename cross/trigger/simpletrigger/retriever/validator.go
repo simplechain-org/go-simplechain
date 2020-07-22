@@ -165,23 +165,6 @@ func (v *SimpleValidator) VerifyContract(cws trigger.Transaction) error {
 	return nil
 }
 
-//func (v *SimpleValidator) VerifyReorg(ctx trigger.Transaction) error {
-//	if v.store.Has(v.chainID, ctx.ID()) {
-//		old := v.store.Get(v.chainID, ctx.ID())
-//		if old == nil {
-//			v.logger.Warn("VerifyReorg failed, can't load ctx")
-//			return cross.ErrInternal
-//		}
-//		if ctx.BlockHash() != old.BlockHash() {
-//			v.logger.Warn("blockchain reorg,txId:%s,old:%s,new:%s", ctx.ID().String(), old.BlockHash().String(), ctx.BlockHash().String())
-//			metric.Report(v.chainConfig.ChainID.Uint64(), "blockchain reorg", "ctxID", ctx.ID().String(),
-//				"old", old.BlockHash().String(), "new", ctx.BlockHash().String())
-//			return cross.ErrReorgCtx
-//		}
-//	}
-//	return nil
-//}
-
 func (v *SimpleValidator) UpdateAnchors(info *cc.RemoteChainInfo) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()

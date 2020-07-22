@@ -36,7 +36,7 @@ import (
 )
 
 const (
-	expireInterval    = time.Minute * 6
+	expireInterval    = time.Minute * 10
 	expireQueueNumber = 63
 )
 
@@ -112,8 +112,11 @@ func (pool *CrossPool) load() error {
 		return err
 	}
 	pending := store.Query(0, 0, []db.FieldName{db.BlockNumField}, false, q.Eq(db.StatusField, uint8(cc.CtxStatusPending)))
-	for _, pendingTX := range pending {
-		pool.pending.Put(pendingTX)
+
+	pool.logger.Info("load pending tx from store", "count", len(pending))
+
+	for _, pendingTx := range pending {
+		pool.pending.Put(pendingTx)
 	}
 	return nil
 }
@@ -223,6 +226,7 @@ func (pool *CrossPool) AddRemotes(ctxList []*cc.CrossTransaction) ([]common.Addr
 			legals = append(legals, ctx)
 
 		case cross.ErrLocalSignCtx: // remote tx signed by local, ignore it
+			pool.logger.Debug("receive remote ctx signed by local anchor", "ctxID", ctx.ID())
 			continue
 
 		default: // other error, gather errors
@@ -371,7 +375,7 @@ func (pool *CrossPool) Commit(txs []*cc.CrossTransactionWithSignatures) {
 		var batch []*cc.CrossTransactionWithSignatures
 		for _, ev := range evs {
 			if ev.InvalidSigIndex == nil { // check signer successfully, store ctx
-				ev.Tx.SetStatus(cc.CtxStatusWaiting)
+				ev.Tx.SetStatus(cc.CtxStatusWaiting) // store waiting status tx
 				batch = append(batch, ev.Tx)
 			} else { // check failed, rollback
 				pool.Rollback(ev.Tx, ev.InvalidSigIndex)
@@ -381,7 +385,7 @@ func (pool *CrossPool) Commit(txs []*cc.CrossTransactionWithSignatures) {
 	}
 
 	pool.wg.Add(1)
-	go func() { //TODO: 同步还是异步？
+	go func() { //TODO: 同步还是异步执行commit？
 		defer pool.wg.Done()
 		pool.commitFeed.Send(cc.SignedCtxEvent{
 			Txs:      txs,
