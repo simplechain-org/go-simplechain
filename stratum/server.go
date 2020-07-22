@@ -248,11 +248,16 @@ func (this *Server) splitWork(nonceBegin, nonceEnd uint64) {
 	} else {
 		log.Info("[Server] splitWork fanout,send the same task")
 		mineTask := this.mineTask.Load().(*MineTask)
+
 		var taskId uint64 = 0
 		for _, session := range this.authorizes {
 			latestTask := session.latestTask.Load()
 			if latestTask != nil {
 				taskId = latestTask.(*StratumTask).Id
+			}
+			taskDifficulty:=big.NewInt(0).SetBytes(mineTask.Difficulty.Bytes())
+			if this.calcHashRate{
+				taskDifficulty.SetUint64(session.difficulty)
 			}
 			notifyTask := &StratumTask{
 				Id:           taskId + 1,
@@ -260,7 +265,7 @@ func (this *Server) splitWork(nonceBegin, nonceEnd uint64) {
 				PowHash:      mineTask.Hash,
 				NonceBegin:   nonceBegin,
 				NonceEnd:     nonceEnd,
-				Difficulty:   big.NewInt(int64(session.difficulty)),
+				Difficulty:   taskDifficulty,
 				Timestamp:    time.Now().UnixNano(),
 				IfClearTask:  true,
 				Submitted:    false,
@@ -298,13 +303,17 @@ func (this *Server) dispatchWork(nonceBegin, nonceEnd uint64, miners int) {
 		} else {
 			sessionSlice = halfSlice
 		}
+		taskDifficulty:=big.NewInt(0).SetBytes(mineTask.Difficulty.Bytes())
+		if this.calcHashRate{
+			taskDifficulty.SetUint64(session.difficulty)
+		}
 		notifyTask := &StratumTask{
 			Id:           latestTask.Id + 1,
 			ServerTaskId: atomic.LoadUint64(&this.taskId),
 			PowHash:      mineTask.Hash,
 			NonceBegin:   nonceBegin,
 			NonceEnd:     nonceBegin + sessionSlice,
-			Difficulty:   big.NewInt(int64(session.difficulty)),
+			Difficulty:   taskDifficulty,
 			Timestamp:    time.Now().UnixNano(),
 			IfClearTask:  true,
 			Submitted:    false,
