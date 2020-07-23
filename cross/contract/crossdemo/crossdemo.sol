@@ -292,6 +292,7 @@ contract crossDemo{
         require(crossChains[remoteChainId].anchors[msg.sender].status);
         require(crossChains[remoteChainId].makerTxs[rtx.txId].signatures[msg.sender] != 1);
         require(crossChains[remoteChainId].makerTxs[rtx.txId].value > 0);
+        require(crossChains[remoteChainId].makerTxs[rtx.txId].from == rtx.from,"from is error");
         require(crossChains[remoteChainId].makerTxs[rtx.txId].to == address(0x0) || crossChains[remoteChainId].makerTxs[rtx.txId].to == rtx.to || crossChains[remoteChainId].makerTxs[rtx.txId].from == rtx.to,"to is error");
         require(crossChains[remoteChainId].makerTxs[rtx.txId].takerHash == bytes32(0x0) || crossChains[remoteChainId].makerTxs[rtx.txId].takerHash == rtx.txHash,"txHash is error");
         crossChains[remoteChainId].makerTxs[rtx.txId].signatures[msg.sender] = 1;
