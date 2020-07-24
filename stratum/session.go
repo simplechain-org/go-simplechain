@@ -26,6 +26,7 @@ import (
 
 	jsoniter "github.com/json-iterator/go"
 )
+
 var (
 	paramNumbersWrong = errors.New("[stratum]Params number incorrect")
 	PeriodMax         = float64(5) // s
@@ -71,10 +72,10 @@ type Session struct {
 	mutex          sync.RWMutex
 	lastSubmitTime int64
 
-	newTask  chan *StratumTask
-	newNonce chan NonceResult
-	server   *Server
-	calcHashRate   bool
+	newTask      chan *StratumTask
+	newNonce     chan NonceResult
+	server       *Server
+	calcHashRate bool
 }
 
 type timeMeter struct {
@@ -116,7 +117,7 @@ type Request struct {
 	JsonRpc string        `json:"jsonrpc,omitempty"`
 	Error   interface{}   `json:"error,omitempty"`
 	Result  interface{}   `json:"result,omitempty"`
-	Param  []interface{} `json:"params"`
+	Param   []interface{} `json:"params"`
 	Method  string        `json:"method"`
 }
 
@@ -145,7 +146,7 @@ type SubscribeResult struct {
 	Method string        `json:"method"`
 }
 
-func NewSession(auth Auth, sessionId string, conn net.Conn, difficulty uint64, server *Server,calcHashRate bool) *Session {
+func NewSession(auth Auth, sessionId string, conn net.Conn, difficulty uint64, server *Server, calcHashRate bool) *Session {
 	session := &Session{
 		sessionId:     sessionId,
 		conn:          conn,
@@ -157,7 +158,7 @@ func NewSession(auth Auth, sessionId string, conn net.Conn, difficulty uint64, s
 		newTask:       make(chan *StratumTask, 10),
 		newNonce:      make(chan NonceResult, 1000),
 		server:        server,
-		calcHashRate:calcHashRate,
+		calcHashRate:  calcHashRate,
 	}
 	return session
 }
@@ -318,7 +319,7 @@ func (this *Session) handleRequest() {
 			err = decoder.Decode(&req)
 			//err = json.Unmarshal(request, &req)
 			if err != nil {
-				log.Warn("[Session]json.Unmarshal", "error", err, "sessionId", this.sessionId, "MinerName", this.minerName,"request",string(request))
+				log.Warn("[Session]json.Unmarshal", "error", err, "sessionId", this.sessionId, "MinerName", this.minerName, "request", string(request))
 				return
 			}
 			switch strings.TrimSpace(req.Method) {
@@ -422,7 +423,7 @@ func (this *Session) dispatchAndVerify() {
 	//将他们放在一个goroutine中
 	//处理任务分发
 	//处理任务提交
-	difficulty := big.NewInt(0)
+	difficulty := big.NewInt(10000)
 	var taskId uint64 = 0
 	powHash := make([]byte, 32)
 	rand.Seed(time.Now().UnixNano())
@@ -441,7 +442,7 @@ func (this *Session) dispatchAndVerify() {
 				Method: "mining.notify",
 				Param:  task.toJson(),
 			}
-			log.Info("Session dispatch task","sessionId", this.sessionId,"difficulty",difficulty)
+			log.Info("Session dispatch task", "sessionId", this.sessionId, "difficulty", difficulty)
 			//任务下发给具体的客户端（一个session一个客户端）
 			this.sendResponse(notify)
 		case nonceResult := <-this.newNonce:
@@ -466,6 +467,7 @@ func (this *Session) dispatchAndVerify() {
 			_, result := scrypt.ScryptHash(powHash, nonceResult.Nonce)
 			if new(big.Int).SetBytes(result).Cmp(target) <= 0 {
 				//expected nonce
+
 				this.onSubmit(nonceResult.Nonce)
 				//echo result:true
 				response := &Response{
@@ -517,12 +519,12 @@ func (this *Session) handleAuthorize(req *Request) error {
 		this.sendResponse(result)
 		return nil
 	}
-	username,ok:=req.Param[0].(string)
-	if !ok{
+	username, ok := req.Param[0].(string)
+	if !ok {
 		log.Warn("handleAuthorize username not ok")
 	}
-	password,ok:=req.Param[1].(string)
-	if !ok{
+	password, ok := req.Param[1].(string)
+	if !ok {
 		log.Warn("handleAuthorize password not ok")
 	}
 	if !this.auth.Auth(username, password) {
@@ -531,7 +533,7 @@ func (this *Session) handleAuthorize(req *Request) error {
 		this.sendResponse(result)
 		return nil
 	}
-	this.minerName =password
+	this.minerName = username
 	result := &Response{
 		Id:     req.Id,
 		Error:  nil,
@@ -581,8 +583,8 @@ func (this *Session) handleSubmit(req *Request) error {
 	if len(req.Param) != 5 {
 		return paramNumbersWrong
 	}
-	requestTaskId,ok:=req.Param[1].(string)
-	if !ok{
+	requestTaskId, ok := req.Param[1].(string)
+	if !ok {
 		log.Warn("handleSubmit requestTaskId not ok")
 	}
 	taskId, err := strconv.ParseUint(requestTaskId, 16, 64)
@@ -601,8 +603,8 @@ func (this *Session) handleSubmit(req *Request) error {
 		//表示有响应给客户端，不需要关闭conn
 		return nil
 	}
-	requestNonce,ok:=req.Param[4].(string)
-	if !ok{
+	requestNonce, ok := req.Param[4].(string)
+	if !ok {
 		log.Warn("handleSubmit requestNonce not ok")
 	}
 	nonce, err := hexutil.DecodeUint64("0x" + strings.TrimLeft(requestNonce, "0"))
@@ -628,7 +630,7 @@ func (this *Session) handleSubmit(req *Request) error {
 	return nil
 }
 func (this *Session) nonceSubmitMeter(difficulty uint64) {
-	if !this.calcHashRate{
+	if !this.calcHashRate {
 		return
 	}
 	this.lastSubmitTime = time.Now().UnixNano()
@@ -649,6 +651,8 @@ func (this *Session) nonceSubmitMeter(difficulty uint64) {
 				IfClearTask:  true,
 				Submitted:    false,
 			}
+			log.Info("Session nonceSubmitMeter", "difficulty", notifyTask.Difficulty)
+			//ok
 			this.DispatchTask(notifyTask)
 		}
 	}
