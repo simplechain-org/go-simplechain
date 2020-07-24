@@ -273,7 +273,7 @@ func (this *Server) splitWork(nonceBegin, nonceEnd uint64) {
 				IfClearTask:  true,
 				Submitted:    false,
 			}
-			log.Trace("[Server] DispatchTask splitWork", "difficulty", notifyTask.Difficulty)
+			log.Info("[Server] DispatchTask splitWork", "difficulty", notifyTask.Difficulty)
 			//ok
 			session.DispatchTask(notifyTask)
 		}
@@ -325,7 +325,7 @@ func (this *Server) dispatchWork(nonceBegin, nonceEnd uint64, miners int) {
 		}
 		nonceBegin = nonceBegin + sessionSlice
 
-		log.Trace("[Server] dispatchWork", "miner", session.minerName, "difficulty", session.difficulty)
+		log.Info("[Server] dispatchWork", "miner", session.minerName, "difficulty", notifyTask.Difficulty)
         //ok
 		session.DispatchTask(notifyTask)
 	}
