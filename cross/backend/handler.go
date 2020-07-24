@@ -190,6 +190,24 @@ func (h *Handler) handle(current *cc.CrossBlockEvent) {
 		local = append(local, h.handleAnchorChange(current.Number)...)
 	}
 
+	handleReceptTransactions := func(takers []*cc.ReceptTransaction, modType cc.ModType, modStatus cc.CtxStatus) (remains []*cc.ReceptTransaction) {
+		for _, tx := range takers {
+			if err := tx.Check(h.store.Get(tx.DestinationId, tx.CTxId)); err != nil {
+				h.log.Warn("check taker failed", "type", modType, "status", modStatus, "error", err)
+				continue
+			}
+			remote = append(remote, &cc.CrossTransactionModifier{
+				ID: tx.CTxId,
+				//TODO: update from reorg/remote wouldn't modify blockNumber
+				Type:   modType,
+				Status: modStatus,
+			})
+			remains = append(remains, tx)
+		}
+		h.log.Debug("handle recept transactions", "type", modType, "status", modStatus, "takers", len(takers), "remains", len(remains))
+		return remains
+	}
+
 	// ignore early block logs
 	if height := h.store.Height(h.chainID); current.Number.Uint64()+h.retriever.ConfirmedDepth() >= height {
 
@@ -202,7 +220,7 @@ func (h *Handler) handle(current *cc.CrossBlockEvent) {
 		// handle reorg, rollback unconfirmed status(executing->waiting, finishing->executed)
 		// reorg taker (remote)
 		if takers := current.ReorgTaker.Takers; len(takers) > 0 {
-			remote = append(remote, takers...)
+			handleReceptTransactions(takers, cc.Reorg, cc.CtxStatusWaiting)
 		}
 
 		// reorg finish (local)
@@ -239,20 +257,15 @@ func (h *Handler) handle(current *cc.CrossBlockEvent) {
 
 		// handle new taker
 		if takers := current.NewTaker.Takers; len(takers) > 0 {
-			remote = append(remote, takers...)
+			handleReceptTransactions(takers, cc.Remote, cc.CtxStatusExecuting)
 		}
 
 		// handle confirmed taker
 		if takers := current.ConfirmedTaker.Txs; len(takers) > 0 {
-			for _, tx := range takers {
-				remote = append(remote, &cc.CrossTransactionModifier{
-					ID: tx.CTxId,
-					// update from remote wouldn't modify blockNumber
-					Type:   cc.Remote,
-					Status: cc.CtxStatusExecuted,
-				})
+			txs := handleReceptTransactions(takers, cc.Remote, cc.CtxStatusExecuted)
+			if len(txs) > 0 {
+				h.writeCrossMessage(cc.ConfirmedTakerEvent{Txs: txs})
 			}
-			h.writeCrossMessage(current.ConfirmedTaker)
 		}
 
 		// handle new finish
@@ -268,13 +281,13 @@ func (h *Handler) handle(current *cc.CrossBlockEvent) {
 
 	if len(local) > 0 {
 		if err := h.store.Updates(h.chainID, local); err != nil {
-			h.log.Warn("handle cross failed", "error", err)
+			h.log.Warn("local handle cross failed", "error", err)
 		}
 	}
 
 	if len(remote) > 0 {
 		if err := h.store.Updates(h.remoteID, remote); err != nil {
-			h.log.Warn("handle cross failed", "error", err)
+			h.log.Warn("remote handle cross failed", "error", err)
 		}
 	}
 }
@@ -373,6 +386,9 @@ func (h *Handler) readCrossMessage() {
 
 			case cc.ConfirmedTakerEvent: // taker确认消息，需要anchor发起解锁交易
 				h.executor.SubmitTransaction(ev.Txs) // submit finish transaction
+
+			default:
+				h.log.Warn("invalid cross message", "msg", ev)
 			}
 
 		case <-h.quitSync:

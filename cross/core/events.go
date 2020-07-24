@@ -27,7 +27,7 @@ type ConfirmedMakerEvent struct {
 }
 
 type NewTakerEvent struct {
-	Takers []*CrossTransactionModifier
+	Takers []*ReceptTransaction
 }
 
 type ConfirmedTakerEvent struct {
@@ -63,6 +63,19 @@ const (
 	Remote
 	Reorg
 )
+
+func (t ModType) String() string {
+	switch t {
+	case Normal:
+		return "normal"
+	case Remote:
+		return "remote"
+	case Reorg:
+		return "reorg"
+	default:
+		return "unknown"
+	}
+}
 
 type CrossTransactionModifier struct {
 	Type          ModType

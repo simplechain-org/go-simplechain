@@ -117,7 +117,7 @@ func (s *SimpleSubscriber) StoreCrossContractLog(blockNumber uint64, hash common
 		s.newLogHook(blockNumber, hash, logs, &unconfirmedLogs, &currentEvent)
 	}
 	if logs != nil {
-		var takers []*cc.CrossTransactionModifier
+		var takers []*cc.ReceptTransaction
 		var finishes []*cc.CrossTransactionModifier
 		var updates []*cc.RemoteChainInfo
 		for _, v := range logs {
@@ -128,12 +128,19 @@ func (s *SimpleSubscriber) StoreCrossContractLog(blockNumber uint64, hash common
 
 				case params.TakerTopic:
 					if len(v.Topics) >= 3 && len(v.Data) >= common.HashLength*4 {
-						takers = append(takers, &cc.CrossTransactionModifier{
-							ID: v.Topics[1],
-							// update remote wouldn't modify blockNumber
-							Type:   cc.Remote,
-							Status: cc.CtxStatusExecuting,
-						})
+						//takers = append(takers, &cc.CrossTransactionModifier{
+						//	ID: v.Topics[1],
+						//	// update remote wouldn't modify blockNumber
+						//	Type:   cc.Remote,
+						//	Status: cc.CtxStatusExecuting,
+						//})
+						ctxId := v.Topics[1]
+						var to, from common.Address
+						copy(to[:], v.Topics[2][common.HashLength-common.AddressLength:])
+						from = common.BytesToAddress(v.Data[common.HashLength*2-common.AddressLength : common.HashLength*2])
+						takers = append(takers, cc.NewReceptTransaction(ctxId, v.TxHash, from, to,
+							common.BytesToHash(v.Data[:common.HashLength]).Big(), s.chain.GetChainConfig().ChainID))
+
 						unconfirmedLogs = append(unconfirmedLogs, v)
 					}
 
@@ -179,11 +186,17 @@ func (s *SimpleSubscriber) NotifyBlockReorg(number *big.Int, deletedLogs [][]*ty
 				switch l.Topics[0] {
 				case params.TakerTopic: // reorg executing -> waiting
 					if len(l.Topics) >= 3 && len(l.Data) >= common.HashLength {
-						reorgEvent.ReorgTaker.Takers = append(reorgEvent.ReorgTaker.Takers, &cc.CrossTransactionModifier{
-							ID:     l.Topics[1],
-							Status: cc.CtxStatusWaiting,
-							Type:   cc.Reorg,
-						})
+						//reorgEvent.ReorgTaker.Takers = append(reorgEvent.ReorgTaker.Takers, &cc.CrossTransactionModifier{
+						//	ID:     l.Topics[1],
+						//	Status: cc.CtxStatusWaiting,
+						//	Type:   cc.Reorg,
+						//})
+						ctxId := l.Topics[1]
+						var to, from common.Address
+						copy(to[:], l.Topics[2][common.HashLength-common.AddressLength:])
+						from = common.BytesToAddress(l.Data[common.HashLength*2-common.AddressLength : common.HashLength*2])
+						reorgEvent.ReorgTaker.Takers = append(reorgEvent.ReorgTaker.Takers, cc.NewReceptTransaction(ctxId, l.TxHash, from, to,
+							common.BytesToHash(l.Data[:common.HashLength]).Big(), s.chain.GetChainConfig().ChainID))
 					}
 
 				case params.MakerFinishTopic: // reorg executing finishing -> executed
