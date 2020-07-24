@@ -2,6 +2,7 @@ package stratum
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
@@ -22,8 +23,9 @@ import (
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"github.com/simplechain-org/go-simplechain/consensus/scrypt"
 	"github.com/simplechain-org/go-simplechain/log"
-)
 
+	jsoniter "github.com/json-iterator/go"
+)
 var (
 	paramNumbersWrong = errors.New("[stratum]Params number incorrect")
 	PeriodMax         = float64(5) // s
@@ -32,6 +34,8 @@ var (
 	HashRateLen = 90
 
 	DifficultyMin = 120000 //创世区块的初始难度
+
+	jsonStd = jsoniter.ConfigCompatibleWithStandardLibrary
 )
 
 type Session struct {
@@ -102,10 +106,18 @@ func (task *StratumTask) toJson() []interface{} {
 	return []interface{}{taskId, hashString, nonceBegin, nonceEnd, difficulty, timestamp, task.IfClearTask}
 }
 
+//type Request struct {
+//	Param  []string    `json:"params"`
+//	Id     interface{} `json:"id"`
+//	Method string      `json:"method"`
+//}
 type Request struct {
-	Param  []string    `json:"params"`
-	Id     interface{} `json:"id"`
-	Method string      `json:"method"`
+	Id      interface{}   `json:"id"`
+	JsonRpc string        `json:"jsonrpc,omitempty"`
+	Error   interface{}   `json:"error,omitempty"`
+	Result  interface{}   `json:"result,omitempty"`
+	Param  []interface{} `json:"params"`
+	Method  string        `json:"method"`
 }
 
 type Notify struct {
@@ -301,9 +313,12 @@ func (this *Session) handleRequest() {
 			}
 			var req Request
 			log.Debug("[Session] handleRequest", "request", string(request))
-			err = json.Unmarshal(request, &req)
+			decoder := jsonStd.NewDecoder(bytes.NewReader(request))
+			decoder.UseNumber()
+			err = decoder.Decode(&req)
+			//err = json.Unmarshal(request, &req)
 			if err != nil {
-				log.Warn("[Session]json.Unmarshal", "error", err, "sessionId", this.sessionId, "MinerName", this.minerName)
+				log.Warn("[Session]json.Unmarshal", "error", err, "sessionId", this.sessionId, "MinerName", this.minerName,"request",string(request))
 				return
 			}
 			switch strings.TrimSpace(req.Method) {
@@ -502,13 +517,21 @@ func (this *Session) handleAuthorize(req *Request) error {
 		this.sendResponse(result)
 		return nil
 	}
-	if !this.auth.Auth(req.Param[0], req.Param[1]) {
+	username,ok:=req.Param[0].(string)
+	if !ok{
+		log.Warn("handleAuthorize username not ok")
+	}
+	password,ok:=req.Param[1].(string)
+	if !ok{
+		log.Warn("handleAuthorize password not ok")
+	}
+	if !this.auth.Auth(username, password) {
 		log.Error("[Session]Auth Failed!", "passwd", req.Param[1], "IP", this.minerIp)
 		result := &Response{Id: req.Id, Error: &Error{Code: 11, Message: "auth failed"}, Result: false}
 		this.sendResponse(result)
 		return nil
 	}
-	this.minerName = req.Param[0]
+	this.minerName =password
 	result := &Response{
 		Id:     req.Id,
 		Error:  nil,
@@ -527,14 +550,10 @@ func (this *Session) handleAuthorize(req *Request) error {
 // "result":[["mining.notify","ae6812eb4cd7735a302a8a9dd95cf71f"],["mining.set_difficulty","290003c9785fd6cd2"],"080c",4],
 // "error":null}
 func (this *Session) handleSubscribe(req *Request) error {
-	method := "mining.subscribe"
-
 	subscriptionID := strconv.FormatInt(time.Now().Unix(), 16) + strconv.FormatInt(time.Now().Unix(), 16) + strconv.FormatInt(time.Now().Unix(), 16) + strconv.FormatInt(time.Now().Unix(), 16)
 	log.Info("[Session]handleSubscribe", "subscriptionID", subscriptionID)
-
 	difficulty := strconv.FormatUint(this.difficulty, 16)
 	log.Info("[Session]handleSubscribe", "difficulty", difficulty)
-
 	result := &SubscribeResult{
 		Error: nil,
 		Id:    req.Id,
@@ -546,7 +565,6 @@ func (this *Session) handleSubscribe(req *Request) error {
 			"",
 			4,
 		},
-		Method: method,
 	}
 	this.sendResponse(result)
 	//when subscribe is ok,run dispatch task and receive nonde
@@ -563,7 +581,11 @@ func (this *Session) handleSubmit(req *Request) error {
 	if len(req.Param) != 5 {
 		return paramNumbersWrong
 	}
-	taskId, err := strconv.ParseUint(req.Param[1], 16, 64)
+	requestTaskId,ok:=req.Param[1].(string)
+	if !ok{
+		log.Warn("handleSubmit requestTaskId not ok")
+	}
+	taskId, err := strconv.ParseUint(requestTaskId, 16, 64)
 	if err != nil {
 		log.Error("[Session]Error when parsing TaskID from submitted message", "sessionId", this.sessionId, "MinerName", this.minerName)
 		err := &Error{
@@ -579,7 +601,11 @@ func (this *Session) handleSubmit(req *Request) error {
 		//表示有响应给客户端，不需要关闭conn
 		return nil
 	}
-	nonce, err := hexutil.DecodeUint64("0x" + strings.TrimLeft(req.Param[4], "0"))
+	requestNonce,ok:=req.Param[4].(string)
+	if !ok{
+		log.Warn("handleSubmit requestNonce not ok")
+	}
+	nonce, err := hexutil.DecodeUint64("0x" + strings.TrimLeft(requestNonce, "0"))
 	if err != nil {
 		err := &Error{
 			Code:    3,
