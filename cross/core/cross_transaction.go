@@ -124,6 +124,10 @@ func (tx *CrossTransaction) BlockHash() common.Hash {
 	return tx.Data.BlockHash
 }
 
+func (tx *CrossTransaction) From() common.Address {
+	return tx.Data.From
+}
+
 func (tx *CrossTransaction) SignHash() (h common.Hash) {
 	if hash := tx.signHash.Load(); hash != nil {
 		return hash.(common.Hash)
@@ -275,6 +279,10 @@ func (cws *CrossTransactionWithSignatures) Hash() (h common.Hash) {
 
 func (cws *CrossTransactionWithSignatures) BlockHash() common.Hash {
 	return cws.Data.BlockHash
+}
+
+func (cws *CrossTransactionWithSignatures) From() common.Address {
+	return cws.Data.From
 }
 
 func (cws *CrossTransactionWithSignatures) SetStatus(status CtxStatus) {
