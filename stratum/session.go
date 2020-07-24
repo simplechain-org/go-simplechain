@@ -442,7 +442,7 @@ func (this *Session) dispatchAndVerify() {
 				Method: "mining.notify",
 				Param:  task.toJson(),
 			}
-			log.Info("Session dispatch task", "sessionId", this.sessionId, "difficulty", difficulty)
+			log.Info("Session dispatch task", "sessionId", this.sessionId, "difficulty", difficulty,"begin",task.NonceBegin)
 			//任务下发给具体的客户端（一个session一个客户端）
 			this.sendResponse(notify)
 		case nonceResult := <-this.newNonce:

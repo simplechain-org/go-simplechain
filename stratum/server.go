@@ -260,7 +260,7 @@ func (this *Server) splitWork(nonceBegin, nonceEnd uint64) {
 		for _, session := range this.authorizes {
 			taskDifficulty := big.NewInt(0).SetBytes(mineTask.Difficulty.Bytes())
 			if this.calcHashRate {
-				log.Info("splitWork difficulty", "change for session", session.difficulty)
+				log.Warn("splitWork difficulty", "change for session", session.difficulty)
 				taskDifficulty.SetUint64(session.difficulty)
 			}
 			notifyTask := &StratumTask{
@@ -273,7 +273,7 @@ func (this *Server) splitWork(nonceBegin, nonceEnd uint64) {
 				IfClearTask:  true,
 				Submitted:    false,
 			}
-			log.Info("[Server] DispatchTask splitWork", "difficulty", notifyTask.Difficulty)
+			log.Trace("[Server] DispatchTask splitWork", "difficulty", notifyTask.Difficulty)
 			//ok
 			session.DispatchTask(notifyTask)
 		}
@@ -283,7 +283,7 @@ func (this *Server) splitWork(nonceBegin, nonceEnd uint64) {
 func (this *Server) dispatchWork(nonceBegin, nonceEnd uint64, miners int) {
 	this.sessionLock.RLock()
 	defer this.sessionLock.RUnlock()
-	log.Info("[Server] dispatchWork", "nonceBegin", nonceBegin, "nonceEnd", nonceEnd)
+	log.Trace("[Server] dispatchWork", "nonceBegin", nonceBegin, "nonceEnd", nonceEnd)
 	totalSlice := nonceEnd - nonceBegin
 	var totalHashRate uint64
 	var zeroHashRateCount uint64
@@ -325,7 +325,7 @@ func (this *Server) dispatchWork(nonceBegin, nonceEnd uint64, miners int) {
 		}
 		nonceBegin = nonceBegin + sessionSlice
 
-		log.Info("[Server] dispatchWork", "miner", session.minerName, "difficulty", session.difficulty)
+		log.Trace("[Server] dispatchWork", "miner", session.minerName, "difficulty", session.difficulty)
         //ok
 		session.DispatchTask(notifyTask)
 	}

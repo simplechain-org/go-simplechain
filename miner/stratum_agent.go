@@ -2,10 +2,13 @@ package miner
 
 import (
 	"context"
+	crand "crypto/rand"
 	"math/big"
+	"math/rand"
 	"runtime/debug"
 	"sync"
 	"sync/atomic"
+	"math"
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/consensus"
@@ -29,6 +32,7 @@ type StratumAgent struct {
 	recentWork *types.Block
 	mutex      sync.Mutex
 	cancel     context.CancelFunc
+	rand     *rand.Rand
 }
 
 func NewStratumAgent(chain consensus.ChainReader, engine consensus.Engine) *StratumAgent {
@@ -99,6 +103,14 @@ func (self *StratumAgent) GetHashRate() uint64 {
 }
 
 func (self *StratumAgent) update(ctx context.Context) {
+	if self.rand == nil {
+		seed, err := crand.Int(crand.Reader, big.NewInt(math.MaxInt64))
+		if err != nil {
+			log.Error(err.Error())
+		}else{
+			self.rand = rand.New(rand.NewSource(seed.Int64()))
+		}
+	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -109,7 +121,8 @@ func (self *StratumAgent) update(ctx context.Context) {
 			log.Info("[StratumAgent]Received work", "difficulty", work.Difficulty())
 			self.mutex.Lock()
 			self.recentWork = work
-			self.server.Dispatch(work.HashNoNonce(), work.Difficulty(), 0, 0)
+			nonceBegin:=uint64(self.rand.Int63())
+			self.server.Dispatch(work.HashNoNonce(), work.Difficulty(), nonceBegin, math.MaxUint64)
 			self.mutex.Unlock()
 		}
 	}
