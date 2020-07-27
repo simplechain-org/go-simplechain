@@ -16,7 +16,7 @@ contract crossDemo{
         address[] anchorAddress;
         mapping(address=>Anchor) anchors;   //锚定矿工列表 address => Anchor
         mapping(bytes32=>MakerInfo) makerTxs; //挂单 交易完成后删除交易，通过发送日志方式来呈现交易历史。
-        mapping(bytes32=>uint256) takerTxs; //跨链交易列表 吃单 hash => Transaction[]
+        mapping(bytes32=>TakerInfo) takerTxs; //跨链交易列表 吃单 hash => Transaction[]
         mapping(address=>Anchor) delAnchors; //删除锚定矿工列表 address => Anchor
         uint64 delsPositionBit;
         address[] delsAddress;
@@ -42,6 +42,11 @@ contract crossDemo{
         bytes32 takerHash;
     }
 
+    struct TakerInfo {
+        uint256 value;
+        address payable from;
+    }
+
     //创建交易 maker
     event MakerTx(bytes32 indexed txId, address indexed from, address to, uint remoteChainId, uint value, uint destValue,bytes data);
 
@@ -58,7 +63,7 @@ contract crossDemo{
     event SetAnchorStatus(uint remoteChainId);
 
     modifier onlyAnchor(uint remoteChainId) {
-        require(crossChains[remoteChainId].remoteChainId > 0,"remoteChainId not exist");
+        require(crossChains[remoteChainId].remoteChainId > 0,"remoteChainId err");
         require(crossChains[remoteChainId].anchors[msg.sender].remoteChainId == remoteChainId,"not anchors");
         _;
     }
@@ -82,8 +87,9 @@ contract crossDemo{
     function getMaxValue(uint remoteChainId) public view returns(uint) { return crossChains[remoteChainId].maxValue; }
 
     function accumulateRewards(uint remoteChainId, address payable anchor, uint reward) public onlyOwner {
-        require(reward <= crossChains[remoteChainId].totalReward, "must less then totalReward");
+        require(reward <= crossChains[remoteChainId].totalReward, "reward err");
         require(crossChains[remoteChainId].anchors[anchor].remoteChainId == remoteChainId, "illegal anchor");
+        assert(crossChains[remoteChainId].totalReward >= reward);
         crossChains[remoteChainId].totalReward -=  reward;
         anchor.transfer(reward);
         emit AccumulateRewards(remoteChainId, anchor, reward);
@@ -91,8 +97,8 @@ contract crossDemo{
 
     //登记链信息 管理员操作
     function chainRegister(uint remoteChainId,uint maxValue, uint8 signConfirmCount, address[] memory _anchors) public onlyOwner returns(bool) {
-        require (crossChains[remoteChainId].remoteChainId == 0,"remoteChainId already exist");
-        require (_anchors.length <= 64,"bigger then 64");
+        require (crossChains[remoteChainId].remoteChainId == 0,"remoteChainId err");
+        require (_anchors.length <= 64,"_anchors err");
         uint64 temp = 0;
         address[] memory newAnchors;
         address[] memory delAnchors;
@@ -119,16 +125,15 @@ contract crossDemo{
             crossChains[remoteChainId].anchorAddress.push(_anchors[i]);
             crossChains[remoteChainId].anchors[_anchors[i]] = Anchor({remoteChainId:remoteChainId,position:i,status:true,signCount:0,finishCount:0});
         }
-
         return true;
     }
 
     //增加锚定矿工，管理员操作
     // position [0, 63]
     function addAnchors(uint remoteChainId, address[] memory _anchors) public onlyOwner {
-        require (crossChains[remoteChainId].remoteChainId > 0,"remoteChainId not exist");
+        require (crossChains[remoteChainId].remoteChainId > 0,"remoteChainId err");
         require (_anchors.length > 0 && _anchors.length < 64,"need _anchors");
-        require ((crossChains[remoteChainId].anchorAddress.length + _anchors.length) <= 64,"bigger then 64");
+        require ((crossChains[remoteChainId].anchorAddress.length + _anchors.length) <= 64,"_anchors err");
         uint64 temp = 0;
         crossChains[remoteChainId].anchorsPositionBit = (temp - 1) >> (64 - crossChains[remoteChainId].anchorAddress.length - _anchors.length);
         //加入锚定矿工
@@ -144,15 +149,14 @@ contract crossDemo{
             crossChains[remoteChainId].anchors[_anchors[i]] = Anchor({remoteChainId:remoteChainId, position:uint8(crossChains[remoteChainId].anchorAddress.length),status:true,signCount:0,finishCount:0});
             crossChains[remoteChainId].anchorAddress.push(_anchors[i]);
         }
-
         emit AddAnchors(remoteChainId);
     }
 
     //移除锚定矿工, 管理员操作
     function removeAnchors(uint remoteChainId, address[] memory _anchors) public onlyOwner {
-        require (crossChains[remoteChainId].remoteChainId > 0,"remoteChainId not exist");
+        require (crossChains[remoteChainId].remoteChainId > 0,"remoteChainId err");
         require (_anchors.length > 0,"need _anchors");
-        require((crossChains[remoteChainId].anchorAddress.length - crossChains[remoteChainId].signConfirmCount) >= _anchors.length,"_anchors too many");
+        require((crossChains[remoteChainId].anchorAddress.length - crossChains[remoteChainId].signConfirmCount) >= _anchors.length,"_anchors err");
         uint64 temp = 0;
         crossChains[remoteChainId].anchorsPositionBit = (temp - 1) >> (64 - crossChains[remoteChainId].anchorAddress.length + _anchors.length);
         for (uint8 i=0; i<_anchors.length; i++) {
@@ -215,15 +219,15 @@ contract crossDemo{
     }
 
     function setSignConfirmCount(uint remoteChainId,uint8 count) public onlyOwner {
-        require (crossChains[remoteChainId].remoteChainId > 0,"remoteChainId not exist");
-        require (count != 0,"can not be zero");
-        require (count <= crossChains[remoteChainId].anchorAddress.length,"not enough anchors");
+        require (crossChains[remoteChainId].remoteChainId > 0,"remoteChainId err");
+        require (count != 0,"count 0");
+        require (count <= crossChains[remoteChainId].anchorAddress.length,"count err");
         crossChains[remoteChainId].signConfirmCount = count;
     }
 
     function setMaxValue(uint remoteChainId,uint maxValue) public onlyOwner {
-        require (crossChains[remoteChainId].remoteChainId > 0,"remoteChainId not exist");
-        require (maxValue != 0,"can not be zero");
+        require (crossChains[remoteChainId].remoteChainId > 0,"remoteChainId err");
+        require (maxValue != 0,"maxValue 0");
         require (maxValue > crossChains[remoteChainId].reward,"too less");
         crossChains[remoteChainId].maxValue = maxValue;
     }
@@ -232,8 +236,11 @@ contract crossDemo{
         return crossChains[remoteChainId].makerTxs[txId].value;
     }
 
-    function getTakerTx(bytes32 txId, uint remoteChainId) public view returns(uint){
-        return crossChains[remoteChainId].takerTxs[txId];
+    function getTakerTx(bytes32 txId, address _from, uint remoteChainId) public view returns(uint){
+        if (crossChains[remoteChainId].takerTxs[txId].from == _from) {
+            return crossChains[remoteChainId].takerTxs[txId].value;
+        }
+        return 0;
     }
 
     function getAnchors(uint remoteChainId) public view returns(address[] memory _anchors,uint8){
@@ -264,8 +271,8 @@ contract crossDemo{
 
     //增加跨链交易
     function makerStart(uint remoteChainId, uint destValue, address payable focus, bytes memory data) public payable {
-        require(msg.value > crossChains[remoteChainId].reward && msg.value < crossChains[remoteChainId].maxValue,"value out of range");
-        require(crossChains[remoteChainId].remoteChainId > 0,"chainId not exist"); //是否支持的跨链
+        require(msg.value > crossChains[remoteChainId].reward && msg.value < crossChains[remoteChainId].maxValue,"value err");
+        require(crossChains[remoteChainId].remoteChainId > 0,"chainId err"); //是否支持的跨链
         bytes32 txId = keccak256(abi.encodePacked(msg.sender, list(), remoteChainId));
         assert(crossChains[remoteChainId].makerTxs[txId].value == 0);
         crossChains[remoteChainId].makerTxs[txId] = MakerInfo({
@@ -292,8 +299,9 @@ contract crossDemo{
         require(crossChains[remoteChainId].anchors[msg.sender].status);
         require(crossChains[remoteChainId].makerTxs[rtx.txId].signatures[msg.sender] != 1);
         require(crossChains[remoteChainId].makerTxs[rtx.txId].value > 0);
-        require(crossChains[remoteChainId].makerTxs[rtx.txId].to == address(0x0) || crossChains[remoteChainId].makerTxs[rtx.txId].to == rtx.to || crossChains[remoteChainId].makerTxs[rtx.txId].from == rtx.to,"to is error");
-        require(crossChains[remoteChainId].makerTxs[rtx.txId].takerHash == bytes32(0x0) || crossChains[remoteChainId].makerTxs[rtx.txId].takerHash == rtx.txHash,"txHash is error");
+        require(crossChains[remoteChainId].makerTxs[rtx.txId].from == rtx.from,"from err");
+        require(crossChains[remoteChainId].makerTxs[rtx.txId].to == address(0x0) || crossChains[remoteChainId].makerTxs[rtx.txId].to == rtx.to || crossChains[remoteChainId].makerTxs[rtx.txId].from == rtx.to,"to err");
+        require(crossChains[remoteChainId].makerTxs[rtx.txId].takerHash == bytes32(0x0) || crossChains[remoteChainId].makerTxs[rtx.txId].takerHash == rtx.txHash,"txHash err");
         crossChains[remoteChainId].makerTxs[rtx.txId].signatures[msg.sender] = 1;
         crossChains[remoteChainId].makerTxs[rtx.txId].signatureCount ++;
         crossChains[remoteChainId].makerTxs[rtx.txId].to = rtx.to;
@@ -363,18 +371,18 @@ contract crossDemo{
     }
 
     function taker(Order memory ctx,uint remoteChainId) payable public{
-        require(ctx.v.length == ctx.r.length,"length error");
-        require(ctx.v.length == ctx.s.length,"length error");
-        require(ctx.to == address(0x0) || ctx.to == msg.sender || ctx.from == msg.sender,"to is err");
-        require(crossChains[remoteChainId].takerTxs[ctx.txId] == 0,"txId exist");
+        require(ctx.v.length == ctx.r.length,"vrs err");
+        require(ctx.v.length == ctx.s.length,"vrs err");
+        require(ctx.to == address(0x0) || ctx.to == msg.sender || ctx.from == msg.sender,"to err");
+        require(crossChains[remoteChainId].takerTxs[ctx.txId].value == 0 || crossChains[remoteChainId].takerTxs[ctx.txId].from != ctx.from,"txId err");
         if(msg.sender == ctx.from){
             require(verifyOwnerSignAndCount(keccak256(abi.encodePacked(ctx.value, ctx.txId, ctx.txHash, ctx.from, ctx.blockHash, chainId(), ctx.destinationValue,ctx.data)), remoteChainId,ctx.v,ctx.r,ctx.s) >= crossChains[remoteChainId].signConfirmCount,"sign error");
-            crossChains[remoteChainId].takerTxs[ctx.txId] = ctx.value;
+            crossChains[remoteChainId].takerTxs[ctx.txId] = TakerInfo({value:ctx.value,from:ctx.from});
             ctx.from.transfer(msg.value);
         } else {
-            require(msg.value >= ctx.destinationValue,"price wrong");
+            require(msg.value >= ctx.destinationValue,"price err");
             require(verifySignAndCount(keccak256(abi.encodePacked(ctx.value, ctx.txId, ctx.txHash, ctx.from, ctx.blockHash, chainId(), ctx.destinationValue,ctx.data)), remoteChainId,ctx.v,ctx.r,ctx.s) >= crossChains[remoteChainId].signConfirmCount,"sign error");
-            crossChains[remoteChainId].takerTxs[ctx.txId] = ctx.value;
+            crossChains[remoteChainId].takerTxs[ctx.txId] = TakerInfo({value:ctx.value,from:ctx.from});
             ctx.from.transfer(msg.value);
         }
         emit TakerTx(ctx.txId,msg.sender,remoteChainId,ctx.from,ctx.value,ctx.destinationValue);
