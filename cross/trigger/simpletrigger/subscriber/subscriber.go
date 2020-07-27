@@ -186,11 +186,6 @@ func (s *SimpleSubscriber) NotifyBlockReorg(number *big.Int, deletedLogs [][]*ty
 				switch l.Topics[0] {
 				case params.TakerTopic: // reorg executing -> waiting
 					if len(l.Topics) >= 3 && len(l.Data) >= common.HashLength {
-						//reorgEvent.ReorgTaker.Takers = append(reorgEvent.ReorgTaker.Takers, &cc.CrossTransactionModifier{
-						//	ID:     l.Topics[1],
-						//	Status: cc.CtxStatusWaiting,
-						//	Type:   cc.Reorg,
-						//})
 						ctxId := l.Topics[1]
 						var to, from common.Address
 						copy(to[:], l.Topics[2][common.HashLength-common.AddressLength:])

@@ -41,8 +41,8 @@ type ChainConfig struct {
 	ConfirmNum   uint64
 }
 type Config struct {
-	Anchor    string
-	AnchorKey string
+	Anchor            string
+	AnchorKey         string
 	RequireSignatures int
 
 	Main ChainConfig
@@ -297,7 +297,7 @@ func (h *Handler) MakeEvent(chain *Chain, event *types.Log, crossTxBytes hexutil
 		log.Error("encode crossTxWithSign failed", "err", err)
 		panic(err)
 	}
-	log.Info("[]*CrossTransaction", "tx_rlp", hexutil.Bytes(data),"signs length",crossTxWithSign.SignaturesLength(),"requireSigns",requerSigns)
+	log.Info("[]*CrossTransaction", "tx_rlp", hexutil.Bytes(data), "signs length", crossTxWithSign.SignaturesLength(), "requireSigns", requerSigns)
 
 }
 
