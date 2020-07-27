@@ -137,7 +137,7 @@ func (v *SimpleValidator) VerifyContract(cws trigger.Transaction) error {
 		}
 
 	} else if v.IsRemoteCtx(cws) {
-		res, err = evmInvoke.CallContract(common.Address{}, &v.contract, params.GetTakerTxFn, paddedCtxId, common.LeftPadBytes(cws.ChainId().Bytes(), 32))
+		res, err = evmInvoke.CallContract(common.Address{}, &v.contract, params.GetTakerTxFn, paddedCtxId, cws.From().Bytes(), common.LeftPadBytes(cws.ChainId().Bytes(), 32))
 		if err != nil {
 			v.logger.Warn("apply getTakerTx transaction failed", "error", err)
 			return cross.ErrInternal

@@ -43,6 +43,7 @@ type ChainConfig struct {
 type Config struct {
 	Anchor    string
 	AnchorKey string
+	RequireSignatures int
 
 	Main ChainConfig
 	Sub  ChainConfig
@@ -85,9 +86,9 @@ func main() {
 	}
 
 	if *role == "mainchain" {
-		h.handleTx(&h.MainChain, common.HexToHash(*txHash))
+		h.handleTx(&h.MainChain, config.RequireSignatures, common.HexToHash(*txHash))
 	} else if *role == "subchain" {
-		h.handleTx(&h.SubChain, common.HexToHash(*txHash))
+		h.handleTx(&h.SubChain, config.RequireSignatures, common.HexToHash(*txHash))
 	}
 
 }
@@ -114,8 +115,7 @@ type Handler struct {
 	SubChain   Chain
 }
 
-//TODO 补签之后未广播到其他节点,判重
-
+//补签之后未广播到其他节点
 func NewHandler(config *Config) *Handler {
 	data, err := hexutil.Decode(params.CrossDemoAbi)
 	if err != nil {
@@ -168,7 +168,7 @@ func NewHandler(config *Config) *Handler {
 	}
 }
 
-func (h *Handler) handleTx(chain *Chain, txHash common.Hash) {
+func (h *Handler) handleTx(chain *Chain, requerSigns int, txHash common.Hash) {
 	ctx := context.Background()
 	receipt, err := chain.Client.TransactionReceipt(ctx, txHash)
 	if err != nil {
@@ -180,7 +180,7 @@ func (h *Handler) handleTx(chain *Chain, txHash common.Hash) {
 			if v.Topics[0] == params.MakerTopic {
 				log.Info("tx event MakerTopic", "ctxID", v.Topics[1].String())
 				addCrossTxBytes, _ := hexutil.Decode(*addCrossTx)
-				h.MakeEvent(chain, v, addCrossTxBytes)
+				h.MakeEvent(chain, v, addCrossTxBytes, requerSigns)
 			}
 
 			if len(v.Topics) >= 3 && v.Topics[0] == params.TakerTopic && len(v.Data) >= common.HashLength*4 {
@@ -239,7 +239,7 @@ func (h *Handler) TakerEvent(chain *Chain, ctx context.Context, event *types.Log
 }
 
 //主链的maker event的处理，打印出签名的交易，通过rpc来插入到跨链DB
-func (h *Handler) MakeEvent(chain *Chain, event *types.Log, crossTxBytes hexutil.Bytes) {
+func (h *Handler) MakeEvent(chain *Chain, event *types.Log, crossTxBytes hexutil.Bytes, requerSigns int) {
 	var from common.Address
 	var to common.Address
 	copy(from[:], event.Topics[2][common.HashLength-common.AddressLength:])
@@ -263,40 +263,42 @@ func (h *Handler) MakeEvent(chain *Chain, event *types.Log, crossTxBytes hexutil
 	if err != nil {
 		log.Error("SignCtx failed", "err", err)
 	}
-	data, err := rlp.EncodeToBytes(signedTx)
+	crossTxWithSign := cc.NewCrossTransactionWithSignatures(signedTx, event.BlockNumber+chain.ConfirmNumber)
+	crossTxWithSign.SetStatus(cc.CtxStatusWaiting)
+
+	//签名要求是>2的情况；如果finish的交易补签会失败（s.service.store.Add(ctx)判重）
+	if len(crossTxBytes) > 0 {
+		var addTxs []*cc.CrossTransaction
+		if err := rlp.DecodeBytes(crossTxBytes, &addTxs); err != nil {
+			panic(err)
+		}
+		for _, addTx := range addTxs {
+			if err := crossTxWithSign.AddSignature(addTx); err != nil {
+				panic(err)
+			}
+		}
+
+		if crossTxWithSign.SignaturesLength() >= requerSigns {
+			if chain.IsMain {
+				if err = chain.Client.SendCrossTxMain(context.Background(), crossTxWithSign); err != nil {
+					panic(err)
+				}
+			} else {
+				if err = chain.Client.SendCrossTxSub(context.Background(), crossTxWithSign); err != nil {
+					panic(err)
+				}
+			}
+			log.Info("SendCrossTransaction successfully", "ctxID", crossTxWithSign.ID())
+		}
+	}
+
+	data, err := rlp.EncodeToBytes(crossTxWithSign.Resolution())
 	if err != nil {
 		log.Error("encode crossTxWithSign failed", "err", err)
 		panic(err)
 	}
+	log.Info("[]*CrossTransaction", "tx_rlp", hexutil.Bytes(data),"signs length",crossTxWithSign.SignaturesLength(),"requireSigns",requerSigns)
 
-	//todo 签名要求是>2的情况；如果finish的交易补签会成功？
-	if len(crossTxBytes) > 0 {
-		var addTx cc.CrossTransaction
-
-		crossTxWithSign := cc.NewCrossTransactionWithSignatures(signedTx, event.BlockNumber+chain.ConfirmNumber)
-		crossTxWithSign.SetStatus(cc.CtxStatusWaiting)
-
-		if err := rlp.DecodeBytes(crossTxBytes, &addTx); err != nil {
-			panic(err)
-		}
-		if err := crossTxWithSign.AddSignature(&addTx); err != nil {
-			panic(err)
-		}
-
-		if chain.IsMain {
-			if err = chain.Client.SendCrossTxMain(context.Background(), crossTxWithSign); err != nil {
-				panic(err)
-			}
-		} else {
-			if err = chain.Client.SendCrossTxSub(context.Background(), crossTxWithSign); err != nil {
-				panic(err)
-			}
-		}
-
-		log.Info("SendCrossTransaction successfully", "ctxID", crossTxWithSign.ID())
-	} else {
-		log.Info("CrossTransaction", "tx_rlp", hexutil.Bytes(data))
-	}
 }
 
 // SignCtx signs the transaction using the given signer and private key

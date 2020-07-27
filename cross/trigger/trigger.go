@@ -35,6 +35,7 @@ type Transaction interface {
 	ChainId() *big.Int
 	DestinationId() *big.Int
 	BlockHash() common.Hash
+	From() common.Address
 }
 
 type ChainRetriever interface {

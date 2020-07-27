@@ -43,8 +43,8 @@ func TestCreation(t *testing.T) {
 			params.MainnetChainConfig,
 			params.MainnetGenesisHash,
 			[]testcase{
-				{0, ID{Hash: checksumToBytes(0x523c0685), Next: 5000000}}, // Unsynced
-				{5000000, ID{Hash: checksumToBytes(0x3093996a), Next: 0}}, // Singularity block
+				{0, ID{Hash: checksumToBytes(0x523c0685), Next: 3966693}}, // Unsynced
+				{3966693, ID{Hash: checksumToBytes(0xbc8a0f5e), Next: 0}}, // Singularity block
 			},
 		},
 		//Ropsten test cases
@@ -74,7 +74,7 @@ func TestValidation(t *testing.T) {
 		id   ID
 		err  error
 	}{
-		{0, ID{Hash: checksumToBytes(0x523c0685), Next: 5000000}, nil},
+		{0, ID{Hash: checksumToBytes(0x523c0685), Next: 3966693}, nil},
 	}
 	for i, tt := range tests {
 		filter := newFilter(params.MainnetChainConfig, params.MainnetGenesisHash, func() uint64 { return tt.head })
