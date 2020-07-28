@@ -4,12 +4,10 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"math/big"
 	"math/rand"
 	"net"
@@ -19,7 +17,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"github.com/simplechain-org/go-simplechain/consensus/scrypt"
 	"github.com/simplechain-org/go-simplechain/log"
@@ -34,34 +31,24 @@ var (
 
 	HashRateLen = 90
 
-	DifficultyMin = 120000 //创世区块的初始难度
+	MinDifficulty uint64 = 120000
 
 	jsonStd = jsoniter.ConfigCompatibleWithStandardLibrary
 )
 
 type Session struct {
-	sessionId  string
-	minerName  string
-	minerIp    string
-	conn       net.Conn
-	difficulty uint64
-	latestTask atomic.Value //*StratumTask
-	closed     int64
-	//The zero Map is empty and ready for use.
-	// A Map must not be copied after first use.
-	difficultyMeter sync.Map
+	sessionId string
+	minerName string
+	minerIp   string
+	conn      net.Conn
 
-	hashRate    uint64 //3m
-	hashRate30s uint64 //30s
-
-	hashRateArray    []uint64
-	hashRateArrayMux sync.Mutex
+	closed int64
 
 	cancel context.CancelFunc
 
 	authorize bool
 
-	onClose     func(sessionId string, auth bool)
+	onClose     func(sessionId string)
 	onAuthorize func(sessionId string)
 	onSubmit    func(nonce uint64)
 
@@ -76,89 +63,37 @@ type Session struct {
 	newNonce     chan NonceResult
 	server       *Server
 	calcHashRate bool
+
+	adjustDifficultyChan chan AdjustResult
+	minDifficulty        uint64
+	initDifficulty       uint64
+	hashRateMeterLen     int
+	hashRateChan         chan chan uint64
+	difficultyChan       chan chan uint64
+	lastSubmitTimeChan   chan chan int64
+	nonceMeterChan       chan chan map[uint64]NonceMeter
+	nonceDifficulty      chan uint64
 }
 
-type timeMeter struct {
-	difficulty    uint64
-	submitSuccess uint64
-	submitFails   uint64
-}
-
-type StratumTask struct {
-	Id           uint64
-	ServerTaskId uint64
-	PowHash      common.Hash
-	NonceBegin   uint64
-	NonceEnd     uint64
-	Difficulty   *big.Int
-	Timestamp    int64
-	IfClearTask  bool
-	Submitted    bool
-}
-
-func (task *StratumTask) toJson() []interface{} {
-	hash := append(append(task.PowHash.Bytes(), task.PowHash.Bytes()...), []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}...)
-	hashString := hex.EncodeToString(hash)
-	difficulty := fmt.Sprintf("%x", task.Difficulty)
-	taskId := strconv.FormatUint(task.Id, 16)
-	nonceBegin := strconv.FormatUint(task.NonceBegin, 16)
-	nonceEnd := strconv.FormatUint(task.NonceEnd, 16)
-	timestamp := strconv.FormatInt(task.Timestamp, 16)
-	return []interface{}{taskId, hashString, nonceBegin, nonceEnd, difficulty, timestamp, task.IfClearTask}
-}
-
-//type Request struct {
-//	Param  []string    `json:"params"`
-//	Id     interface{} `json:"id"`
-//	Method string      `json:"method"`
-//}
-type Request struct {
-	Id      interface{}   `json:"id"`
-	JsonRpc string        `json:"jsonrpc,omitempty"`
-	Error   interface{}   `json:"error,omitempty"`
-	Result  interface{}   `json:"result,omitempty"`
-	Param   []interface{} `json:"params"`
-	Method  string        `json:"method"`
-}
-
-type Notify struct {
-	Param  []interface{} `json:"params"`
-	Id     interface{}   `json:"id"`
-	Method string        `json:"method"`
-}
-
-type Error struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-}
-
-type Response struct {
-	Error  *Error      `json:"error"`
-	Id     interface{} `json:"id"`
-	Result bool        `json:"result"`
-	Method string      `json:"method"`
-}
-
-type SubscribeResult struct {
-	Error  *Error        `json:"error"`
-	Id     interface{}   `json:"id"`
-	Result []interface{} `json:"result"`
-	Method string        `json:"method"`
-}
-
-func NewSession(auth Auth, sessionId string, conn net.Conn, difficulty uint64, server *Server, calcHashRate bool) *Session {
+func NewSession(auth Auth, sessionId string, conn net.Conn, initDifficulty uint64, minDifficulty uint64, server *Server, calcHashRate bool, hashRateMeterLen int) *Session {
 	session := &Session{
-		sessionId:     sessionId,
-		conn:          conn,
-		response:      make(chan interface{}, 100),
-		difficulty:    difficulty,
-		hashRateArray: make([]uint64, 0, HashRateLen),
-		auth:          auth,
-		stop:          make(chan struct{}),
-		newTask:       make(chan *StratumTask, 10),
-		newNonce:      make(chan NonceResult, 1000),
-		server:        server,
-		calcHashRate:  calcHashRate,
+		sessionId:          sessionId,
+		conn:               conn,
+		response:           make(chan interface{}, 100),
+		initDifficulty:     initDifficulty,
+		minDifficulty:      minDifficulty,
+		auth:               auth,
+		stop:               make(chan struct{}),
+		newTask:            make(chan *StratumTask, 10),
+		newNonce:           make(chan NonceResult, 10),
+		server:             server,
+		calcHashRate:       calcHashRate,
+		hashRateMeterLen:   hashRateMeterLen,
+		hashRateChan:       make(chan chan uint64, 10),
+		difficultyChan:     make(chan chan uint64, 10),
+		lastSubmitTimeChan: make(chan chan int64, 10),
+		nonceMeterChan:     make(chan chan map[uint64]NonceMeter, 10),
+		nonceDifficulty:    make(chan uint64, 10),
 	}
 	return session
 }
@@ -168,7 +103,7 @@ func (this *Session) Start(calcHashRate bool) {
 	go this.handleRequest()
 	go this.handleResponse()
 	if calcHashRate {
-		go this.hashRateMeter()
+		go this.loop()
 	}
 }
 
@@ -178,62 +113,15 @@ func (this *Session) Close() {
 		close(this.stop)
 		this.conn.Close()
 		if this.onClose != nil {
-			this.onClose(this.sessionId, this.authorize)
+			this.onClose(this.sessionId)
 		}
 	}
-}
-
-func (this *Session) hashRateMeter() {
-	ticker := time.NewTicker(2 * time.Second)
-	defer func() {
-		ticker.Stop()
-		log.Debug("[Session]hashRateMeter done")
-	}()
-	var lastAcceptQuantity uint64
-	for {
-		select {
-		case <-ticker.C:
-			var temp uint64
-			this.difficultyMeter.Range(func(diff, v interface{}) bool {
-				temp += diff.(uint64) * atomic.LoadUint64(&v.(*timeMeter).submitSuccess)
-				return true
-			})
-			this.hashRateArrayMux.Lock()
-			hash := (temp - lastAcceptQuantity) / 2
-			this.hashRateArray = append(this.hashRateArray, hash)
-			if len(this.hashRateArray) > HashRateLen {
-				this.hashRateArray = this.hashRateArray[len(this.hashRateArray)-HashRateLen:]
-			}
-			lastAcceptQuantity = temp
-			var total uint64
-			for _, v := range this.hashRateArray {
-				total += v
-			}
-			atomic.StoreUint64(&this.hashRate, total/uint64(len(this.hashRateArray)))
-			if len(this.hashRateArray) >= 30 {
-				var total uint64
-				hashRateArray := this.hashRateArray[len(this.hashRateArray)-30:]
-				for _, v := range hashRateArray {
-					total += v
-				}
-				this.hashRate30s = total / uint64(len(hashRateArray))
-			} else {
-				this.hashRate30s = atomic.LoadUint64(&this.hashRate)
-			}
-			this.hashRateArrayMux.Unlock()
-		case <-this.stop:
-			return
-		}
-	}
-}
-func (this *Session) GetHashRate() uint64 {
-	return atomic.LoadUint64(&this.hashRate)
 }
 func (this *Session) GetSessionId() string {
 	return this.sessionId
 }
 
-func (this *Session) RegisterCloseFunc(onClose func(sessionId string, auth bool)) {
+func (this *Session) RegisterCloseFunc(onClose func(sessionId string)) {
 	this.onClose = onClose
 }
 func (this *Session) RegisterAuthorizeFunc(onAuthorize func(sessionId string)) {
@@ -264,8 +152,9 @@ func (this *Session) handleResponse() {
 		case res := <-this.response:
 			resBytes, err := json.Marshal(res)
 			if err == nil {
-				log.Debug("[Session] handleResponse", "miner", this.minerName)
 				this.writeResponse(resBytes)
+			} else {
+				log.Error("[Session] handleResponse error", "error", err)
 			}
 		}
 	}
@@ -317,7 +206,6 @@ func (this *Session) handleRequest() {
 			decoder := jsonStd.NewDecoder(bytes.NewReader(request))
 			decoder.UseNumber()
 			err = decoder.Decode(&req)
-			//err = json.Unmarshal(request, &req)
 			if err != nil {
 				log.Warn("[Session]json.Unmarshal", "error", err, "sessionId", this.sessionId, "MinerName", this.minerName, "request", string(request))
 				return
@@ -345,84 +233,19 @@ func (this *Session) handleRequest() {
 	}
 }
 
-//调整难度
-// hash rate 没有计算出来的时候，
-// 		1.根据提交频率进行调整
-// 采用 难度/hash rate 进行调整
-//bool 是否调整过难度
-func (s *Session) AdjustDifficulty(serverDifficulty uint64) bool {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	var difficulty uint64
-	prev := s.difficulty
-	if s.hashRate == 0 && s.difficulty > uint64(DifficultyMin) {
-		//修改为按时间估算来衰减
-		if time.Now().UnixNano()-s.lastSubmitTime > 3e9 {
-			if s.difficulty/4 < uint64(DifficultyMin) {
-				difficulty = uint64(DifficultyMin)
-			} else {
-				timeTemp := float64(time.Now().UnixNano()-s.lastSubmitTime) / 1e9
-				n := int(math.Log2(timeTemp / PeriodMin))
-				difficulty = s.difficulty / (2 << uint(n))
-			}
-		}
-	} else {
-		//单位 秒
-		timeTemp := float64(s.difficulty) / float64(s.hashRate)
-
-		if timeTemp > PeriodMax {
-			if s.difficulty > uint64(DifficultyMin) {
-				difficulty = s.difficulty / 2
-			}
-		} else if timeTemp < PeriodMin {
-			pow10 := int(math.Log10(PeriodMin / timeTemp))
-			n := math.Log2(PeriodMin / timeTemp / math.Pow10(pow10))
-			difficulty = s.difficulty * (2 << uint(n)) * uint64(math.Pow10(pow10))
-		}
-	}
-
-	if difficulty > 0 {
-		s.difficulty = difficulty
-
-		if difficulty < uint64(DifficultyMin) {
-			s.difficulty = uint64(DifficultyMin)
-		}
-	}
-	if s.difficulty > serverDifficulty {
-		s.difficulty = serverDifficulty
-	}
-	return prev != s.difficulty
-}
-
-//get session difficulty
-func (s *Session) GetDifficulty() uint64 {
-	s.mutex.RLock()
-	defer s.mutex.RUnlock()
-	return s.difficulty
-}
-
-type NonceResult struct {
-	TaskId uint64
-	Nonce  uint64
-	Id     interface{}
-	Method string
-}
-
-func (this *Session) DispatchTask(task *StratumTask) {
+//must new task
+func (this *Session) dispatchTask(task *StratumTask) {
 	select {
 	case this.newTask <- task:
-		log.Info("new task", "hash", task.PowHash.String(), "difficulty", task.Difficulty)
+		log.Info("[Session] dispatchTask", "hash", task.PowHash.String(), "difficulty", task.Difficulty)
 	default:
-		log.Warn("Session DispatchTask newTask block")
+		log.Warn("[Session] dispatchTask newTask block")
 	}
 }
 func (this *Session) dispatchAndVerify() {
 	defer func() {
-		log.Debug("Session dispatchAndVerify exited", "sessionId", this.sessionId)
+		log.Info("[Session] dispatchAndVerify exited", "sessionId", this.sessionId)
 	}()
-	//将他们放在一个goroutine中
-	//处理任务分发
-	//处理任务提交
 	difficulty := big.NewInt(10000)
 	var taskId uint64 = 0
 	powHash := make([]byte, 32)
@@ -432,20 +255,23 @@ func (this *Session) dispatchAndVerify() {
 		case <-this.stop:
 			return
 		case task := <-this.newTask:
-			this.latestTask.Store(task)
-			difficulty.SetBytes(task.Difficulty.Bytes())
+			if this.calcHashRate {
+				this.AdjustDifficulty(task.Difficulty.Uint64())
+				difficulty.SetUint64(this.GetDifficulty())
+			} else {
+				difficulty.SetBytes(task.Difficulty.Bytes())
+			}
 			taskId++
 			task.Id = taskId
 			copy(powHash, task.PowHash.Bytes())
 			notify := &Notify{
 				Id:     rand.Uint64(),
 				Method: "mining.notify",
-				Param:  task.toJson(),
+				Params: task.toJson(),
 			}
-			log.Info("Session dispatch task", "sessionId", this.sessionId, "difficulty", difficulty,"begin",task.NonceBegin)
-			//任务下发给具体的客户端（一个session一个客户端）
 			this.sendResponse(notify)
 		case nonceResult := <-this.newNonce:
+			log.Trace("[Session] receive", "nonce", nonceResult.Nonce)
 			//new nonce come
 			//check taskId
 			if nonceResult.TaskId != taskId {
@@ -467,7 +293,6 @@ func (this *Session) dispatchAndVerify() {
 			_, result := scrypt.ScryptHash(powHash, nonceResult.Nonce)
 			if new(big.Int).SetBytes(result).Cmp(target) <= 0 {
 				//expected nonce
-
 				this.onSubmit(nonceResult.Nonce)
 				//echo result:true
 				response := &Response{
@@ -477,8 +302,8 @@ func (this *Session) dispatchAndVerify() {
 					Method: nonceResult.Method,
 				}
 				this.sendResponse(response)
-
-				this.nonceSubmitMeter(difficulty.Uint64())
+				this.NonceMeter(difficulty.Uint64())
+				this.checkNeedNewTask(difficulty.Uint64())
 			} else {
 				//not expected nonce
 				format := "nonce %x check failed,difficulty:%x,taskId:%x,powHash:%x"
@@ -496,39 +321,29 @@ func (this *Session) dispatchAndVerify() {
 				//echo result:false
 				this.sendResponse(response)
 				log.Warn("check nonce", "err:", msg)
-				diff, ok := this.difficultyMeter.Load(difficulty)
-				if !ok {
-					meter := &timeMeter{
-						difficulty:  difficulty.Uint64(),
-						submitFails: 1,
-					}
-					this.difficultyMeter.Store(difficulty.Uint64(), meter)
-				} else {
-					atomic.AddUint64(&diff.(*timeMeter).submitFails, 1)
-				}
 			}
 		}
 	}
 }
 
-//授权--->订阅
+//auth--->subscribe
 func (this *Session) handleAuthorize(req *Request) error {
-	if len(req.Param) < 2 {
-		log.Error("[Session]Params empty when handling Authorize!", "Params", req.Param)
+	if len(req.Params) < 2 {
+		log.Error("[Session]Params empty when handling Authorize!", "Params", req.Params)
 		result := &Response{Id: req.Id, Error: &Error{Code: 10, Message: "params error"}, Result: false}
 		this.sendResponse(result)
 		return nil
 	}
-	username, ok := req.Param[0].(string)
+	username, ok := req.Params[0].(string)
 	if !ok {
 		log.Warn("handleAuthorize username not ok")
 	}
-	password, ok := req.Param[1].(string)
+	password, ok := req.Params[1].(string)
 	if !ok {
 		log.Warn("handleAuthorize password not ok")
 	}
 	if !this.auth.Auth(username, password) {
-		log.Error("[Session]Auth Failed!", "passwd", req.Param[1], "IP", this.minerIp)
+		log.Error("[Session]Auth Failed!", "passwd", req.Params[1], "IP", this.minerIp)
 		result := &Response{Id: req.Id, Error: &Error{Code: 11, Message: "auth failed"}, Result: false}
 		this.sendResponse(result)
 		return nil
@@ -548,14 +363,9 @@ func (this *Session) handleAuthorize(req *Request) error {
 }
 
 //server -> client
-// {"id":1,
-// "result":[["mining.notify","ae6812eb4cd7735a302a8a9dd95cf71f"],["mining.set_difficulty","290003c9785fd6cd2"],"080c",4],
-// "error":null}
 func (this *Session) handleSubscribe(req *Request) error {
 	subscriptionID := strconv.FormatInt(time.Now().Unix(), 16) + strconv.FormatInt(time.Now().Unix(), 16) + strconv.FormatInt(time.Now().Unix(), 16) + strconv.FormatInt(time.Now().Unix(), 16)
-	log.Info("[Session]handleSubscribe", "subscriptionID", subscriptionID)
-	difficulty := strconv.FormatUint(this.difficulty, 16)
-	log.Info("[Session]handleSubscribe", "difficulty", difficulty)
+	difficulty := strconv.FormatUint(this.initDifficulty, 16)
 	result := &SubscribeResult{
 		Error: nil,
 		Id:    req.Id,
@@ -569,21 +379,20 @@ func (this *Session) handleSubscribe(req *Request) error {
 		},
 	}
 	this.sendResponse(result)
-	//when subscribe is ok,run dispatch task and receive nonde
+	//when subscribe is ok,run dispatch task and receive nonce
 	go this.dispatchAndVerify()
 	return nil
 }
 
-//返回error表示需要将conn关闭
 func (this *Session) handleSubmit(req *Request) error {
 	if !this.authorize {
 		return errors.New("unauthorized")
 	}
 	// validate difficulty, submit share or reject
-	if len(req.Param) != 5 {
+	if len(req.Params) != 5 {
 		return paramNumbersWrong
 	}
-	requestTaskId, ok := req.Param[1].(string)
+	requestTaskId, ok := req.Params[1].(string)
 	if !ok {
 		log.Warn("handleSubmit requestTaskId not ok")
 	}
@@ -600,10 +409,9 @@ func (this *Session) handleSubmit(req *Request) error {
 			Result: false,
 		}
 		this.sendResponse(result)
-		//表示有响应给客户端，不需要关闭conn
 		return nil
 	}
-	requestNonce, ok := req.Param[4].(string)
+	requestNonce, ok := req.Params[4].(string)
 	if !ok {
 		log.Warn("handleSubmit requestNonce not ok")
 	}
@@ -619,7 +427,6 @@ func (this *Session) handleSubmit(req *Request) error {
 			Result: false,
 		}
 		this.sendResponse(result)
-		//表示有响应给客户端，不需要关闭conn
 		return nil
 	}
 	select {
@@ -629,32 +436,27 @@ func (this *Session) handleSubmit(req *Request) error {
 	}
 	return nil
 }
-func (this *Session) nonceSubmitMeter(difficulty uint64) {
+func (this *Session) checkNeedNewTask(difficulty uint64) {
 	if !this.calcHashRate {
 		return
 	}
-	this.lastSubmitTime = time.Now().UnixNano()
-	diff, _ := this.difficultyMeter.LoadOrStore(difficulty, &timeMeter{difficulty: difficulty})
-	atomic.AddUint64(&diff.(*timeMeter).submitSuccess, 1)
-	task, ok := this.server.mineTask.Load().(*StratumTask)
-	if ok {
+	task := this.server.GetCurrentMineTask()
+	if task != nil {
 		if this.AdjustDifficulty(task.Difficulty.Uint64()) {
 			log.Warn("session nonce AdjustDifficulty:", this.GetDifficulty())
-			//new task for new difficulty
+			//new task
 			notifyTask := &StratumTask{
 				ServerTaskId: task.Id,
 				PowHash:      task.PowHash,
 				NonceBegin:   task.NonceBegin,
 				NonceEnd:     UINT64MAX,
-				Difficulty:   big.NewInt(0).SetUint64(this.GetDifficulty()),
+				Difficulty:   big.NewInt(0).SetUint64(task.Difficulty.Uint64()),
 				Timestamp:    time.Now().UnixNano(),
 				IfClearTask:  true,
 				Submitted:    false,
 			}
-			log.Info("Session nonceSubmitMeter", "difficulty", notifyTask.Difficulty)
-			//ok
-			this.DispatchTask(notifyTask)
+			log.Info("Session checkNeedNewTask", "difficulty", notifyTask.Difficulty)
+			this.dispatchTask(notifyTask)
 		}
 	}
-
 }

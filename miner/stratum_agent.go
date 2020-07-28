@@ -3,12 +3,12 @@ package miner
 import (
 	"context"
 	crand "crypto/rand"
+	"math"
 	"math/big"
 	"math/rand"
 	"runtime/debug"
 	"sync"
 	"sync/atomic"
-	"math"
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/consensus"
@@ -32,7 +32,7 @@ type StratumAgent struct {
 	recentWork *types.Block
 	mutex      sync.Mutex
 	cancel     context.CancelFunc
-	rand     *rand.Rand
+	rand       *rand.Rand
 }
 
 func NewStratumAgent(chain consensus.ChainReader, engine consensus.Engine) *StratumAgent {
@@ -73,7 +73,6 @@ func (self *StratumAgent) Start() {
 	agentCtx, self.cancel = context.WithCancel(context.Background())
 	self.server.Start()
 
-	go self.update(agentCtx)
 	go self.resultLoop(agentCtx)
 
 }
@@ -102,15 +101,18 @@ func (self *StratumAgent) GetHashRate() uint64 {
 	return self.server.GetHashRate()
 }
 
-func (self *StratumAgent) update(ctx context.Context) {
+func (self *StratumAgent) resultLoop(ctx context.Context) {
 	if self.rand == nil {
 		seed, err := crand.Int(crand.Reader, big.NewInt(math.MaxInt64))
 		if err != nil {
 			log.Error(err.Error())
-		}else{
+		} else {
 			self.rand = rand.New(rand.NewSource(seed.Int64()))
 		}
 	}
+	result := make(chan uint64, 1)
+	self.server.ReadResult(result)
+	var currentBlock *types.Block
 	for {
 		select {
 		case <-ctx.Done():
@@ -119,37 +121,22 @@ func (self *StratumAgent) update(ctx context.Context) {
 		case work := <-self.workCh:
 			//get work from work chan,and dispatch work to server
 			log.Info("[StratumAgent]Received work", "difficulty", work.Difficulty())
-			self.mutex.Lock()
-			self.recentWork = work
-			nonceBegin:=uint64(self.rand.Int63())
+			currentBlock = work
+			nonceBegin := uint64(self.rand.Int63())
 			self.server.Dispatch(work.HashNoNonce(), work.Difficulty(), nonceBegin, math.MaxUint64)
-			self.mutex.Unlock()
-		}
-	}
-}
-
-func (self *StratumAgent) resultLoop(agentCtx context.Context) {
-	for {
-		select {
-		case <-agentCtx.Done():
-			log.Debug("[StratumAgent]resultLoop done")
-			return
-		case nonce := <-self.server.ReadResult():
-			self.mutex.Lock()
-			work := self.recentWork
-			self.mutex.Unlock()
-			hash := work.HashNoNonce()
+		case nonce := <-result:
+			hash := currentBlock.HashNoNonce()
 			digest, result := scrypt.ScryptHash(hash[:], nonce)
-			target := new(big.Int).Div(maxUint256, work.Difficulty())
+			target := new(big.Int).Div(maxUint256, currentBlock.Difficulty())
 			if big.NewInt(0).SetBytes(result).Cmp(target) < 0 {
-				header := types.CopyHeader(work.Header())
+				header := types.CopyHeader(currentBlock.Header())
 				header.Nonce = types.EncodeNonce(nonce)
 				header.MixDigest = common.BytesToHash(digest)
-				block := work.WithSeal(header)
+				block := currentBlock.WithSeal(header)
+				log.Info("[StratumAgent] got expected nonce", "number", block.Number(), "hash", block.Hash(), "nonce", nonce)
 				self.resultCh <- block
-				log.Info("[StratumAgent] sealed new block Successfully", "number", block.Number(), "hash", block.Hash(), "hashrate", self.GetHashRate())
 			} else {
-				log.Info("[StratumAgent] sealed new block failed", "number", work.Number(), "hash", work.Hash())
+				log.Info("[StratumAgent] sealed new block failed", "number", currentBlock.Number(), "hash", currentBlock.Hash())
 			}
 		}
 	}
