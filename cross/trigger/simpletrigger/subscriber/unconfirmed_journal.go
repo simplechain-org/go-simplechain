@@ -101,15 +101,15 @@ func (journal *unconfirmedJournal) load(add func(uint64, common.Hash, []*types.L
 	journal.writer = new(devNull)
 	defer func() { journal.writer = nil }()
 
-	// Inject all transactions from the journal into the pool
+	// Inject all logs from the journal into the subscriber
 	stream := rlp.NewStream(input, 0)
 	total, blocks := 0, 0
 
 	var (
-		failure error
-		index   uint64
-		hash    common.Hash
-		batch   []*types.Log
+		failure   error
+		lastIndex uint64
+		lastHash  common.Hash
+		batch     []*types.Log
 	)
 
 	for {
@@ -124,18 +124,18 @@ func (journal *unconfirmedJournal) load(add func(uint64, common.Hash, []*types.L
 
 		total++
 
-		if (index > 0 && index != lg.BlockNumber) || (hash != common.Hash{} && hash != lg.BlockHash) {
-			add(index, hash, batch)
+		if (lastIndex > 0 && lastIndex != lg.BlockNumber) || (lastHash != common.Hash{} && lastHash != lg.BlockHash) {
+			add(lastIndex, lastHash, batch)
 			batch = batch[:0]
 			blocks++
 		}
-		index = lg.BlockNumber
-		hash = lg.BlockHash
+		lastIndex = lg.BlockNumber
+		lastHash = lg.BlockHash
 		batch = append(batch, (*types.Log)(lg))
 	}
 
 	if len(batch) > 0 {
-		add(index, hash, batch)
+		add(lastIndex, lastHash, batch)
 		blocks++
 	}
 
@@ -170,25 +170,22 @@ func (journal *unconfirmedJournal) rotate(blocks *ring.Ring) error {
 		return err
 	}
 	journaled, blockCounts := 0, 0
-	for blocks != nil {
-		logs := blocks.Value.(*unconfirmedBlockLog).logs
-		for _, lg := range logs {
-			if err = rlp.Encode(replacement, (*journalLog)(lg)); err != nil {
-				replacement.Close()
-				return err
+
+	if blocks != nil {
+		blocks.Do(func(block interface{}) {
+			logs := block.(*unconfirmedBlockLog).logs
+			for _, lg := range logs {
+				if err = rlp.Encode(replacement, (*journalLog)(lg)); err != nil {
+					replacement.Close()
+					log.Warn("rotate journal logs failed", "error", err)
+					return
+				}
 			}
-		}
-		journaled += len(logs)
-		blockCounts++
-		// Drop the block out of the ring
-		if blocks.Value == blocks.Next().Value {
-			blocks = nil
-		} else {
-			blocks = blocks.Move(-1)
-			blocks.Unlink(1)
-			blocks = blocks.Move(1)
-		}
+			journaled += len(logs)
+			blockCounts++
+		})
 	}
+
 	replacement.Close()
 
 	// Replace the live journal with the newly generated one

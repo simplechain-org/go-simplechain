@@ -19,42 +19,48 @@ package db
 import (
 	"math/big"
 	"testing"
+	"time"
 
-	"github.com/simplechain-org/go-simplechain/common"
-	"github.com/simplechain-org/go-simplechain/cross/core"
 	"github.com/simplechain-org/go-simplechain/ethdb/memorydb"
+
 	"github.com/stretchr/testify/assert"
 )
 
-func TestTransactionLog_AddFinish(t *testing.T) {
+func TestQueueDB(t *testing.T) {
 	db := memorydb.New()
 	defer db.Close()
 
-	{
-		txLogs, err := NewTransactionLogs(db)
-		assert.NoError(t, err)
-		l := txLogs.Get(big.NewInt(1))
-		assert.NoError(t, l.AddFinish(&core.CrossTransactionWithSignatures{
-			Data:     core.CtxDatas{CTxId: common.BytesToHash([]byte("1"))},
-			Status:   core.CtxStatusFinished,
-			BlockNum: 1,
-		}))
-		assert.NoError(t, l.AddFinish(&core.CrossTransactionWithSignatures{
-			Data:     core.CtxDatas{CTxId: common.BytesToHash([]byte("2"))},
-			Status:   core.CtxStatusFinished,
-			BlockNum: 2,
-		}))
+	qdb, err := NewQueueDB(db)
+	assert.NoError(t, err)
 
-		_, err = l.Commit()
-		assert.NoError(t, err)
+	const COUNT = 10000
+
+	go func() {
+		for i := int64(0); i < COUNT; i++ {
+			err := qdb.Push(big.NewInt(i).Bytes())
+			assert.NoError(t, err)
+		}
+	}()
+
+	recChan := make(chan []byte, COUNT)
+	go func() {
+		for {
+			buf, _ := qdb.Pop()
+			if buf != nil {
+				recChan <- buf
+			}
+		}
+	}()
+
+	for i := int64(0); i < COUNT; i++ {
+		select {
+		case buf := <-recChan:
+			assert.Equal(t, i, new(big.Int).SetBytes(buf).Int64())
+		case <-time.After(time.Second * 5):
+			t.Error("timeout")
+			return
+		}
 	}
 
-	{
-		txLogs, err := NewTransactionLogs(db)
-		assert.NoError(t, err)
-		l := txLogs.Get(big.NewInt(1))
-		assert.True(t, l.IsFinish(common.BytesToHash([]byte("1"))))
-		assert.True(t, l.IsFinish(common.BytesToHash([]byte("2"))))
-		assert.False(t, l.IsFinish(common.BytesToHash([]byte("3"))))
-	}
+	assert.EqualValues(t, 0, qdb.Size())
 }

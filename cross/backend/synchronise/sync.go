@@ -1,3 +1,19 @@
+// Copyright 2016 The go-simplechain Authors
+// This file is part of the go-simplechain library.
+//
+// The go-simplechain library is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// The go-simplechain library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with the go-simplechain library. If not, see <http://www.gnu.org/licenses/>.
+
 package synchronise
 
 import (
@@ -52,7 +68,7 @@ type Sync struct {
 }
 
 type CrossPool interface {
-	AddRemote(*cc.CrossTransaction) (common.Address, error)
+	AddRemotes([]*cc.CrossTransaction) ([]common.Address, []error)
 	Pending(startNumber uint64, limit int) (ids []common.Hash, pending []*cc.CrossTransactionWithSignatures)
 }
 
@@ -68,6 +84,9 @@ type CrossChain interface {
 }
 
 func New(chainID *big.Int, pool CrossPool, store CrossStore, chain CrossChain, mode SyncMode) *Sync {
+	logger := log.New("X-module", "sync", "chainID", chainID)
+	logger.Info("Initialising cross synchronisation", "mode", mode.String())
+
 	s := &Sync{
 		chainID:       chainID,
 		peers:         newPeerSet(),
@@ -77,7 +96,7 @@ func New(chainID *big.Int, pool CrossPool, store CrossStore, chain CrossChain, m
 		chain:         chain,
 		synchronizeCh: make(chan []*cc.CrossTransactionWithSignatures, syncChannelSize),
 		quitSync:      make(chan struct{}),
-		log:           log.New("X-module", "sync", "chainID", chainID),
+		log:           logger,
 	}
 
 	go s.loopSync()
@@ -155,7 +174,7 @@ func (s *Sync) Synchronise(id string, height *big.Int) error {
 	case nil:
 	case errBusy, errCanceled:
 	case errTimeout, errBadPeer:
-		//TODO-U: need to drop peer?
+		//TODO: need to drop peer?
 		fallthrough
 	default:
 		s.log.Warn("Synchronisation failed", "error", err)
@@ -242,6 +261,8 @@ func (s *Sync) syncWithPeer(id string, peerHeight *big.Int) error {
 		}
 	}
 
+	// 通过区块log标识的跨链交易高度同步store。
+	// TODO:如果在store同步过程中，所在高度H的跨链交易状态被其他链修改(executing,executed)，那么此次状态更新讲无法被同步
 	if height := s.store.Height(); height <= peerHeight.Uint64() {
 		go p.peer.RequestCtxSyncByHeight(s.chainID.Uint64(), height)
 	}
@@ -297,10 +318,12 @@ func (s *Sync) syncPendingWithPeer(id string, request []common.Hash) error {
 	}
 
 	if _, loaded := s.pendingSyncing.LoadOrStore(p.id, make(chan []*cc.CrossTransaction, syncPendingChannelSize)); loaded {
-		s.log.Debug("pending sync busy")
+		s.log.Debug("pending sync busy", "pid", p.id)
 		return errBusy
 	}
 	defer s.pendingSyncing.Delete(id)
+
+	s.log.Debug("sync pending from peer", "id", id, "requests", len(request))
 
 	go p.peer.RequestPendingSync(s.chainID.Uint64(), request) //TODO-U:判断是否需要向此节点请求签名(高度？or 历史签名？)
 
@@ -325,7 +348,7 @@ func (s *Sync) syncPendingWithPeer(id string, request []common.Hash) error {
 
 			request, _ := s.pool.Pending(synced, defaultMaxSyncSize)
 			if len(request) == 0 {
-				s.log.Debug("no pending sync request, synchronization completed")
+				s.log.Debug("no pending need sync, synchronization completed")
 				return nil
 			}
 			// send next sync pending request
@@ -349,7 +372,7 @@ func (s *Sync) DeliverCrossTransactions(pid string, ctxList []*cc.CrossTransacti
 
 	select {
 	case s.synchronizeCh <- ctxList:
-		peer.log.Debug("syncing cross transactions", "peer", peer.id)
+		peer.log.Debug("syncing cross transactions", "peer", peer.id, "count", len(ctxList))
 	case <-s.quitSync:
 		return errCanceled
 	}
@@ -369,7 +392,7 @@ func (s *Sync) DeliverPending(pid string, pending []*cc.CrossTransaction) error 
 
 	select {
 	case ch.(chan []*cc.CrossTransaction) <- pending:
-		peer.log.Debug("syncing pending", "peer", peer.id)
+		peer.log.Debug("syncing pending", "peer", peer.id, "count", len(pending))
 	case <-s.quitSync:
 		return errCanceled
 	}
@@ -423,13 +446,13 @@ func (s *Sync) syncCrossTransaction(ctxList []*cc.CrossTransactionWithSignatures
 
 func (s *Sync) syncPending(ctxList []*cc.CrossTransaction) (lastNumber uint64) {
 	for _, ctx := range ctxList {
-		// 同步pending时向单节点请求签名，所以不监控漏签
-		if _, err := s.pool.AddRemote(ctx); err != nil {
-			s.log.Trace("SyncPending failed", "id", ctx.ID(), "err", err)
-		}
 		if num := s.chain.GetConfirmedTransactionNumberOnChain(ctx); num > lastNumber {
 			lastNumber = num
 		}
+	}
+	// 同步pending时向单节点请求签名，所以不监控漏签
+	if _, errs := s.pool.AddRemotes(ctxList); errs != nil {
+		s.log.Trace("SyncPending failed", "err", errs)
 	}
 	return lastNumber
 }
