@@ -129,7 +129,7 @@ func TestStaleSubmission(t *testing.T) {
 	defer scrypt.Close()
 	api := &API{scrypt}
 
-	fakeNonce, fakeDigest := types.BlockNonce{0x01, 0x02, 0x03}, common.HexToHash("deadbeef")
+	fakeNonce := types.BlockNonce{0x01, 0x02, 0x03}
 
 	testcases := []struct {
 		headers     []*types.Header
@@ -178,7 +178,7 @@ func TestStaleSubmission(t *testing.T) {
 		for _, h := range c.headers {
 			scrypt.Seal(nil, types.NewBlockWithHeader(h), results, nil)
 		}
-		if res := api.SubmitWork(fakeNonce, scrypt.SealHash(c.headers[c.submitIndex]), fakeDigest); res != c.submitRes {
+		if res := api.SubmitWork(fakeNonce, scrypt.SealHash(c.headers[c.submitIndex])); res != c.submitRes {
 			t.Errorf("case %d submit result mismatch, want %t, get %t", id+1, c.submitRes, res)
 		}
 		if !c.submitRes {
@@ -189,9 +189,9 @@ func TestStaleSubmission(t *testing.T) {
 			if res.Header().Nonce != fakeNonce {
 				t.Errorf("case %d block nonce mismatch, want %s, get %s", id+1, fakeNonce, res.Header().Nonce)
 			}
-			if res.Header().MixDigest != fakeDigest {
-				t.Errorf("case %d block digest mismatch, want %s, get %s", id+1, fakeDigest, res.Header().MixDigest)
-			}
+			//if res.Header().MixDigest != fakeDigest {
+			//	t.Errorf("case %d block digest mismatch, want %s, get %s", id+1, fakeDigest, res.Header().MixDigest)
+			//}
 			if res.Header().Difficulty.Uint64() != c.headers[c.submitIndex].Difficulty.Uint64() {
 				t.Errorf("case %d block difficulty mismatch, want %d, get %d", id+1, c.headers[c.submitIndex].Difficulty, res.Header().Difficulty)
 			}
