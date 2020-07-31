@@ -79,7 +79,7 @@ type hashrate struct {
 // sealWork wraps a seal work package for remote sealer.
 type sealWork struct {
 	errc chan error
-	res  chan [3]string
+	res  chan [2]string
 }
 
 // PowScrypt is a consensus engine based on proof-of-work implementing the scrypt

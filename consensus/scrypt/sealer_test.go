@@ -2,6 +2,7 @@ package scrypt
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"math/big"
 	"net"
@@ -10,13 +11,14 @@ import (
 	"time"
 
 	"github.com/simplechain-org/go-simplechain/common"
+	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"github.com/simplechain-org/go-simplechain/core/types"
 )
 
 // Tests whether remote HTTP servers are correctly notified of new work.
 func TestRemoteNotify(t *testing.T) {
 	// Start a simple webserver to capture notifications
-	sink := make(chan [3]string)
+	sink := make(chan [2]string)
 
 	server := &http.Server{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -24,7 +26,7 @@ func TestRemoteNotify(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to read miner notification: %v", err)
 			}
-			var work [3]string
+			var work [2]string
 			if err := json.Unmarshal(blob, &work); err != nil {
 				t.Fatalf("failed to unmarshal miner notification: %v", err)
 			}
@@ -63,11 +65,14 @@ func TestRemoteNotify(t *testing.T) {
 	scrypt.Seal(nil, block, nil, nil)
 	select {
 	case work := <-sink:
-		if want := scrypt.SealHash(header).Hex(); work[0] != want {
+		sealhash := scrypt.SealHash(header)
+		if want := hexutil.Encode(
+			append(append(sealhash.Bytes(), sealhash.Bytes()...),
+				[]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}...),
+		); work[0] != want {
 			t.Errorf("work packet hash mismatch: have %s, want %s", work[0], want)
 		}
-		target := new(big.Int).Div(new(big.Int).Lsh(big.NewInt(1), 256), header.Difficulty)
-		if want := common.BytesToHash(target.Bytes()).Hex(); work[1] != want {
+		if want := fmt.Sprintf("%x", header.Difficulty); work[1] != want {
 			t.Errorf("work packet target mismatch: have %s, want %s", work[1], want)
 		}
 	case <-time.After(3 * time.Second):
