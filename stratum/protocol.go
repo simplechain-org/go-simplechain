@@ -2,9 +2,9 @@ package stratum
 
 import (
 	"encoding/hex"
+	"fmt"
 	"math/big"
 	"strconv"
-	"fmt"
 
 	"github.com/simplechain-org/go-simplechain/common"
 )

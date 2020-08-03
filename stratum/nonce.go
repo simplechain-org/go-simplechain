@@ -1,7 +1,9 @@
 package stratum
+
 import (
 	"github.com/simplechain-org/go-simplechain/log"
 )
+
 func (this *Session) NonceMeter(nonceDifficulty uint64) {
 	select {
 	case this.nonceDifficulty <- nonceDifficulty:
@@ -9,6 +11,7 @@ func (this *Session) NonceMeter(nonceDifficulty uint64) {
 		log.Warn("Session NonceMeter nonceDifficulty block")
 	}
 }
+
 //get session difficulty
 func (this *Session) GetDifficulty() uint64 {
 	result := make(chan uint64, 1)

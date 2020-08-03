@@ -1,13 +1,13 @@
 package stratum
 
 import (
-	"github.com/simplechain-org/go-simplechain/consensus/scrypt"
 	"math/big"
 	"net"
 	"sync/atomic"
 	"time"
 
 	"github.com/simplechain-org/go-simplechain/common"
+	"github.com/simplechain-org/go-simplechain/consensus/scrypt"
 	"github.com/simplechain-org/go-simplechain/log"
 
 	uuid "github.com/satori/go.uuid"
@@ -20,8 +20,8 @@ const (
 var (
 	ResultChanSize       = 100
 	InitDifficulty int64 = 2000000
-	hashMeterSize  int   = 90
-	maxUint256           = new(big.Int).Exp(big.NewInt(2), big.NewInt(256), big.NewInt(0))
+	//hashMeterSize  int   = 90
+	maxUint256 = new(big.Int).Exp(big.NewInt(2), big.NewInt(256), big.NewInt(0))
 )
 
 type MineTask struct {
@@ -191,16 +191,16 @@ func (this *Server) mineTaskLoop() {
 			result <- notifyTask
 		case result := <-this.requestHashRate:
 			var hashRate uint64
-			for sessionId, _ := range sessions {
+			for sessionId := range sessions {
 				hashRate += sessions[sessionId].GetHashRate()
 			}
 			result <- hashRate
 		case <-this.stop:
-			for sessionId, _ := range unauthorized {
+			for sessionId := range unauthorized {
 				unauthorized[sessionId].Close()
 				delete(unauthorized, sessionId)
 			}
-			for sessionId, _ := range sessions {
+			for sessionId := range sessions {
 				sessions[sessionId].Close()
 				delete(sessions, sessionId)
 			}

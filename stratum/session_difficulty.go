@@ -27,6 +27,7 @@ func (this *Session) AdjustDifficulty(serverDifficulty uint64) bool {
 	}
 	return false
 }
+
 type NonceMeter struct {
 	difficulty uint64
 	times      uint64
@@ -40,7 +41,7 @@ func (this *Session) loop() {
 	hashRateMeter := ring.New(this.hashRateMeterLen)
 	var difficulty uint64 = this.initDifficulty
 	var hashRate uint64
-	var lastSubmitTime int64=time.Now().Unix()
+	var lastSubmitTime int64 = time.Now().Unix()
 	var factorDiff uint64
 	for {
 		select {
