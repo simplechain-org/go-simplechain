@@ -1,3 +1,19 @@
+// Copyright 2016 The go-simplechain Authors
+// This file is part of the go-simplechain library.
+//
+// The go-simplechain library is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// The go-simplechain library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with the go-simplechain library. If not, see <http://www.gnu.org/licenses/>.
+
 package backend
 
 import (
@@ -24,7 +40,7 @@ const (
 	blockChanSize     = 1
 	signedPendingSize = 256
 
-	defaultStoreDelay  = 200
+	defaultStoreDelay  = 120
 	intervalStoreDelay = time.Minute * 10
 )
 
@@ -87,7 +103,7 @@ func NewCrossHandler(ctx *cross.ServiceContext, service *CrossService,
 
 	db := h.store.RegisterChain(h.chainID)
 	h.pool = NewCrossPool(h.chainID, h.config, h.store, h.txLog, h.retriever, h.executor.SignHash)
-	h.synchronise = synchronise.New(h.chainID, h.pool, db, h.retriever, synchronise.ALL)
+	h.synchronise = synchronise.New(h.chainID, h.pool, db, h.retriever, ctx.Config.SyncMode)
 
 	return h, nil
 }
@@ -155,8 +171,11 @@ func (h *Handler) loop() {
 func (h *Handler) handle(current *cc.CrossBlockEvent) {
 	var (
 		local, remote []*cc.CrossTransactionModifier
-		startTime     = time.Now()
 	)
+
+	defer func(start time.Time) {
+		log.Debug("X handle crosschain block complete", "runtime", time.Since(start))
+	}(time.Now())
 
 	// handle anchor update
 	if updates := current.NewAnchor.ChainInfo; len(updates) > 0 {
@@ -171,6 +190,24 @@ func (h *Handler) handle(current *cc.CrossBlockEvent) {
 		local = append(local, h.handleAnchorChange(current.Number)...)
 	}
 
+	handleReceptTransactions := func(takers []*cc.ReceptTransaction, modType cc.ModType, modStatus cc.CtxStatus) (remains []*cc.ReceptTransaction) {
+		for _, tx := range takers {
+			if err := tx.Check(h.store.Get(tx.DestinationId, tx.CTxId)); err != nil {
+				h.log.Warn("check taker failed", "type", modType, "status", modStatus, "error", err)
+				continue
+			}
+			remote = append(remote, &cc.CrossTransactionModifier{
+				ID: tx.CTxId,
+				//TODO: update from reorg/remote wouldn't modify blockNumber
+				Type:   modType,
+				Status: modStatus,
+			})
+			remains = append(remains, tx)
+		}
+		h.log.Debug("handle recept transactions", "type", modType, "status", modStatus, "takers", len(takers), "remains", len(remains))
+		return remains
+	}
+
 	// ignore early block logs
 	if height := h.store.Height(h.chainID); current.Number.Uint64()+h.retriever.ConfirmedDepth() >= height {
 
@@ -183,7 +220,7 @@ func (h *Handler) handle(current *cc.CrossBlockEvent) {
 		// handle reorg, rollback unconfirmed status(executing->waiting, finishing->executed)
 		// reorg taker (remote)
 		if takers := current.ReorgTaker.Takers; len(takers) > 0 {
-			remote = append(remote, takers...)
+			handleReceptTransactions(takers, cc.Reorg, cc.CtxStatusWaiting)
 		}
 
 		// reorg finish (local)
@@ -193,7 +230,7 @@ func (h *Handler) handle(current *cc.CrossBlockEvent) {
 
 		// handle confirmed maker
 		if makers := current.ConfirmedMaker.Txs; len(makers) > 0 {
-			signed, errs := h.pool.AddLocals(makers...)
+			signed, commits, errs := h.pool.AddLocals(makers...)
 			for _, err := range errs {
 				logFn := h.log.Warn
 				switch err {
@@ -207,32 +244,28 @@ func (h *Handler) handle(current *cc.CrossBlockEvent) {
 				logFn("Add local ctx failed", "error", err)
 			}
 			// assemble signed local and add them to store with pending status
-			cws := make([]*cc.CrossTransactionWithSignatures, len(signed))
-			for i, ctx := range signed {
+			pendingTx := txDifferent(signed, commits)
+			cws := make([]*cc.CrossTransactionWithSignatures, len(pendingTx))
+			for i, ctx := range pendingTx {
 				cws[i] = cc.NewCrossTransactionWithSignatures(ctx, current.Number.Uint64())
 			}
 			if err := h.store.Adds(h.chainID, cws, false); err != nil {
 				h.log.Warn("Store pending ctx failed", "error", err)
 			}
-			h.service.BroadcastCrossTx(signed, true)
+			h.service.BroadcastCrossTx(signed, true) // broad cast self signed tx to other anchors
 		}
 
 		// handle new taker
 		if takers := current.NewTaker.Takers; len(takers) > 0 {
-			remote = append(remote, takers...)
+			handleReceptTransactions(takers, cc.Remote, cc.CtxStatusExecuting)
 		}
 
 		// handle confirmed taker
 		if takers := current.ConfirmedTaker.Txs; len(takers) > 0 {
-			for _, tx := range takers {
-				remote = append(remote, &cc.CrossTransactionModifier{
-					ID: tx.CTxId,
-					// update from remote wouldn't modify blockNumber
-					Type:   cc.Remote,
-					Status: cc.CtxStatusExecuted,
-				})
+			txs := handleReceptTransactions(takers, cc.Remote, cc.CtxStatusExecuted)
+			if len(txs) > 0 {
+				h.writeCrossMessage(cc.ConfirmedTakerEvent{Txs: txs})
 			}
-			h.writeCrossMessage(current.ConfirmedTaker)
 		}
 
 		// handle new finish
@@ -248,17 +281,15 @@ func (h *Handler) handle(current *cc.CrossBlockEvent) {
 
 	if len(local) > 0 {
 		if err := h.store.Updates(h.chainID, local); err != nil {
-			h.log.Warn("handle cross failed", "error", err)
+			h.log.Warn("local handle cross failed", "error", err)
 		}
 	}
 
 	if len(remote) > 0 {
 		if err := h.store.Updates(h.remoteID, remote); err != nil {
-			h.log.Warn("handle cross failed", "error", err)
+			h.log.Warn("remote handle cross failed", "error", err)
 		}
 	}
-
-	log.Trace("X handle crosschain block complete", "timeUsed", time.Since(startTime).String())
 }
 
 // number高度anchor发生变化时，检查之前的跨链交易签名是否已经失效
@@ -287,6 +318,24 @@ func (h *Handler) handleAnchorChange(number *big.Int) []*cc.CrossTransactionModi
 	return txm
 }
 
+// TxDifference returns a new set which is the difference between signed and commits.
+func txDifferent(signed []*cc.CrossTransaction, commits []*cc.CrossTransactionWithSignatures) []*cc.CrossTransaction {
+	keep := make([]*cc.CrossTransaction, 0, len(signed))
+
+	remove := make(map[common.Hash]struct{})
+	for _, tx := range commits {
+		remove[tx.Hash()] = struct{}{}
+	}
+
+	for _, tx := range signed {
+		if _, ok := remove[tx.Hash()]; !ok {
+			keep = append(keep, tx)
+		}
+	}
+
+	return keep
+}
+
 func (h *Handler) writeCrossMessage(v interface{}) {
 	select {
 	case h.crossMsgWriter <- v:
@@ -302,34 +351,44 @@ func (h *Handler) readCrossMessage() {
 		case v := <-h.crossMsgReader:
 			switch ev := v.(type) {
 			case cc.SignedCtxEvent: // 对面链签名完成的跨链交易消息，需要在此链验证anchor是否一致
-				cws := ev.Tx
-				if cws.DestinationId().Cmp(h.chainID) == 0 {
-					var invalidSigIndex []int
-					for i, ctx := range cws.Resolution() {
-						chainID := ctx.ChainId()
-						if _, err := h.retriever.VerifySigner(ctx, chainID, chainID); err != nil {
-							invalidSigIndex = append(invalidSigIndex, i)
+				var commits []cc.CommitEvent
+				for _, cws := range ev.Txs {
+					if cws.DestinationId().Cmp(h.chainID) == 0 {
+						var invalidSigIndex []int
+						for i, ctx := range cws.Resolution() {
+							chainID := ctx.ChainId()
+							if _, err := h.retriever.VerifySigner(ctx, chainID, chainID); err != nil {
+								invalidSigIndex = append(invalidSigIndex, i)
+							}
 						}
-					}
 
-					if invalidSigIndex != nil {
-						h.log.Warn("invalid signature remote chain ctx", "ctxID", cws.ID().String(), "sigIndex", invalidSigIndex)
-						cm.Report(h.chainID.Uint64(), "VerifyContract failed", "ctxID", cws.ID().String(), "sigIndex", invalidSigIndex)
-					}
+						if invalidSigIndex != nil {
+							h.log.Warn("invalid signature remote chain ctx", "ctxID", cws.ID().String(), "sigIndex", invalidSigIndex)
+							cm.Report(h.chainID.Uint64(), "VerifyContract failed", "ctxID", cws.ID().String(), "sigIndex", invalidSigIndex)
+						}
 
-					if err := h.retriever.VerifyContract(cws); err != nil && !h.txLog.IsFinish(cws.ID()) {
-						h.log.Warn("unfinished ctx verify failed in contract", "ctxID", cws.ID().String(), "error", err)
-						cm.Report(h.chainID.Uint64(), "VerifyContract failed", "ctxID", cws.ID().String(), "error", err)
-						break
-					}
+						if err := h.retriever.VerifyContract(cws); err != nil && !h.txLog.IsFinish(cws.ID()) {
+							h.log.Warn("ctx verify failed in contract", "ctxID", cws.ID().String(), "error", err)
+							cm.Report(h.chainID.Uint64(), "VerifyContract failed", "ctxID", cws.ID().String(), "error", err)
+							break // Discard this cws, will not commit or rollback
+						}
 
-					if ev.CallBack != nil {
-						ev.CallBack(cws, invalidSigIndex...) //call callback with signer checking results
+						commits = append(commits, cc.CommitEvent{
+							Tx:              cws,
+							InvalidSigIndex: invalidSigIndex,
+						})
 					}
 				}
 
+				if ev.CallBack != nil && commits != nil {
+					ev.CallBack(commits) // call callback with signer checking results
+				}
+
 			case cc.ConfirmedTakerEvent: // taker确认消息，需要anchor发起解锁交易
-				h.executor.SubmitTransaction(ev.Txs)
+				h.executor.SubmitTransaction(ev.Txs) // submit finish transaction
+
+			default:
+				h.log.Warn("invalid cross message", "msg", ev)
 			}
 
 		case <-h.quitSync:
@@ -346,7 +405,7 @@ func (h *Handler) AddRemoteCtx(ctx *cc.CrossTransaction) error {
 	signer, err := h.pool.AddRemote(ctx)
 	switch err {
 	case nil:
-	case cc.ErrDuplicateSign, cross.ErrAlreadyExistCtx:
+	case cc.ErrDuplicateSign, cross.ErrAlreadyExistCtx, cross.ErrRepetitionCtx:
 	case cross.ErrFinishedCtx:
 		h.log.Info("ctx is already finished", "id", ctx.ID().String())
 	default:

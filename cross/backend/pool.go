@@ -1,3 +1,19 @@
+// Copyright 2016 The go-simplechain Authors
+// This file is part of the go-simplechain library.
+//
+// The go-simplechain library is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// The go-simplechain library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with the go-simplechain library. If not, see <http://www.gnu.org/licenses/>.
+
 package backend
 
 import (
@@ -15,19 +31,18 @@ import (
 	cm "github.com/simplechain-org/go-simplechain/cross/metric"
 	"github.com/simplechain-org/go-simplechain/cross/trigger"
 
-	"github.com/asdine/storm/v3"
 	"github.com/asdine/storm/v3/q"
 	lru "github.com/hashicorp/golang-lru"
 )
 
 const (
-	expireInterval    = time.Minute * 6
+	expireInterval    = time.Minute * 10
 	expireQueueNumber = 63
 )
 
 type store interface {
 	GetStore(chainID *big.Int) (db.CtxDB, error)
-	Add(ctx *cc.CrossTransactionWithSignatures) error
+	Adds(chainID *big.Int, ctxList []*cc.CrossTransactionWithSignatures, replaceable bool) error
 	Get(chainID *big.Int, ctxID common.Hash) *cc.CrossTransactionWithSignatures
 }
 
@@ -35,7 +50,7 @@ type finishedLog interface {
 	IsFinish(cc.CtxID) bool
 }
 
-// CrossPool is used for collecting signatures
+// CrossPool is used for collecting multisign signatures
 type CrossPool struct {
 	chainID *big.Int
 	config  *cross.Config
@@ -97,8 +112,11 @@ func (pool *CrossPool) load() error {
 		return err
 	}
 	pending := store.Query(0, 0, []db.FieldName{db.BlockNumField}, false, q.Eq(db.StatusField, uint8(cc.CtxStatusPending)))
-	for _, pendingTX := range pending {
-		pool.pending.Put(pendingTX)
+
+	pool.logger.Info("load pending tx from store", "count", len(pending))
+
+	for _, pendingTx := range pending {
+		pool.pending.Put(pendingTx)
 	}
 	return nil
 }
@@ -138,7 +156,11 @@ func (pool *CrossPool) Stop() {
 }
 
 // AddLocal CrossTransactions synced from blockchain subscriber
-func (pool *CrossPool) AddLocals(txs ...*cc.CrossTransaction) (signed []*cc.CrossTransaction, errs []error) {
+// @signed: ctx signed by local anchor
+// @commits: ctx signed completely, commit to signedCtxCh
+// @errs: errors
+func (pool *CrossPool) AddLocals(txs ...*cc.CrossTransaction) (
+	signed []*cc.CrossTransaction, commits []*cc.CrossTransactionWithSignatures, errs []error) {
 	for _, ctx := range txs {
 		if pool.txLog.IsFinish(ctx.ID()) {
 			// already exist in finished log
@@ -163,14 +185,9 @@ func (pool *CrossPool) AddLocals(txs ...*cc.CrossTransaction) (signed []*cc.Cros
 		signed = append(signed, signedTx)
 	}
 
-	pool.mu.Lock()
-	defer pool.mu.Unlock()
-	for _, signedTx := range signed {
-		if err := pool.addTx(signedTx, true); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	return signed, errs
+	commits, addErrs := pool.addTxs(signed, true)
+	errs = append(errs, addErrs...)
+	return signed, commits, errs
 }
 
 // GetLocal get local signed CrossTransaction from pool & store
@@ -194,34 +211,71 @@ func (pool *CrossPool) GetLocal(ctxID common.Hash) *cc.CrossTransaction {
 	return nil
 }
 
+func (pool *CrossPool) AddRemotes(ctxList []*cc.CrossTransaction) ([]common.Address, []error) {
+	var (
+		signers []common.Address
+		errs    []error
+		legals  []*cc.CrossTransaction
+	)
+
+	for _, ctx := range ctxList {
+		signer, err := pool.addRemoteTx(ctx)
+		signers = append(signers, signer)
+		switch err {
+		case nil: // no error, add them
+			legals = append(legals, ctx)
+
+		case cross.ErrLocalSignCtx: // remote tx signed by local, ignore it
+			pool.logger.Debug("receive remote ctx signed by local anchor", "ctxID", ctx.ID())
+			continue
+
+		default: // other error, gather errors
+			errs = append(errs, err)
+			continue
+		}
+	}
+
+	_, addErrs := pool.addTxs(legals, false)
+	errs = append(errs, addErrs...)
+	return signers, errs
+}
+
 // AddRemote CrossTransactions received from peers
 func (pool *CrossPool) AddRemote(ctx *cc.CrossTransaction) (signer common.Address, err error) {
+	signers, errs := pool.AddRemotes([]*cc.CrossTransaction{ctx})
+	if len(errs) > 0 {
+		return signers[0], errs[0]
+	}
+	return signers[0], nil
+}
+
+func (pool *CrossPool) addRemoteTx(ctx *cc.CrossTransaction) (signer common.Address, err error) {
 	signer, err = pool.retriever.VerifySigner(ctx, ctx.ChainId(), ctx.DestinationId())
 	if err != nil {
 		return signer, err
 	}
 	// self signer ignore
 	if signer == pool.config.Signer {
-		return signer, nil
+		return signer, cross.ErrLocalSignCtx
 	}
 	if pool.txLog.IsFinish(ctx.ID()) {
 		// already exist in finished log, ignore ctx
 		return signer, cross.ErrFinishedCtx
 	}
+	// already exist in store and not at pending status
 	if old := pool.store.Get(pool.chainID, ctx.ID()); old != nil && old.Status != cc.CtxStatusPending {
 		pool.logger.Debug("ctx is already signed", "ctxID", ctx.ID().String())
 		return signer, cross.ErrAlreadyExistCtx
 	}
+	// check transaction is expired
 	if err := pool.retriever.VerifyExpire(ctx); err != nil {
 		return signer, err
 	}
+	// check contract include this maker transaction
 	if err := pool.retriever.VerifyContract(ctx); err != nil {
 		return signer, err
 	}
-
-	pool.mu.Lock()
-	defer pool.mu.Unlock()
-	return signer, pool.addTx(ctx, false)
+	return signer, nil
 }
 
 func (pool *CrossPool) signTx(ctx *cc.CrossTransaction) (*cc.CrossTransaction, error) {
@@ -233,20 +287,40 @@ func (pool *CrossPool) signTx(ctx *cc.CrossTransaction) (*cc.CrossTransaction, e
 	return ctx, nil
 }
 
-func (pool *CrossPool) addTx(ctx *cc.CrossTransaction, local bool) error {
+func (pool *CrossPool) addTxs(signed []*cc.CrossTransaction, local bool) (commits []*cc.CrossTransactionWithSignatures, errs []error) {
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+	for _, signedTx := range signed {
+		cws, err := pool.addTx(signedTx, local)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		if cws != nil {
+			commits = append(commits, cws)
+		}
+	}
+	if len(commits) > 0 {
+		pool.Commit(commits) // batch commit to the store
+	}
+	return commits, errs
+}
+
+func (pool *CrossPool) addTx(ctx *cc.CrossTransaction, local bool) (*cc.CrossTransactionWithSignatures, error) {
 	id := ctx.ID()
 
-	checkAndCommit := func(id common.Hash) error {
+	// check transaction's signatures is enough
+	checkAndCommit := func(id common.Hash) (*cc.CrossTransactionWithSignatures, error) {
 		if cws := pool.pending.Get(id); cws != nil && cws.SignaturesLength() >= pool.retriever.RequireSignatures() {
-			pool.Commit(cws)
+			return cws, nil
 		}
-		return nil
+		return nil, nil
 	}
 
 	// if this pending ctx exist, add signature to pending directly
 	if cws := pool.pending.Get(id); cws != nil {
 		if err := cws.AddSignature(ctx); err != nil {
-			return err
+			return nil, err
 		}
 		return checkAndCommit(id)
 	}
@@ -255,27 +329,27 @@ func (pool *CrossPool) addTx(ctx *cc.CrossTransaction, local bool) error {
 	if local {
 		pendingRws := cc.NewCrossTransactionWithSignatures(ctx, pool.retriever.GetConfirmedTransactionNumberOnChain(ctx))
 		// promote queued ctx to pending, update to number received by local
-		// move cws from queued to pending
+		// move signed-tx from queued to pending
 		if queuedRws := pool.queued.Get(id); queuedRws != nil {
 			if err := queuedRws.AddSignature(ctx); err != nil {
-				return err
+				return nil, err
 			}
 			pendingRws = queuedRws
 		}
 		pool.pending.Put(pendingRws)
-		pool.queued.RemoveByID(id)
+		pool.queued.RemoveByID(id) // remove it from queue. TODO:从网络同步的交易仍可以进入queue中，目前采用定期清理queue的方式避免内存溢出
 		return checkAndCommit(id)
 	}
 
-	// add new remote ctx, only add to pending pool
-	if cws := pool.queued.Get(id); cws != nil {
+	// add new remote ctx, add into queue
+	if cws := pool.queued.Get(id); cws != nil { // exist in queue, check and add new signature
 		if err := cws.AddSignature(ctx); err != nil {
-			return err
+			return nil, err
 		}
-	} else {
+	} else { // nonexistent tx, add it into queue
 		pool.queued.Put(cc.NewCrossTransactionWithSignatures(ctx, pool.retriever.GetConfirmedTransactionNumberOnChain(ctx)))
 	}
-	return nil
+	return nil, nil
 }
 
 // verifyReorg compares blockHash to verify blockchain reorg
@@ -292,29 +366,40 @@ func (pool *CrossPool) verifyReorg(ctx *cc.CrossTransaction) error {
 }
 
 // Commit signed ctx with callback
-func (pool *CrossPool) Commit(cws *cc.CrossTransactionWithSignatures) {
-	pool.pending.RemoveByID(cws.ID()) // remove it from pending
+func (pool *CrossPool) Commit(txs []*cc.CrossTransactionWithSignatures) {
+	for _, tx := range txs {
+		pool.pending.RemoveByID(tx.ID()) // remove it from pending immediately
+	}
+
+	callback := func(evs []cc.CommitEvent) {
+		var batch []*cc.CrossTransactionWithSignatures
+		for _, ev := range evs {
+			if ev.InvalidSigIndex == nil { // check signer successfully, store ctx
+				ev.Tx.SetStatus(cc.CtxStatusWaiting) // store waiting status tx
+				batch = append(batch, ev.Tx)
+			} else { // check failed, rollback
+				pool.Rollback(ev.Tx, ev.InvalidSigIndex)
+			}
+		}
+		pool.Store(batch)
+	}
+
 	pool.wg.Add(1)
-	go func() { //TODO: 同步还是异步？
+	go func() { //TODO: 同步还是异步执行commit？
 		defer pool.wg.Done()
 		pool.commitFeed.Send(cc.SignedCtxEvent{
-			Tx: cws,
-			CallBack: func(cws *cc.CrossTransactionWithSignatures, invalidSigIndex ...int) {
-				if invalidSigIndex == nil { // check signer successfully, store ctx
-					pool.Store(cws)
-				} else { // check failed, rollback
-					pool.Rollback(cws, invalidSigIndex)
-				}
-			}})
+			Txs:      txs,
+			CallBack: callback,
+		})
 	}()
 }
 
 // Store ctx into CrossStore
-func (pool *CrossPool) Store(cws *cc.CrossTransactionWithSignatures) {
-	cws.SetStatus(cc.CtxStatusWaiting)
+func (pool *CrossPool) Store(cwsList []*cc.CrossTransactionWithSignatures) {
 	// if pending exist, update to waiting
-	if err := pool.store.Add(cws); err != nil && err != storm.ErrAlreadyExists {
-		pool.logger.Warn("Store local ctx failed", "txID", cws.ID(), "err", err)
+	err := pool.store.Adds(pool.chainID, cwsList, true)
+	if err != nil {
+		pool.logger.Warn("Store local ctx failed", "err", err)
 	}
 }
 
@@ -336,7 +421,7 @@ func (pool *CrossPool) Stats() (int, int) {
 // Pending return pending ctx by height
 func (pool *CrossPool) Pending(startNumber uint64, limit int) (ids []common.Hash, pending []*cc.CrossTransactionWithSignatures) {
 	var deletes []common.Hash
-	pool.pending.Map(func(ctx *cc.CrossTransactionWithSignatures) bool {
+	pool.pending.Do(func(ctx *cc.CrossTransactionWithSignatures) bool {
 		if ctx.BlockNum <= startNumber { // 低于起始高度的pending不取
 			return false
 		}
