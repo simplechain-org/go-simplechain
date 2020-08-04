@@ -27,6 +27,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/simplechain-org/go-simplechain/sub"
 	"html/template"
 	"io/ioutil"
 	"math"
@@ -258,7 +259,13 @@ func newFaucet(genesis *core.Genesis, port int, enodes []*discv5.Node, network u
 		config := &eth.Config{Genesis: genesis,
 			Role: role,
 		}
-		return eth.New(ctx, config)
+		if role.IsMainChain() {
+			return eth.New(ctx, config)
+		} else if role.IsSubChain() {
+			return sub.New(ctx, config)
+		} else {
+			return nil,errors.New("role err")
+		}
 	}); err != nil {
 		return nil, err
 	}
