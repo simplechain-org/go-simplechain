@@ -25,14 +25,18 @@ func (this *Session) GetDifficulty() uint64 {
 }
 
 func (this *Session) GetHashRate() uint64 {
-	result := make(chan uint64, 1)
-	select {
-	case this.hashRateChan <- result:
-		return <-result
-	default:
-		log.Warn("Session GetHashRate hashRateChan block")
+	if this.calcHashRate {
+		result := make(chan uint64, 1)
+		select {
+		case this.hashRateChan <- result:
+			return <-result
+		default:
+			log.Warn("Session GetHashRate hashRateChan block")
+		}
+		return 0
+	} else {
+		return 0
 	}
-	return 0
 }
 
 func (this *Session) GetLastSubmitTime() int64 {
