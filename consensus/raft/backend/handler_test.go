@@ -12,6 +12,8 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/simplechain-org/go-simplechain/accounts"
+	"github.com/simplechain-org/go-simplechain/accounts/keystore"
 	"github.com/simplechain-org/go-simplechain/consensus/raft"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/crypto"
@@ -140,7 +142,7 @@ func nextPort(t *testing.T) uint16 {
 	return uint16(listener.Addr().(*net.TCPAddr).Port)
 }
 
-func prepareServiceContext(key *ecdsa.PrivateKey) (ctx *node.ServiceContext, cfg *node.Config, err error) {
+func prepareServiceContext(key *ecdsa.PrivateKey, am *accounts.Manager) (ctx *node.ServiceContext, cfg *node.Config, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("%s", r)
@@ -154,7 +156,8 @@ func prepareServiceContext(key *ecdsa.PrivateKey) (ctx *node.ServiceContext, cfg
 		},
 	}
 	ctx = &node.ServiceContext{
-		EventMux: new(event.TypeMux),
+		EventMux:       new(event.TypeMux),
+		AccountManager: am,
 	}
 	// config is private field so we need some workaround to set the value
 	configField := reflect.ValueOf(ctx).Elem().FieldByName("config")
@@ -166,7 +169,10 @@ func prepareServiceContext(key *ecdsa.PrivateKey) (ctx *node.ServiceContext, cfg
 func startRaftNode(id, port uint16, tmpWorkingDir string, key *ecdsa.PrivateKey, nodes []*enode.Node) (*RaftService, error) {
 	datadir := fmt.Sprintf("%s/node%d", tmpWorkingDir, id)
 
-	ctx, _, err := prepareServiceContext(key)
+	ks := keystore.NewKeyStore(datadir, keystore.StandardScryptN, keystore.StandardScryptP)
+	am := accounts.NewManager(&accounts.Config{InsecureUnlockAllowed: false}, ks)
+
+	ctx, _, err := prepareServiceContext(key, am)
 	if err != nil {
 		return nil, err
 	}
