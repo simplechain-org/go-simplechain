@@ -196,7 +196,7 @@ func throttle(rate time.Duration, f func()) func() {
 
 		for range ticker.C {
 			<-request.Out()
-			go f()
+			f()
 		}
 	}()
 

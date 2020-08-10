@@ -796,6 +796,19 @@ var (
 		Usage: "The port to bind for the raft transport",
 		Value: 50400,
 	}
+	RaftBlockTimeFlag = cli.IntFlag{
+		Name:  "raftblocktime",
+		Usage: "Amount of time between raft block creations in milliseconds",
+		Value: 50,
+	}
+	RaftDNSEnabledFlag = cli.BoolFlag{
+		Name:  "raftdnsenable",
+		Usage: "Enable DNS resolution of peers",
+	}
+	RaftEmitCheckpointsFlag = cli.BoolFlag{
+		Name:  "raftcheckpoints",
+		Usage: "If enabled, emit specially formatted logging checkpoints",
+	}
 
 	// Istanbul settings
 	IstanbulRequestTimeoutFlag = cli.Uint64Flag{

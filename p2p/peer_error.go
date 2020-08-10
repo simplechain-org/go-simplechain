@@ -26,9 +26,19 @@ const (
 	errInvalidMsg
 )
 
+// Quorum
+//
+// Constants for peer connection errors
+const (
+	// Unauthorized node joining existing raft cluster
+	errNotInRaftCluster = iota + 100
+)
+
 var errorToString = map[int]string{
 	errInvalidMsgCode: "invalid message code",
 	errInvalidMsg:     "invalid message",
+	// Quorum
+	errNotInRaftCluster: "not in raft cluster",
 }
 
 type peerError struct {

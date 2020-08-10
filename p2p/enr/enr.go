@@ -100,6 +100,10 @@ func (r *Record) Seq() uint64 {
 	return r.seq
 }
 
+func (r *Record) Pair() []pair {
+	return r.pairs
+}
+
 // SetSeq updates the record sequence number. This invalidates any signature on the record.
 // Calling SetSeq is usually not required because setting any key in a signed record
 // increments the sequence number.
