@@ -1,3 +1,3 @@
 package raft
 
-// link to backend/intergration_test.go
+// link to backend/integration_test.go

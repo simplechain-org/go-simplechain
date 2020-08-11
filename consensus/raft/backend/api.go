@@ -2,6 +2,7 @@ package backend
 
 import (
 	"errors"
+
 	"github.com/coreos/etcd/pkg/types"
 )
 

@@ -19,7 +19,6 @@ package p2p
 import (
 	"crypto/ecdsa"
 	"errors"
-	"github.com/stretchr/testify/assert"
 	"io"
 	"math/rand"
 	"net"
@@ -33,6 +32,8 @@ import (
 	"github.com/simplechain-org/go-simplechain/p2p/enode"
 	"github.com/simplechain-org/go-simplechain/p2p/enr"
 	"golang.org/x/crypto/sha3"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // func init() {
