@@ -18,6 +18,11 @@ package synchronise
 
 import (
 	"encoding/binary"
+	"math/big"
+	"math/rand"
+	"sync"
+	"testing"
+
 	"github.com/Beyond-simplechain/foundation/container"
 	"github.com/Beyond-simplechain/foundation/container/redblacktree"
 	"github.com/simplechain-org/go-simplechain/common"
@@ -25,11 +30,8 @@ import (
 	db "github.com/simplechain-org/go-simplechain/cross/database"
 	"github.com/simplechain-org/go-simplechain/cross/trigger"
 	"github.com/simplechain-org/go-simplechain/log"
+
 	"github.com/stretchr/testify/assert"
-	"math/big"
-	"math/rand"
-	"sync"
-	"testing"
 )
 
 type syncTester struct {
