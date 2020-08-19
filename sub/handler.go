@@ -58,6 +58,7 @@ const (
 
 var (
 	syncChallengeTimeout = 15 * time.Second // Time allowance for a node to reply to the sync progress challenge
+	broadcastTxLimit     = 1000
 )
 
 func errResp(code errCode, format string, v ...interface{}) error {
@@ -103,6 +104,10 @@ type ProtocolManager struct {
 
 	raftMode bool
 	engine   consensus.Engine // used for istanbul consensus
+
+	newTransactions int64
+	txSyncTimer     *time.Timer
+	txSyncPeriod    time.Duration
 }
 
 // NewProtocolManager returns a new Ethereum sub protocol manager. The Ethereum sub protocol manages peers capable
@@ -266,10 +271,7 @@ func (pm *ProtocolManager) removePeer(id string) {
 func (pm *ProtocolManager) Start(maxPeers int) {
 	pm.maxPeers = maxPeers
 
-	// broadcast transactions
-	pm.txsCh = make(chan core.NewTxsEvent, txChanSize)
-	pm.txsSub = pm.txpool.SubscribeNewTxsEvent(pm.txsCh)
-	go pm.txBroadcastLoop()
+	pm.handleTxs(false)
 
 	if !pm.raftMode {
 		// broadcast mined blocks
@@ -317,6 +319,25 @@ func (pm *ProtocolManager) Stop() {
 
 func (pm *ProtocolManager) newPeer(pv int, p *p2p.Peer, rw p2p.MsgReadWriter) *peer {
 	return newPeer(pv, p, newMeteredMsgWriter(rw))
+}
+
+func (pm *ProtocolManager) handleTxs(legacy bool) {
+	// broadcast transactions
+	pm.txsCh = make(chan core.NewTxsEvent, txChanSize)
+
+	if legacy {
+		pm.txsSub = pm.txpool.SubscribeNewTxsEvent(pm.txsCh)
+		go pm.txBroadcastLoopLegacy()
+
+	} else {
+		pm.txsSub = pm.txpool.SubscribeSyncTxsEvent(pm.txsCh)
+
+		pm.txSyncPeriod = time.Millisecond * 50
+		pm.txSyncTimer = time.NewTimer(pm.txSyncPeriod)
+
+		go pm.txCollectLoop()
+		go pm.txBroadcastLoop()
+	}
 }
 
 // handle is the callback invoked to manage the life cycle of an eth peer. When
@@ -786,6 +807,8 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			}
 			p.MarkTransaction(tx.Hash())
 		}
+		totalMsg += len(txs)
+		log.Error("receive tx msg", "total", totalMsg, "txs", len(txs))
 		pm.AddRemotes(txs)
 
 	default:
@@ -794,6 +817,8 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 	}
 	return nil
 }
+
+var totalMsg int
 
 // BroadcastBlock will either propagate a block to a subset of it's peers, or
 // will only announce it's availability (depending what's requested).
@@ -865,16 +890,85 @@ func (pm *ProtocolManager) minedBroadcastLoop() {
 	}
 }
 
-func (pm *ProtocolManager) txBroadcastLoop() {
+func (pm *ProtocolManager) txCollectLoop() {
+	//var lastSyncTime *time.Time
 	for {
 		select {
-		case event := <-pm.txsCh:
-			pm.BroadcastTxs(event.Txs)
+		case ev := <-pm.txsCh:
+			if atomic.AddInt64(&pm.newTransactions, int64(len(ev.Txs))) >= int64(broadcastTxLimit) {
+				pm.txSyncTimer.Reset(0)
+			}
+
+			//if lastSyncTime == nil {
+			//	now := time.Now()
+			//	lastSyncTime = &now
+			//	break
+			//}
+			//
+			//log.Warn("txCollectLoop since last", "used", time.Since(*lastSyncTime))
+			//*lastSyncTime = time.Now()
+
+		case <-pm.txsSub.Err():
+			return
+		}
+	}
+}
+
+func (pm *ProtocolManager) txBroadcastLoopLegacy() {
+	for {
+		select {
+		case ev := <-pm.txsCh:
+			pm.dumpTxs(ev.Txs)
+			pm.BroadcastTxs(ev.Txs)
 
 		// Err() channel will be closed when unsubscribing.
 		case <-pm.txsSub.Err():
 			return
 		}
+	}
+}
+
+func (pm *ProtocolManager) txBroadcastLoop() {
+	var total int
+
+	for {
+		select {
+		case <-pm.txSyncTimer.C:
+			newTransactions := int(atomic.LoadInt64(&pm.newTransactions))
+			txs := pm.txpool.SyncLimit(newTransactions)
+
+			l := txs.Len()
+
+			if l > 0 {
+				total += l
+				log.Trace("dump transactions", "total", total, "count", l, "newTransactions", newTransactions)
+				pm.BroadcastTxs(txs)
+				atomic.AddInt64(&pm.newTransactions, -int64(l))
+			}
+
+			//if l <= broadcastTxLimit/2 {
+			//	waiting += waiting / 2
+			//}
+
+			pm.txSyncTimer.Reset(pm.txSyncPeriod)
+
+		case <-pm.quitSync:
+			return
+		}
+	}
+}
+
+func (pm *ProtocolManager) dumpTxs(txs types.Transactions) {
+	select {
+	case ev := <-pm.txsCh:
+		txs = append(txs, ev.Txs...)
+		if len(txs) >= broadcastTxLimit {
+			return
+		}
+		pm.dumpTxs(txs)
+
+	default:
+		log.Trace("dump transactions from txsCh", "count", txs.Len())
 	}
 }
 

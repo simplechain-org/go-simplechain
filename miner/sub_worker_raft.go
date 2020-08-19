@@ -1,5 +1,3 @@
-//+build 2019
-
 package miner
 
 import (
@@ -147,16 +145,16 @@ func (w *worker) commitRaftWork() {
 		return
 	}
 
-	allTxs, err := w.eth.TxPool().Pending()
-	if err != nil {
-		log.Error("Failed to fetch pending transactions", "err", err)
-		return
-	}
+	allTxs := w.eth.TxPool().PendingLimit(int(w.maxBlockTxs))
+	//if err != nil {
+	//	log.Error("Failed to fetch pending transactions", "err", err)
+	//	return
+	//}
 
 	txs := w.raftCtx.speculativeChain.WithoutProposedTxes(allTxs)
-	transactions := types.NewTransactionsByPriceAndNonce(w.current.signer, txs)
+	//transactions := types.NewTransactionsByPriceAndNonce(w.current.signer, txs)
 
-	if w.commitTransactions(transactions, w.coinbase, nil) {
+	if w.commitTransactions(txs, w.coinbase, nil) {
 		return
 	}
 

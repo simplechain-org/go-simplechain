@@ -118,6 +118,7 @@ func (p *peer) broadcast() {
 		select {
 		case txs := <-p.queuedTxs:
 			if err := p.SendTransactions(txs); err != nil {
+				p.Log().Error("send transactions failed", "err", err)
 				return
 			}
 			p.Log().Trace("Broadcast transactions", "count", len(txs))

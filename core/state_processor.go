@@ -24,6 +24,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/core/vm"
 	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/params"
+	"sync"
 )
 
 // StateProcessor is a basic Processor, which takes care of transitioning
@@ -75,11 +76,17 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	return receipts, allLogs, *usedGas, p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles(), receipts)
 }
 
+var evmPool = sync.Pool{
+	New: func() interface{} {
+		return new(vm.EVM)
+	},
+}
+
 // ApplyTransaction attempts to apply a transaction to the given state database
 // and uses the input parameters for its environment. It returns the receipt
 // for the transaction, gas used and an error if the transaction failed,
 // indicating the block was invalid.
-func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config) (*types.Receipt, error) {
+func applyCommonTransaction(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config) (*types.Receipt, error) {
 	msg, err := tx.AsMessage(types.MakeSigner(config))
 	if err != nil {
 		return nil, err
@@ -88,7 +95,11 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 	context := NewEVMContext(msg, header, bc, author)
 	// Create a new environment which holds all relevant information
 	// about the transaction and calling mechanisms.
-	vmenv := vm.NewEVM(context, statedb, config, cfg)
+	//vmenv := vm.NewEVM(context, statedb, config, cfg)
+	vmenv := evmPool.Get().(*vm.EVM)
+	defer evmPool.Put(vmenv)
+
+	vm.PrepareEVM(context, vmenv, statedb, config, cfg)
 	// Apply the transaction to the current state (included in the env)
 	_, gas, failed, err := ApplyMessage(vmenv, msg, gp)
 	if err != nil {
@@ -118,4 +129,42 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 	receipt.TransactionIndex = uint(statedb.TxIndex())
 
 	return receipt, err
+}
+
+func applyEmptyTransaction(tx *types.Transaction) (*types.Receipt, error) {
+	var root []byte
+	receipt := types.NewReceipt(root, false, 0)
+	receipt.TxHash = tx.Hash()
+	receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
+	return receipt, nil
+}
+
+func applyAccountTransaction(config *params.ChainConfig, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64) (*types.Receipt, error) {
+	msg, err := tx.AsMessage(types.MakeSigner(config))
+	if err != nil {
+		return nil, err
+	}
+	sender, to := msg.From(), msg.To()
+	statedb.SetNonce(sender, statedb.GetNonce(sender)+1)
+	if to != nil {
+		balance := tx.Value()
+		statedb.AddBalance(*to, balance)
+		statedb.SubBalance(sender, balance)
+	}
+	*usedGas += params.TxGas
+	statedb.Finalise(true)
+	return applyEmptyTransaction(tx)
+}
+
+func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config) (*types.Receipt, error) {
+	//to := tx.To()
+	//if to != nil || *to == types.HashTxAddress {
+	//	return applyHashTransaction(tx)
+	//	//return applyHashTransaction2(config, statedb, header, tx)
+	//} else {
+	//	return applyCommonTransaction(config, bc, author, gp, statedb, header, tx, usedGas, cfg)
+	//}
+	//return applyEmptyTransaction(tx)
+	return applyAccountTransaction(config, gp, statedb, header, tx, usedGas)
+	//return applyCommonTransaction(config, bc, author, gp, statedb, header, tx, usedGas, cfg)
 }

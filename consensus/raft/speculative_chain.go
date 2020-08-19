@@ -174,7 +174,7 @@ func (chain *SpeculativeChain) removeProposedTxes(block *types.Block) {
 	}
 }
 
-func (chain *SpeculativeChain) WithoutProposedTxes(addrTxes AddressTxes) AddressTxes {
+func (chain *SpeculativeChain) __WithoutProposedTxes(addrTxes AddressTxes) AddressTxes {
 	newMap := make(AddressTxes)
 
 	for addr, txes := range addrTxes {
@@ -190,4 +190,14 @@ func (chain *SpeculativeChain) WithoutProposedTxes(addrTxes AddressTxes) Address
 	}
 
 	return newMap
+}
+
+func (chain *SpeculativeChain) WithoutProposedTxes(txes types.Transactions) types.Transactions {
+	filteredTxes := make(types.Transactions, 0, txes.Len())
+	for _, tx := range txes {
+		if !chain.proposedTxes.Contains(tx.Hash()) {
+			filteredTxes = append(filteredTxes, tx)
+		}
+	}
+	return filteredTxes
 }

@@ -41,6 +41,10 @@ type Transaction struct {
 	hash atomic.Value
 	size atomic.Value
 	from atomic.Value
+	// for txpool
+	timestamp int64
+	synced    bool
+	local     bool
 }
 
 type txdata struct {
@@ -50,6 +54,7 @@ type txdata struct {
 	Recipient    *common.Address `json:"to"       rlp:"nil"` // nil means contract creation
 	Amount       *big.Int        `json:"value"    gencodec:"required"`
 	Payload      []byte          `json:"input"    gencodec:"required"`
+	BlockLimit   uint64          `json:"blockLimit"    gencodec:"required"`
 
 	// Signature values
 	V *big.Int `json:"v" gencodec:"required"`
@@ -179,6 +184,16 @@ func (tx *Transaction) Value() *big.Int    { return new(big.Int).Set(tx.data.Amo
 func (tx *Transaction) Nonce() uint64      { return tx.data.AccountNonce }
 func (tx *Transaction) CheckNonce() bool   { return true }
 
+func (tx *Transaction) BlockLimit() uint64                { return tx.data.BlockLimit }
+func (tx *Transaction) SetBlockLimit(expiredBlock uint64) { tx.data.BlockLimit = expiredBlock }
+
+func (tx *Transaction) IsSynced() bool                { return tx.synced }
+func (tx *Transaction) SetSynced(synced bool)         { tx.synced = synced }
+func (tx *Transaction) IsLocal() bool                 { return tx.local }
+func (tx *Transaction) SetLocal(local bool)           { tx.local = local }
+func (tx *Transaction) ImportTime() int64             { return tx.timestamp }
+func (tx *Transaction) SetImportTime(timestamp int64) { tx.timestamp = timestamp }
+
 // To returns the recipient address of the transaction.
 // It returns nil if the transaction is a contract creation.
 func (tx *Transaction) To() *common.Address {
@@ -225,7 +240,7 @@ func (tx *Transaction) AsMessage(s Signer) (Message, error) {
 		to:         tx.data.Recipient,
 		amount:     tx.data.Amount,
 		data:       tx.data.Payload,
-		checkNonce: true,
+		checkNonce: false,
 	}
 
 	var err error

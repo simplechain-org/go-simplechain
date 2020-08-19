@@ -18,6 +18,8 @@ package types
 
 import (
 	"bytes"
+	"golang.org/x/crypto/sha3"
+	"sort"
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/rlp"
@@ -29,7 +31,34 @@ type DerivableList interface {
 	GetRlp(i int) []byte
 }
 
-func DeriveSha(list DerivableList) common.Hash {
+var DeriveSha = DeriveLegacySha
+
+type BytesPair struct {
+	Key   []byte `gencodec:"required"`
+	Value []byte `gencodec:"required"`
+}
+
+func DeriveListSha(list DerivableList) (h common.Hash) {
+	l := list.Len()
+	keybuf := new(bytes.Buffer)
+	ordered := make([]BytesPair, l)
+	for i := 0; i < list.Len(); i++ {
+		keybuf.Reset()
+		rlp.Encode(keybuf, uint(i))
+		ordered[i] = BytesPair{keybuf.Bytes(), list.GetRlp(i)}
+	}
+
+	sort.Slice(ordered, func(i, j int) bool {
+		return bytes.Compare(ordered[i].Key, ordered[j].Key) < 0
+	})
+
+	hw := sha3.NewLegacyKeccak256()
+	rlp.Encode(hw, ordered)
+	hw.Sum(h[:0])
+	return h
+}
+
+func DeriveLegacySha(list DerivableList) common.Hash {
 	keybuf := new(bytes.Buffer)
 	trie := new(trie.Trie)
 	for i := 0; i < list.Len(); i++ {

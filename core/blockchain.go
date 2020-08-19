@@ -646,6 +646,28 @@ func (bc *BlockChain) Genesis() *types.Block {
 	return bc.genesisBlock
 }
 
+// GetTransactions retrieves a block's transactions from the database by
+// number, caching it if found.
+func (bc *BlockChain) GetTransactions(number uint64) types.Transactions {
+	header := bc.hc.GetHeaderByNumber(number)
+	if header == nil {
+		return nil
+	}
+	hash := header.Hash()
+	// Short circuit if the body's already in the cache, retrieve otherwise
+	if cached, ok := bc.bodyCache.Get(header.Hash()); ok {
+		body := cached.(*types.Body)
+		return body.Transactions
+	}
+	body := rawdb.ReadBody(bc.db, hash, number)
+	if body == nil {
+		return nil
+	}
+	// Cache the found body for next time and return
+	bc.bodyCache.Add(hash, body)
+	return body.Transactions
+}
+
 // GetBody retrieves a block body (transactions and uncles) from the database by
 // hash, caching it if found.
 func (bc *BlockChain) GetBody(hash common.Hash) *types.Body {

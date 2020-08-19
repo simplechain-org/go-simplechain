@@ -59,6 +59,7 @@ const (
 	NodeDataMsg        = 0x0e
 	GetReceiptsMsg     = 0x0f
 	ReceiptsMsg        = 0x10
+	TransactionsMsg    = 0x11
 
 	//for eth64
 	CtxSignMsg = 0x31
@@ -104,10 +105,12 @@ type txPool interface {
 	// Pending should return pending transactions.
 	// The slice should be modifiable by the caller.
 	Pending() (map[common.Address]types.Transactions, error)
+	SyncLimit(int) types.Transactions
 	//GetAnchorTxs(common.Address) (map[common.Address]types.Transactions, error)
 	// SubscribeNewTxsEvent should return an event subscription of
 	// NewTxsEvent and send events to the given channel.
 	SubscribeNewTxsEvent(chan<- core.NewTxsEvent) event.Subscription
+	SubscribeSyncTxsEvent(chan<- core.NewTxsEvent) event.Subscription
 
 	// GetLatestNonceFromQueueAndPending.
 	//GetCurrentNonce(address common.Address) uint64

@@ -96,6 +96,14 @@ type testTxPool struct {
 	lock sync.RWMutex // Protects the transaction pool
 }
 
+func (p *testTxPool) SyncLimit(int) types.Transactions {
+	panic("implement me")
+}
+
+func (p *testTxPool) SubscribeSyncTxsEvent(chan<- core.NewTxsEvent) event.Subscription {
+	panic("implement me")
+}
+
 // AddRemotes appends a batch of transactions to the pool, and notifies any
 // listeners if the addition channel is non nil
 func (p *testTxPool) AddRemotes(txs []*types.Transaction) []error {

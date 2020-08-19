@@ -13,7 +13,6 @@
 //
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-simplechain library. If not, see <http://www.gnu.org/licenses/>.
-//+build 2019
 
 package miner
 
@@ -80,6 +79,9 @@ const (
 
 	// staleThreshold is the maximum depth of the acceptable stale block.
 	staleThreshold = 7
+
+	defaultMaxBlockTxs   = 15000
+	defaultMinTxsCanSeal = 1000
 )
 
 // environment is the worker's current environment and holds all of the current state information.
@@ -169,8 +171,10 @@ type worker struct {
 	snapshotState *state.StateDB
 
 	// atomic status counters
-	running int32 // The indicator whether the consensus engine is running or not.
-	newTxs  int32 // New arrival transaction count since last sealing work submitting.
+	running      int32 // The indicator whether the consensus engine is running or not.
+	newTxs       int32 // New arrival transaction count since last sealing work submitting.
+	maxBlockTxs  uint64
+	lastSealTime int64
 
 	// External functions
 	isLocalBlock func(block *types.Block) bool // Function used to determine whether the specified block is mined by local miner.
@@ -210,6 +214,8 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 		resubmitAdjustCh:   make(chan *intervalAdjust, resubmitAdjustChanSize),
 		agents:             make(map[Agent]struct{}),
 	}
+
+	worker.maxBlockTxs = defaultMaxBlockTxs
 
 	// Subscribe NewTxsEvent for tx pool
 	worker.txsSub = eth.TxPool().SubscribeNewTxsEvent(worker.txsCh)
@@ -530,14 +536,15 @@ func (w *worker) mainLoop() {
 				coinbase := w.coinbase
 				w.mu.RUnlock()
 
-				txs := make(map[common.Address]types.Transactions)
-				for _, tx := range ev.Txs {
-					acc, _ := types.Sender(w.current.signer, tx)
-					txs[acc] = append(txs[acc], tx)
-				}
-				txset := types.NewTransactionsByPriceAndNonce(w.current.signer, txs)
+				//txs := make(map[common.Address]types.Transactions)
+				//for _, tx := range ev.Txs {
+				//	acc, _ := types.Sender(w.current.signer, tx)
+				//	txs[acc] = append(txs[acc], tx)
+				//}
+				//txset := types.NewTransactionsByPriceAndNonce(w.current.signer, txs)
 				tcount := w.current.tcount
-				w.commitTransactions(txset, coinbase, nil)
+				//log.Error("[debug] commit txsCh's transactions")
+				w.commitTransactions(ev.Txs, coinbase, nil)
 				// Only update the snapshot if any new transactons were added
 				// to the pending block
 				if tcount != w.current.tcount {
@@ -667,8 +674,29 @@ func (w *worker) resultLoop() {
 				log.Error("Failed writing block to chain", "err", err)
 				continue
 			}
-			log.Info("Successfully sealed new block", "number", block.Number(), "sealhash", sealhash, "hash", hash,
-				"elapsed", common.PrettyDuration(time.Since(task.createdAt)))
+			//log.Info("Successfully sealed new block", "number", block.Number(), "sealhash", sealhash, "hash", hash,
+			//	"elapsed", common.PrettyDuration(time.Since(task.createdAt)))
+			log.Warn("Successfully sealed new block", "number", block.Number(), "sealhash", sealhash, "hash", hash,
+				"elapsed", common.PrettyDuration(time.Since(task.createdAt)), "txs", len(block.Transactions()), "diff", block.Difficulty())
+
+			// Adjust maxBlockTxs
+			if w.chainConfig.Clique != nil {
+				sealTime := time.Now().UnixNano()
+				if w.lastSealTime > 0 {
+					period := int64(time.Second*time.Duration(w.chainConfig.Clique.Period)) * 3 / 2
+					if sealTime-w.lastSealTime > period {
+						atomic.StoreUint64(&w.maxBlockTxs, w.maxBlockTxs/2)
+						if w.maxBlockTxs < defaultMinTxsCanSeal {
+							atomic.StoreUint64(&w.maxBlockTxs, defaultMinTxsCanSeal)
+						}
+
+					} else if block.Transactions().Len() >= int(w.maxBlockTxs) {
+						atomic.StoreUint64(&w.maxBlockTxs, w.maxBlockTxs*5/4)
+					}
+				}
+				log.Error("[debug] seal used", "time", time.Duration(sealTime-w.lastSealTime))
+				atomic.StoreInt64(&w.lastSealTime, sealTime)
+			}
 
 			// Broadcast the block and announce chain insertion event
 			w.mux.Post(core.NewMinedBlockEvent{Block: block})
@@ -778,10 +806,9 @@ func (w *worker) commitTransaction(tx *types.Transaction, coinbase common.Addres
 	return receipt.Logs, nil
 }
 
-func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coinbase common.Address, interrupt *int32) bool {
+func (w *worker) commitTransactions(txs types.Transactions, coinbase common.Address, interrupt *int32) bool {
 	// Short circuit if current is nil
 	if w.current == nil {
-		//log.Info("w.current == nil")
 		return true
 	}
 
@@ -789,9 +816,11 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		w.current.gasPool = new(core.GasPool).AddGas(w.current.header.GasLimit)
 	}
 
-	var coalescedLogs []*types.Log
-	//Loop:
-	for {
+	var (
+		coalescedLogs []*types.Log
+	)
+
+	for _, tx := range txs {
 		// In the following three cases, we will interrupt the execution of the transaction.
 		// (1) new head block event arrival, the interrupt signal is 1
 		// (2) worker start or restart, the interrupt signal is 1
@@ -810,6 +839,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 					inc:   true,
 				}
 			}
+			//log.Error("[debug] commitTransactions interrupt", "code", atomic.LoadInt32(interrupt))
 			return atomic.LoadInt32(interrupt) == commitInterruptNewHead
 		}
 		// If we don't have enough gas for any further transactions then we're done
@@ -817,11 +847,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 			log.Trace("Not enough gas for further transactions", "have", w.current.gasPool, "want", params.TxGas)
 			break
 		}
-		// Retrieve the next transaction and abort if all done
-		tx := txs.Peek()
-		if tx == nil {
-			break
-		}
+
 		// Error may be ignored here. The error has already been checked
 		// during transaction acceptance is the transaction pool.
 		//
@@ -835,29 +861,28 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		case core.ErrGasLimitReached:
 			// Pop the current out-of-gas transaction without shifting in the next from the account
 			log.Trace("Gas limit exceeded for current block", "sender", from)
-			txs.Pop()
 
-		case core.ErrNonceTooLow:
-			// New head notification data race between the transaction pool and miner, shift
-			log.Trace("Skipping transaction with low nonce", "sender", from, "nonce", tx.Nonce())
-			txs.Shift()
-
-		case core.ErrNonceTooHigh:
-			// Reorg notification data race between the transaction pool and miner, skip account =
-			log.Trace("Skipping account with hight nonce", "sender", from, "nonce", tx.Nonce())
-			txs.Pop()
+		//case core.ErrNonceTooLow:
+		//	// New head notification data race between the transaction pool and miner, shift
+		//	log.Trace("Skipping transaction with low nonce", "sender", from, "nonce", tx.Nonce())
+		//	txs.Shift()
+		//
+		//case core.ErrNonceTooHigh:
+		//	// Reorg notification data race between the transaction pool and miner, skip account =
+		//	log.Trace("Skipping account with hight nonce", "sender", from, "nonce", tx.Nonce())
+		//	txs.Pop()
 
 		case nil:
 			// Everything ok, collect the logs and shift in the next transaction from the same account
 			coalescedLogs = append(coalescedLogs, logs...)
 			w.current.tcount++
-			txs.Shift()
+			//txs.Shift()
 
 		default:
 			// Strange error, discard the transaction and get the next in line (note, the
 			// nonce-too-high clause will prevent us from executing in vain).
 			log.Debug("Transaction failed, account skipped", "hash", tx.Hash(), "err", err)
-			txs.Shift()
+			//txs.Shift()
 		}
 	}
 
@@ -954,43 +979,38 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 	commitUncles(w.localUncles)
 	commitUncles(w.remoteUncles)
 
-	if !noempty {
+	// Fill the block with all available pending transactions.
+	start := time.Now()
+	pending := w.eth.TxPool().PendingLimit(int(w.maxBlockTxs))
+	//log.Error("[debug] get pending", "parentNum", parent.NumberU64(),
+	//	"pendingSize", pending.Len(), "maxBlockTxs", w.maxBlockTxs)
+	loadTime := time.Since(start)
+
+	if !noempty && pending == nil {
 		// Create an empty block based on temporary copied state for sealing in advance without waiting block
 		// execution finished.
 		w.commit(uncles, nil, false, tstart)
 	}
 
-	// Fill the block with all available pending transactions.
-	pending, err := w.eth.TxPool().Pending()
-	if err != nil {
-		log.Error("Failed to fetch pending transactions", "err", err)
-		return
-	}
 	// Short circuit if there is no available pending transactions
 	if len(pending) == 0 {
 		w.updateSnapshot()
 		return
 	}
-	// Split the pending transactions into locals and remotes
-	localTxs, remoteTxs := make(map[common.Address]types.Transactions), pending
-	for _, account := range w.eth.TxPool().Locals() {
-		if txs := remoteTxs[account]; len(txs) > 0 {
-			delete(remoteTxs, account)
-			localTxs[account] = txs
-		}
+
+	start = time.Now()
+	exit := w.commitTransactions(pending, w.coinbase, interrupt)
+
+	executeTime := time.Since(start)
+	eachcost := executeTime / time.Duration(pending.Len())
+	log.Debug("[debug] >>> block pack transactions time",
+		"load", loadTime, "execute", executeTime, "eachcost", eachcost)
+
+	if exit {
+		//log.Error("poatest----interrupt", "timestamp", timestamp, "total", len(pending))
+		return
 	}
-	if len(localTxs) > 0 {
-		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, localTxs)
-		if w.commitTransactions(txs, w.coinbase, interrupt) {
-			return
-		}
-	}
-	if len(remoteTxs) > 0 {
-		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, remoteTxs)
-		if w.commitTransactions(txs, w.coinbase, interrupt) {
-			return
-		}
-	}
+
 	w.commit(uncles, w.fullTaskHook, true, tstart)
 }
 
