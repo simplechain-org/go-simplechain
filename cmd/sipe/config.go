@@ -23,6 +23,7 @@ import (
 	"math/big"
 	"os"
 	"reflect"
+	"time"
 	"unicode"
 
 	"github.com/simplechain-org/go-simplechain/cmd/utils"
@@ -219,13 +220,15 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 func RegisterRaftService(stack *node.Node, ctx *cli.Context, cfg gethConfig, subChan <-chan *sub.Ethereum) {
 	datadir := ctx.GlobalString(utils.DataDirFlag.Name)
 	joinExistingId := ctx.GlobalInt(utils.RaftJoinExistingFlag.Name)
-
 	raftPort := uint16(ctx.GlobalInt(utils.RaftPortFlag.Name))
+	blockTimeMillis := ctx.GlobalInt(utils.RaftBlockTimeFlag.Name)
+	useDns := ctx.GlobalBool(utils.RaftDNSEnabledFlag.Name)
 
 	if err := stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
 		privkey := cfg.Node.NodeKey()
 		strId := enode.PubkeyToIDV4(&privkey.PublicKey).String()
 		peers := cfg.Node.StaticNodes()
+		blockTimeNanos := time.Duration(blockTimeMillis) * time.Millisecond
 
 		var myId uint16
 		var joinExisting bool
@@ -256,7 +259,7 @@ func RegisterRaftService(stack *node.Node, ctx *cli.Context, cfg gethConfig, sub
 		}
 
 		ethereum := <-subChan
-		return raftBackend.New(ctx, myId, raftPort, joinExisting, ethereum, peers, datadir)
+		return raftBackend.New(ctx, myId, raftPort, joinExisting, ethereum, peers, datadir, blockTimeNanos, useDns)
 	}); err != nil {
 		utils.Fatalf("Failed to register the Raft service: %v", err)
 	}

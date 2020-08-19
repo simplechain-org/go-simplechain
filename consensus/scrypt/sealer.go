@@ -20,6 +20,7 @@ import (
 	crand "crypto/rand"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"math/big"
 	"math/rand"
@@ -187,7 +188,7 @@ func (powScrypt *PowScrypt) remote(notify []string, noverify bool) {
 
 		results      chan<- *types.Block
 		currentBlock *types.Block
-		currentWork  [3]string
+		currentWork  [2]string
 
 		notifyTransport = &http.Transport{}
 		notifyClient    = &http.Client{
@@ -216,7 +217,7 @@ func (powScrypt *PowScrypt) remote(notify []string, noverify bool) {
 				if err != nil {
 					log.Warn("Failed to notify remote miner", "err", err)
 				} else {
-					log.Trace("Notified remote miner", "miner", url, "hash", log.Lazy{Fn: func() common.Hash { return common.HexToHash(work[0]) }}, "target", work[2])
+					log.Trace("Notified remote miner", "miner", url, "hash", log.Lazy{Fn: func() common.Hash { return common.HexToHash(work[0]) }}, "difficulty", work[1])
 					res.Body.Close()
 				}
 			}(notifyReqs[i], url)
@@ -231,9 +232,15 @@ func (powScrypt *PowScrypt) remote(notify []string, noverify bool) {
 	makeWork := func(block *types.Block) {
 		hash := powScrypt.SealHash(block.Header())
 
-		currentWork[0] = hash.Hex()
-		currentWork[1] = common.BytesToHash(new(big.Int).Div(two256, block.Difficulty()).Bytes()).Hex()
-		currentWork[2] = hexutil.EncodeBig(block.Number())
+		//currentWork[0] = hash.Hex()
+		//currentWork[1] = common.BytesToHash(new(big.Int).Div(two256, block.Difficulty()).Bytes()).Hex()
+		//currentWork[2] = hexutil.EncodeBig(block.Number())
+		currentWork[0] = hexutil.Encode(
+			append(append(block.HashNoNonce().Bytes(),
+				block.HashNoNonce().Bytes()...),
+				[]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}...),
+		)
+		currentWork[1] = fmt.Sprintf("%x", block.Difficulty())
 
 		// Trace the seal work fetched by remote sealer.
 		currentBlock = block

@@ -45,20 +45,26 @@ func TestRemoteSealer(t *testing.T) {
 	header := &types.Header{Number: big.NewInt(1), Difficulty: big.NewInt(100)}
 	block := types.NewBlockWithHeader(header)
 	sealhash := scrypt.SealHash(header)
+	fixHash := func(sealhash common.Hash) string {
+		return hexutil.Encode(
+			append(append(sealhash.Bytes(), sealhash.Bytes()...),
+				[]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}...),
+		)
+	}
 
 	// Push new work.
 	results := make(chan *types.Block)
 	scrypt.Seal(nil, block, results, nil)
 
 	var (
-		work [3]string
+		work [2]string
 		err  error
 	)
-	if work, err = api.GetWork(); err != nil || work[0] != sealhash.Hex() {
+	if work, err = api.GetWork(); err != nil || work[0] != fixHash(sealhash) {
 		t.Error("expect to return a mining work has same hash")
 	}
 
-	if res := api.SubmitWork(types.BlockNonce{}, sealhash, common.Hash{}); res {
+	if res := api.SubmitWork(types.BlockNonce{}, sealhash); res {
 		t.Error("expect to return false when submit a fake solution")
 	}
 	// Push new block with same block number to replace the original one.
@@ -67,7 +73,7 @@ func TestRemoteSealer(t *testing.T) {
 	sealhash = scrypt.SealHash(header)
 	scrypt.Seal(nil, block, results, nil)
 
-	if work, err = api.GetWork(); err != nil || work[0] != sealhash.Hex() {
+	if work, err = api.GetWork(); err != nil || work[0] != fixHash(sealhash) {
 		t.Error("expect to return the latest pushed work")
 	}
 }

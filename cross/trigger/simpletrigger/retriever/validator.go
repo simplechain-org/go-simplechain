@@ -1,3 +1,19 @@
+// Copyright 2016 The go-simplechain Authors
+// This file is part of the go-simplechain library.
+//
+// The go-simplechain library is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// The go-simplechain library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with the go-simplechain library. If not, see <http://www.gnu.org/licenses/>.
+
 package retriever
 
 import (
@@ -137,7 +153,7 @@ func (v *SimpleValidator) VerifyContract(cws trigger.Transaction) error {
 		}
 
 	} else if v.IsRemoteCtx(cws) {
-		res, err = evmInvoke.CallContract(common.Address{}, &v.contract, params.GetTakerTxFn, paddedCtxId, common.LeftPadBytes(cws.ChainId().Bytes(), 32))
+		res, err = evmInvoke.CallContract(common.Address{}, &v.contract, params.GetTakerTxFn, paddedCtxId, cws.From().Bytes(), common.LeftPadBytes(cws.ChainId().Bytes(), 32))
 		if err != nil {
 			v.logger.Warn("apply getTakerTx transaction failed", "error", err)
 			return cross.ErrInternal
@@ -148,23 +164,6 @@ func (v *SimpleValidator) VerifyContract(cws trigger.Transaction) error {
 	}
 	return nil
 }
-
-//func (v *SimpleValidator) VerifyReorg(ctx trigger.Transaction) error {
-//	if v.store.Has(v.chainID, ctx.ID()) {
-//		old := v.store.Get(v.chainID, ctx.ID())
-//		if old == nil {
-//			v.logger.Warn("VerifyReorg failed, can't load ctx")
-//			return cross.ErrInternal
-//		}
-//		if ctx.BlockHash() != old.BlockHash() {
-//			v.logger.Warn("blockchain reorg,txId:%s,old:%s,new:%s", ctx.ID().String(), old.BlockHash().String(), ctx.BlockHash().String())
-//			metric.Report(v.chainConfig.ChainID.Uint64(), "blockchain reorg", "ctxID", ctx.ID().String(),
-//				"old", old.BlockHash().String(), "new", ctx.BlockHash().String())
-//			return cross.ErrReorgCtx
-//		}
-//	}
-//	return nil
-//}
 
 func (v *SimpleValidator) UpdateAnchors(info *cc.RemoteChainInfo) error {
 	v.mu.Lock()

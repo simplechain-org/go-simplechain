@@ -1,3 +1,19 @@
+// Copyright 2016 The go-simplechain Authors
+// This file is part of the go-simplechain library.
+//
+// The go-simplechain library is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// The go-simplechain library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with the go-simplechain library. If not, see <http://www.gnu.org/licenses/>.
+
 package core
 
 import (
@@ -122,6 +138,10 @@ func (tx *CrossTransaction) Hash() (h common.Hash) {
 
 func (tx *CrossTransaction) BlockHash() common.Hash {
 	return tx.Data.BlockHash
+}
+
+func (tx *CrossTransaction) From() common.Address {
+	return tx.Data.From
 }
 
 func (tx *CrossTransaction) SignHash() (h common.Hash) {
@@ -275,6 +295,10 @@ func (cws *CrossTransactionWithSignatures) Hash() (h common.Hash) {
 
 func (cws *CrossTransactionWithSignatures) BlockHash() common.Hash {
 	return cws.Data.BlockHash
+}
+
+func (cws *CrossTransactionWithSignatures) From() common.Address {
+	return cws.Data.From
 }
 
 func (cws *CrossTransactionWithSignatures) SetStatus(status CtxStatus) {

@@ -101,7 +101,7 @@ func generate(consensus ConsensusType, n int, ips []string, ports []int, discpor
 			}
 		}
 
-		enodes[i] = enode.NewV4WithRaft(&prikey.PublicKey, ip, port, discport, raftport).String()
+		enodes[i] = enode.NewV4Hostname(&prikey.PublicKey, ips[i], port, discport, raftport).String()
 	}
 
 	if err := mkdir(nodeDir); err != nil {

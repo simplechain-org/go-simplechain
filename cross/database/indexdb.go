@@ -1,3 +1,19 @@
+// Copyright 2016 The go-simplechain Authors
+// This file is part of the go-simplechain library.
+//
+// The go-simplechain library is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// The go-simplechain library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with the go-simplechain library. If not, see <http://www.gnu.org/licenses/>.
+
 package db
 
 import (
@@ -20,8 +36,7 @@ type indexDB struct {
 	root    *storm.DB // root db of stormDB
 	db      storm.Node
 	cache   *IndexDbCache
-	//txLog   *TransactionLog
-	logger log.Logger
+	logger  log.Logger
 }
 
 type FieldName = string
@@ -40,7 +55,7 @@ const (
 
 func NewIndexDB(chainID *big.Int, rootDB *storm.DB, cacheSize uint64) *indexDB {
 	dbName := "chain" + chainID.String()
-	log.Info("New IndexDB", "dbName", dbName, "cacheSize", cacheSize)
+	log.Info("Open IndexDB", "dbName", dbName, "cacheSize", cacheSize)
 	return &indexDB{
 		chainID: chainID,
 		db:      rootDB.From(dbName).WithBatch(true),
@@ -110,6 +125,9 @@ func (d *indexDB) Writes(ctxList []*cc.CrossTransactionWithSignatures, replaceab
 		if new.BlockNum < old.BlockNum {
 			return false
 		}
+		if new.Status <= old.Status { //TODO:无法解决同步其他节点时，其他节点回滚的状态
+			return false
+		}
 		return true
 	}
 
@@ -121,7 +139,7 @@ func (d *indexDB) Writes(ctxList []*cc.CrossTransactionWithSignatures, replaceab
 		var old CrossTransactionIndexed
 		err = tx.One(CtxIdIndex, ctx.ID(), &old)
 		if err == storm.ErrNotFound {
-			d.logger.Debug("add new cross transaction",
+			d.logger.Trace("add new cross transaction",
 				"id", ctx.ID().String(), "status", ctx.Status.String(), "number", ctx.BlockNum)
 
 			if err = tx.Save(new); err != nil {
@@ -129,7 +147,7 @@ func (d *indexDB) Writes(ctxList []*cc.CrossTransactionWithSignatures, replaceab
 			}
 
 		} else if canReplace(&old, new) {
-			d.logger.Debug("replace cross transaction", "id", ctx.ID().String(),
+			d.logger.Trace("replace cross transaction", "id", ctx.ID().String(),
 				"old_status", cc.CtxStatus(old.Status).String(), "new_status", ctx.Status.String(),
 				"old_height", old.BlockNum, "new_height", ctx.BlockNum)
 
@@ -139,7 +157,7 @@ func (d *indexDB) Writes(ctxList []*cc.CrossTransactionWithSignatures, replaceab
 			}
 
 		} else {
-			d.logger.Debug("can't add or replace cross transaction", "id", ctx.ID().String(),
+			d.logger.Trace("can't add or replace cross transaction", "id", ctx.ID().String(),
 				"old_status", cc.CtxStatus(old.Status).String(), "new_status", ctx.Status.String(),
 				"old_height", old.BlockNum, "new_height", ctx.BlockNum, "replaceable", replaceable)
 
@@ -217,11 +235,11 @@ func (d *indexDB) Updates(idList []common.Hash, updaters []func(ctx *CrossTransa
 	for i, id := range idList {
 		var ctx CrossTransactionIndexed
 		if err = tx.One(CtxIdIndex, id, &ctx); err != nil {
-			return err
+			return ErrCtxDbFailure{"transaction want to be updated is not exist", err}
 		}
 		updaters[i](&ctx)
 		if err = tx.Update(&ctx); err != nil {
-			return err
+			return ErrCtxDbFailure{"transaction update failed", err}
 		}
 		if d.cache != nil {
 			d.cache.Remove(CtxIdIndex, id)
@@ -247,7 +265,7 @@ func (d *indexDB) Deletes(idList []common.Hash) (err error) {
 			d.cache.Remove(TxHashIndex, ctx.TxHash)
 		}
 		if err = tx.DeleteStruct(&ctx); err != nil {
-			return err
+			return ErrCtxDbFailure{"transaction delete failed", err}
 		}
 	}
 

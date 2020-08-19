@@ -1,6 +1,7 @@
 {
   "Anchor": "0x935d0d6851c8db45C75D2DD66A630db22A1a918A",
   "AnchorKey": "283ca24539a411988fea1ec40534e716c28cede0fc730289c8ec48866898f7aa",
+  "RequireSignatures": 2,
   "Main": {
     "Url": "/Users/yusheng/Projects/crossTest/1_512_3/sipe.ipc",
     "ChainID": 1,

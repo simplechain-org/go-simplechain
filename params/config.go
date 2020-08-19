@@ -124,6 +124,8 @@ var (
 	TestChainConfig = &ChainConfig{big.NewInt(1), big.NewInt(0), nil, new(EthashConfig), nil, nil, nil, false, nil}
 
 	TestRules = TestChainConfig.Rules(new(big.Int))
+
+	RaftChainConfig = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, nil, nil, nil, nil, true, nil}
 )
 
 // TrustedCheckpoint represents a set of post-processed trie roots (CHT and

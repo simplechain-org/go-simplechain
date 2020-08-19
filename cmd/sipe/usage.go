@@ -81,11 +81,6 @@ var AppHelpFlagGroups = []flagGroup{
 			utils.LightKDFFlag,
 			utils.WhitelistFlag,
 			utils.RoleFlag,
-			utils.ContractMainFlag,
-			utils.ContractSubFlag,
-			utils.AnchorSignerFlag,
-			utils.ConfirmDepthFlag,
-			utils.AnchorMaxGasPriceFlag,
 		},
 	},
 	{
@@ -105,6 +100,17 @@ var AppHelpFlagGroups = []flagGroup{
 		Flags: []cli.Flag{
 			utils.DeveloperFlag,
 			utils.DeveloperPeriodFlag,
+		},
+	},
+	{
+		Name: "CROSS CHAIN",
+		Flags: []cli.Flag{
+			utils.ContractMainFlag,
+			utils.ContractSubFlag,
+			utils.ConfirmDepthFlag,
+			utils.AnchorSignerFlag,
+			utils.AnchorMaxGasPriceFlag,
+			utils.AnchorSyncModeFlag,
 		},
 	},
 	{
@@ -150,6 +156,8 @@ var AppHelpFlagGroups = []flagGroup{
 			utils.RaftModeFlag,
 			utils.RaftJoinExistingFlag,
 			utils.RaftPortFlag,
+			utils.RaftBlockTimeFlag,
+			utils.RaftDNSEnabledFlag,
 		},
 	},
 	{

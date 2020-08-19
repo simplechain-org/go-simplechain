@@ -1,3 +1,19 @@
+// Copyright 2016 The go-simplechain Authors
+// This file is part of the go-simplechain library.
+//
+// The go-simplechain library is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// The go-simplechain library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with the go-simplechain library. If not, see <http://www.gnu.org/licenses/>.
+
 package synchronise
 
 import (
@@ -7,15 +23,14 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/Beyond-simplechain/foundation/container"
+	"github.com/Beyond-simplechain/foundation/container/redblacktree"
 	"github.com/simplechain-org/go-simplechain/common"
-	"github.com/simplechain-org/go-simplechain/log"
-
 	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	db "github.com/simplechain-org/go-simplechain/cross/database"
 	"github.com/simplechain-org/go-simplechain/cross/trigger"
+	"github.com/simplechain-org/go-simplechain/log"
 
-	"github.com/Beyond-simplechain/foundation/container"
-	"github.com/Beyond-simplechain/foundation/container/redblacktree"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -44,20 +59,22 @@ func newTester() *syncTester {
 	return tester
 }
 
-func (sc *syncTester) AddRemote(ctx *cc.CrossTransaction) (common.Address, error) {
+func (sc *syncTester) AddRemotes(ctxList []*cc.CrossTransaction) ([]common.Address, []error) {
 	sc.lock.Lock()
 	defer sc.lock.Unlock()
-	if ex := sc.queue.Get(ctx.ID()); ex != nil {
-		ex.Data.V = append(ex.Data.V, bigZero)
-		ex.Data.R = append(ex.Data.R, bigZero)
-		ex.Data.S = append(ex.Data.S, bigZero)
-	} else {
-		ctx.Data.V = bigZero
-		ctx.Data.R = bigZero
-		ctx.Data.S = bigZero
-		sc.queue.Put(cc.NewCrossTransactionWithSignatures(ctx, sc.txs[ctx.ID()]))
+	for _, ctx := range ctxList {
+		if ex := sc.queue.Get(ctx.ID()); ex != nil {
+			ex.Data.V = append(ex.Data.V, bigZero)
+			ex.Data.R = append(ex.Data.R, bigZero)
+			ex.Data.S = append(ex.Data.S, bigZero)
+		} else {
+			ctx.Data.V = bigZero
+			ctx.Data.R = bigZero
+			ctx.Data.S = bigZero
+			sc.queue.Put(cc.NewCrossTransactionWithSignatures(ctx, sc.txs[ctx.ID()]))
+		}
 	}
-	return common.Address{}, nil
+	return nil, nil
 }
 
 func (sc *syncTester) AddLocals(ctxs []*cc.CrossTransactionWithSignatures) {
@@ -67,7 +84,7 @@ func (sc *syncTester) AddLocals(ctxs []*cc.CrossTransactionWithSignatures) {
 }
 
 func (sc *syncTester) Pending(startNumber uint64, limit int) (ids []common.Hash, pending []*cc.CrossTransactionWithSignatures) {
-	sc.pending.Map(func(ctx *cc.CrossTransactionWithSignatures) bool {
+	sc.pending.Do(func(ctx *cc.CrossTransactionWithSignatures) bool {
 		if ctx.BlockNum <= startNumber { // 低于起始高度的pending不取
 			return false
 		}
@@ -271,8 +288,8 @@ func TestSync_Synchronise(t *testing.T) {
 
 	// test busy
 	{
-		store.generate(10, 500)
-		store.generate(11, 500)
+		store.generate(10, 5000)
+		store.generate(11, 5000)
 
 		var wg sync.WaitGroup
 		wg.Add(1)

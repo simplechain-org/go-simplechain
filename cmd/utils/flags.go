@@ -43,6 +43,8 @@ import (
 	"github.com/simplechain-org/go-simplechain/consensus/scrypt"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/vm"
+	"github.com/simplechain-org/go-simplechain/cross"
+	"github.com/simplechain-org/go-simplechain/cross/backend/synchronise"
 	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/eth"
 	"github.com/simplechain-org/go-simplechain/eth/downloader"
@@ -794,6 +796,19 @@ var (
 		Usage: "The port to bind for the raft transport",
 		Value: 50400,
 	}
+	RaftBlockTimeFlag = cli.IntFlag{
+		Name:  "raftblocktime",
+		Usage: "Amount of time between raft block creations in milliseconds",
+		Value: 50,
+	}
+	RaftDNSEnabledFlag = cli.BoolFlag{
+		Name:  "raftdnsenable",
+		Usage: "Enable DNS resolution of peers",
+	}
+	RaftEmitCheckpointsFlag = cli.BoolFlag{
+		Name:  "raftcheckpoints",
+		Usage: "If enabled, emit specially formatted logging checkpoints",
+	}
 
 	// Istanbul settings
 	IstanbulRequestTimeoutFlag = cli.Uint64Flag{
@@ -878,6 +893,11 @@ var (
 	AnchorSignerFlag = cli.StringFlag{
 		Name:  "anchor.signer",
 		Usage: "public address of anchor signer",
+	}
+	AnchorSyncModeFlag = TextMarshalerFlag{
+		Name:  "anchor.syncmode",
+		Usage: `anchor peer syncmode("all", "store", "pending" or "off")`,
+		Value: &cross.DefaultConfig.SyncMode,
 	}
 	ConfirmDepthFlag = cli.IntFlag{
 		Name:  "anchor.confirmdepth",
@@ -1568,6 +1588,7 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 	setWhitelist(ctx, cfg)
 	setLes(ctx, cfg)
 	setAnchorSign(ctx, ks, cfg)
+	setAnchorSync(ctx, cfg)
 
 	if ctx.GlobalIsSet(SyncModeFlag.Name) {
 		cfg.SyncMode = *GlobalTextMarshaler(ctx, SyncModeFlag.Name).(*downloader.SyncMode)
@@ -1997,5 +2018,11 @@ func setAnchorSign(ctx *cli.Context, ks *keystore.KeyStore, cfg *eth.Config) {
 		} else {
 			Fatalf("No anchorSigner configured")
 		}
+	}
+}
+
+func setAnchorSync(ctx *cli.Context, cfg *eth.Config) {
+	if ctx.GlobalIsSet(AnchorSyncModeFlag.Name) {
+		cfg.CrossConfig.SyncMode = *GlobalTextMarshaler(ctx, AnchorSyncModeFlag.Name).(*synchronise.SyncMode)
 	}
 }
