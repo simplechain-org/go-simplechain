@@ -409,14 +409,23 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 	}
 
-	if istanbul, ok := pm.engine.(consensus.Istanbul); ok {
+	switch bft := pm.engine.(type) {
+	case consensus.Byzantine:
 		pubKey := p.Node().Pubkey()
 		addr := crypto.PubkeyToAddress(*pubKey)
-		handled, err := istanbul.HandleMsg(addr, msg)
+		handled, err := bft.HandleMsg(addr, msg)
 		if handled {
 			return err
 		}
 	}
+	//if istanbul, ok := pm.engine.(consensus.Istanbul); ok {
+	//	pubKey := p.Node().Pubkey()
+	//	addr := crypto.PubkeyToAddress(*pubKey)
+	//	handled, err := istanbul.HandleMsg(addr, msg)
+	//	if handled {
+	//		return err
+	//	}
+	//}
 
 	// Handle the message depending on its contents
 	switch {
@@ -898,6 +907,8 @@ func (pm *ProtocolManager) getConsensusAlgorithm() string {
 		consensusAlgo = "raft"
 	} else {
 		switch pm.engine.(type) {
+		case consensus.Pbft: // warning: must check pbft first for sharing interface method
+			consensusAlgo = "pbft"
 		case consensus.Istanbul:
 			consensusAlgo = "istanbul"
 		case *clique.Clique:

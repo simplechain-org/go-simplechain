@@ -161,6 +161,8 @@ var (
 		utils.RaftPortFlag,
 		utils.IstanbulRequestTimeoutFlag,
 		utils.IstanbulBlockPeriodFlag,
+		utils.PbftRequestTimeoutFlag,
+		utils.PbftBlockPeriodFlag,
 		utils.ConfirmDepthFlag,
 		utils.AnchorSignerFlag,
 		utils.AnchorMaxGasPriceFlag,

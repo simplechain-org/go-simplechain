@@ -18,6 +18,7 @@ package types
 
 import (
 	"bytes"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -85,4 +86,12 @@ func TestExtractToIstanbul(t *testing.T) {
 			t.Errorf("expected: %v, but got: %v", test.expectedResult, istanbulExtra)
 		}
 	}
+}
+
+func TestMixDegist(t *testing.T) {
+	//w := "Istanbul practical byzantine fault tolerance"
+	w := "Parallel byzantine fault tolerance"
+	hex := hexutil.Encode([]byte(w))
+	hash := common.HexToHash(hex)
+	fmt.Println(hash.String(), IstanbulDigest.String(), hash == IstanbulDigest)
 }

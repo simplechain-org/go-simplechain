@@ -809,6 +809,18 @@ var (
 		Value: eth.DefaultConfig.Istanbul.BlockPeriod,
 	}
 
+	// Pbft settings
+	PbftRequestTimeoutFlag = cli.Uint64Flag{
+		Name:  "pbft.requesttimeout",
+		Usage: "Timeout for each pbft round in milliseconds",
+		Value: eth.DefaultConfig.Pbft.RequestTimeout,
+	}
+	PbftBlockPeriodFlag = cli.Uint64Flag{
+		Name:  "pbft.blockperiod",
+		Usage: "Default minimum difference between two consecutive block's timestamps in seconds",
+		Value: eth.DefaultConfig.Pbft.BlockPeriod,
+	}
+
 	// Metrics flags
 	MetricsEnabledFlag = cli.BoolFlag{
 		Name:  "metrics",
@@ -1478,6 +1490,15 @@ func setIstanbul(ctx *cli.Context, cfg *eth.Config) {
 	}
 }
 
+func setPbft(ctx *cli.Context, cfg *eth.Config) {
+	if ctx.GlobalIsSet(PbftRequestTimeoutFlag.Name) {
+		cfg.Pbft.RequestTimeout = ctx.GlobalUint64(PbftRequestTimeoutFlag.Name)
+	}
+	if ctx.GlobalIsSet(PbftBlockPeriodFlag.Name) {
+		cfg.Pbft.BlockPeriod = ctx.GlobalUint64(PbftBlockPeriodFlag.Name)
+	}
+}
+
 func setWhitelist(ctx *cli.Context, cfg *eth.Config) {
 	whitelist := ctx.GlobalString(WhitelistFlag.Name)
 	if whitelist == "" {
@@ -1572,6 +1593,7 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 	setEthash(ctx, cfg)
 	setMiner(ctx, &cfg.Miner)
 	setIstanbul(ctx, cfg)
+	setPbft(ctx, cfg)
 	setWhitelist(ctx, cfg)
 	setLes(ctx, cfg)
 	setAnchorSign(ctx, ks, cfg)

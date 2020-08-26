@@ -96,6 +96,10 @@ type testTxPool struct {
 	lock sync.RWMutex // Protects the transaction pool
 }
 
+func (p *testTxPool) ValidateBlocks(types.Blocks) {
+	panic("implement me")
+}
+
 func (p *testTxPool) SyncLimit(int) types.Transactions {
 	panic("implement me")
 }

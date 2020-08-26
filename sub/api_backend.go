@@ -19,6 +19,7 @@ package sub
 import (
 	"context"
 	"errors"
+	"github.com/simplechain-org/go-simplechain/consensus"
 	"math/big"
 
 	"github.com/simplechain-org/go-simplechain/accounts"
@@ -96,7 +97,7 @@ func (b *EthAPIBackend) HeaderByHash(ctx context.Context, hash common.Hash) (*ty
 func (b *EthAPIBackend) BlockByNumber(ctx context.Context, number rpc.BlockNumber) (*types.Block, error) {
 	// Pending block is only known by the miner
 	if number == rpc.PendingBlockNumber {
-		if b.eth.protocolManager.raftMode {
+		if _, pbft := b.eth.engine.(consensus.Pbft); pbft || b.eth.protocolManager.raftMode {
 			// Use latest instead.
 			return b.eth.blockchain.CurrentBlock(), nil
 		}
@@ -138,7 +139,7 @@ func (b *EthAPIBackend) BlockByNumberOrHash(ctx context.Context, blockNrOrHash r
 func (b *EthAPIBackend) StateAndHeaderByNumber(ctx context.Context, number rpc.BlockNumber) (*state.StateDB, *types.Header, error) {
 	// Pending state is only known by the miner
 	if number == rpc.PendingBlockNumber {
-		if b.eth.protocolManager.raftMode {
+		if _, pbft := b.eth.engine.(consensus.Pbft); pbft || b.eth.protocolManager.raftMode {
 			// Use latest instead.
 			header, err := b.HeaderByNumber(ctx, rpc.LatestBlockNumber)
 			if header == nil || err != nil {

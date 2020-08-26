@@ -15,6 +15,8 @@
 // along with the go-simplechain library. If not, see <http://www.gnu.org/licenses/>.
 
 // Package consensus implements different Ethereum consensus engines.
+//+build 2019
+
 package consensus
 
 import (

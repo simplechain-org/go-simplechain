@@ -25,9 +25,11 @@ import (
 )
 
 var (
+	// to identify whether the block is from Byzantine consensus engine
 	// IstanbulDigest represents a hash of "Istanbul practical byzantine fault tolerance"
-	// to identify whether the block is from Istanbul consensus engine
 	IstanbulDigest = common.HexToHash("0x63746963616c2062797a616e74696e65206661756c7420746f6c6572616e6365")
+	// IstanbulDigest represents a hash of "Parallel byzantine fault tolerance"
+	PbftDigest = common.HexToHash("0x72616c6c656c2062797a616e74696e65206661756c7420746f6c6572616e6365")
 
 	IstanbulExtraVanity = 32 // Fixed number of extra-data bytes reserved for validator vanity
 	IstanbulExtraSeal   = 65 // Fixed number of extra-data bytes reserved for validator seal
@@ -38,8 +40,8 @@ var (
 
 type IstanbulExtra struct {
 	Validators    []common.Address
-	Seal          []byte
-	CommittedSeal [][]byte
+	Seal          []byte   // signature for sealer
+	CommittedSeal [][]byte // Pbft signatures, ignore in the Hash calculation
 }
 
 // EncodeRLP serializes ist into the Ethereum RLP format.
@@ -86,6 +88,33 @@ func ExtractIstanbulExtra(h *Header) (*IstanbulExtra, error) {
 // decoded/encoded by rlp.
 func IstanbulFilteredHeader(h *Header, keepSeal bool) *Header {
 	newHeader := CopyHeader(h)
+	istanbulExtra, err := ExtractIstanbulExtra(newHeader)
+	if err != nil {
+		return nil
+	}
+
+	if !keepSeal {
+		istanbulExtra.Seal = []byte{}
+	}
+	istanbulExtra.CommittedSeal = [][]byte{}
+
+	payload, err := rlp.EncodeToBytes(&istanbulExtra)
+	if err != nil {
+		return nil
+	}
+
+	newHeader.Extra = append(newHeader.Extra[:IstanbulExtraVanity], payload...)
+
+	return newHeader
+}
+
+func PbftPendingHeader(h *Header, keepSeal bool) *Header {
+	newHeader := CopyHeader(h)
+	newHeader.Root = common.Hash{}
+	newHeader.ReceiptHash = common.Hash{}
+	newHeader.Bloom = Bloom{}
+	newHeader.GasUsed = 0
+
 	istanbulExtra, err := ExtractIstanbulExtra(newHeader)
 	if err != nil {
 		return nil

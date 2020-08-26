@@ -246,6 +246,10 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 		return worker
 	}
 
+	if pbft, ok := engine.(consensus.Pbft); ok {
+		pbft.SetExecutor(worker)
+	}
+
 	go worker.mainLoop()
 	go worker.newWorkLoop(recommit)
 	go worker.resultLoop()
@@ -301,9 +305,14 @@ func (w *worker) start() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	atomic.StoreInt32(&w.running, 1)
-	if istanbul, ok := w.engine.(consensus.Istanbul); ok {
-		istanbul.Start(w.chain, w.chain.CurrentBlock, w.chain.HasBadBlock)
+
+	switch bft := w.engine.(type) {
+	case consensus.Byzantine:
+		bft.Start(w.chain, w.chain.CurrentBlock, w.chain.HasBadBlock)
 	}
+	//if istanbul, ok := w.engine.(consensus.Istanbul); ok {
+	//	istanbul.Start(w.chain, w.chain.CurrentBlock, w.chain.HasBadBlock)
+	//}
 	if w.chainConfig.Raft {
 		w.requestMinting()
 	} else {
@@ -323,9 +332,13 @@ func (w *worker) stop() {
 			agent.Stop()
 		}
 	}
-	if istanbul, ok := w.engine.(consensus.Istanbul); ok {
-		istanbul.Stop()
+	switch bft := w.engine.(type) {
+	case consensus.Byzantine:
+		bft.Stop()
 	}
+	//if istanbul, ok := w.engine.(consensus.Istanbul); ok {
+	//	istanbul.Stop()
+	//}
 	atomic.StoreInt32(&w.running, 0)
 }
 
@@ -408,8 +421,8 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 			commit(false, commitInterruptNewHead)
 
 		case head := <-w.chainHeadCh:
-			if ist, ok := w.engine.(consensus.Istanbul); ok {
-				if err := ist.NewChainHead(); err != nil {
+			if bft, ok := w.engine.(consensus.Byzantine); ok {
+				if err := bft.NewChainHead(); err != nil {
 					log.Warn("new istanbul chain head failed", "error", err.Error())
 				}
 			}
@@ -608,14 +621,20 @@ func (w *worker) taskLoop() {
 			w.pendingMu.Lock()
 			w.pendingTasks[w.engine.SealHash(task.block.Header())] = task
 			w.pendingMu.Unlock()
-			_, ok := w.engine.(*scrypt.PowScrypt)
-			if ok {
+
+			switch w.engine.(type) {
+			case *scrypt.PowScrypt:
 				w.seal(task.block)
-			} else {
+
+			//case consensus.Pbft:
+			//TODO: pbft
+
+			default:
 				if err := w.engine.Seal(w.chain, task.block, w.resultCh, stopCh); err != nil && err != dpos.ErrUnauthorized {
 					log.Warn("Block sealing failed", "err", err)
 				}
 			}
+
 		case <-w.exitCh:
 			interrupt()
 			return
@@ -676,8 +695,9 @@ func (w *worker) resultLoop() {
 			}
 			//log.Info("Successfully sealed new block", "number", block.Number(), "sealhash", sealhash, "hash", hash,
 			//	"elapsed", common.PrettyDuration(time.Since(task.createdAt)))
-			log.Warn("Successfully sealed new block", "number", block.Number(), "sealhash", sealhash, "hash", hash,
-				"elapsed", common.PrettyDuration(time.Since(task.createdAt)), "txs", len(block.Transactions()), "diff", block.Difficulty())
+			log.Warn("Successfully sealed new block", "number", block.Number(), "sealhash", sealhash,
+				"hash", hash, "elapsed", common.PrettyDuration(time.Since(task.createdAt)),
+				"txs", len(block.Transactions()), "diff", block.Difficulty(), "maxBlockTxs", w.maxBlockTxs)
 
 			// Adjust maxBlockTxs
 			if w.chainConfig.Clique != nil {
@@ -694,7 +714,7 @@ func (w *worker) resultLoop() {
 						atomic.StoreUint64(&w.maxBlockTxs, w.maxBlockTxs*5/4)
 					}
 				}
-				log.Error("[debug] seal used", "time", time.Duration(sealTime-w.lastSealTime))
+				log.Error("[report] seal used", "time", time.Duration(sealTime-w.lastSealTime))
 				atomic.StoreInt64(&w.lastSealTime, sealTime)
 			}
 
@@ -909,12 +929,40 @@ func (w *worker) commitTransactions(txs types.Transactions, coinbase common.Addr
 	return false
 }
 
+var ph *types.Header
+
 // commitNewWork generates several new sealing tasks based on the parent block.
 func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	tstart := time.Now()
 	parent := w.chain.CurrentBlock()
+
+	log.Trace("[debug] header.Hash()", "hash", parent.Header().Hash().String(), "blockHash", parent.Hash())
+
+	//nh := parent.Header()
+	//if ph != nil {
+	//	log.Error("[debug].compare header",
+	//		"Hash", ph.Hash() == nh.Hash(),
+	//		"Number", ph.Number.Cmp(nh.Number),
+	//		"ParentHash", ph.ParentHash == (nh.ParentHash),
+	//		"GasUsed", ph.GasUsed == (nh.GasUsed),
+	//		"Root", ph.Root == (nh.Root),
+	//		"TxHash", ph.TxHash == (nh.TxHash),
+	//		"ReceiptHash", ph.ReceiptHash == (nh.ReceiptHash),
+	//		"Nonce", ph.Nonce == (nh.Nonce),
+	//		"Time", ph.Time == (nh.Time),
+	//		"Extra", bytes.Compare(ph.Extra, nh.Extra),
+	//		"MixDigest", ph.MixDigest == (nh.MixDigest),
+	//		"GasLimit", ph.GasLimit == (nh.GasLimit),
+	//		"Difficulty", ph.Difficulty.Cmp(nh.Difficulty),
+	//		"Coinbase", ph.Coinbase == (nh.Coinbase),
+	//		"UncleHash", ph.UncleHash == (nh.UncleHash),
+	//		"Bloom", ph.Bloom == (nh.Bloom),
+	//	)
+	//}
+	//ph = new(types.Header)
+	//*ph = *nh
 
 	if parent.Time() >= uint64(timestamp) {
 		timestamp = int64(parent.Time() + 1)
@@ -942,6 +990,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 		}
 		header.Coinbase = w.coinbase
 	}
+	log.Trace("[debug] engine.Prepare.GetHeader", "parent", header.ParentHash.String(), "hash", header.Hash(), "number", header.Number, )
 	if err := w.engine.Prepare(w.chain, header); err != nil {
 		log.Error("Failed to prepare header for mining", "err", err)
 		return
@@ -954,6 +1003,13 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 	}
 	// Create the current work task and check any fork transitions needed
 	env := w.current
+
+	// commit new byzantium work to pbft engine
+	if _, ok := w.engine.(consensus.Pbft); ok {
+		w.commitByzantium(interrupt, noempty, tstart)
+		return
+	}
+
 	// Accumulate the uncles for the current block
 	uncles := make([]*types.Header, 0, 2)
 	commitUncles := func(blocks map[common.Hash]*types.Block) {
@@ -982,8 +1038,6 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 	// Fill the block with all available pending transactions.
 	start := time.Now()
 	pending := w.eth.TxPool().PendingLimit(int(w.maxBlockTxs))
-	//log.Error("[debug] get pending", "parentNum", parent.NumberU64(),
-	//	"pendingSize", pending.Len(), "maxBlockTxs", w.maxBlockTxs)
 	loadTime := time.Since(start)
 
 	if !noempty && pending == nil {
@@ -1003,7 +1057,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 
 	executeTime := time.Since(start)
 	eachcost := executeTime / time.Duration(pending.Len())
-	log.Debug("[debug] >>> block pack transactions time",
+	log.Error("[report] >>> block pack transactions time",
 		"load", loadTime, "execute", executeTime, "eachcost", eachcost)
 
 	if exit {

@@ -57,8 +57,8 @@ const (
 )
 
 var (
-	syncChallengeTimeout = 15 * time.Second // Time allowance for a node to reply to the sync progress challenge
-	broadcastTxLimit     = 1000
+	syncChallengeTimeout       = 15 * time.Second // Time allowance for a node to reply to the sync progress challenge
+	broadcastTxLimit     int64 = 1000
 )
 
 func errResp(code errCode, format string, v ...interface{}) error {
@@ -105,9 +105,11 @@ type ProtocolManager struct {
 	raftMode bool
 	engine   consensus.Engine // used for istanbul consensus
 
-	newTransactions int64
-	txSyncTimer     *time.Timer
-	txSyncPeriod    time.Duration
+	newTransactions types.Transactions
+	newTxLock       sync.Mutex
+	//newTransactions int64
+	txSyncTimer  *time.Timer
+	txSyncPeriod time.Duration
 }
 
 // NewProtocolManager returns a new Ethereum sub protocol manager. The Ethereum sub protocol manages peers capable
@@ -131,9 +133,13 @@ func NewProtocolManager(config *params.ChainConfig, checkpoint *params.TrustedCh
 		engine:      engine,
 	}
 
-	if istanbul, ok := manager.engine.(consensus.Istanbul); ok {
-		istanbul.SetBroadcaster(manager)
+	switch bft := manager.engine.(type) {
+	case consensus.Byzantine:
+		bft.SetBroadcaster(manager)
 	}
+	//if istanbul, ok := manager.engine.(consensus.Istanbul); ok {
+	//	istanbul.SetBroadcaster(manager)
+	//}
 
 	if mode == downloader.FullSync {
 		// The database seems empty as the current block is the genesis. Yet the fast
@@ -200,6 +206,9 @@ func NewProtocolManager(config *params.ChainConfig, checkpoint *params.TrustedCh
 			log.Warn("Fast syncing, discarded propagated block", "number", blocks[0].Number(), "hash", blocks[0].Hash())
 			return 0, nil
 		}
+
+		manager.txpool.ValidateBlocks(blocks)
+
 		n, err := manager.blockchain.InsertChain(blocks)
 		if err == nil {
 			atomic.StoreUint32(&manager.acceptTxs, 1) // Mark initial sync done on any fetcher import
@@ -277,6 +286,7 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 		// broadcast mined blocks
 		pm.minedBlockSub = pm.eventMux.Subscribe(core.NewMinedBlockEvent{})
 		go pm.minedBroadcastLoop()
+
 	} else {
 		// We set this immediately in raft mode to make sure the miner never drops
 		// incoming txes. Raft mode doesn't use the fetcher or downloader, and so
@@ -441,10 +451,10 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 	}
 
-	if istanbul, ok := pm.engine.(consensus.Istanbul); ok {
+	if bft, ok := pm.engine.(consensus.Byzantine); ok {
 		pubKey := p.Node().Pubkey()
 		addr := crypto.PubkeyToAddress(*pubKey)
-		handled, err := istanbul.HandleMsg(addr, msg)
+		handled, err := bft.HandleMsg(addr, msg)
 		if handled {
 			return err
 		}
@@ -808,7 +818,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			p.MarkTransaction(tx.Hash())
 		}
 		totalMsg += len(txs)
-		log.Error("receive tx msg", "total", totalMsg, "txs", len(txs))
+		//log.Error("receive tx msg", "total", totalMsg, "txs", len(txs))
 		pm.AddRemotes(txs)
 
 	default:
@@ -819,6 +829,22 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 }
 
 var totalMsg int
+
+func (pm *ProtocolManager) BroadcastBlock2(block *types.Block) {
+	peers := pm.peers.PeersWithoutBlock(block.Hash())
+
+	transferLen := int(math.Sqrt(float64(len(peers))))
+	if transferLen < minBroadcastPeers {
+		transferLen = minBroadcastPeers
+	}
+	if transferLen > len(peers) {
+		transferLen = len(peers)
+	}
+	transfer := peers[:transferLen]
+	for _, peer := range transfer {
+		peer.AsyncSendNewBlock(block, block.DeprecatedTd())
+	}
+}
 
 // BroadcastBlock will either propagate a block to a subset of it's peers, or
 // will only announce it's availability (depending what's requested).
@@ -871,6 +897,7 @@ func (pm *ProtocolManager) BroadcastTxs(txs types.Transactions) {
 		for _, peer := range peers {
 			txset[peer] = append(txset[peer], tx)
 		}
+		tx.SetSynced(true) // Mark tx synced
 		log.Trace("Broadcast transaction", "hash", tx.Hash(), "recipients", len(peers))
 	}
 	// FIXME include this again: peers = peers[:int(math.Sqrt(float64(len(peers))))]
@@ -881,32 +908,57 @@ func (pm *ProtocolManager) BroadcastTxs(txs types.Transactions) {
 
 // Mined broadcast loop
 func (pm *ProtocolManager) minedBroadcastLoop() {
+	var lastTime = time.Now()
 	// automatically stops if unsubscribe
 	for obj := range pm.minedBlockSub.Chan() {
 		if ev, ok := obj.Data.(core.NewMinedBlockEvent); ok {
-			pm.BroadcastBlock(ev.Block, true)  // First propagate block to peers
+			//TODO report
+			b, _ := rlp.EncodeToBytes(ev.Block)
+			log.Error("[report] minedBroadcastLoop", "used", time.Since(lastTime), "size", common.StorageSize(len(b)).String())
+			lastTime = time.Now()
+
+			//pm.BroadcastBlock2(ev.Block)
+			//pm.BroadcastBlock(ev.Block, true)  // First propagate block to peers
 			pm.BroadcastBlock(ev.Block, false) // Only then announce to the rest
+
 		}
 	}
 }
 
 func (pm *ProtocolManager) txCollectLoop() {
-	//var lastSyncTime *time.Time
+	//lastTime := time.Now()
+	var (
+		total     int
+		totalCost time.Duration
+		lastTime  time.Time
+	)
 	for {
 		select {
 		case ev := <-pm.txsCh:
-			if atomic.AddInt64(&pm.newTransactions, int64(len(ev.Txs))) >= int64(broadcastTxLimit) {
-				pm.txSyncTimer.Reset(0)
+			//TODO: report
+			if !lastTime.IsZero() {
+				total += len(ev.Txs)
+				totalCost += time.Since(lastTime)
+			}
+			lastTime = time.Now()
+
+			if totalCost > time.Second && len(ev.Txs) > 0 {
+				b, _ := rlp.EncodeToBytes(ev.Txs[0])
+				log.Error("[report] txCollectLoop", "avgCost", totalCost/time.Duration(total), "size", common.StorageSize(len(b)).String())
+				total, totalCost = 0, 0
+				lastTime = time.Now()
 			}
 
-			//if lastSyncTime == nil {
-			//	now := time.Now()
-			//	lastSyncTime = &now
-			//	break
-			//}
-			//
-			//log.Warn("txCollectLoop since last", "used", time.Since(*lastSyncTime))
-			//*lastSyncTime = time.Now()
+			//newTransactions := atomic.AddInt64(&pm.newTransactions, int64(len(ev.Txs)))
+			pm.newTxLock.Lock()
+			pm.newTransactions = append(pm.newTransactions, ev.Txs...)
+			//if newTransactions >= broadcastTxLimit {
+			if pm.newTransactions.Len() >= int(broadcastTxLimit) {
+				pm.BroadcastTxs(pm.newTransactions)
+				pm.newTransactions = pm.newTransactions[:0]
+				//TODO: adjust sync period
+			}
+			pm.newTxLock.Unlock()
 
 		case <-pm.txsSub.Err():
 			return
@@ -934,16 +986,26 @@ func (pm *ProtocolManager) txBroadcastLoop() {
 	for {
 		select {
 		case <-pm.txSyncTimer.C:
-			newTransactions := int(atomic.LoadInt64(&pm.newTransactions))
-			txs := pm.txpool.SyncLimit(newTransactions)
+			//newTransactions := atomic.LoadInt64(&pm.newTransactions)
+			var txs types.Transactions
+			pm.newTxLock.Lock()
+			if pm.newTransactions.Len() > int(broadcastTxLimit) {
+				txs = pm.newTransactions[:broadcastTxLimit]
+				pm.newTransactions = pm.newTransactions[broadcastTxLimit:]
+			} else {
+				txs = append(pm.newTransactions, pm.txpool.SyncLimit(int(broadcastTxLimit)-pm.newTransactions.Len())...)
+				pm.newTransactions = pm.newTransactions[:0]
+			}
+			pm.newTxLock.Unlock()
+
+			//txs := pm.txpool.SyncLimit(int(cmath.Int64Min(newTransactions, broadcastTxLimit)))
 
 			l := txs.Len()
 
 			if l > 0 {
 				total += l
-				log.Trace("dump transactions", "total", total, "count", l, "newTransactions", newTransactions)
+				log.Trace("dump transactions", "total", total, "count", l)
 				pm.BroadcastTxs(txs)
-				atomic.AddInt64(&pm.newTransactions, -int64(l))
 			}
 
 			//if l <= broadcastTxLimit/2 {
@@ -962,7 +1024,7 @@ func (pm *ProtocolManager) dumpTxs(txs types.Transactions) {
 	select {
 	case ev := <-pm.txsCh:
 		txs = append(txs, ev.Txs...)
-		if len(txs) >= broadcastTxLimit {
+		if len(txs) >= int(broadcastTxLimit) {
 			return
 		}
 		pm.dumpTxs(txs)

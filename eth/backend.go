@@ -21,6 +21,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/simplechain-org/go-simplechain/consensus/pbft"
 	"math/big"
 	"runtime"
 	"sync"
@@ -37,6 +38,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/consensus/ethash"
 	"github.com/simplechain-org/go-simplechain/consensus/istanbul"
 	istanbulBackend "github.com/simplechain-org/go-simplechain/consensus/istanbul/backend"
+	pbftBackend "github.com/simplechain-org/go-simplechain/consensus/pbft/backend"
 	"github.com/simplechain-org/go-simplechain/consensus/raft"
 	"github.com/simplechain-org/go-simplechain/consensus/scrypt"
 	"github.com/simplechain-org/go-simplechain/core"
@@ -313,6 +315,14 @@ func CreateConsensusEngine(ctx *node.ServiceContext, chainConfig *params.ChainCo
 		return istanbulBackend.New(&config.Istanbul, ctx.NodeKey(), db)
 	}
 
+	if chainConfig.Pbft != nil {
+		if chainConfig.Pbft.Epoch != 0 {
+			config.Pbft.Epoch = chainConfig.Pbft.Epoch
+		}
+		config.Pbft.ProposerPolicy = pbft.ProposerPolicy(chainConfig.Pbft.ProposerPolicy)
+		return pbftBackend.New(&config.Pbft, ctx.NodeKey(), db)
+	}
+
 	if chainConfig.Raft {
 		return raft.New(ctx.NodeKey())
 	}
@@ -498,10 +508,12 @@ func (s *Ethereum) shouldPreserve(block *types.Block) bool {
 
 // SetEtherbase sets the mining reward address.
 func (s *Ethereum) SetEtherbase(etherbase common.Address) {
-	if _, ok := s.engine.(consensus.Istanbul); ok {
-		log.Error("Cannot set etherbase in Istanbul consensus")
+	switch s.engine.(type) {
+	case consensus.Byzantine:
+		log.Error("Cannot set etherbase in Byzantine consensus")
 		return
 	}
+
 	s.lock.Lock()
 	s.etherbase = etherbase
 	s.lock.Unlock()

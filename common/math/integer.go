@@ -104,3 +104,24 @@ func Uint64Max(x, y uint64) uint64 {
 	}
 	return y
 }
+
+func Uint64Min(x, y uint64) uint64 {
+	if x >= y {
+		return y
+	}
+	return x
+}
+
+func Int64Max(x, y int64) int64 {
+	if x >= y {
+		return x
+	}
+	return y
+}
+
+func Int64Min(x, y int64) int64 {
+	if x >= y {
+		return y
+	}
+	return x
+}

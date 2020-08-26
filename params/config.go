@@ -109,9 +109,9 @@ var (
 	// This configuration is intentionally not using keyed fields to force anyone
 	// adding flags to the config to also have to set these fields.
 
-	AllCliqueProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, nil, &CliqueConfig{Period: 0, Epoch: 30000}, nil, nil, false, nil}
+	AllCliqueProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, nil, &CliqueConfig{Period: 0, Epoch: 30000}, nil, nil, false, nil, nil}
 
-	AllDPoSProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, nil, nil, nil, &DPoSConfig{Period: 3, Epoch: 30000, MaxSignerCount: 21, MinVoterBalance: new(big.Int).Mul(big.NewInt(10000), big.NewInt(1000000000000000000))}, false, nil}
+	AllDPoSProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, nil, nil, nil, &DPoSConfig{Period: 3, Epoch: 30000, MaxSignerCount: 21, MinVoterBalance: new(big.Int).Mul(big.NewInt(10000), big.NewInt(1000000000000000000))}, false, nil, nil}
 
 	// AllScryptProtocolChanges contains every protocol change (EIPs) introduced
 	// and accepted by the Ethereum core developers into the Scrypt consensus.
@@ -119,9 +119,9 @@ var (
 	// This configuration is intentionally not using keyed fields to force anyone
 	// adding flags to the config to also have to set these fields.
 
-	AllScryptProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, nil, nil, new(ScryptConfig), nil, false, nil}
+	AllScryptProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, nil, nil, new(ScryptConfig), nil, false, nil, nil}
 
-	TestChainConfig = &ChainConfig{big.NewInt(1), big.NewInt(0), nil, new(EthashConfig), nil, nil, nil, false, nil}
+	TestChainConfig = &ChainConfig{big.NewInt(1), big.NewInt(0), nil, new(EthashConfig), nil, nil, nil, false, nil, nil}
 
 	TestRules = TestChainConfig.Rules(new(big.Int))
 )
@@ -186,6 +186,7 @@ type ChainConfig struct {
 	DPoS     *DPoSConfig     `json:"dpos,omitempty"`
 	Raft     bool            `json:"raft,omitempty"`
 	Istanbul *IstanbulConfig `json:"istanbul,omitempty"`
+	Pbft     *PbftConfig     `json:"pbft,omitempty"`
 }
 
 // EthashConfig is the consensus engine configs for proof-of-work based sealing.
@@ -213,13 +214,23 @@ type IstanbulConfig struct {
 	ProposerPolicy uint64 `json:"policy"` // The policy for proposer selection
 }
 
-type RaftConfig struct {
-	BlockTime uint64 `json:"blockTime"`
-}
-
 // String implements the stringer interface, returning the consensus engine details.
 func (c *IstanbulConfig) String() string {
 	return "istanbul"
+}
+
+type PbftConfig struct {
+	Epoch          uint64 `json:"epoch"`  // Epoch length to reset votes and checkpoint
+	ProposerPolicy uint64 `json:"policy"` // The policy for proposer selection
+}
+
+// String implements the stringer interface, returning the consensus engine details.
+func (c *PbftConfig) String() string {
+	return "pbft"
+}
+
+type RaftConfig struct {
+	BlockTime uint64 `json:"blockTime"`
 }
 
 type GenesisAccount struct {
@@ -271,6 +282,8 @@ func (c *ChainConfig) String() string {
 		engine = c.DPoS
 	case c.Istanbul != nil:
 		engine = c.Istanbul
+	case c.Pbft != nil:
+		engine = c.Pbft
 	case c.Raft:
 		engine = "raft"
 	default:

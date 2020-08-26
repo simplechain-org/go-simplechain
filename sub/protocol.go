@@ -115,6 +115,7 @@ type txPool interface {
 	// GetLatestNonceFromQueueAndPending.
 	//GetCurrentNonce(address common.Address) uint64
 	Nonce(addr common.Address) uint64
+	ValidateBlocks(types.Blocks)
 }
 
 // statusData63 is the network packet for the status message for eth/63.

@@ -180,6 +180,9 @@ type BlockChain struct {
 	shouldPreserve  func(*types.Block) bool        // Function used to determine whether should preserve the given block.
 	terminateInsert func(common.Hash, uint64) bool // Testing hook used to terminate ancient receipt chain insertion.
 	crossSubscriber simpleSubscriber
+
+	executeEnv    *state.ExecutedEnvironment
+	executeEnvMux sync.RWMutex
 }
 
 // NewBlockChain returns a fully initialised block chain using information
@@ -1508,6 +1511,21 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 	return n, err
 }
 
+// warning: only usd in the pbft consensus
+//func (bc *BlockChain) InsertPreExecutedBlock(block *types.Block, environment *state.ExecutedEnvironment) error {
+//	if block == nil {
+//		return nil
+//	}
+//
+//	bc.wg.Add(1)
+//	bc.chainmu.Lock()
+//	_, err := bc.insertChain(types.Blocks{block}, true, map[common.Hash]*state.ExecutedEnvironment{block.Hash(): environment})
+//	bc.chainmu.Unlock()
+//	bc.wg.Done()
+//
+//	return err
+//}
+
 // insertChain is the internal implementation of InsertChain, which assumes that
 // 1) chains are contiguous, and 2) The chain mutex is held.
 //
@@ -1621,13 +1639,14 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 	}
 	// No validation errors for the first block (or chain prefix skipped)
 	for ; block != nil && err == nil || err == ErrKnownBlock; block, err = it.next() {
+		blockHash := block.Hash()
 		// If the chain is terminating, stop processing blocks
 		if atomic.LoadInt32(&bc.procInterrupt) == 1 {
 			log.Debug("Premature abort during blocks processing")
 			break
 		}
 		// If the header is a banned one, straight out abort
-		if BadHashes[block.Hash()] {
+		if BadHashes[blockHash] {
 			bc.reportBlock(block, nil, ErrBlacklistedHash)
 			return it.index, ErrBlacklistedHash
 		}
@@ -1641,7 +1660,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 			if bc.chainConfig.Clique == nil {
 				logger = log.Warn
 			}
-			logger("Inserted known block", "number", block.Number(), "hash", block.Hash(),
+			logger("Inserted known block", "number", block.Number(), "hash", blockHash,
 				"uncles", len(block.Uncles()), "txs", len(block.Transactions()), "gas", block.GasUsed(),
 				"root", block.Root())
 
@@ -1684,40 +1703,59 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 			}
 		}
 		// Process block using the parent state as reference point
+		var (
+			receipts types.Receipts
+			logs     []*types.Log
+			usedGas  uint64
+			executed bool
+		)
+
+		// use pre executed context for Pbft consensus
+		// block was executed at proposal commit phase
+		bc.executeEnvMux.RLock()
+		if bc.executeEnv != nil && bc.executeEnv.BlockHash() == block.Hash() {
+			executed = true
+			receipts, logs, usedGas = bc.executeEnv.Receipts(), bc.executeEnv.Logs(), bc.executeEnv.GasUsed()
+		}
+		bc.executeEnvMux.RUnlock()
+
 		substart := time.Now()
-		receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig)
-		if err != nil {
-			bc.reportBlock(block, receipts, err)
-			atomic.StoreUint32(&followupInterrupt, 1)
-			return it.index, err
+		if !executed { // execute and validate common block
+			receipts, logs, usedGas, err = bc.processor.Process(block, statedb, bc.vmConfig)
+			//}
+
+			if err != nil {
+				bc.reportBlock(block, receipts, err)
+				atomic.StoreUint32(&followupInterrupt, 1)
+				return it.index, err
+			}
+			// Update the metrics touched during block processing
+			accountReadTimer.Update(statedb.AccountReads)     // Account reads are complete, we can mark them
+			storageReadTimer.Update(statedb.StorageReads)     // Storage reads are complete, we can mark them
+			accountUpdateTimer.Update(statedb.AccountUpdates) // Account updates are complete, we can mark them
+			storageUpdateTimer.Update(statedb.StorageUpdates) // Storage updates are complete, we can mark them
+
+			triehash := statedb.AccountHashes + statedb.StorageHashes // Save to not double count in validation
+			trieproc := statedb.AccountReads + statedb.AccountUpdates
+			trieproc += statedb.StorageReads + statedb.StorageUpdates
+
+			blockExecutionTimer.Update(time.Since(substart) - trieproc - triehash)
+
+			// Validate the state using the default validator
+			substart = time.Now()
+			if err := bc.validator.ValidateState(block, statedb, receipts, usedGas); err != nil {
+				bc.reportBlock(block, receipts, err)
+				atomic.StoreUint32(&followupInterrupt, 1)
+				return it.index, err
+			}
+			//proctime := time.Since(start) FIXME: proctime statistic
+
+			// Update the metrics touched during block validation
+			accountHashTimer.Update(statedb.AccountHashes) // Account hashes are complete, we can mark them
+			storageHashTimer.Update(statedb.StorageHashes) // Storage hashes are complete, we can mark them
+
+			blockValidationTimer.Update(time.Since(substart) - (statedb.AccountHashes + statedb.StorageHashes - triehash))
 		}
-		// Update the metrics touched during block processing
-		accountReadTimer.Update(statedb.AccountReads)     // Account reads are complete, we can mark them
-		storageReadTimer.Update(statedb.StorageReads)     // Storage reads are complete, we can mark them
-		accountUpdateTimer.Update(statedb.AccountUpdates) // Account updates are complete, we can mark them
-		storageUpdateTimer.Update(statedb.StorageUpdates) // Storage updates are complete, we can mark them
-
-		triehash := statedb.AccountHashes + statedb.StorageHashes // Save to not double count in validation
-		trieproc := statedb.AccountReads + statedb.AccountUpdates
-		trieproc += statedb.StorageReads + statedb.StorageUpdates
-
-		blockExecutionTimer.Update(time.Since(substart) - trieproc - triehash)
-
-		// Validate the state using the default validator
-		substart = time.Now()
-		if err := bc.validator.ValidateState(block, statedb, receipts, usedGas); err != nil {
-			bc.reportBlock(block, receipts, err)
-			atomic.StoreUint32(&followupInterrupt, 1)
-			return it.index, err
-		}
-		proctime := time.Since(start)
-
-		// Update the metrics touched during block validation
-		accountHashTimer.Update(statedb.AccountHashes) // Account hashes are complete, we can mark them
-		storageHashTimer.Update(statedb.StorageHashes) // Storage hashes are complete, we can mark them
-
-		blockValidationTimer.Update(time.Since(substart) - (statedb.AccountHashes + statedb.StorageHashes - triehash))
-
 		// Write the block to the chain and get the status.
 		substart = time.Now()
 		status, err := bc.writeBlockWithState(block, receipts, logs, statedb, false)
@@ -1744,7 +1782,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 			lastCanon = block
 
 			// Only count canonical blocks for GC processing time
-			bc.gcproc += proctime
+			//bc.gcproc += proctime FIXME: proctime statistic
 
 		case SideStatTy:
 			log.Debug("Inserted forked block", "number", block.Number(), "hash", block.Hash(),
@@ -2314,4 +2352,10 @@ type simpleSubscriber interface {
 
 func (bc *BlockChain) SetCrossSubscriber(s trigger.Subscriber) {
 	bc.crossSubscriber = s.(simpleSubscriber) // panic if failed
+}
+
+func (bc *BlockChain) SetExecuteEnvironment(env *state.ExecutedEnvironment) {
+	bc.executeEnvMux.Lock()
+	defer bc.executeEnvMux.Unlock()
+	bc.executeEnv = env
 }

@@ -184,6 +184,9 @@ func (tx *Transaction) Value() *big.Int    { return new(big.Int).Set(tx.data.Amo
 func (tx *Transaction) Nonce() uint64      { return tx.data.AccountNonce }
 func (tx *Transaction) CheckNonce() bool   { return true }
 
+func (tx *Transaction) SetSender(from atomic.Value) { tx.from = from }
+func (tx *Transaction) GetSender() atomic.Value     { return tx.from }
+
 func (tx *Transaction) BlockLimit() uint64                { return tx.data.BlockLimit }
 func (tx *Transaction) SetBlockLimit(expiredBlock uint64) { tx.data.BlockLimit = expiredBlock }
 

@@ -93,7 +93,7 @@ func (t *txLookup) Clear() {
 type V = *types.Transaction
 
 var Compare = func(a, b interface{}) int { return container.Int64Comparator(a.(*types.Transaction).ImportTime(), b.(*types.Transaction).ImportTime()) }
-var Multi = true
+var Multi = false // use nano time key
 
 // Set holds elements in a red-black Tree
 type txQueue struct {

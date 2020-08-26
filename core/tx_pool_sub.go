@@ -13,18 +13,19 @@
 //
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
+//+build !2019
 
 package core
 
 import (
 	"errors"
 	"fmt"
-	"github.com/Beyond-simplechain/foundation/asio"
 	"math"
 	"math/big"
 	"sync"
 	"time"
 
+	"github.com/Beyond-simplechain/foundation/asio"
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"
@@ -45,8 +46,9 @@ var (
 
 	// ErrNonceTooLow is returned if the nonce of a transaction is lower than the
 	// one present in the local chain.
-	ErrNonceTooLow     = errors.New("nonce too low")
-	ErrNonceDuplicated = errors.New("nonce duplicated")
+	ErrNonceTooLow = errors.New("nonce too low")
+
+	ErrDuplicated = errors.New("duplicated tx")
 
 	// ErrUnderpriced is returned if a transaction's gas price is below the minimum
 	// configured for the transaction pool.
@@ -208,6 +210,8 @@ type TxPool struct {
 	chainconfig *params.ChainConfig
 	chain       blockChain
 
+	currentState *state.StateDB
+
 	txFeed       event.Feed
 	scope        event.SubscriptionScope
 	chainHeadCh  chan ChainHeadEvent
@@ -215,11 +219,12 @@ type TxPool struct {
 	signer       types.Signer
 	mu           sync.RWMutex
 
-	all          *txLookup // All transactions to allow lookups
-	queue        *txQueue
-	invalid      *txLookup
+	all   *txLookup // All transactions to allow lookups
+	queue *txQueue
+	//invalid      *txLookup
 	txChecker    *TxChecker
 	blockTxCheck *BlockTxChecker
+	validatorMu  sync.RWMutex
 
 	parallel *asio.Parallel
 	syncFeed event.Feed
@@ -244,8 +249,8 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		chain:       chain,
 		signer:      types.NewEIP155Signer(chainconfig.ChainID),
 		//pending:     make(map[common.Address]*txList),
-		queue:        newTxQueue(),
-		invalid:      newTxLookup(),
+		queue: newTxQueue(),
+		//invalid:      newTxLookup(),
 		txChecker:    NewTxChecker(),
 		blockTxCheck: NewBlockTxChecker(chain),
 		//beats:           make(map[common.Address]time.Time),
@@ -264,7 +269,7 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 
 	// If local transactions and journaling is enabled, load from disk
 	config.Journal = ""
-	if !config.NoLocals && config.Journal != "" {
+	if !config.NoLocals && config.Journal != "" { //TODO: set tx journal to persist local rpc tx
 		//pool.journal = newTxJournal(config.Journal)
 		//
 		//if err := pool.journal.load(pool.AddLocals); err != nil {
@@ -382,9 +387,10 @@ func (pool *TxPool) lockedReset(oldHead, newHead *types.Header) {
 func (pool *TxPool) reset(oldHead *types.Header, newBlock *types.Block, newHead *types.Header) {
 	//log.Error("[debug] txpool.reset", "order", 2)
 	// If we're reorging an old state, reinject all dropped transactions
-	var reinject types.Transactions
+	var reinject, recache types.Transactions
 
 	if oldHead != nil && oldHead.Hash() != newHead.ParentHash {
+		log.Warn("txpool reset", "old", oldHead.Hash(), "new", newHead.Hash())
 		// If the reorg is too deep, avoid doing it (will happen during fast sync)
 		oldNum := oldHead.Number.Uint64()
 		newNum := newHead.Number.Uint64()
@@ -401,6 +407,7 @@ func (pool *TxPool) reset(oldHead *types.Header, newBlock *types.Block, newHead 
 			)
 			for rem.NumberU64() > add.NumberU64() {
 				discarded = append(discarded, rem.Transactions()...)
+				pool.blockTxCheck.DeleteBlockTxs(rem.NumberU64()) // remove from blockTxCheck
 				if rem = pool.chain.GetBlock(rem.ParentHash(), rem.NumberU64()-1); rem == nil {
 					log.Error("Unrooted old chain seen by tx pool", "block", oldHead.Number, "hash", oldHead.Hash())
 					return
@@ -408,6 +415,7 @@ func (pool *TxPool) reset(oldHead *types.Header, newBlock *types.Block, newHead 
 			}
 			for add.NumberU64() > rem.NumberU64() {
 				included = append(included, add.Transactions()...)
+				pool.blockTxCheck.SetBlockTxs(add.NumberU64(), add.Transactions()) // add to blockTxCheck
 				if add = pool.chain.GetBlock(add.ParentHash(), add.NumberU64()-1); add == nil {
 					log.Error("Unrooted new chain seen by tx pool", "block", newHead.Number, "hash", newHead.Hash())
 					return
@@ -415,35 +423,40 @@ func (pool *TxPool) reset(oldHead *types.Header, newBlock *types.Block, newHead 
 			}
 			for rem.Hash() != add.Hash() {
 				discarded = append(discarded, rem.Transactions()...)
+				pool.blockTxCheck.DeleteBlockTxs(rem.NumberU64()) // remove from blockTxCheck
 				if rem = pool.chain.GetBlock(rem.ParentHash(), rem.NumberU64()-1); rem == nil {
 					log.Error("Unrooted old chain seen by tx pool", "block", oldHead.Number, "hash", oldHead.Hash())
 					return
 				}
 				included = append(included, add.Transactions()...)
+				pool.blockTxCheck.SetBlockTxs(add.NumberU64(), add.Transactions()) // add to blockTxCheck
 				if add = pool.chain.GetBlock(add.ParentHash(), add.NumberU64()-1); add == nil {
 					log.Error("Unrooted new chain seen by tx pool", "block", newHead.Number, "hash", newHead.Hash())
 					return
 				}
 			}
 			reinject = types.TxDifference(discarded, included)
+			recache = types.TxDifference(included, discarded)
 		}
 	}
 	// Initialize the internal state to the current head
 	if newHead == nil {
 		newHead = pool.chain.CurrentBlock().Header() // Special case during testing
 	}
-	//statedb, err := pool.chain.StateAt(newHead.Root)
-	//if err != nil {
-	//	log.Error("Failed to reset txpool state", "err", err)
-	//	return
-	//}
-	//pool.currentState = statedb
+	statedb, err := pool.chain.StateAt(newHead.Root)
+	if err != nil {
+		log.Error("Failed to reset txpool state", "err", err)
+		return
+	}
+	pool.currentState = statedb
 	//pool.pendingState = state.ManageState(statedb)
 	//pool.currentMaxGas = newHead.GasLimit
 
 	// Inject any transactions discarded due to reorgs
 	log.Debug("Reinjecting stale transactions", "count", len(reinject))
 	senderCacher.recover(pool.signer, reinject)
+
+	pool.blockTxCheck.InsertCaches(recache) // recache blockTxCheck
 	pool.addTxs(reinject, false, true)
 
 	// validate the pool of pending transactions, this will remove
@@ -541,8 +554,8 @@ func (pool *TxPool) Stats() (int, int) {
 // number of queued (non-executable) transactions.
 func (pool *TxPool) stats() (int, int) {
 	pending := pool.queue.Size()
-	invalid := pool.invalid.Count()
-	return pending, invalid
+	//invalid := pool.invalid.Count()
+	return pending, 0
 }
 
 // Content retrieves the data content of the transaction pool, returning all the
@@ -561,8 +574,17 @@ func (pool *TxPool) SyncLimit(limit int) types.Transactions {
 		return nil
 	}
 
+	invalid := make(map[common.Hash]struct{})
 	ret := make(types.Transactions, 0)
 	pool.queue.Range(func(tx *types.Transaction) bool {
+		if _, ok := invalid[tx.Hash()]; ok {
+			return true
+		}
+		if err := pool.blockTxCheck.CheckBlockLimit(tx); err != nil {
+			log.Trace("Pending block limit check failed")
+			invalid[tx.Hash()] = struct{}{}
+			return true
+		}
 		if tx.IsSynced() {
 			return true
 		}
@@ -570,7 +592,7 @@ func (pool *TxPool) SyncLimit(limit int) types.Transactions {
 			return true
 		}
 		ret = append(ret, tx)
-		tx.SetSynced(true)
+		//tx.SetSynced(true)
 
 		if len(ret) >= limit {
 			return false
@@ -578,6 +600,7 @@ func (pool *TxPool) SyncLimit(limit int) types.Transactions {
 		return true
 	})
 
+	go pool.RemoveInvalidTxs(invalid)
 	return ret
 }
 
@@ -592,8 +615,10 @@ func (pool *TxPool) PendingLimit(limit int) types.Transactions {
 	}
 
 	pending := make(types.Transactions, 0, size)
+	invalid := make(map[common.Hash]struct{})
+
 	pool.queue.Range(func(tx *types.Transaction) bool {
-		if pool.invalid.Has(tx.Hash()) {
+		if _, ok := invalid[tx.Hash()]; ok {
 			return true
 		}
 		if !pool.blockTxCheck.OK(tx, false) {
@@ -602,7 +627,7 @@ func (pool *TxPool) PendingLimit(limit int) types.Transactions {
 		}
 		if err := pool.blockTxCheck.CheckBlockLimit(tx); err != nil {
 			log.Trace("Pending block limit check failed")
-			pool.invalid.Add(tx)
+			invalid[tx.Hash()] = struct{}{}
 			return true
 		}
 
@@ -613,7 +638,7 @@ func (pool *TxPool) PendingLimit(limit int) types.Transactions {
 		}
 		return true
 	})
-	go pool.RemoveInvalidTxs()
+	go pool.RemoveInvalidTxs(invalid)
 	return pending
 }
 
@@ -642,13 +667,17 @@ func (pool *TxPool) preCheck(tx *types.Transaction) error {
 		return ErrNegativeValue
 	}
 	//log.Warn("tx from", from.String())
-	// Ensure the transaction adheres to nonce ordering
-	if tx.Hash() == common.EmptyHash || !pool.blockTxCheck.OK(tx, false) {
-		return ErrNonceDuplicated
+	// Ensure the transaction is not duplicate
+	if !pool.txChecker.OK(tx, false) || !pool.blockTxCheck.OK(tx, false) {
+		return ErrDuplicated
 	}
 
 	if err := pool.blockTxCheck.CheckBlockLimit(tx); err != nil {
 		return err
+	}
+
+	if uint64(pool.queue.Size()) >= pool.config.GlobalSlots {
+		return fmt.Errorf("txpool is full discard tx:%s", tx.Hash().String())
 	}
 
 	return nil
@@ -658,14 +687,43 @@ func (pool *TxPool) preCheck(tx *types.Transaction) error {
 // rules and adheres to some heuristic limits of the local node (price and size).
 func (pool *TxPool) validateTx(tx *types.Transaction /*, local bool*/) error {
 	// Heuristic limit, reject transactions over 32KB to prevent DOS attacks
-	_, err := types.Sender(pool.signer, tx)
+	from, err := types.Sender(pool.signer, tx)
 	if err != nil {
 		return ErrInvalidSender
 	}
 	if !pool.txChecker.OK(tx, true) {
-		return ErrNonceDuplicated
+		return ErrDuplicated
+	}
+	// Transactor should have enough funds to cover the costs
+	// cost == V + GP * GL
+	// FIXME: important: statedb should support concurrent-RW，don't lock the pool
+	pool.validatorMu.Lock()
+	defer pool.validatorMu.Unlock()
+	if pool.currentState.GetBalance(from).Cmp(tx.Cost()) < 0 {
+		return ErrInsufficientFunds
 	}
 	return nil
+}
+
+func (pool *TxPool) ValidateBlocks(blocks types.Blocks) {
+	var wg sync.WaitGroup
+	for _, block := range blocks {
+		for _, tx := range block.Transactions() {
+			if ptx := pool.all.Get(tx.Hash()); ptx != nil {
+				tx.SetSender(ptx.GetSender())
+
+			} else {
+				transaction := tx // use out-of-range address for parallel invoke
+				wg.Add(1)
+				pool.parallel.Put(func() error {
+					defer wg.Done()
+					_, err := types.Sender(pool.signer, transaction)
+					return err
+				}, nil)
+			}
+		}
+	}
+	wg.Wait()
 }
 
 // add validates a transaction and inserts it into the non-executable queue for
@@ -695,6 +753,7 @@ func (pool *TxPool) add(tx *types.Transaction, local, sync bool) error {
 		// If the transaction fails basic validation, discard it
 		if err := pool.validateTx(tx); err != nil {
 			log.Trace("Discarding invalid transaction", "hash", hash, "err", err)
+			//log.Error("[debug] Discarding invalid transaction", "hash", hash, "err", err)
 			//invalidTxCounter.Inc(1)
 			return err
 		}
@@ -704,9 +763,8 @@ func (pool *TxPool) add(tx *types.Transaction, local, sync bool) error {
 		pool.txChecker.InsertCache(tx)
 		pool.journalTx(tx)
 
-		log.Trace("Pooled new future transaction", "hash", hash)
-		go pool.txFeed.Send(NewTxsEvent{types.Transactions{tx}})
-		go pool.syncFeed.Send(NewTxsEvent{types.Transactions{tx}})
+		//go pool.txFeed.Send(NewTxsEvent{types.Transactions{tx}})
+		go pool.syncFeed.Send(NewTxsEvent{types.Transactions{tx}}) //TODO-U: send sync signal
 		return nil
 	}
 
@@ -807,7 +865,7 @@ func (pool *TxPool) removeTx(hash common.Hash) {
 	// Remove it from the list of known transactions
 	pool.queue.Remove(tx)
 	pool.all.Remove(hash)
-	pool.invalid.Remove(hash)
+	//pool.invalid.Remove(hash)
 }
 
 func (pool *TxPool) RemoveBlockKnownTxs(block *types.Block) {
@@ -819,15 +877,13 @@ func (pool *TxPool) RemoveBlockKnownTxs(block *types.Block) {
 	}
 }
 
-func (pool *TxPool) RemoveInvalidTxs() {
-	pool.invalid.Range(func(hash common.Hash, tx *types.Transaction) bool {
+func (pool *TxPool) RemoveInvalidTxs(invalid map[common.Hash]struct{}) {
+	for hash := range invalid {
 		if tx := pool.all.Get(hash); tx != nil {
 			pool.all.Remove(hash)
 			pool.queue.Remove(tx)
 		}
 
-		pool.txChecker.DeleteCache(tx.Hash())
-		return true
-	})
-	pool.invalid.Clear()
+		pool.txChecker.DeleteCache(hash)
+	}
 }

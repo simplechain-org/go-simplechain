@@ -36,6 +36,14 @@ func (m *TxChecker) InsertCache(tx transaction) {
 	m.cache[tx.Hash()] = struct{}{}
 }
 
+func (m *TxChecker) InsertCaches(txs types.Transactions) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	for _, tx := range txs {
+		m.cache[tx.Hash()] = struct{}{}
+	}
+}
+
 func (m *TxChecker) DeleteCache(hash common.Hash) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
@@ -130,6 +138,22 @@ func (m *BlockTxChecker) GetBlockTxs(number uint64, update bool) []common.Hash {
 	}
 
 	return hashes
+}
+
+func (m *BlockTxChecker) SetBlockTxs(number uint64, txs types.Transactions) {
+	hashes := make([]common.Hash, 0, txs.Len())
+	for _, tx := range txs {
+		hashes = append(hashes, tx.Hash())
+	}
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	m.blkTxCache[number] = hashes
+}
+
+func (m *BlockTxChecker) DeleteBlockTxs(number uint64) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	delete(m.blkTxCache, number)
 }
 
 func (m *BlockTxChecker) UpdateCache(init bool) {

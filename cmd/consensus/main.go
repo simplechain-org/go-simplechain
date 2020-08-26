@@ -216,7 +216,7 @@ func writeGenesis(consensus ConsensusType, addresses []accounts.Account, dir, fi
 		return fmt.Errorf("unmarshal genesis file failed, %s", err.Error())
 	}
 
-	if consensus == RAFT || consensus == DPOS {
+	if consensus == RAFT || consensus == DPOS || consensus == PBFT {
 		for _, addr := range addresses {
 			genesis.Alloc[addr.Address] = core.GenesisAccount{Balance: new(big.Int).Mul(big.NewInt(params.Ether), big.NewInt(1e4))}
 		}

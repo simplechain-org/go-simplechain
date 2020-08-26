@@ -20,6 +20,7 @@ package types
 import (
 	"encoding/binary"
 	"fmt"
+	"github.com/simplechain-org/go-simplechain/log"
 	"io"
 	"math/big"
 	"reflect"
@@ -101,12 +102,21 @@ type headerMarshaling struct {
 func (h *Header) Hash() common.Hash {
 	// If the mix digest is equivalent to the predefined Istanbul digest, use Istanbul
 	// specific hash calculation.
-	if h.MixDigest == IstanbulDigest {
+	if h.MixDigest == IstanbulDigest || h.MixDigest == PbftDigest {
 		// Seal is reserved in extra-data. To prove block is signed by the proposer.
 		if istanbulHeader := IstanbulFilteredHeader(h, true); istanbulHeader != nil {
 			return rlpHash(istanbulHeader)
 		}
 	}
+	return rlpHash(h)
+}
+
+func (h *Header) PendingHash() common.Hash {
+	if h.MixDigest == PbftDigest {
+		return rlpHash(PbftPendingHeader(h, true))
+	}
+
+	log.Trace("incomplete hash was not allowed for this header", "digest", h.MixDigest)
 	return rlpHash(h)
 }
 
@@ -175,8 +185,9 @@ type Block struct {
 	transactions Transactions
 
 	// caches
-	hash atomic.Value
-	size atomic.Value
+	hash        atomic.Value
+	pendingHash atomic.Value
+	size        atomic.Value
 
 	// Td is used by package core to store the total difficulty
 	// of the chain up to and including the block.
@@ -423,6 +434,15 @@ func (b *Block) Hash() common.Hash {
 	}
 	v := b.header.Hash()
 	b.hash.Store(v)
+	return v
+}
+
+func (b *Block) PendingHash() common.Hash {
+	if hash := b.pendingHash.Load(); hash != nil {
+		return hash.(common.Hash)
+	}
+	v := b.header.PendingHash()
+	b.pendingHash.Store(v)
 	return v
 }
 

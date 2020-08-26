@@ -55,8 +55,11 @@ func initNonce(seed uint64, count int) []uint64 {
 
 var parallel = asio.NewParallel(1000, 100)
 
+var chainId *uint64
+
 func main() {
 	url := flag.String("url", "ws://127.0.0.1:8546", "websocket url")
+	chainId = flag.Uint64("chainid", 1, "chainId")
 
 	sendTx := flag.Bool("sendtx", false, "enable only send tx")
 	senderCount := flag.Int("accounts", 4, "the number of sender")
@@ -132,7 +135,7 @@ func throughputs(ctx context.Context, client *ethclient.Client, index int, priva
 		log.Fatalf(errPrefix+" get gas price: %v", err)
 	}
 	toAddress := common.HexToAddress("0xffd79941b7085805f48ded97298694c6bb950e2c")
-	signer := types.NewEIP155Signer(big.NewInt(110))
+	signer := types.NewEIP155Signer(new(big.Int).SetUint64(*chainId))
 
 	var (
 		data       [20 + 64]byte

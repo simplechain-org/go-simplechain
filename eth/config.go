@@ -17,6 +17,7 @@
 package eth
 
 import (
+	"github.com/simplechain-org/go-simplechain/consensus/pbft"
 	"math/big"
 	"os"
 	"os/user"
@@ -65,6 +66,7 @@ var DefaultConfig = Config{
 	},
 	Role:     common.RoleMainChain,
 	Istanbul: *istanbul.DefaultConfig,
+	Pbft:     *pbft.DefaultConfig,
 }
 
 func init() {
@@ -134,6 +136,9 @@ type Config struct {
 
 	// Istanbul options
 	Istanbul istanbul.Config
+
+	// Pbft options
+	Pbft pbft.Config
 
 	// Transaction pool options
 	TxPool core.TxPoolConfig
