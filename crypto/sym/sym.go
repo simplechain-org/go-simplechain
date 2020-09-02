@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/meshplus/bitxhub-kit/crypto"
+	"github.com/simplechain-org/go-simplechain/crypto"
 )
 
 // HashType represent hash algorithm type

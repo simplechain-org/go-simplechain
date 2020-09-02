@@ -10,9 +10,9 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/meshplus/bitxhub-kit/crypto"
-	"github.com/meshplus/bitxhub-kit/crypto/asym/secp256k1"
-	"github.com/meshplus/bitxhub-kit/types"
+	"github.com/simplechain-org/go-simplechain/common"
+	"github.com/simplechain-org/go-simplechain/crypto"
+	"github.com/simplechain-org/go-simplechain/crypto/secp256k1"
 )
 
 var _ crypto.PrivateKey = (*PrivateKey)(nil)
@@ -162,12 +162,12 @@ func (pub *PublicKey) Bytes() ([]byte, error) {
 		}, nil), nil
 }
 
-func (pub *PublicKey) Address() (types.Address, error) {
+func (pub *PublicKey) Address() (common.Address, error) {
 	data := elliptic.Marshal(pub.k.Curve, pub.k.X, pub.k.Y)
 
 	ret := sha256.Sum256(data[1:])
 
-	return types.Bytes2Address(ret[12:]), nil
+	return common.BytesToAddress(ret[12:]), nil
 }
 
 func (pub *PublicKey) Verify(digest []byte, sig []byte) (bool, error) {
