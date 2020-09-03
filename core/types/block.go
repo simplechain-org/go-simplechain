@@ -18,6 +18,7 @@
 package types
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"github.com/simplechain-org/go-simplechain/log"
@@ -111,12 +112,31 @@ func (h *Header) Hash() common.Hash {
 	return rlpHash(h)
 }
 
+func RlpPendingHeaderHash(h *Header) common.Hash {
+	return rlpHash([]interface{}{
+		h.ParentHash,
+		h.UncleHash,
+		h.Coinbase,
+		h.TxHash,
+		h.Difficulty,
+		h.Number,
+		h.GasLimit,
+		h.Time,
+		h.Extra,
+		h.MixDigest,
+		h.Nonce,
+	})
+}
+
 func (h *Header) PendingHash() common.Hash {
 	if h.MixDigest == PbftDigest {
-		return rlpHash(PbftPendingHeader(h, true))
+		pendingHeader := PbftPendingHeader(h, true)
+		if pendingHeader != nil {
+			return RlpPendingHeaderHash(pendingHeader)
+		}
 	}
 
-	log.Trace("incomplete hash was not allowed for this header", "digest", h.MixDigest)
+	log.Trace("pending hash was not allowed for this header", "digest", h.MixDigest)
 	return rlpHash(h)
 }
 
@@ -153,6 +173,7 @@ func rlpHash(x interface{}) (h common.Hash) {
 	hw.Sum(h[:0])
 	return h
 }
+
 func (h *Header) HashNoNonce() common.Hash {
 	return rlpHash([]interface{}{
 		h.ParentHash,
@@ -447,3 +468,16 @@ func (b *Block) PendingHash() common.Hash {
 }
 
 type Blocks []*Block
+
+func (bs Blocks) String() string {
+	var buf bytes.Buffer
+	buf.WriteByte('[')
+	for _, b := range bs {
+		buf.WriteByte('{')
+		buf.WriteString(fmt.Sprintf("hash:%s, ", b.Hash().TerminalString()))
+		buf.WriteString(fmt.Sprintf("number:%d", b.NumberU64()))
+		buf.WriteByte('}')
+	}
+	buf.WriteByte(']')
+	return buf.String()
+}

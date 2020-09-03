@@ -176,7 +176,9 @@ type BlockChain struct {
 	processor  Processor  // Block transaction processor interface
 	vmConfig   vm.Config
 
-	badBlocks       *lru.Cache                     // Bad block cache
+	badBlocks        *lru.Cache // Bad block cache
+	badProposeBlocks *lru.Cache // Bad block cache, used for pbft consensus
+
 	shouldPreserve  func(*types.Block) bool        // Function used to determine whether should preserve the given block.
 	terminateInsert func(common.Hash, uint64) bool // Testing hook used to terminate ancient receipt chain insertion.
 	crossSubscriber simpleSubscriber
@@ -203,24 +205,26 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 	txLookupCache, _ := lru.New(txLookupCacheLimit)
 	futureBlocks, _ := lru.New(maxFutureBlocks)
 	badBlocks, _ := lru.New(badBlockLimit)
+	badProposeBlocks, _ := lru.New(badBlockLimit)
 
 	bc := &BlockChain{
-		chainConfig:    chainConfig,
-		cacheConfig:    cacheConfig,
-		db:             db,
-		triegc:         prque.New(nil),
-		stateCache:     state.NewDatabaseWithCache(db, cacheConfig.TrieCleanLimit),
-		quit:           make(chan struct{}),
-		shouldPreserve: shouldPreserve,
-		bodyCache:      bodyCache,
-		bodyRLPCache:   bodyRLPCache,
-		receiptsCache:  receiptsCache,
-		blockCache:     blockCache,
-		txLookupCache:  txLookupCache,
-		futureBlocks:   futureBlocks,
-		engine:         engine,
-		vmConfig:       vmConfig,
-		badBlocks:      badBlocks,
+		chainConfig:      chainConfig,
+		cacheConfig:      cacheConfig,
+		db:               db,
+		triegc:           prque.New(nil),
+		stateCache:       state.NewDatabaseWithCache(db, cacheConfig.TrieCleanLimit),
+		quit:             make(chan struct{}),
+		shouldPreserve:   shouldPreserve,
+		bodyCache:        bodyCache,
+		bodyRLPCache:     bodyRLPCache,
+		receiptsCache:    receiptsCache,
+		blockCache:       blockCache,
+		txLookupCache:    txLookupCache,
+		futureBlocks:     futureBlocks,
+		engine:           engine,
+		vmConfig:         vmConfig,
+		badBlocks:        badBlocks,
+		badProposeBlocks: badProposeBlocks,
 	}
 	bc.validator = NewBlockValidator(chainConfig, bc, engine)
 	bc.prefetcher = newStatePrefetcher(chainConfig, bc, engine)
@@ -722,7 +726,12 @@ func (bc *BlockChain) HasBlock(hash common.Hash, number uint64) bool {
 
 // HasBadBlock returns whether the block with the hash is a bad block. dep: Istanbul
 func (bc *BlockChain) HasBadBlock(hash common.Hash) bool {
-	return bc.badBlocks.Contains(hash)
+	switch bc.engine.(type) {
+	case consensus.Pbft:
+		return bc.badProposeBlocks.Contains(hash)
+	default:
+		return bc.badBlocks.Contains(hash)
+	}
 }
 
 // HasFastBlock checks if a fast block is fully present in the database or not.
@@ -1535,6 +1544,12 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 // is imported, but then new canon-head is added before the actual sidechain
 // completes, then the historic state could be pruned again
 func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, error) {
+	defer func(start time.Time) {
+		log.Trace("BlockChain.insertChain", "blocks", chain.String(), "startTime", start, "costTime", time.Since(start))
+		//log.Error("[debug] BlockChain.insertChain", "blocks", chain.String(), "startTime", start, "costTime", time.Since(start))
+		//debug.PrintStack() //TODO-D
+	}(time.Now())
+
 	// If the chain is terminating, don't even bother starting up
 	if atomic.LoadInt32(&bc.procInterrupt) == 1 {
 		return 0, nil
@@ -2151,6 +2166,10 @@ func (bc *BlockChain) BadBlocks() []*types.Block {
 // addBadBlock adds a bad block to the bad-block LRU cache
 func (bc *BlockChain) addBadBlock(block *types.Block) {
 	bc.badBlocks.Add(block.Hash(), block)
+	// If a pbft block, add pendingHash too
+	if block.MixDigest() == types.PbftDigest {
+		bc.badProposeBlocks.Add(block.PendingHash(), block)
+	}
 }
 
 // reportBlock logs a bad block error.
