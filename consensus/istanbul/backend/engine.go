@@ -107,7 +107,7 @@ func (sb *backend) Author(header *types.Header) (common.Address, error) {
 // It will extract for each seal who signed it, regardless of if the seal is
 // repeated
 func (sb *backend) Signers(header *types.Header) ([]common.Address, error) {
-	extra, err := types.ExtractIstanbulExtra(header)
+	extra, err := types.ExtractByzantineExtra(header)
 	if err != nil {
 		return []common.Address{}, err
 	}
@@ -150,7 +150,7 @@ func (sb *backend) verifyHeader(chain consensus.ChainReader, header *types.Heade
 	}
 
 	// Ensure that the extra data format is satisfied
-	if _, err := types.ExtractIstanbulExtra(header); err != nil {
+	if _, err := types.ExtractByzantineExtra(header); err != nil {
 		return errInvalidExtraDataFormat
 	}
 
@@ -284,7 +284,7 @@ func (sb *backend) verifyCommittedSeals(chain consensus.ChainReader, header *typ
 		return err
 	}
 
-	extra, err := types.ExtractIstanbulExtra(header)
+	extra, err := types.ExtractByzantineExtra(header)
 	if err != nil {
 		return err
 	}
@@ -579,7 +579,7 @@ func (sb *backend) snapshot(chain consensus.ChainReader, number uint64, hash com
 			if err := sb.VerifyHeader(chain, genesis, false); err != nil {
 				return nil, err
 			}
-			istanbulExtra, err := types.ExtractIstanbulExtra(genesis)
+			istanbulExtra, err := types.ExtractByzantineExtra(genesis)
 			if err != nil {
 				return nil, err
 			}
@@ -659,7 +659,7 @@ func ecrecover(header *types.Header) (common.Address, error) {
 	}
 
 	// Retrieve the signature from the header extra-data
-	istanbulExtra, err := types.ExtractIstanbulExtra(header)
+	istanbulExtra, err := types.ExtractByzantineExtra(header)
 	if err != nil {
 		return common.Address{}, err
 	}
@@ -682,7 +682,7 @@ func prepareExtra(header *types.Header, vals []common.Address) ([]byte, error) {
 	}
 	buf.Write(header.Extra[:types.IstanbulExtraVanity])
 
-	ist := &types.IstanbulExtra{
+	ist := &types.ByzantineExtra{
 		Validators:    vals,
 		Seal:          []byte{},
 		CommittedSeal: [][]byte{},
@@ -703,7 +703,7 @@ func writeSeal(h *types.Header, seal []byte) error {
 		return errInvalidSignature
 	}
 
-	istanbulExtra, err := types.ExtractIstanbulExtra(h)
+	istanbulExtra, err := types.ExtractByzantineExtra(h)
 	if err != nil {
 		return err
 	}
@@ -730,7 +730,7 @@ func writeCommittedSeals(h *types.Header, committedSeals [][]byte) error {
 		}
 	}
 
-	istanbulExtra, err := types.ExtractIstanbulExtra(h)
+	istanbulExtra, err := types.ExtractByzantineExtra(h)
 	if err != nil {
 		return err
 	}

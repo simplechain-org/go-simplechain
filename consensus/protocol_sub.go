@@ -20,6 +20,7 @@ package consensus
 import (
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/types"
+	"time"
 )
 
 // Constants to match up protocol versions and messages
@@ -52,10 +53,20 @@ type Broadcaster interface {
 	Enqueue(id string, block *types.Block)
 	// FindPeers retrives peers by addresses
 	FindPeers(map[common.Address]bool) map[common.Address]Peer
+	// FindRoute
+	FindRoute([]common.Address, int, int) map[common.Address]Peer
 }
 
-type Executor interface {
+type Sealer interface {
+	// Execute block and return executed block
 	Execute(block *types.Block) (*types.Block, error)
+	// Adjust max block txs can seal
+	AdjustMaxBlockTxs(remaining time.Duration, timeout bool)
+}
+
+type TxPool interface {
+	// Init partial block by txpool
+	InitPartialBlock(pBlock *types.PartialBlock) bool
 }
 
 // Peer defines the interface to communicate with peer

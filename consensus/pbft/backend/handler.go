@@ -27,13 +27,14 @@ import (
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/consensus"
 	"github.com/simplechain-org/go-simplechain/consensus/pbft"
+	"github.com/simplechain-org/go-simplechain/consensus/pbft/validator"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/p2p"
 )
 
 const (
-	IstanbulMsg = 0x11
+	PbftMsg     = 0x11
 	NewBlockMsg = 0x07
 )
 
@@ -56,7 +57,7 @@ func (sb *backend) HandleMsg(addr common.Address, msg p2p.Msg) (bool, error) {
 	sb.coreMu.Lock()
 	defer sb.coreMu.Unlock()
 
-	if msg.Code == IstanbulMsg {
+	if msg.Code == PbftMsg {
 		if !sb.coreStarted {
 			return true, pbft.ErrStoppedEngine
 		}
@@ -83,7 +84,7 @@ func (sb *backend) HandleMsg(addr common.Address, msg p2p.Msg) (bool, error) {
 		}
 		sb.knownMessages.Add(hash, true)
 
-		go sb.istanbulEventMux.Post(pbft.MessageEvent{
+		go sb.pbftEventMux.Post(pbft.MessageEvent{
 			Payload: data,
 		})
 
@@ -109,8 +110,8 @@ func (sb *backend) HandleMsg(addr common.Address, msg p2p.Msg) (bool, error) {
 				return false, nil
 			}
 			newRequestedBlock := request.Block
-			if newRequestedBlock.Header().MixDigest == types.PbftDigest && sb.core.IsCurrentProposal(newRequestedBlock.Hash()) {
-				log.Debug("Proposer already proposed this block", "hash", newRequestedBlock.Hash(), "sender", addr)
+			if newRequestedBlock.Header().MixDigest == types.PbftDigest && sb.core.IsCurrentProposal(newRequestedBlock.PendingHash()) {
+				log.Debug("Proposer already proposed this block", "hash", newRequestedBlock.Hash(), "proposalHash", newRequestedBlock.PendingHash(), "sender", addr)
 				return true, nil
 			}
 		}
@@ -118,21 +119,47 @@ func (sb *backend) HandleMsg(addr common.Address, msg p2p.Msg) (bool, error) {
 	return false, nil
 }
 
+func (sb *backend) CurrentValidators() ([]common.Address, int) {
+	var validators pbft.ValidatorSet
+	if sb.currentBlock == nil || sb.currentBlock() == nil {
+		validators = validator.NewSet(nil, sb.config.ProposerPolicy)
+	} else {
+		current := sb.currentBlock()
+		validators = sb.getValidators(current.NumberU64(), current.Hash())
+	}
+	var (
+		addresses = make([]common.Address, 0, validators.Size())
+		index     = -1
+	)
+
+	for i, v := range validators.List() {
+		if sb.address == v.Address() {
+			index = i
+		}
+		addresses = append(addresses, v.Address())
+	}
+	return addresses, index
+}
+
 // SetBroadcaster implements consensus.Handler.SetBroadcaster
 func (sb *backend) SetBroadcaster(broadcaster consensus.Broadcaster) {
 	sb.broadcaster = broadcaster
 }
 
-func (sb *backend) SetExecutor(executor consensus.Executor) {
-	sb.executor = executor
+func (sb *backend) SetSealer(worker consensus.Sealer) {
+	sb.sealer = worker
 }
 
-func (sb *backend) NewChainHead() error {
+func (sb *backend) SetTxPool(pool consensus.TxPool) {
+	sb.txPool = pool
+}
+
+func (sb *backend) NewChainHead(block *types.Block) error {
 	sb.coreMu.RLock()
 	defer sb.coreMu.RUnlock()
 	if !sb.coreStarted {
 		return pbft.ErrStoppedEngine
 	}
-	go sb.istanbulEventMux.Post(pbft.FinalCommittedEvent{})
+	go sb.pbftEventMux.Post(pbft.FinalCommittedEvent{Committed: block})
 	return nil
 }

@@ -30,6 +30,7 @@ func newTestRoundState(view *pbft.View, validatorSet pbft.ValidatorSet) *roundSt
 		round:      view.Round,
 		sequence:   view.Sequence,
 		Preprepare: newTestPreprepare(view),
+		Prepare:    newTestConclusion(),
 		Prepares:   newMessageSet(validatorSet),
 		Commits:    newMessageSet(validatorSet),
 		mu:         new(sync.RWMutex),

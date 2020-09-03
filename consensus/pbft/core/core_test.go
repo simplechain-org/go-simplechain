@@ -28,7 +28,7 @@ import (
 	elog "github.com/simplechain-org/go-simplechain/log"
 )
 
-func makeBlock(number int64) *types.Block {
+func makeBlock(number int64, txs ...*types.Transaction) *types.Block {
 	header := &types.Header{
 		Difficulty: big.NewInt(0),
 		Number:     big.NewInt(number),
@@ -36,12 +36,19 @@ func makeBlock(number int64) *types.Block {
 		GasUsed:    0,
 		Time:       0,
 	}
-	block := &types.Block{}
-	return block.WithSeal(header)
+	return types.NewBlock(header, txs, nil, nil)
 }
 
 func newTestProposal() pbft.Proposal {
 	return makeBlock(1)
+}
+
+func newTestConclusion() pbft.Conclusion {
+	return makeBlock(1)
+}
+
+func newTestPartialProposal(txs ...*types.Transaction) pbft.Proposal {
+	return types.NewPartialBlock(makeBlock(1, txs...))
 }
 
 func TestNewRequest(t *testing.T) {

@@ -17,9 +17,9 @@
 package core
 
 import (
-	"reflect"
-
 	"github.com/simplechain-org/go-simplechain/consensus/pbft"
+	"reflect"
+	"time"
 )
 
 func (c *core) sendPrepare() {
@@ -40,12 +40,18 @@ func (c *core) sendPrepare() {
 }
 
 func (c *core) handlePrepare(msg *message, src pbft.Validator) error {
+	logger := c.logger.New("from", src, "state", c.state)
+	c.prepareTimestamp = time.Now()
+
 	// Decode PsREPARE message
 	var prepare *pbft.Subject
 	err := msg.Decode(&prepare)
 	if err != nil {
 		return errFailedDecodePrepare
 	}
+
+	c.logger.Trace("[debug] ## pbft handle Prepare ## 【2】", "number", prepare.View.Sequence,
+		"hash", prepare.Pending)
 
 	if err := c.checkMessage(msgPrepare, prepare.View); err != nil {
 		return err
@@ -59,10 +65,11 @@ func (c *core) handlePrepare(msg *message, src pbft.Validator) error {
 
 	c.acceptPrepare(msg, src)
 
+	logger.Trace("[report] handle prepare", "cost", time.Since(c.prepareTimestamp))
+
 	// Change to Prepared state if we've received enough PREPARE messages or it is locked
 	// and we are in earlier state before Prepared state.
-	if ((c.current.IsHashLocked() && prepare.Digest == c.current.GetLockedHash()) || c.current.GetPrepareOrCommitSize() >= c.Confirmations()) &&
-		c.state.Cmp(StatePrepared) < 0 {
+	if ((c.current.IsHashLocked() && prepare.Digest == c.current.GetLockedHash()) || c.current.GetPrepareOrCommitSize() >= c.Confirmations()) && c.state.Cmp(StatePrepared) < 0 {
 		c.current.LockHash()
 		c.setState(StatePrepared)
 		c.sendCommit()

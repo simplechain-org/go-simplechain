@@ -1,18 +1,18 @@
-// Copyright 2017 The go-ethereum Authors
-// This file is part of the go-ethereum library.
+// Copyright 2020 The go-simplechain Authors
+// This file is part of the go-simplechain library.
 //
-// The go-ethereum library is free software: you can redistribute it and/or modify
+// The go-simplechain library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// The go-ethereum library is distributed in the hope that it will be useful,
+// The go-simplechain library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
+// along with the go-simplechain library. If not, see <http://www.gnu.org/licenses/>.
 
 package pbft
 
@@ -31,8 +31,6 @@ type Proposal interface {
 	// Number retrieves the sequence number of this proposal.
 	Number() *big.Int
 
-	// Hash retrieves the hash of this proposal.
-	Hash() common.Hash // executed block hash
 	PendingHash() common.Hash // unexecuted block hash
 
 	EncodeRLP(w io.Writer) error
@@ -40,6 +38,25 @@ type Proposal interface {
 	DecodeRLP(s *rlp.Stream) error
 
 	String() string
+}
+
+// Conclusion means executed Proposal
+type Conclusion interface {
+	Proposal
+	// Hash retrieves the hash of this proposal.
+	Hash() common.Hash
+}
+
+// PartialProposal is a Proposal without tx body
+type PartialProposal interface {
+	Proposal
+
+	TxDigests() []common.Hash
+
+	Completed() bool // return whether the proposal is completed (no missed txs)
+
+	FillMissedTxs(txs types.Transactions) error
+	FetchMissedTxs(misses []types.MissedTx) (types.Transactions, error)
 }
 
 type Request struct {
@@ -119,30 +136,95 @@ func (b *Preprepare) DecodeRLP(s *rlp.Stream) error {
 	return nil
 }
 
+type PartialPreprepare Preprepare
+
+// Overwrite Decode method for partial block
+func (b *PartialPreprepare) DecodeRLP(s *rlp.Stream) error {
+	var preprepare struct {
+		View     *View
+		Proposal *types.PartialBlock
+	}
+
+	if err := s.Decode(&preprepare); err != nil {
+		return err
+	}
+	b.View, b.Proposal = preprepare.View, preprepare.Proposal
+
+	return nil
+}
+
 type Subject struct {
-	View   *View
-	Digest common.Hash
+	View    *View
+	Pending common.Hash
+	Digest  common.Hash
 }
 
 // EncodeRLP serializes b into the Ethereum RLP format.
 func (b *Subject) EncodeRLP(w io.Writer) error {
-	return rlp.Encode(w, []interface{}{b.View, b.Digest})
+	return rlp.Encode(w, []interface{}{b.View, b.Pending, b.Digest})
 }
 
 // DecodeRLP implements rlp.Decoder, and load the consensus fields from a RLP stream.
 func (b *Subject) DecodeRLP(s *rlp.Stream) error {
 	var subject struct {
-		View   *View
-		Digest common.Hash
+		View    *View
+		Pending common.Hash
+		Digest  common.Hash
 	}
 
 	if err := s.Decode(&subject); err != nil {
 		return err
 	}
-	b.View, b.Digest = subject.View, subject.Digest
+	b.View, b.Pending, b.Digest = subject.View, subject.Pending, subject.Digest
 	return nil
 }
 
 func (b *Subject) String() string {
-	return fmt.Sprintf("{View: %v, Digest: %v}", b.View, b.Digest.String())
+	return fmt.Sprintf("{View: %v, Pending:%v, Digest: %v}", b.View, b.Pending, b.Digest.String())
+}
+
+type MissedReq struct {
+	View      *View
+	MissedTxs []types.MissedTx
+}
+
+func (b *MissedReq) EncodeRLP(w io.Writer) error {
+	return rlp.Encode(w, []interface{}{b.View, b.MissedTxs})
+}
+
+// DecodeRLP implements rlp.Decoder, and load the consensus fields from a RLP stream.
+func (b *MissedReq) DecodeRLP(s *rlp.Stream) error {
+	var subject struct {
+		View      *View
+		MissedReq []types.MissedTx
+	}
+
+	if err := s.Decode(&subject); err != nil {
+		return err
+	}
+	b.View, b.MissedTxs = subject.View, subject.MissedReq
+	return nil
+}
+
+type MissedResp struct {
+	View   *View
+	ReqTxs types.Transactions
+}
+
+func (b *MissedResp) EncodeRLP(w io.Writer) error {
+	return rlp.Encode(w, []interface{}{b.View, b.ReqTxs})
+}
+
+// DecodeRLP implements rlp.Decoder, and load the consensus fields from a RLP stream.
+func (b *MissedResp) DecodeRLP(s *rlp.Stream) error {
+	var subject struct {
+		View   *View
+		ReqTxs types.Transactions
+	}
+
+	if err := s.Decode(&subject); err != nil {
+		return err
+	}
+	b.View, b.ReqTxs = subject.View, subject.ReqTxs
+	return nil
 }

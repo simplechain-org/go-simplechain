@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	dbKeySnapshotPrefix = "istanbul-snapshot"
+	dbKeySnapshotPrefix = "pbft-snapshot"
 )
 
 // Vote represents a single vote that an authorized validator made to modify the

@@ -16,11 +16,13 @@
 
 package core
 
-import "github.com/simplechain-org/go-simplechain/common"
+import (
+	"github.com/simplechain-org/go-simplechain/common"
+	"github.com/simplechain-org/go-simplechain/consensus/pbft"
+)
 
-func (c *core) handleFinalCommitted() error {
+func (c *core) handleFinalCommitted(committed pbft.Conclusion) {
 	logger := c.logger.New("state", c.state)
-	logger.Trace("Received a final committed proposal")
+	logger.Trace("Received a final committed proposal", "committed", committed)
 	c.startNewRound(common.Big0)
-	return nil
 }

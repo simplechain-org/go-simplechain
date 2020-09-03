@@ -1,18 +1,18 @@
-// Copyright 2017 The go-ethereum Authors
-// This file is part of the go-ethereum library.
+// Copyright 2020 The go-simplechain Authors
+// This file is part of the go-simplechain library.
 //
-// The go-ethereum library is free software: you can redistribute it and/or modify
+// The go-simplechain library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// The go-ethereum library is distributed in the hope that it will be useful,
+// The go-simplechain library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
+// along with the go-simplechain library. If not, see <http://www.gnu.org/licenses/>.
 
 package backend
 
@@ -48,18 +48,18 @@ func New(config *pbft.Config, privateKey *ecdsa.PrivateKey, db ethdb.Database) c
 	recentMessages, _ := lru.NewARC(inmemoryPeers)
 	knownMessages, _ := lru.NewARC(inmemoryMessages)
 	backend := &backend{
-		config:           config,
-		istanbulEventMux: new(event.TypeMux),
-		privateKey:       privateKey,
-		address:          crypto.PubkeyToAddress(privateKey.PublicKey),
-		logger:           log.New(),
-		db:               db,
-		commitCh:         make(chan *types.Block, 1),
-		recents:          recents,
-		candidates:       make(map[common.Address]bool),
-		coreStarted:      false,
-		recentMessages:   recentMessages,
-		knownMessages:    knownMessages,
+		config:         config,
+		pbftEventMux:   new(event.TypeMux),
+		privateKey:     privateKey,
+		address:        crypto.PubkeyToAddress(privateKey.PublicKey),
+		logger:         log.New(),
+		db:             db,
+		commitCh:       make(chan *types.Block, 1),
+		recents:        recents,
+		candidates:     make(map[common.Address]bool),
+		coreStarted:    false,
+		recentMessages: recentMessages,
+		knownMessages:  knownMessages,
 	}
 	backend.core = pc.New(backend, backend.config)
 	return backend
@@ -68,18 +68,18 @@ func New(config *pbft.Config, privateKey *ecdsa.PrivateKey, db ethdb.Database) c
 // ----------------------------------------------------------------------------
 
 type backend struct {
-	config           *pbft.Config
-	istanbulEventMux *event.TypeMux
-	privateKey       *ecdsa.PrivateKey
-	address          common.Address
-	core             pc.Engine
-	logger           log.Logger
-	db               ethdb.Database
-	chain            consensus.ChainReader
-	currentBlock     func() *types.Block
-	hasBadBlock      func(hash common.Hash) bool
+	config       *pbft.Config
+	pbftEventMux *event.TypeMux
+	privateKey   *ecdsa.PrivateKey
+	address      common.Address
+	core         pc.Engine
+	logger       log.Logger
+	db           ethdb.Database
+	chain        consensus.ChainReader
+	currentBlock func() *types.Block
+	hasBadBlock  func(hash common.Hash) bool
 
-	// the channels for istanbul engine notifications
+	// the channels for pbft engine notifications
 	commitCh          chan *types.Block
 	proposedBlockHash common.Hash
 	sealMu            sync.Mutex
@@ -95,10 +95,14 @@ type backend struct {
 
 	// event subscription for ChainHeadEvent event
 	broadcaster consensus.Broadcaster
-	executor    consensus.Executor
+	sealer      consensus.Sealer
+	txPool      consensus.TxPool
 
 	recentMessages *lru.ARCCache // the cache of peer's messages
 	knownMessages  *lru.ARCCache // the cache of self messages
+
+	sealStart time.Time // record engine starting seal time
+	execCost  time.Duration
 }
 
 // zekun: HACK
@@ -112,22 +116,81 @@ func (sb *backend) Address() common.Address {
 }
 
 // Validators implements pbft.Backend.Validators
-func (sb *backend) Validators(proposal pbft.Proposal) pbft.ValidatorSet {
+func (sb *backend) Validators(proposal pbft.Conclusion) pbft.ValidatorSet {
 	return sb.getValidators(proposal.Number().Uint64(), proposal.Hash())
 	//return sb.getValidators(proposal.Number().Uint64(), proposal.PendingHash())
 }
 
 // Broadcast implements pbft.Backend.Broadcast
-func (sb *backend) Broadcast(valSet pbft.ValidatorSet, payload []byte) error {
+func (sb *backend) Broadcast(valSet pbft.ValidatorSet, sender common.Address, payload []byte) error {
 	// send to others
-	sb.Gossip(valSet, payload)
+	//sb.Gossip(valSet, payload)
+	sb.Guidance(valSet, sender, payload)
 	// send to self
 	msg := pbft.MessageEvent{
 		Payload: payload,
 	}
 
-	go sb.istanbulEventMux.Post(msg)
+	go sb.pbftEventMux.Post(msg)
 	return nil
+}
+
+func (sb *backend) SendMsg(val pbft.Validators, payload []byte) error {
+	targets := make(map[common.Address]bool)
+	ps := sb.broadcaster.FindPeers(targets)
+
+	for _, p := range ps {
+		go func(peer consensus.Peer) {
+			if err := peer.Send(PbftMsg, payload); err != nil {
+				log.Error("send PbftMsg failed", "error", err.Error())
+			}
+		}(p)
+	}
+	return nil
+}
+
+func (sb *backend) Guidance(valSet pbft.ValidatorSet, sender common.Address, payload []byte) {
+	hash := pbft.RLPHash(payload)
+	sb.knownMessages.Add(hash, true)
+
+	targets := make([]common.Address, 0, valSet.Size())
+	myIndex, routeIndex := -1, -1 // -1 means not a route node index
+	for i, val := range valSet.List() {
+		if val.Address() == sb.Address() {
+			myIndex = i
+		}
+		if val.Address() == sender {
+			routeIndex = i
+		}
+		targets = append(targets, val.Address())
+	}
+
+	if sb.broadcaster != nil {
+		ps := sb.broadcaster.FindRoute(targets, myIndex, routeIndex)
+
+		for addr, p := range ps {
+			ms, ok := sb.recentMessages.Get(addr)
+			var m *lru.ARCCache
+			if ok {
+				m, _ = ms.(*lru.ARCCache)
+				if _, k := m.Get(hash); k {
+					// This peer had this event, skip it
+					continue
+				}
+			} else {
+				m, _ = lru.NewARC(inmemoryMessages)
+			}
+
+			m.Add(hash, true)
+			sb.recentMessages.Add(addr, m)
+
+			go func(peer consensus.Peer) {
+				if err := peer.Send(PbftMsg, payload); err != nil {
+					log.Error("send PbftMsg failed", "error", err.Error())
+				}
+			}(p)
+		}
+	}
 }
 
 // Broadcast implements pbft.Backend.Gossip
@@ -162,8 +225,8 @@ func (sb *backend) Gossip(valSet pbft.ValidatorSet, payload []byte) {
 			sb.recentMessages.Add(addr, m)
 
 			go func(peer consensus.Peer) {
-				if err := peer.Send(IstanbulMsg, payload); err != nil {
-					log.Error("send IstanbulMsg failed", "error", err.Error())
+				if err := peer.Send(PbftMsg, payload); err != nil {
+					log.Error("send PbftMsg failed", "error", err.Error())
 				}
 			}(p)
 		}
@@ -171,31 +234,43 @@ func (sb *backend) Gossip(valSet pbft.ValidatorSet, payload []byte) {
 }
 
 // Commit implements pbft.Backend.Commit
-func (sb *backend) Commit(proposal pbft.Proposal, seals [][]byte) error {
-	// Check if the proposal is a valid block
-	block, ok := proposal.(*types.Block)
+func (sb *backend) Commit(conclusion pbft.Conclusion, commitSeals [][]byte) error {
+	// Check if the conclusion is a valid block
+	block, ok := conclusion.(*types.Block)
 	if !ok {
-		sb.logger.Error("Invalid proposal, %v", proposal)
+		sb.logger.Error("Invalid conclusion, %v", conclusion)
 		return errInvalidProposal
 	}
 
-	//TODO-D: execute block, pendingBlock需要在prepare阶段执行，这里仅供测试时使用
-	block, err := sb.executor.Execute(block)
-	if err != nil {
-		return err
-	}
+	//TODO-D: execute block, pendingBlock需要在handlePreprepare阶段执行，这里仅供测试时使用
+	//block, err := sb.sealer.Execute(block)
+	//if err != nil {
+	//	return err
+	//}
 
 	h := block.Header()
-	// Append seals into extra-data
-	err = writeCommittedSeals(h, seals)
+	// Append commitSeals into extra-data
+	err := writeCommittedSeals(h, commitSeals)
 	if err != nil {
 		return err
 	}
 	// update block's header
 	block = block.WithSeal(h)
 
-	//sb.logger.Info("Committed", "address", sb.Address(), "hash", proposal.Hash(), "number", proposal.Number().Uint64())
-	sb.logger.Info("Committed", "address", sb.Address(), "hash", proposal.PendingHash(), "number", proposal.Number().Uint64())
+	hTime := time.Unix(int64(h.Time), 0)
+	delay := hTime.Sub(now())
+	if sb.sealer != nil {
+		sb.sealer.AdjustMaxBlockTxs(delay, false)
+	}
+
+	sb.logger.Trace("[report] pbft consensus seal cost",
+		"num", h.Number, "totalCost", time.Since(sb.sealStart), "execCost", sb.execCost)
+
+	<-time.After(delay)
+
+	//sb.logger.Info("Committed", "address", sb.Address(), "hash", conclusion.Hash(), "number", conclusion.Number().Uint64())
+	sb.logger.Info("Committed", "address", sb.Address(), "number", conclusion.Number().Uint64(),
+		"proposeHash", conclusion.PendingHash(), "hash", conclusion.Hash(), "elapsed", time.Since(hTime))
 
 	//TODO-Translate: 如果本节点正在出块并且是commit的区块，直接提交区块（共识前出块节点已经执行过此区块）
 	// 否则，提交给fetcher，作为同步到的区块执行
@@ -214,6 +289,7 @@ func (sb *backend) Commit(proposal pbft.Proposal, seals [][]byte) error {
 	}
 
 	if sb.broadcaster != nil {
+		log.Trace("[debug] broadcast block ...", "number", block.NumberU64(), "hash", block.Hash())
 		sb.broadcaster.Enqueue(fetcherID, block)
 	}
 	return nil
@@ -221,43 +297,115 @@ func (sb *backend) Commit(proposal pbft.Proposal, seals [][]byte) error {
 
 // EventMux implements pbft.Backend.EventMux
 func (sb *backend) EventMux() *event.TypeMux {
-	return sb.istanbulEventMux
+	return sb.pbftEventMux
 }
 
 // Verify implements pbft.Backend.Verify
-func (sb *backend) Verify(proposal pbft.Proposal) (time.Duration, error) {
+func (sb *backend) Verify(proposal pbft.Proposal, checkHeader, checkBody bool) (time.Duration, error) {
 	// Check if the proposal is a valid block
-	block := &types.Block{}
-	block, ok := proposal.(*types.Block)
-	if !ok {
-		sb.logger.Error("Invalid proposal, %v", proposal)
+	var block *types.Block
+	switch pb := proposal.(type) {
+	case *types.Block:
+		block = pb
+	case *types.PartialBlock:
+		block = &pb.Block
+	default:
+		sb.logger.Error("Invalid proposal(wrong type)", "proposal", proposal)
 		return 0, errInvalidProposal
 	}
 
 	// check bad block
-	if sb.HasBadProposal(block.Hash()) {
+	if sb.HasBadProposal(block.PendingHash()) { // proposal only has pendingHash (fixed in blockchain)
+		//if sb.HasBadProposal(block.Hash()) {
 		return 0, core.ErrBlacklistedHash
 	}
 
 	// check block body
-	txnHash := types.DeriveSha(block.Transactions())
-	uncleHash := types.CalcUncleHash(block.Uncles())
-	if txnHash != block.Header().TxHash {
-		return 0, errMismatchTxhashes
-	}
-	if uncleHash != nilUncleHash {
-		return 0, errInvalidUncleHash
+	if checkBody {
+		err := sb.VerifyBody(block)
+		if err != nil {
+			return 0, err
+		}
 	}
 
 	// verify the header of proposed block
-	err := sb.VerifyHeader(sb.chain, block.Header(), false)
-	// ignore errEmptyCommittedSeals error because we don't have the committed seals yet
-	if err == nil || err == errEmptyCommittedSeals {
+	if !checkHeader {
 		return 0, nil
-	} else if err == consensus.ErrFutureBlock {
-		return time.Unix(int64(block.Header().Time), 0).Sub(now()), consensus.ErrFutureBlock
 	}
-	return 0, err
+	err := sb.VerifyHeader(sb.chain, block.Header(), false)
+	switch err {
+	// ignore errEmptyCommittedSeals error because we don't have the committed seals yet
+	case nil, errEmptyCommittedSeals:
+		return 0, nil
+
+	case consensus.ErrFutureBlock:
+		return time.Unix(int64(block.Header().Time), 0).Sub(now()), consensus.ErrFutureBlock
+
+	default:
+		return 0, err
+	}
+}
+
+func (sb *backend) VerifyBody(block *types.Block) error {
+	txnHash := types.DeriveSha(block.Transactions())
+	uncleHash := types.CalcUncleHash(block.Uncles())
+	if txnHash != block.Header().TxHash {
+		return errMismatchTxhashes
+	}
+	if uncleHash != nilUncleHash {
+		return errInvalidUncleHash
+	}
+	return nil
+}
+
+func (sb *backend) FillPartialProposal(proposal pbft.PartialProposal) (filled bool, missed []types.MissedTx, err error) {
+	block, ok := proposal.(*types.PartialBlock)
+	if !ok {
+		sb.logger.Error("Invalid proposal(wrong type), %v", proposal)
+		return false, nil, errInvalidProposal
+	}
+
+	if sb.txPool == nil {
+		return false, nil, errNonExistentTxPool
+	}
+
+	// resize block transactions to digests size
+	*block.Transactions() = make(types.Transactions, len(block.TxDigests()))
+	// fill block transactions by txpool
+	filled = sb.txPool.InitPartialBlock(block)
+
+	return filled, block.MissedTxs, nil
+}
+
+func (sb *backend) Execute(proposal pbft.Proposal) (pbft.Conclusion, error) {
+	var block *types.Block
+	switch pb := proposal.(type) {
+	case *types.Block:
+		block = pb
+	case *types.PartialBlock:
+		block = &pb.Block
+	default:
+		sb.logger.Error("Invalid proposal(wrong type)", "proposal", proposal)
+		return nil, errInvalidProposal
+	}
+
+	if sb.sealer == nil {
+		return block, errNonExistentSealer
+	}
+
+	defer func(start time.Time) {
+		sb.logger.Debug("Execute Proposal", "pendingHash", proposal.PendingHash(), "usedTime", time.Since(start))
+		//sb.logger.Error("[report] Execute Proposal", "usedTime", time.Since(start))
+		sb.execCost = time.Since(start)
+	}(time.Now())
+
+	return sb.sealer.Execute(block)
+}
+
+func (sb *backend) OnTimeout() {
+	if sb.sealer != nil {
+		sb.sealer.AdjustMaxBlockTxs(0, true)
+	}
 }
 
 // Sign implements pbft.Backend.Sign
@@ -294,7 +442,7 @@ func (sb *backend) GetProposer(number uint64) common.Address {
 	return common.Address{}
 }
 
-// ParentValidators implements pbft.Backend.GetParentValidators
+// ParentValidators implements pbft.Backend.ParentValidators
 func (sb *backend) ParentValidators(proposal pbft.Proposal) pbft.ValidatorSet {
 	if block, ok := proposal.(*types.Block); ok {
 		return sb.getValidators(block.Number().Uint64()-1, block.ParentHash())
@@ -305,13 +453,14 @@ func (sb *backend) ParentValidators(proposal pbft.Proposal) pbft.ValidatorSet {
 func (sb *backend) getValidators(number uint64, hash common.Hash) pbft.ValidatorSet {
 	snap, err := sb.snapshot(sb.chain, number, hash, nil)
 	if err != nil {
+		sb.logger.Warn("validators are not found in snapshot")
 		return validator.NewSet(nil, sb.config.ProposerPolicy)
 	}
 	return snap.ValSet
 }
 
-func (sb *backend) LastProposal() (pbft.Proposal, common.Address) {
-	block := sb.currentBlock()
+func (sb *backend) LastProposal() (pbft.Proposal, pbft.Conclusion, common.Address) {
+	block := sb.currentBlock() // current block on blockchain
 
 	var proposer common.Address
 	if block.Number().Cmp(common.Big0) > 0 {
@@ -319,12 +468,12 @@ func (sb *backend) LastProposal() (pbft.Proposal, common.Address) {
 		proposer, err = sb.Author(block.Header())
 		if err != nil {
 			sb.logger.Error("Failed to get block proposer", "err", err)
-			return nil, common.Address{}
+			return nil, nil, common.Address{}
 		}
 	}
 
 	// Return header only block here since we don't need block body
-	return block, proposer
+	return block, block, proposer
 }
 
 func (sb *backend) HasBadProposal(hash common.Hash) bool {

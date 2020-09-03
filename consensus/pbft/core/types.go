@@ -37,7 +37,7 @@ type Engine interface {
 	//
 	// pending request is populated right at the preprepare stage so this would give us the earliest verification
 	// to avoid any race condition of coming propagated blocks
-	IsCurrentProposal(blockHash common.Hash) bool
+	IsCurrentProposal(proposalHash common.Hash) bool
 }
 
 type State uint64
@@ -77,13 +77,22 @@ func (s State) Cmp(y State) int {
 	return 0
 }
 
+type MsgCode = uint64
+
 const (
-	msgPreprepare uint64 = iota
-	msgPrepare
-	msgCommit
-	msgRoundChange
-	//msgAll
+	msgPreprepare  = MsgCode(0x00)
+	msgPrepare     = MsgCode(0x01)
+	msgCommit      = MsgCode(0x02)
+	msgRoundChange = MsgCode(0x03)
+
+	msgPartialPreprepare   = MsgCode(0x10)
+	msgPartialGetMissedTxs = MsgCode(0x11)
+	msgPartialMissedTxs    = MsgCode(0x12)
 )
+
+func isPartialMsg(code uint64) bool {
+	return code >= msgPartialPreprepare && code <= msgPartialMissedTxs
+}
 
 type message struct {
 	Code          uint64

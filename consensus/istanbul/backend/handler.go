@@ -27,6 +27,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/consensus"
 	"github.com/simplechain-org/go-simplechain/consensus/istanbul"
+	"github.com/simplechain-org/go-simplechain/consensus/istanbul/validator"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/p2p"
@@ -123,7 +124,29 @@ func (sb *backend) SetBroadcaster(broadcaster consensus.Broadcaster) {
 	sb.broadcaster = broadcaster
 }
 
-func (sb *backend) NewChainHead() error {
+func (sb *backend) CurrentValidators() ([]common.Address, int) {
+	var validators istanbul.ValidatorSet
+	current := sb.currentBlock()
+	if current == nil {
+		validators = validator.NewSet(nil, sb.config.ProposerPolicy)
+	} else {
+		validators = sb.getValidators(current.NumberU64(), current.Hash())
+	}
+	var (
+		addresses = make([]common.Address, 0, validators.Size())
+		index     = -1
+	)
+
+	for i, v := range validators.List() {
+		if sb.address == v.Address() {
+			index = i
+		}
+		addresses = append(addresses, v.Address())
+	}
+	return addresses, index
+}
+
+func (sb *backend) NewChainHead(*types.Block) error {
 	sb.coreMu.RLock()
 	defer sb.coreMu.RUnlock()
 	if !sb.coreStarted {

@@ -24,17 +24,18 @@ import (
 	"time"
 
 	"github.com/simplechain-org/go-simplechain/common"
+	cmath "github.com/simplechain-org/go-simplechain/common/math"
 	"github.com/simplechain-org/go-simplechain/common/prque"
 	"github.com/simplechain-org/go-simplechain/consensus/pbft"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/log"
-	metrics "github.com/simplechain-org/go-simplechain/metrics"
+	"github.com/simplechain-org/go-simplechain/metrics"
 )
 
 // New creates an Istanbul consensus core
 func New(backend pbft.Backend, config *pbft.Config) Engine {
-	r := metrics.NewRegistry()
+	//r := metrics.NewRegistry()
 	c := &core{
 		config:             config,
 		address:            backend.Address(),
@@ -49,18 +50,26 @@ func New(backend pbft.Backend, config *pbft.Config) Engine {
 		consensusTimestamp: time.Time{},
 		roundMeter:         metrics.NewMeter(),
 		sequenceMeter:      metrics.NewMeter(),
-		consensusTimer:     metrics.NewTimer(),
 	}
 
-	r.Register("consensus/pbft/core/round", c.roundMeter)
-	r.Register("consensus/pbft/core/sequence", c.sequenceMeter)
-	r.Register("consensus/pbft/core/consensus", c.consensusTimer)
+	c.roundMeter = metrics.NewRegisteredMeter("consensus/pbft/core/round", nil)
+	c.sequenceMeter = metrics.NewRegisteredMeter("consensus/pbft/core/sequence", nil)
+	c.consensusTimer = metrics.NewRegisteredTimer("consensus/pbft/core/consensus", nil)
+
+	//r.Register("consensus/pbft/core/round", c.roundMeter)
+	//r.Register("consensus/pbft/core/sequence", c.sequenceMeter)
+	//r.Register("consensus/pbft/core/consensus", c.consensusTimer)
 
 	c.validateFn = c.checkValidatorSignature
 	return c
 }
 
 // ----------------------------------------------------------------------------
+
+const (
+	timeoutRate     = 1.5
+	maxRoundTimeout = 20
+)
 
 type core struct {
 	config  *pbft.Config
@@ -90,13 +99,22 @@ type core struct {
 	pendingRequests   *prque.Prque
 	pendingRequestsMu *sync.Mutex
 
-	consensusTimestamp time.Time
 	// the meter to record the round change rate
 	roundMeter metrics.Meter
 	// the meter to record the sequence update rate
 	sequenceMeter metrics.Meter
 	// the timer to record consensus duration (from accepting a preprepare to final committed stage)
-	consensusTimer metrics.Timer
+	consensusTimer     metrics.Timer
+	consensusTimestamp time.Time
+
+	preprepareTimer     metrics.Timer
+	preprepareTimestamp time.Time
+
+	prepareTimer     metrics.Timer
+	prepareTimestamp time.Time
+
+	commitTimer     metrics.Timer
+	commitTimestamp time.Time
 }
 
 func (c *core) finalizeMessage(msg *message) ([]byte, error) {
@@ -107,9 +125,9 @@ func (c *core) finalizeMessage(msg *message) ([]byte, error) {
 	// Add proof of consensus
 	msg.CommittedSeal = []byte{}
 	// Assign the CommittedSeal if it's a COMMIT message and proposal is not nil
-	if msg.Code == msgCommit && c.current.Proposal() != nil {
-		//seal := PrepareCommittedSeal(c.current.Proposal().Hash())
-		seal := PrepareCommittedSeal(c.current.Proposal().PendingHash())
+	if msg.Code == msgCommit && c.current.Conclusion() != nil {
+		seal := PrepareCommittedSeal(c.current.Conclusion().Hash())
+		//seal := PrepareCommittedSeal(c.current.Proposal().PendingHash()) //TODO: 签pendingHash(proposal)还是Conclusion ？
 		msg.CommittedSeal, err = c.backend.Sign(seal)
 		if err != nil {
 			return nil, err
@@ -145,8 +163,23 @@ func (c *core) broadcast(msg *message) {
 	}
 
 	// Broadcast payload
-	if err = c.backend.Broadcast(c.valSet, payload); err != nil {
+	if err = c.backend.Broadcast(c.valSet, msg.Address, payload); err != nil {
 		logger.Error("Failed to broadcast message", "msg", msg, "err", err)
+		return
+	}
+}
+
+func (c *core) send(msg *message, val pbft.Validators) {
+	logger := c.logger.New("state", c.state)
+
+	payload, err := c.finalizeMessage(msg)
+	if err != nil {
+		logger.Error("Failed to finalize message", "msg", msg, "err", err)
+		return
+	}
+
+	if err = c.backend.SendMsg(val, payload); err != nil {
+		logger.Error("Failed to send message", "msg", msg, "err", err)
 		return
 	}
 }
@@ -166,24 +199,24 @@ func (c *core) IsProposer() bool {
 	return v.IsProposer(c.backend.Address())
 }
 
-func (c *core) IsCurrentProposal(blockHash common.Hash) bool {
+func (c *core) IsCurrentProposal(proposalHash common.Hash) bool {
 	//return c.current != nil && c.current.pendingRequest != nil && c.current.pendingRequest.Proposal.Hash() == blockHash
-	return c.current != nil && c.current.pendingRequest != nil && c.current.pendingRequest.Proposal.PendingHash() == blockHash
+	return c.current != nil && c.current.pendingRequest != nil && c.current.pendingRequest.Proposal.PendingHash() == proposalHash
 }
 
 func (c *core) commit() {
 	c.setState(StateCommitted)
 
-	proposal := c.current.Proposal()
-	if proposal != nil {
+	conclusion := c.current.Conclusion()
+	if conclusion != nil {
 		committedSeals := make([][]byte, c.current.Commits.Size())
 		for i, v := range c.current.Commits.Values() {
 			committedSeals[i] = make([]byte, types.IstanbulExtraSeal)
 			copy(committedSeals[i][:], v.CommittedSeal[:])
 		}
 
-		if err := c.backend.Commit(proposal, committedSeals); err != nil {
-			c.logger.Error("Commit Failed", "proposal", proposal.Hash(), "num", proposal.Number(), "err", err)
+		if err := c.backend.Commit(conclusion, committedSeals); err != nil {
+			c.logger.Error("Commit Failed", "conclusion", conclusion.Hash(), "num", conclusion.Number(), "err", err)
 			c.current.UnlockHash() //Unlock block when insertion fails
 			c.sendNextRoundChange()
 		}
@@ -191,8 +224,17 @@ func (c *core) commit() {
 
 }
 
+var last time.Time //TODO-D: test startNewRound loop time cost
+
 // startNewRound starts a new round. if round equals to 0, it means to starts a new sequence
 func (c *core) startNewRound(round *big.Int) {
+	{
+		if !last.IsZero() {
+			log.Trace("[debug] pbft round time >>>", "round", round, "sinceLast", time.Since(last))
+		}
+		last = time.Now()
+	}
+
 	var logger log.Logger
 	if c.current == nil {
 		logger = c.logger.New("old_round", -1, "old_seq", 0)
@@ -201,8 +243,8 @@ func (c *core) startNewRound(round *big.Int) {
 	}
 
 	roundChange := false
-	// Try to get last proposal
-	lastProposal, lastProposer := c.backend.LastProposal()
+	// Try to get last proposal(conclusion)
+	_, lastProposal, lastProposer := c.backend.LastProposal()
 	if c.current == nil {
 		logger.Trace("Start to the initial round")
 
@@ -334,16 +376,11 @@ func (c *core) newRoundChangeTimer() {
 	c.stopTimer()
 
 	// set timeout based on the round number
-	timeout := time.Duration(c.config.RequestTimeout) * time.Millisecond
-	round := c.current.Round().Uint64()
-
-	//if round > 0 { //TODO-U:
-	//	timeout += time.Duration(math.Pow(2, float64(round))) * time.Second
-	//	log.Error("[debug] timeout ###", "timeout", timeout, "round", round)
-	//}
+	round := cmath.Uint64Min(c.current.Round().Uint64(), maxRoundTimeout)
+	timeout := time.Duration(c.config.RequestTimeout) * time.Millisecond * time.Duration(math.Pow(timeoutRate, float64(round)))
 
 	c.roundChangeTimer = time.AfterFunc(timeout, func() {
-		log.Error("[debug] timeout ###", "timeout", timeout, "round", round)
+		log.Warn("timeout, send view change", "timeout", timeout, "round", round)
 		c.sendEvent(timeoutEvent{}) //FIXME: send timeoutEvent
 	})
 }

@@ -1,25 +1,25 @@
-// Copyright 2017 The go-ethereum Authors
-// This file is part of the go-ethereum library.
+// Copyright 2020 The go-simplechain Authors
+// This file is part of the go-simplechain library.
 //
-// The go-ethereum library is free software: you can redistribute it and/or modify
+// The go-simplechain library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// The go-ethereum library is distributed in the hope that it will be useful,
+// The go-simplechain library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
+// along with the go-simplechain library. If not, see <http://www.gnu.org/licenses/>.
 
 package backend
 
 import (
 	"bytes"
 	"errors"
-	"golang.org/x/crypto/sha3"
+	"github.com/simplechain-org/go-simplechain/common/math"
 	"math/big"
 	"math/rand"
 	"time"
@@ -82,6 +82,10 @@ var (
 	errEmptyCommittedSeals = errors.New("zero committed seals")
 	// errMismatchTxhashes is returned if the TxHash in header is mismatch.
 	errMismatchTxhashes = errors.New("mismatch transactions hashes")
+	// errNonExistentSealer is sealer required but was not set
+	errNonExistentSealer = errors.New("required sealer was not set")
+	// errNonExistentTxPool is txpool required but was not set
+	errNonExistentTxPool = errors.New("required txpool was not set")
 )
 var (
 	defaultDifficulty = big.NewInt(1)
@@ -96,7 +100,7 @@ var (
 	recentAddresses, _ = lru.NewARC(inmemoryAddresses)
 )
 
-// Author retrieves the Ethereum address of the account that minted the given
+// Author retrieves the address of the account that minted the given
 // block, which may be different from the header's coinbase if a consensus
 // engine is based on signatures.
 func (sb *backend) Author(header *types.Header) (common.Address, error) {
@@ -107,14 +111,14 @@ func (sb *backend) Author(header *types.Header) (common.Address, error) {
 // It will extract for each seal who signed it, regardless of if the seal is
 // repeated
 func (sb *backend) Signers(header *types.Header) ([]common.Address, error) {
-	extra, err := types.ExtractIstanbulExtra(header)
+	extra, err := types.ExtractByzantineExtra(header)
 	if err != nil {
 		return []common.Address{}, err
 	}
 
 	var addrs []common.Address
-	//proposalSeal := istanbulCore.PrepareCommittedSeal(header.Hash())
-	proposalSeal := istanbulCore.PrepareCommittedSeal(header.PendingHash()) //FIXME: should commit signature with hash not pendingHash
+	proposalSeal := istanbulCore.PrepareCommittedSeal(header.Hash())
+	//proposalSeal := istanbulCore.PrepareCommittedSeal(header.PendingHash()) //FIXME: should commit signature with hash not pendingHash
 
 	// 1. Get committed seals from current header
 	for _, seal := range extra.CommittedSeal {
@@ -151,11 +155,11 @@ func (sb *backend) verifyHeader(chain consensus.ChainReader, header *types.Heade
 	}
 
 	// Ensure that the extra data format is satisfied
-	if _, err := types.ExtractIstanbulExtra(header); err != nil {
+	if _, err := types.ExtractByzantineExtra(header); err != nil {
 		return errInvalidExtraDataFormat
 	}
 
-	// Ensure that the coinbase is valid
+	// Ensure that the nonce is valid
 	if header.Nonce != (emptyNonce) && !bytes.Equal(header.Nonce[:], nonceAuthVote) && !bytes.Equal(header.Nonce[:], nonceDropVote) {
 		return errInvalidNonce
 	}
@@ -285,7 +289,7 @@ func (sb *backend) verifyCommittedSeals(chain consensus.ChainReader, header *typ
 		return err
 	}
 
-	extra, err := types.ExtractIstanbulExtra(header)
+	extra, err := types.ExtractByzantineExtra(header)
 	if err != nil {
 		return err
 	}
@@ -388,10 +392,8 @@ func (sb *backend) Prepare(chain consensus.ChainReader, header *types.Header) er
 	header.Extra = extra
 
 	// set header's timestamp
-	header.Time = parent.Time + sb.config.BlockPeriod
-	if int64(header.Time) < time.Now().Unix() {
-		header.Time = uint64(time.Now().Unix())
-	}
+	header.Time = math.Uint64Max(parent.Time+sb.config.BlockPeriod, uint64(time.Now().Unix()))
+
 	return nil
 }
 
@@ -447,7 +449,7 @@ func (sb *backend) Seal(chain consensus.ChainReader, block *types.Block, results
 	//delay := time.Unix(int64(header.Time), 0).Sub(now())
 
 	go func() {
-		// TODO-U: seal immediately
+		// TODO-U: seal immediately, wait at commit phase
 		// wait for the timestamp of header, use this to adjust the block period
 		//select {
 		//case <-time.After(delay):
@@ -455,6 +457,8 @@ func (sb *backend) Seal(chain consensus.ChainReader, block *types.Block, results
 		//	results <- nil
 		//	return
 		//}
+
+		sb.sealStart = now()
 
 		// get the proposed block hash and clear it if the seal() is completed.
 		sb.sealMu.Lock()
@@ -472,10 +476,9 @@ func (sb *backend) Seal(chain consensus.ChainReader, block *types.Block, results
 		for {
 			select {
 			case result := <-sb.commitCh:
-				// if the block hash and the hash from channel are the same,
+				// if the block sealHash and the sealHash from channel are the same,
 				// return the result. Otherwise, keep waiting the next hash.
 				if result != nil && sb.SealHash(block.Header()) == sb.SealHash(result.Header()) {
-					//if result != nil && block.Hash() == result.Hash() { // FIXME: use PendingHash() instead of Hash()
 					results <- result
 					return
 				}
@@ -583,7 +586,7 @@ func (sb *backend) snapshot(chain consensus.ChainReader, number uint64, hash com
 			if err := sb.VerifyHeader(chain, genesis, false); err != nil {
 				return nil, err
 			}
-			istanbulExtra, err := types.ExtractIstanbulExtra(genesis)
+			istanbulExtra, err := types.ExtractByzantineExtra(genesis)
 			if err != nil {
 				return nil, err
 			}
@@ -633,7 +636,6 @@ func (sb *backend) snapshot(chain consensus.ChainReader, number uint64, hash com
 	return snap, err
 }
 
-// FIXME: Need to update this for Istanbul
 // sigHash returns the hash which is used as input for the Istanbul
 // signing. It is the hash of the entire header apart from the 65 byte signature
 // contained at the end of the extra data.
@@ -642,13 +644,16 @@ func (sb *backend) snapshot(chain consensus.ChainReader, number uint64, hash com
 // panics. This is done to avoid accidentally using both forms (signature present
 // or not), which could be abused to produce different hashes for the same header.
 func sigHash(header *types.Header) (hash common.Hash) {
-	//return header.PendingHash()
-	hasher := sha3.NewLegacyKeccak256()
-
+	//hasher := sha3.NewLegacyKeccak256()
+	//
+	//rlp.Encode(hasher, types.PbftPendingHeader(header, false))
+	//hasher.Sum(hash[:0])
 	// Clean seal is required for calculating proposer seal.
-	rlp.Encode(hasher, types.PbftPendingHeader(header, false))
-	hasher.Sum(hash[:0])
-	return hash
+	sealHeader := types.PbftPendingHeader(header, false)
+	if sealHeader == nil {
+		return header.Hash() //TODO: if sealHeader is nil
+	}
+	return types.RlpPendingHeaderHash(sealHeader)
 }
 
 // SealHash returns the hash of a block prior to it being sealed.
@@ -656,19 +661,21 @@ func (sb *backend) SealHash(header *types.Header) common.Hash {
 	return sigHash(header)
 }
 
-// ecrecover extracts the Ethereum account address from a signed header.
+// ecrecover extracts the account address from a signed header.
 func ecrecover(header *types.Header) (common.Address, error) {
-	hash := header.Hash()
+	//hash := header.Hash()
+	hash := header.PendingHash() //TODO-U: sealer use Hash or PendingHash ?
 	if addr, ok := recentAddresses.Get(hash); ok {
 		return addr.(common.Address), nil
 	}
 
 	// Retrieve the signature from the header extra-data
-	istanbulExtra, err := types.ExtractIstanbulExtra(header)
+	istanbulExtra, err := types.ExtractByzantineExtra(header)
 	if err != nil {
 		return common.Address{}, err
 	}
 
+	// address for seal leader
 	addr, err := pbft.GetSignatureAddress(sigHash(header).Bytes(), istanbulExtra.Seal)
 	if err != nil {
 		return addr, err
@@ -687,7 +694,7 @@ func prepareExtra(header *types.Header, vals []common.Address) ([]byte, error) {
 	}
 	buf.Write(header.Extra[:types.IstanbulExtraVanity])
 
-	ist := &types.IstanbulExtra{
+	ist := &types.ByzantineExtra{
 		Validators:    vals,
 		Seal:          []byte{},
 		CommittedSeal: [][]byte{},
@@ -708,7 +715,7 @@ func writeSeal(h *types.Header, seal []byte) error {
 		return errInvalidSignature
 	}
 
-	istanbulExtra, err := types.ExtractIstanbulExtra(h)
+	istanbulExtra, err := types.ExtractByzantineExtra(h)
 	if err != nil {
 		return err
 	}
@@ -735,7 +742,7 @@ func writeCommittedSeals(h *types.Header, committedSeals [][]byte) error {
 		}
 	}
 
-	istanbulExtra, err := types.ExtractIstanbulExtra(h)
+	istanbulExtra, err := types.ExtractByzantineExtra(h)
 	if err != nil {
 		return err
 	}

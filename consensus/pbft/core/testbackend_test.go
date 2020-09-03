@@ -18,6 +18,7 @@ package core
 
 import (
 	"crypto/ecdsa"
+	"github.com/simplechain-org/go-simplechain/core/types"
 	"math/big"
 	"time"
 
@@ -48,8 +49,16 @@ type testSystemBackend struct {
 	db      ethdb.Database
 }
 
+func (self *testSystemBackend) SendMsg(val pbft.Validators, payload []byte) error {
+	panic("implement me")
+}
+
+func (self *testSystemBackend) FillPartialProposal(proposal pbft.PartialProposal) (bool, []types.MissedTx, error) {
+	panic("implement me")
+}
+
 type testCommittedMsgs struct {
-	commitProposal pbft.Proposal
+	commitProposal pbft.Conclusion
 	committedSeals [][]byte
 }
 
@@ -62,7 +71,7 @@ func (self *testSystemBackend) Address() common.Address {
 }
 
 // Peers returns all connected peers
-func (self *testSystemBackend) Validators(proposal pbft.Proposal) pbft.ValidatorSet {
+func (self *testSystemBackend) Validators(proposal pbft.Conclusion) pbft.ValidatorSet {
 	return self.peers
 }
 
@@ -79,7 +88,7 @@ func (self *testSystemBackend) Send(message []byte, target common.Address) error
 	return nil
 }
 
-func (self *testSystemBackend) Broadcast(valSet pbft.ValidatorSet, message []byte) error {
+func (self *testSystemBackend) Broadcast(valSet pbft.ValidatorSet, sender common.Address, message []byte) error {
 	testLogger.Info("enqueuing a message...", "address", self.Address())
 	self.sentMsgs = append(self.sentMsgs, message)
 	self.sys.queuedMessage <- pbft.MessageEvent{
@@ -92,7 +101,11 @@ func (self *testSystemBackend) Gossip(valSet pbft.ValidatorSet, message []byte) 
 	testLogger.Warn("not sign any data")
 }
 
-func (self *testSystemBackend) Commit(proposal pbft.Proposal, seals [][]byte) error {
+func (self *testSystemBackend) Guidance(valSet pbft.ValidatorSet, sender common.Address, message []byte) {
+	testLogger.Warn("not sign any data")
+}
+
+func (self *testSystemBackend) Commit(proposal pbft.Conclusion, seals [][]byte) error {
 	testLogger.Info("commit message", "address", self.Address())
 	self.committedMsgs = append(self.committedMsgs, testCommittedMsgs{
 		commitProposal: proposal,
@@ -104,9 +117,15 @@ func (self *testSystemBackend) Commit(proposal pbft.Proposal, seals [][]byte) er
 	return nil
 }
 
-func (self *testSystemBackend) Verify(proposal pbft.Proposal) (time.Duration, error) {
+func (self *testSystemBackend) Verify(proposal pbft.Proposal, _, _ bool) (time.Duration, error) {
 	return 0, nil
 }
+
+func (self *testSystemBackend) Execute(proposal pbft.Proposal) (pbft.Conclusion, error) {
+	return proposal.(pbft.Conclusion), nil
+}
+
+func (self *testSystemBackend) OnTimeout() {}
 
 func (self *testSystemBackend) Sign(data []byte) ([]byte, error) {
 	testLogger.Info("returning current backend address so that CheckValidatorSignature returns the same value")
@@ -135,12 +154,15 @@ func (self *testSystemBackend) HasBadProposal(hash common.Hash) bool {
 	return false
 }
 
-func (self *testSystemBackend) LastProposal() (pbft.Proposal, common.Address) {
+func (self *testSystemBackend) LastProposal() (pbft.Proposal, pbft.Conclusion, common.Address) {
 	l := len(self.committedMsgs)
+	var block pbft.Conclusion
 	if l > 0 {
-		return self.committedMsgs[l-1].commitProposal, common.Address{}
+		block = self.committedMsgs[l-1].commitProposal
+	} else {
+		block = makeBlock(0)
 	}
-	return makeBlock(0), common.Address{}
+	return block, block, common.Address{}
 }
 
 // Only block height 5 will return true
@@ -156,8 +178,39 @@ func (self *testSystemBackend) ParentValidators(proposal pbft.Proposal) pbft.Val
 	return self.peers
 }
 
-func (sb *testSystemBackend) Close() error {
+func (self *testSystemBackend) Close() error {
 	return nil
+}
+
+type testSystemTxPool struct {
+	all map[common.Hash]*types.Transaction
+}
+
+func newTestSystemTxPool(txs ...*types.Transaction) *testSystemTxPool {
+	pool := &testSystemTxPool{make(map[common.Hash]*types.Transaction)}
+	for _, tx := range txs {
+		pool.all[tx.Hash()] = tx
+	}
+	return pool
+}
+
+func (pool *testSystemTxPool) InitPartialBlock(pb *types.PartialBlock) bool {
+	digests := pb.TxDigests()
+	misses := pb.MissedTxs
+	transactions := pb.Transactions()
+
+	for index, hash := range digests {
+		if tx := pool.all[hash]; tx != nil {
+			(*transactions)[index] = tx
+		} else {
+			misses = append(misses, types.MissedTx{Hash: hash, Index: uint32(index)})
+		}
+	}
+
+	if len(misses) > 0 {
+		return false
+	}
+	return true
 }
 
 // ==============================================

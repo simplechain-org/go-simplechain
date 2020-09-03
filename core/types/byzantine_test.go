@@ -1,29 +1,30 @@
-// Copyright 2017 The go-ethereum Authors
-// This file is part of the go-ethereum library.
+// Copyright 2014 The go-simplechain Authors
+// This file is part of the go-simplechain library.
 //
-// The go-ethereum library is free software: you can redistribute it and/or modify
+// The go-simplechain library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// The go-ethereum library is distributed in the hope that it will be useful,
+// The go-simplechain library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
+// along with the go-simplechain library. If not, see <http://www.gnu.org/licenses/>.
 
 package types
 
 import (
 	"bytes"
-	"fmt"
-	"reflect"
-	"testing"
-
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
+	"github.com/simplechain-org/go-simplechain/rlp"
+	"github.com/stretchr/testify/assert"
+	"math/big"
+	"reflect"
+	"testing"
 )
 
 func TestHeaderHash(t *testing.T) {
@@ -49,14 +50,14 @@ func TestExtractToIstanbul(t *testing.T) {
 	testCases := []struct {
 		vanity         []byte
 		istRawData     []byte
-		expectedResult *IstanbulExtra
+		expectedResult *ByzantineExtra
 		expectedErr    error
 	}{
 		{
 			// normal case
 			bytes.Repeat([]byte{0x00}, IstanbulExtraVanity),
 			hexutil.MustDecode("0xf858f8549444add0ec310f115a0e603b2d7db9f067778eaf8a94294fc7e8f22b3bcdcf955dd7ff3ba2ed833f8212946beaaed781d2d2ab6350f5c4566a2c6eaac407a6948be76812f765c24641ec63dc2852b378aba2b44080c0"),
-			&IstanbulExtra{
+			&ByzantineExtra{
 				Validators: []common.Address{
 					common.BytesToAddress(hexutil.MustDecode("0x44add0ec310f115a0e603b2d7db9f067778eaf8a")),
 					common.BytesToAddress(hexutil.MustDecode("0x294fc7e8f22b3bcdcf955dd7ff3ba2ed833f8212")),
@@ -73,12 +74,12 @@ func TestExtractToIstanbul(t *testing.T) {
 			bytes.Repeat([]byte{0x00}, IstanbulExtraVanity-1),
 			nil,
 			nil,
-			ErrInvalidIstanbulHeaderExtra,
+			ErrInvalidByzantineHeaderExtra,
 		},
 	}
 	for _, test := range testCases {
 		h := &Header{Extra: append(test.vanity, test.istRawData...)}
-		istanbulExtra, err := ExtractIstanbulExtra(h)
+		istanbulExtra, err := ExtractByzantineExtra(h)
 		if err != test.expectedErr {
 			t.Errorf("expected: %v, but got: %v", test.expectedErr, err)
 		}
@@ -88,10 +89,53 @@ func TestExtractToIstanbul(t *testing.T) {
 	}
 }
 
-func TestMixDegist(t *testing.T) {
-	//w := "Istanbul practical byzantine fault tolerance"
-	w := "Parallel byzantine fault tolerance"
-	hex := hexutil.Encode([]byte(w))
-	hash := common.HexToHash(hex)
-	fmt.Println(hash.String(), IstanbulDigest.String(), hash == IstanbulDigest)
+func TestPartialBlock_RLP(t *testing.T) {
+	block := Block{
+		header: &Header{
+			ParentHash:  common.Hash{1},
+			UncleHash:   common.Hash{},
+			Coinbase:    common.Address{},
+			Root:        common.Hash{1},
+			TxHash:      common.Hash{2},
+			ReceiptHash: common.Hash{3},
+			Bloom:       Bloom{},
+			Difficulty:  big.NewInt(1),
+			Number:      big.NewInt(2),
+			GasLimit:    1,
+			GasUsed:     2,
+			Time:        3,
+			Extra:       []byte{123, 22},
+			MixDigest:   common.Hash{1},
+			Nonce:       BlockNonce{},
+		},
+		transactions: Transactions{
+			{
+				data: txdata{
+					AccountNonce: 1,
+					Price:        big.NewInt(1),
+					GasLimit:     2,
+					Recipient:    nil,
+					Amount:       big.NewInt(2),
+					Payload:      nil,
+					BlockLimit:   3,
+				},
+			},
+		},
+	}
+
+	pb := NewPartialBlock(&block)
+
+	enc, err := rlp.EncodeToBytes(pb)
+	assert.NoError(t, err)
+
+	var partialBlock PartialBlock
+	if err := rlp.DecodeBytes(enc, &partialBlock); err != nil {
+		t.Fatal("decode error: ", err)
+	}
+
+	//fmt.Println(partialBlock.Block)
+	assert.True(t, reflect.DeepEqual(partialBlock.Header(), block.Header()))
+	assert.Nil(t, partialBlock.transactions)
+	assert.Equal(t, block.transactions[0].Hash(), partialBlock.txs[0])
+
 }

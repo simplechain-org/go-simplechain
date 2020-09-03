@@ -1,18 +1,18 @@
-// Copyright 2017 The go-ethereum Authors
-// This file is part of the go-ethereum library.
+// Copyright 2020 The go-simplechain Authors
+// This file is part of the go-simplechain library.
 //
-// The go-ethereum library is free software: you can redistribute it and/or modify
+// The go-simplechain library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// The go-ethereum library is distributed in the hope that it will be useful,
+// The go-simplechain library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
+// along with the go-simplechain library. If not, see <http://www.gnu.org/licenses/>.
 
 package core
 
@@ -61,10 +61,14 @@ func (c *core) checkMessage(msgCode uint64, view *pbft.View) error {
 		return errFutureMessage
 	}
 
-	// StateAcceptRequest only accepts msgPreprepare
-	// other messages are future messages
 	if c.state == StateAcceptRequest {
-		if msgCode > msgPreprepare {
+		switch {
+		// unsupported partial messages node
+		case isPartialMsg(msgCode) && !c.config.EnablePartially:
+			return errInvalidMessage
+		// StateAcceptRequest only accepts msgPreprepare or msgPartial*
+		// other messages are future messages
+		case msgCode > msgPreprepare && msgCode <= msgRoundChange:
 			return errFutureMessage
 		}
 		return nil

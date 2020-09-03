@@ -17,10 +17,10 @@
 package core
 
 import (
-	"reflect"
-
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/consensus/pbft"
+	"reflect"
+	"time"
 )
 
 func (c *core) sendCommit() {
@@ -51,12 +51,18 @@ func (c *core) broadcastCommit(sub *pbft.Subject) {
 }
 
 func (c *core) handleCommit(msg *message, src pbft.Validator) error {
+	logger := c.logger.New("from", src, "state", c.state)
+	c.commitTimestamp = time.Now()
+
 	// Decode COMMIT message
 	var commit *pbft.Subject
 	err := msg.Decode(&commit)
 	if err != nil {
 		return errFailedDecodeCommit
 	}
+
+	logger.Trace("[debug] $$ pbft handle Commit $$ 【3】", "number", commit.View.Sequence,
+		"hash", commit.Pending)
 
 	if err := c.checkMessage(msgCommit, commit.View); err != nil {
 		return err
@@ -67,6 +73,8 @@ func (c *core) handleCommit(msg *message, src pbft.Validator) error {
 	}
 
 	c.acceptCommit(msg, src)
+
+	logger.Trace("[report] handle commit", "cost", time.Since(c.commitTimestamp))
 
 	// Commit the proposal once we have enough COMMIT messages and we are not in the Committed state.
 	//

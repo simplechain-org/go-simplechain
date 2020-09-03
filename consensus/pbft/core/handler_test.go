@@ -121,7 +121,7 @@ func TestHandleMsg(t *testing.T) {
 	}
 
 	// with malicious payload
-	if err := r0.handleMsg([]byte{1}); err == nil {
+	if _, err := r0.handleMsg([]byte{1}); err == nil {
 		t.Errorf("error mismatch: have %v, want nil", err)
 	}
 }

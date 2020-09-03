@@ -134,8 +134,15 @@ type Byzantine interface {
 	// Stop stops the engine
 	Stop() error
 
+	// get block validators and self index(return -1 if not a validator) of current blockchain height
+	CurrentValidators() ([]common.Address, int)
+
+	// handle p2p msg, return whether engine was handled
 	HandleMsg(addr common.Address, msg p2p.Msg) (bool, error)
-	NewChainHead() error
+
+	// report new block head is committed to blockchain
+	NewChainHead(block *types.Block) error
+
 	SetBroadcaster(broadcaster Broadcaster)
 }
 
@@ -146,5 +153,8 @@ type Istanbul interface {
 
 type Pbft interface {
 	Byzantine
-	SetExecutor(executor Executor)
+
+	SetSealer(sealer Sealer)
+
+	SetTxPool(pool TxPool)
 }

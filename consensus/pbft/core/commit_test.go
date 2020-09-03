@@ -32,12 +32,14 @@ func TestHandleCommit(t *testing.T) {
 	F := uint64(1)
 
 	proposal := newTestProposal()
+	conclusion := newTestConclusion()
 	expectedSubject := &pbft.Subject{
 		View: &pbft.View{
 			Round:    big.NewInt(0),
 			Sequence: proposal.Number(),
 		},
-		Digest: proposal.PendingHash(),
+		Pending: proposal.PendingHash(),
+		Digest:  conclusion.Hash(),
 	}
 
 	testCases := []struct {
@@ -243,8 +245,9 @@ func TestVerifyCommit(t *testing.T) {
 			// normal case
 			expected: nil,
 			commit: &pbft.Subject{
-				View:   &pbft.View{Round: big.NewInt(0), Sequence: big.NewInt(0)},
-				Digest: newTestProposal().PendingHash(),
+				View:    &pbft.View{Round: big.NewInt(0), Sequence: big.NewInt(0)},
+				Pending: newTestProposal().PendingHash(),
+				Digest:  newTestConclusion().Hash(),
 			},
 			roundState: newTestRoundState(
 				&pbft.View{Round: big.NewInt(0), Sequence: big.NewInt(0)},
@@ -255,8 +258,9 @@ func TestVerifyCommit(t *testing.T) {
 			// old message
 			expected: errInconsistentSubject,
 			commit: &pbft.Subject{
-				View:   &pbft.View{Round: big.NewInt(0), Sequence: big.NewInt(0)},
-				Digest: newTestProposal().PendingHash(),
+				View:    &pbft.View{Round: big.NewInt(0), Sequence: big.NewInt(0)},
+				Pending: newTestProposal().PendingHash(),
+				Digest:  newTestConclusion().Hash(),
 			},
 			roundState: newTestRoundState(
 				&pbft.View{Round: big.NewInt(1), Sequence: big.NewInt(1)},
@@ -267,8 +271,9 @@ func TestVerifyCommit(t *testing.T) {
 			// different digest
 			expected: errInconsistentSubject,
 			commit: &pbft.Subject{
-				View:   &pbft.View{Round: big.NewInt(0), Sequence: big.NewInt(0)},
-				Digest: common.BytesToHash([]byte("1234567890")),
+				View:    &pbft.View{Round: big.NewInt(0), Sequence: big.NewInt(0)},
+				Pending: common.BytesToHash([]byte("1234567890")),
+				Digest:  common.BytesToHash([]byte("1234567890")),
 			},
 			roundState: newTestRoundState(
 				&pbft.View{Round: big.NewInt(1), Sequence: big.NewInt(1)},
@@ -279,8 +284,9 @@ func TestVerifyCommit(t *testing.T) {
 			// malicious package(lack of sequence)
 			expected: errInconsistentSubject,
 			commit: &pbft.Subject{
-				View:   &pbft.View{Round: big.NewInt(0), Sequence: nil},
-				Digest: newTestProposal().PendingHash(),
+				View:    &pbft.View{Round: big.NewInt(0), Sequence: nil},
+				Pending: newTestProposal().PendingHash(),
+				Digest:  newTestConclusion().Hash(),
 			},
 			roundState: newTestRoundState(
 				&pbft.View{Round: big.NewInt(1), Sequence: big.NewInt(1)},
@@ -292,7 +298,8 @@ func TestVerifyCommit(t *testing.T) {
 			expected: errInconsistentSubject,
 			commit: &pbft.Subject{
 				View:   &pbft.View{Round: big.NewInt(1), Sequence: big.NewInt(0)},
-				Digest: newTestProposal().PendingHash(),
+				Pending: newTestProposal().PendingHash(),
+				Digest:  newTestConclusion().Hash(),
 			},
 			roundState: newTestRoundState(
 				&pbft.View{Round: big.NewInt(0), Sequence: big.NewInt(0)},
@@ -304,7 +311,8 @@ func TestVerifyCommit(t *testing.T) {
 			expected: errInconsistentSubject,
 			commit: &pbft.Subject{
 				View:   &pbft.View{Round: big.NewInt(0), Sequence: big.NewInt(1)},
-				Digest: newTestProposal().PendingHash(),
+				Pending: newTestProposal().PendingHash(),
+				Digest:  newTestConclusion().Hash(),
 			},
 			roundState: newTestRoundState(
 				&pbft.View{Round: big.NewInt(0), Sequence: big.NewInt(0)},

@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/simplechain-org/go-simplechain/common"
+	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/event"
 )
 
@@ -30,24 +31,36 @@ type Backend interface {
 	Address() common.Address
 
 	// Validators returns the validator set
-	Validators(proposal Proposal) ValidatorSet
+	Validators(conclusion Conclusion) ValidatorSet
 
 	// EventMux returns the event mux in backend
 	EventMux() *event.TypeMux
 
-	// Broadcast sends a message to all validators (include self)
-	Broadcast(valSet ValidatorSet, payload []byte) error
+	// Broadcast sends a message to other validators by router
+	Broadcast(valSet ValidatorSet, sender common.Address, payload []byte) error
+
+	// Send a message to the specific validators
+	SendMsg(val Validators, payload []byte) error
+
+	// Guidance sends a message to other validators by router
+	Guidance(valSet ValidatorSet, sender common.Address, payload []byte)
 
 	// Gossip sends a message to all validators (exclude self)
 	Gossip(valSet ValidatorSet, payload []byte)
 
 	// Commit delivers an approved proposal to backend.
 	// The delivered proposal will be put into blockchain.
-	Commit(proposal Proposal, seals [][]byte) error
+	Commit(proposal Conclusion, commitSeals [][]byte) error
 
 	// Verify verifies the proposal. If a consensus.ErrFutureBlock error is returned,
 	// the time difference of the proposal and current time is also returned.
-	Verify(Proposal) (time.Duration, error)
+	Verify(proposal Proposal, checkHeader, checkBody bool) (time.Duration, error)
+
+	Execute(Proposal) (Conclusion, error)
+
+	OnTimeout()
+
+	FillPartialProposal(proposal PartialProposal) (bool, []types.MissedTx, error)
 
 	// Sign signs input data with the backend's private key
 	Sign([]byte) ([]byte, error)
@@ -57,7 +70,7 @@ type Backend interface {
 	CheckSignature(data []byte, addr common.Address, sig []byte) error
 
 	// LastProposal retrieves latest committed proposal and the address of proposer
-	LastProposal() (Proposal, common.Address)
+	LastProposal() (Proposal, Conclusion, common.Address)
 
 	// HasPropsal checks if the combination of the given hash and height matches any existing blocks
 	HasPropsal(hash common.Hash, number *big.Int) bool

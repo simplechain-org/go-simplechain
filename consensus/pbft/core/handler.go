@@ -96,8 +96,9 @@ func (c *core) handleEvents() {
 					c.storeRequestMsg(r)
 				}
 			case pbft.MessageEvent:
-				if err := c.handleMsg(ev.Payload); err == nil {
-					c.backend.Gossip(c.valSet, ev.Payload)
+				if sender, err := c.handleMsg(ev.Payload); err == nil {
+					//c.backend.Gossip(c.valSet, ev.Payload)
+					c.backend.Guidance(c.valSet, sender, ev.Payload)
 				}
 			case backlogEvent:
 				// No need to check signature for internal messages
@@ -107,21 +108,24 @@ func (c *core) handleEvents() {
 						c.logger.Warn("Get message payload failed", "err", err)
 						continue
 					}
-					c.backend.Gossip(c.valSet, p)
+					//c.backend.Gossip(c.valSet, p)
+					c.backend.Guidance(c.valSet, ev.msg.Address, p)
 				}
 			}
 		case _, ok := <-c.timeoutSub.Chan():
 			if !ok {
 				return
 			}
+			c.backend.OnTimeout()
 			c.handleTimeoutMsg()
+
 		case event, ok := <-c.finalCommittedSub.Chan():
 			if !ok {
 				return
 			}
-			switch event.Data.(type) {
+			switch ev := event.Data.(type) {
 			case pbft.FinalCommittedEvent:
-				c.handleFinalCommitted()
+				c.handleFinalCommitted(ev.Committed)
 			}
 		}
 	}
@@ -132,24 +136,24 @@ func (c *core) sendEvent(ev interface{}) {
 	c.backend.EventMux().Post(ev)
 }
 
-func (c *core) handleMsg(payload []byte) error {
+func (c *core) handleMsg(payload []byte) (common.Address, error) {
 	logger := c.logger.New()
 
 	// Decode message and check its signature
 	msg := new(message)
 	if err := msg.FromPayload(payload, c.validateFn); err != nil {
 		logger.Error("Failed to decode message from payload", "err", err)
-		return err
+		return common.Address{}, err
 	}
 
 	// Only accept message if the address is valid
 	_, src := c.valSet.GetByAddress(msg.Address)
 	if src == nil {
 		logger.Error("Invalid address in message", "msg", msg)
-		return pbft.ErrUnauthorizedAddress
+		return msg.Address, pbft.ErrUnauthorizedAddress
 	}
 
-	return c.handleCheckedMsg(msg, src)
+	return msg.Address, c.handleCheckedMsg(msg, src)
 }
 
 func (c *core) handleCheckedMsg(msg *message, src pbft.Validator) error {
@@ -173,6 +177,18 @@ func (c *core) handleCheckedMsg(msg *message, src pbft.Validator) error {
 		return testBacklog(c.handleCommit(msg, src))
 	case msgRoundChange:
 		return testBacklog(c.handleRoundChange(msg, src))
+	case msgPartialPreprepare:
+		if c.config.EnablePartially {
+			return testBacklog(c.handlePartialPreprepare(msg, src))
+		}
+	case msgPartialGetMissedTxs:
+		if c.config.EnablePartially {
+			return testBacklog(c.handleGetMissedTxs(msg, src))
+		}
+	case msgPartialMissedTxs:
+		if c.config.EnablePartially {
+			return testBacklog(c.handleMissedTxs(msg, src))
+		}
 	default:
 		logger.Error("Invalid message", "msg", msg)
 	}
@@ -192,7 +208,7 @@ func (c *core) handleTimeoutMsg() {
 		}
 	}
 
-	lastProposal, _ := c.backend.LastProposal()
+	lastProposal, _, _ := c.backend.LastProposal()
 	if lastProposal != nil && lastProposal.Number().Cmp(c.current.Sequence()) >= 0 {
 		c.logger.Trace("round change timeout, catch up latest sequence", "number", lastProposal.Number().Uint64())
 		c.startNewRound(common.Big0)

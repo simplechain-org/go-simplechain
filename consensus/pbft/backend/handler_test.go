@@ -18,6 +18,7 @@ package backend
 
 import (
 	"bytes"
+	"fmt"
 	"io/ioutil"
 	"math/big"
 	"testing"
@@ -37,7 +38,7 @@ func TestIstanbulMessage(t *testing.T) {
 	// generate one msg
 	data := []byte("data1")
 	hash := pbft.RLPHash(data)
-	msg := makeMsg(IstanbulMsg, data)
+	msg := makeMsg(PbftMsg, data)
 	addr := common.BytesToAddress([]byte("address"))
 
 	// 1. this message should not be in cache
@@ -98,13 +99,19 @@ func TestHandleNewBlockMessage_whenTypical(t *testing.T) {
 func TestHandleNewBlockMessage_whenNotAProposedBlock(t *testing.T) {
 	_, backend := newBlockChain(1)
 	arbitraryAddress := common.BytesToAddress([]byte("arbitrary"))
-	_, arbitraryP2PMessage := buildArbitraryP2PNewBlockMessage(t, false)
-	postAndWait(backend, types.NewBlock(&types.Header{
+	arbitraryBlock, arbitraryP2PMessage := buildArbitraryP2PNewBlockMessage(t, false)
+
+	proposeBlock := types.NewBlock(&types.Header{
 		Number:    big.NewInt(1),
 		Root:      common.BytesToHash([]byte("someroot")),
-		GasLimit:  1,
+		GasLimit:  10000,
 		MixDigest: types.PbftDigest,
-	}, nil, nil, nil), t)
+	}, nil, nil, nil)
+
+	postAndWait(backend, proposeBlock, t)
+
+	fmt.Println(arbitraryBlock.PendingHash().String())
+	fmt.Println(proposeBlock.PendingHash().String())
 
 	handled, err := backend.HandleMsg(arbitraryAddress, arbitraryP2PMessage)
 

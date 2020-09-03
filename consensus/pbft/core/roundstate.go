@@ -48,6 +48,7 @@ type roundState struct {
 	round          *big.Int
 	sequence       *big.Int
 	Preprepare     *pbft.Preprepare
+	Prepare        pbft.Conclusion // executed proposal
 	Prepares       *messageSet
 	Commits        *messageSet
 	lockedHash     common.Hash
@@ -76,7 +77,7 @@ func (s *roundState) Subject() *pbft.Subject {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	if s.Preprepare == nil {
+	if s.Preprepare == nil || s.Prepare == nil {
 		return nil
 	}
 
@@ -85,8 +86,8 @@ func (s *roundState) Subject() *pbft.Subject {
 			Round:    new(big.Int).Set(s.round),
 			Sequence: new(big.Int).Set(s.sequence),
 		},
-		//Digest: s.Preprepare.Proposal.Hash(),
-		Digest: s.Preprepare.Proposal.PendingHash(),
+		Pending: s.Preprepare.Proposal.PendingHash(), // pending hash of proposal
+		Digest:  s.Prepare.Hash(),                    // hash of conclusion
 	}
 }
 
@@ -97,12 +98,44 @@ func (s *roundState) SetPreprepare(preprepare *pbft.Preprepare) {
 	s.Preprepare = preprepare
 }
 
+func (s *roundState) SetPrepare(prepare pbft.Conclusion) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.Prepare = prepare
+}
+
 func (s *roundState) Proposal() pbft.Proposal {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	if s.Preprepare != nil {
 		return s.Preprepare.Proposal
+	}
+
+	return nil
+}
+
+// return partial block proposal,
+// return nil if the proposal is not exist or not a partial proposal
+func (s *roundState) PartialProposal() pbft.PartialProposal {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.Preprepare != nil {
+		if pp, ok := s.Preprepare.Proposal.(pbft.PartialProposal); ok {
+			return pp
+		}
+	}
+	return nil
+}
+
+func (s *roundState) Conclusion() pbft.Conclusion {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.Prepare != nil {
+		return s.Prepare
 	}
 
 	return nil

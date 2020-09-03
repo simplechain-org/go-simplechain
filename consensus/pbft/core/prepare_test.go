@@ -33,12 +33,14 @@ func TestHandlePrepare(t *testing.T) {
 	F := uint64(1)
 
 	proposal := newTestProposal()
+	conclusion := newTestConclusion()
 	expectedSubject := &pbft.Subject{
 		View: &pbft.View{
 			Round:    big.NewInt(0),
 			Sequence: proposal.Number(),
 		},
-		Digest: proposal.PendingHash(),
+		Pending: proposal.PendingHash(),
+		Digest:  conclusion.Hash(),
 	}
 
 	testCases := []struct {
@@ -277,8 +279,9 @@ func TestVerifyPrepare(t *testing.T) {
 			// normal case
 			expected: nil,
 			prepare: &pbft.Subject{
-				View:   &pbft.View{Round: big.NewInt(0), Sequence: big.NewInt(0)},
-				Digest: newTestProposal().PendingHash(),
+				View:    &pbft.View{Round: big.NewInt(0), Sequence: big.NewInt(0)},
+				Pending: newTestProposal().PendingHash(),
+				Digest:  newTestConclusion().Hash(),
 			},
 			roundState: newTestRoundState(
 				&pbft.View{Round: big.NewInt(0), Sequence: big.NewInt(0)},
@@ -290,7 +293,8 @@ func TestVerifyPrepare(t *testing.T) {
 			expected: errInconsistentSubject,
 			prepare: &pbft.Subject{
 				View:   &pbft.View{Round: big.NewInt(0), Sequence: big.NewInt(0)},
-				Digest: newTestProposal().PendingHash(),
+				Pending: newTestProposal().PendingHash(),
+				Digest:  newTestConclusion().Hash(),
 			},
 			roundState: newTestRoundState(
 				&pbft.View{Round: big.NewInt(1), Sequence: big.NewInt(1)},
@@ -302,6 +306,7 @@ func TestVerifyPrepare(t *testing.T) {
 			expected: errInconsistentSubject,
 			prepare: &pbft.Subject{
 				View:   &pbft.View{Round: big.NewInt(0), Sequence: big.NewInt(0)},
+				Pending: common.BytesToHash([]byte("1234567890")),
 				Digest: common.BytesToHash([]byte("1234567890")),
 			},
 			roundState: newTestRoundState(
@@ -314,7 +319,8 @@ func TestVerifyPrepare(t *testing.T) {
 			expected: errInconsistentSubject,
 			prepare: &pbft.Subject{
 				View:   &pbft.View{Round: big.NewInt(0), Sequence: nil},
-				Digest: newTestProposal().PendingHash(),
+				Pending: newTestProposal().PendingHash(),
+				Digest:  newTestConclusion().Hash(),
 			},
 			roundState: newTestRoundState(
 				&pbft.View{Round: big.NewInt(1), Sequence: big.NewInt(1)},
@@ -326,7 +332,8 @@ func TestVerifyPrepare(t *testing.T) {
 			expected: errInconsistentSubject,
 			prepare: &pbft.Subject{
 				View:   &pbft.View{Round: big.NewInt(1), Sequence: big.NewInt(0)},
-				Digest: newTestProposal().PendingHash(),
+				Pending: newTestProposal().PendingHash(),
+				Digest:  newTestConclusion().Hash(),
 			},
 			roundState: newTestRoundState(
 				&pbft.View{Round: big.NewInt(0), Sequence: big.NewInt(0)},
@@ -338,7 +345,8 @@ func TestVerifyPrepare(t *testing.T) {
 			expected: errInconsistentSubject,
 			prepare: &pbft.Subject{
 				View:   &pbft.View{Round: big.NewInt(0), Sequence: big.NewInt(1)},
-				Digest: newTestProposal().PendingHash(),
+				Pending: newTestProposal().PendingHash(),
+				Digest:  newTestConclusion().Hash(),
 			},
 			roundState: newTestRoundState(
 				&pbft.View{Round: big.NewInt(0), Sequence: big.NewInt(0)},

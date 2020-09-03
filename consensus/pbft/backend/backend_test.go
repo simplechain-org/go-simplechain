@@ -113,7 +113,6 @@ func TestCheckValidatorSignature(t *testing.T) {
 
 func TestCommit(t *testing.T) {
 	backend := newBackend()
-
 	commitCh := make(chan *types.Block)
 	// Case: it's a proposer, so the backend.commit will receive channel result from backend.Commit function
 	testCases := []struct {
@@ -151,7 +150,7 @@ func TestCommit(t *testing.T) {
 			commitCh <- <-backend.commitCh
 		}()
 
-		backend.proposedBlockHash = expBlock.Hash()
+		backend.proposedBlockHash = expBlock.PendingHash()
 		if err := backend.Commit(expBlock, test.expectedSignature); err != nil {
 			if err != test.expectedErr {
 				t.Errorf("error mismatch: have %v, want %v", err, test.expectedErr)
@@ -174,6 +173,7 @@ func TestCommit(t *testing.T) {
 
 func TestGetProposer(t *testing.T) {
 	chain, engine := newBlockChain(1)
+
 	block := makeBlock(chain, engine, chain.Genesis())
 	chain.InsertChain(types.Blocks{block})
 	expected := engine.GetProposer(1)
@@ -235,4 +235,14 @@ func newBackend() (b *backend) {
 	key, _ := generatePrivateKey()
 	b.privateKey = key
 	return
+}
+
+type testSealer struct {
+}
+
+func (testSealer) Execute(block *types.Block) (*types.Block, error) {
+	return block, nil
+}
+
+func (testSealer) AdjustMaxBlockTxs(remaining time.Duration, timeout bool) {
 }
