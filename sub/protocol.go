@@ -47,22 +47,20 @@ const protocolMaxMsgSize = 10 * 1024 * 1024 // Maximum cap on the size of a prot
 
 // eth protocol message codes
 const (
-	StatusMsg          = 0x00
-	NewBlockHashesMsg  = 0x01
-	TransactionMsg     = 0x02
-	GetBlockHeadersMsg = 0x03
-	BlockHeadersMsg    = 0x04
-	GetBlockBodiesMsg  = 0x05
-	BlockBodiesMsg     = 0x06
-	NewBlockMsg        = 0x07
-	GetNodeDataMsg     = 0x0d
-	NodeDataMsg        = 0x0e
-	GetReceiptsMsg     = 0x0f
-	ReceiptsMsg        = 0x10
-	TransactionsMsg    = 0x11
-
-	//for eth64
-	CtxSignMsg = 0x31
+	StatusMsg           = 0x00
+	NewBlockHashesMsg   = 0x01
+	TransactionMsg      = 0x02
+	GetBlockHeadersMsg  = 0x03
+	BlockHeadersMsg     = 0x04
+	GetBlockBodiesMsg   = 0x05
+	BlockBodiesMsg      = 0x06
+	NewBlockMsg         = 0x07
+	GetNodeDataMsg      = 0x0d
+	NodeDataMsg         = 0x0e
+	GetReceiptsMsg      = 0x0f
+	ReceiptsMsg         = 0x10
+	ByzantineMsg        = 0x11 // include IstanbulMsg and PbftMsg
+	TransactionRouteMsg = 0x21
 )
 
 type errCode int
@@ -77,7 +75,6 @@ const (
 	ErrForkIDRejected
 	ErrNoStatusMsg
 	ErrExtraStatusMsg
-	ErrVerifyCtx
 )
 
 func (e errCode) String() string {
@@ -101,6 +98,8 @@ type txPool interface {
 	// AddRemotes should add the given transactions to the pool.
 	AddLocal(*types.Transaction) error
 	AddRemote(*types.Transaction) error
+	AddRemoteSync(*types.Transaction) error
+	AddRemotesSync([]*types.Transaction) []error
 
 	// Pending should return pending transactions.
 	// The slice should be modifiable by the caller.
@@ -116,6 +115,8 @@ type txPool interface {
 	//GetCurrentNonce(address common.Address) uint64
 	Nonce(addr common.Address) uint64
 	ValidateBlocks(types.Blocks)
+
+	Signer() types.Signer
 }
 
 // statusData63 is the network packet for the status message for eth/63.

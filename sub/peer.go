@@ -19,6 +19,7 @@ package sub
 import (
 	"errors"
 	"fmt"
+	"github.com/simplechain-org/go-simplechain/crypto"
 	"math/big"
 	"sync"
 	"time"
@@ -86,12 +87,13 @@ type peer struct {
 	td   *big.Int
 	lock sync.RWMutex
 
-	knownTxs    mapset.Set                // Set of transaction hashes known to be known by this peer
-	knownBlocks mapset.Set                // Set of block hashes known to be known by this peer
-	queuedTxs   chan []*types.Transaction // Queue of transactions to broadcast to the peer
-	queuedProps chan *propEvent           // Queue of blocks to broadcast to the peer
-	queuedAnns  chan *types.Block         // Queue of blocks to announce to the peer
-	term        chan struct{}             // Termination channel to stop the
+	knownTxs    mapset.Set                  // Set of transaction hashes known to be known by this peer
+	knownBlocks mapset.Set                  // Set of block hashes known to be known by this peer
+	queuedTxs   chan []*types.Transaction   // Queue of transactions to broadcast to the peer
+	queuedTxr   chan *TransactionsWithRoute // Queue of transactions to broadcast to the peer(route syncmode)
+	queuedProps chan *propEvent             // Queue of blocks to broadcast to the peer
+	queuedAnns  chan *types.Block           // Queue of blocks to announce to the peer
+	term        chan struct{}               // Termination channel to stop the
 	poolEntry   *poolEntry
 }
 
@@ -104,6 +106,7 @@ func newPeer(version int, p *p2p.Peer, rw p2p.MsgReadWriter) *peer {
 		knownTxs:    mapset.NewSet(),
 		knownBlocks: mapset.NewSet(),
 		queuedTxs:   make(chan []*types.Transaction, maxQueuedTxs),
+		queuedTxr:   make(chan *TransactionsWithRoute, maxQueuedTxs),
 		queuedProps: make(chan *propEvent, maxQueuedProps),
 		queuedAnns:  make(chan *types.Block, maxQueuedAnns),
 		term:        make(chan struct{}),
@@ -122,6 +125,14 @@ func (p *peer) broadcast() {
 				return
 			}
 			p.Log().Trace("Broadcast transactions", "count", len(txs))
+
+		case txr := <-p.queuedTxr:
+			if err := p.SendTransactionsByRouter(txr); err != nil {
+				p.Log().Error("send transactions failed", "err", err)
+				return
+			}
+			p.Log().Trace("Broadcast transactions", "count", len(txr.Txs))
+
 
 		case prop := <-p.queuedProps:
 			if err := p.SendNewBlock(prop.block, prop.td); err != nil {
@@ -196,6 +207,10 @@ func (p *peer) MarkTransaction(hash common.Hash) {
 	p.knownTxs.Add(hash)
 }
 
+func (p *peer) HasTransaction(hash common.Hash) bool {
+	return p.knownTxs.Contains(hash)
+}
+
 // SendTransactions sends transactions to the peer and includes the hashes
 // in its transaction hash set for future reference.
 func (p *peer) SendTransactions(txs types.Transactions) error {
@@ -209,11 +224,47 @@ func (p *peer) SendTransactions(txs types.Transactions) error {
 	return p2p.Send(p.rw, TransactionMsg, txs)
 }
 
+// SendTransactionsByRoute sends transactions to the peer by sync router
+// and includes the hashes in its transaction hash set for future reference.
+func (p *peer) SendTransactionsByRouter(txr *TransactionsWithRoute) error {
+	// Mark all the transactions as known, but ensure we don't overflow our limits
+	for _, tx := range txr.Txs {
+		p.knownTxs.Add(tx.Hash())
+	}
+	for p.knownTxs.Cardinality() >= maxKnownTxs {
+		p.knownTxs.Pop()
+	}
+	return p2p.Send(p.rw, TransactionRouteMsg, txr)
+}
+
 // AsyncSendTransactions queues list of transactions propagation to a remote
 // peer. If the peer's broadcast queue is full, the event is silently dropped.
 func (p *peer) AsyncSendTransactions(txs []*types.Transaction) {
 	select {
 	case p.queuedTxs <- txs:
+		// Mark all the transactions as known, but ensure we don't overflow our limits
+		for _, tx := range txs {
+			p.knownTxs.Add(tx.Hash())
+		}
+		for p.knownTxs.Cardinality() >= maxKnownTxs {
+			p.knownTxs.Pop()
+		}
+	default:
+		p.Log().Debug("Dropping transaction propagation", "count", len(txs))
+	}
+}
+
+// AsyncSendTransactions queues list of transactions propagation to a remote
+// peer. If the peer's broadcast queue is full, the event is silently dropped.
+func (p *peer) AsyncSendTransactionsByRouter(txs []*types.Transaction, routeIndex int) {
+	if routeIndex < 0 {
+		p.Log().Warn("Unsupported route index in TransactionsByRouter", "index", routeIndex)
+		p.AsyncSendTransactions(txs)
+		return
+	}
+
+	select {
+	case p.queuedTxr <- &TransactionsWithRoute{Txs: txs, RouteIndex: uint64(routeIndex)}:
 		// Mark all the transactions as known, but ensure we don't overflow our limits
 		for _, tx := range txs {
 			p.knownTxs.Add(tx.Hash())
@@ -467,15 +518,17 @@ func (p *peer) Send(msgcode uint64, data interface{}) error {
 // peerSet represents the collection of active peers currently participating in
 // the Ethereum sub-protocol.
 type peerSet struct {
-	peers  map[string]*peer
-	lock   sync.RWMutex
-	closed bool
+	peers   map[string]*peer
+	address map[string]common.Address // mapping peerId to address
+	lock    sync.RWMutex
+	closed  bool
 }
 
 // newPeerSet creates a new peer set to track the active participants.
 func newPeerSet() *peerSet {
 	return &peerSet{
-		peers: make(map[string]*peer),
+		peers:   make(map[string]*peer),
+		address: make(map[string]common.Address),
 	}
 }
 
@@ -492,7 +545,12 @@ func (ps *peerSet) Register(p *peer) error {
 	if _, ok := ps.peers[p.id]; ok {
 		return errAlreadyRegistered
 	}
+
+	pubKey := p.Node().Pubkey()
+	addr := crypto.PubkeyToAddress(*pubKey)
 	ps.peers[p.id] = p
+	ps.address[p.id] = addr
+
 	go p.broadcast()
 
 	return nil
@@ -509,6 +567,7 @@ func (ps *peerSet) Unregister(id string) error {
 		return errNotRegistered
 	}
 	delete(ps.peers, id)
+	delete(ps.address, id)
 	p.close()
 
 	return nil
@@ -585,6 +644,17 @@ func (ps *peerSet) Peers() map[string]*peer {
 	set := make(map[string]*peer)
 	for id, p := range ps.peers {
 		set[id] = p
+	}
+	return set
+}
+
+func (ps *peerSet) PeerWithAddresses() map[common.Address]*peer {
+	ps.lock.RLock()
+	defer ps.lock.RUnlock()
+
+	set := make(map[common.Address]*peer)
+	for id, addr := range ps.address {
+		set[addr] = ps.peers[id]
 	}
 	return set
 }

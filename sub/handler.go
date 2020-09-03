@@ -20,7 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
+	"github.com/Beyond-simplechain/foundation/asio"
 	"math/big"
 	"sync"
 	"sync/atomic"
@@ -54,6 +54,11 @@ const (
 
 	// minimim number of peers to broadcast new blocks to
 	minBroadcastPeers = 4
+	// default treeWidth of treeRouter
+	defaultTreeRouterWidth = 3
+	defaultTxSyncPeriod    = time.Millisecond * 100
+	parallelTasks          = 10000
+	parallelThreads        = 100
 )
 
 var (
@@ -104,12 +109,18 @@ type ProtocolManager struct {
 
 	raftMode bool
 	engine   consensus.Engine // used for istanbul consensus
+	parallel *asio.Parallel
 
+	// for sync transaction
 	newTransactions types.Transactions
 	newTxLock       sync.Mutex
 	//newTransactions int64
+	txSyncRouter *TreeRouter // router will be updated by new block
 	txSyncTimer  *time.Timer
 	txSyncPeriod time.Duration
+
+	// for sync block
+	blockSyncRouter *TreeRouter
 }
 
 // NewProtocolManager returns a new Ethereum sub protocol manager. The Ethereum sub protocol manages peers capable
@@ -131,11 +142,16 @@ func NewProtocolManager(config *params.ChainConfig, checkpoint *params.TrustedCh
 		serverPool:  serverPool,
 		raftMode:    config.Raft,
 		engine:      engine,
+		parallel:    asio.NewParallel(parallelTasks, parallelThreads),
 	}
 
 	switch bft := manager.engine.(type) {
 	case consensus.Byzantine:
 		bft.SetBroadcaster(manager)
+		// set validators, create tx sync router
+		validators, idx := bft.CurrentValidators()
+		manager.txSyncRouter = CreateTreeRouter(blockchain.CurrentBlock().NumberU64(), validators, idx, defaultTreeRouterWidth)
+		manager.blockSyncRouter = CreateTreeRouter(0, validators, idx, defaultTreeRouterWidth)
 	}
 	//if istanbul, ok := manager.engine.(consensus.Istanbul); ok {
 	//	istanbul.SetBroadcaster(manager)
@@ -305,7 +321,7 @@ func (pm *ProtocolManager) Stop() {
 
 	pm.txsSub.Unsubscribe() // quits txBroadcastLoop
 	if !pm.raftMode {
-		pm.minedBlockSub.Unsubscribe() // quits blockBroadcastLoop
+		pm.minedBlockSub.Unsubscribe() //quits blockBroadcastLoop
 	}
 
 	// Quit the sync loop.
@@ -329,25 +345,6 @@ func (pm *ProtocolManager) Stop() {
 
 func (pm *ProtocolManager) newPeer(pv int, p *p2p.Peer, rw p2p.MsgReadWriter) *peer {
 	return newPeer(pv, p, newMeteredMsgWriter(rw))
-}
-
-func (pm *ProtocolManager) handleTxs(legacy bool) {
-	// broadcast transactions
-	pm.txsCh = make(chan core.NewTxsEvent, txChanSize)
-
-	if legacy {
-		pm.txsSub = pm.txpool.SubscribeNewTxsEvent(pm.txsCh)
-		go pm.txBroadcastLoopLegacy()
-
-	} else {
-		pm.txsSub = pm.txpool.SubscribeSyncTxsEvent(pm.txsCh)
-
-		pm.txSyncPeriod = time.Millisecond * 50
-		pm.txSyncTimer = time.NewTimer(pm.txSyncPeriod)
-
-		go pm.txCollectLoop()
-		go pm.txBroadcastLoop()
-	}
 }
 
 // handle is the callback invoked to manage the life cycle of an eth peer. When
@@ -451,10 +448,22 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 	}
 
+	// handle byzantine messages, exit if handled
 	if bft, ok := pm.engine.(consensus.Byzantine); ok {
-		pubKey := p.Node().Pubkey()
-		addr := crypto.PubkeyToAddress(*pubKey)
-		handled, err := bft.HandleMsg(addr, msg)
+		//if msg.Code == NewBlockMsg { //TODO: test
+		//	log.Warn("[debug] warning: receive New block")
+		//}
+		var (
+			handled bool
+			err     error
+		)
+		if addr, ok := pm.peers.address[p.id]; ok {
+			handled, err = bft.HandleMsg(addr, msg)
+		} else {
+			pubKey := p.Node().Pubkey()
+			addr := crypto.PubkeyToAddress(*pubKey)
+			handled, err = bft.HandleMsg(addr, msg)
+		}
 		if handled {
 			return err
 		}
@@ -817,221 +826,41 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			}
 			p.MarkTransaction(tx.Hash())
 		}
-		totalMsg += len(txs)
-		//log.Error("receive tx msg", "total", totalMsg, "txs", len(txs))
+
 		pm.AddRemotes(txs)
+
+	case msg.Code == TransactionRouteMsg:
+		// Transactions arrived, make sure we have a valid and fresh chain to handle them
+		if atomic.LoadUint32(&pm.acceptTxs) == 0 {
+			break
+		}
+		// Transactions can be processed, parse all of them and deliver to the pool
+		var txr *TransactionsWithRoute
+		if err := msg.Decode(&txr); err != nil {
+			return errResp(ErrDecode, "msg %v: %v", msg, err)
+		}
+
+		//log.Error("[debug] receive TransactionRouteMsg", "txs", txr.Txs.Len())
+
+		pm.handleRemoteTxsByRouter(p, txr)
+		pm.addRemoteTxsByRouter2TxPool(p, txr)
+		//TODO-D: handle remote-synced route txs in handle_synctx.go
+		//for i, tx := range txr.Txs {
+		//	// Validate and mark the remote transaction
+		//	if tx == nil {
+		//		return errResp(ErrDecode, "transaction %d is nil", i)
+		//	}
+		//	p.MarkTransaction(tx.Hash())
+		//}
+		//totalMsg += len(txr.Txs)
+		////log.Error("receive tx msg", "total", totalMsg, "txs", len(txs))
+		//pm.AddRemotes(txr.Txs)
 
 	default:
 		return errResp(ErrInvalidMsgCode, "%v", msg.Code)
 
 	}
 	return nil
-}
-
-var totalMsg int
-
-func (pm *ProtocolManager) BroadcastBlock2(block *types.Block) {
-	peers := pm.peers.PeersWithoutBlock(block.Hash())
-
-	transferLen := int(math.Sqrt(float64(len(peers))))
-	if transferLen < minBroadcastPeers {
-		transferLen = minBroadcastPeers
-	}
-	if transferLen > len(peers) {
-		transferLen = len(peers)
-	}
-	transfer := peers[:transferLen]
-	for _, peer := range transfer {
-		peer.AsyncSendNewBlock(block, block.DeprecatedTd())
-	}
-}
-
-// BroadcastBlock will either propagate a block to a subset of it's peers, or
-// will only announce it's availability (depending what's requested).
-func (pm *ProtocolManager) BroadcastBlock(block *types.Block, propagate bool) {
-	hash := block.Hash()
-	peers := pm.peers.PeersWithoutBlock(hash)
-
-	// If propagation is requested, send to a subset of the peer
-	if propagate {
-		// Calculate the TD of the block (it's not imported yet, so block.Td is not valid)
-		var td *big.Int
-		if parent := pm.blockchain.GetBlock(block.ParentHash(), block.NumberU64()-1); parent != nil {
-			td = new(big.Int).Add(block.Difficulty(), pm.blockchain.GetTd(block.ParentHash(), block.NumberU64()-1))
-		} else {
-			log.Error("Propagating dangling block", "number", block.Number(), "hash", hash)
-			return
-		}
-		// Send the block to a subset of our peers
-		transferLen := int(math.Sqrt(float64(len(peers))))
-		if transferLen < minBroadcastPeers {
-			transferLen = minBroadcastPeers
-		}
-		if transferLen > len(peers) {
-			transferLen = len(peers)
-		}
-		transfer := peers[:transferLen]
-		for _, peer := range transfer {
-			peer.AsyncSendNewBlock(block, td)
-		}
-		log.Trace("Propagated block", "hash", hash, "recipients", len(transfer), "duration", common.PrettyDuration(time.Since(block.ReceivedAt)))
-		return
-	}
-	// Otherwise if the block is indeed in out own chain, announce it
-	if pm.blockchain.HasBlock(hash, block.NumberU64()) {
-		for _, peer := range peers {
-			peer.AsyncSendNewBlockHash(block)
-		}
-		log.Trace("Announced block", "hash", hash, "recipients", len(peers), "duration", common.PrettyDuration(time.Since(block.ReceivedAt)))
-	}
-}
-
-// BroadcastTxs will propagate a batch of transactions to all peers which are not known to
-// already have the given transaction.
-func (pm *ProtocolManager) BroadcastTxs(txs types.Transactions) {
-	var txset = make(map[*peer]types.Transactions)
-
-	// Broadcast transactions to a batch of peers not knowing about it
-	for _, tx := range txs {
-		peers := pm.peers.PeersWithoutTx(tx.Hash())
-		for _, peer := range peers {
-			txset[peer] = append(txset[peer], tx)
-		}
-		tx.SetSynced(true) // Mark tx synced
-		log.Trace("Broadcast transaction", "hash", tx.Hash(), "recipients", len(peers))
-	}
-	// FIXME include this again: peers = peers[:int(math.Sqrt(float64(len(peers))))]
-	for peer, txs := range txset {
-		peer.AsyncSendTransactions(txs)
-	}
-}
-
-// Mined broadcast loop
-func (pm *ProtocolManager) minedBroadcastLoop() {
-	var lastTime = time.Now()
-	// automatically stops if unsubscribe
-	for obj := range pm.minedBlockSub.Chan() {
-		if ev, ok := obj.Data.(core.NewMinedBlockEvent); ok {
-			//TODO report
-			b, _ := rlp.EncodeToBytes(ev.Block)
-			log.Error("[report] minedBroadcastLoop", "used", time.Since(lastTime), "size", common.StorageSize(len(b)).String())
-			lastTime = time.Now()
-
-			//pm.BroadcastBlock2(ev.Block)
-			//pm.BroadcastBlock(ev.Block, true)  // First propagate block to peers
-			pm.BroadcastBlock(ev.Block, false) // Only then announce to the rest
-
-		}
-	}
-}
-
-func (pm *ProtocolManager) txCollectLoop() {
-	//lastTime := time.Now()
-	var (
-		total     int
-		totalCost time.Duration
-		lastTime  time.Time
-	)
-	for {
-		select {
-		case ev := <-pm.txsCh:
-			//TODO: report
-			if !lastTime.IsZero() {
-				total += len(ev.Txs)
-				totalCost += time.Since(lastTime)
-			}
-			lastTime = time.Now()
-
-			if totalCost > time.Second && len(ev.Txs) > 0 {
-				b, _ := rlp.EncodeToBytes(ev.Txs[0])
-				log.Error("[report] txCollectLoop", "avgCost", totalCost/time.Duration(total), "size", common.StorageSize(len(b)).String())
-				total, totalCost = 0, 0
-				lastTime = time.Now()
-			}
-
-			//newTransactions := atomic.AddInt64(&pm.newTransactions, int64(len(ev.Txs)))
-			pm.newTxLock.Lock()
-			pm.newTransactions = append(pm.newTransactions, ev.Txs...)
-			//if newTransactions >= broadcastTxLimit {
-			if pm.newTransactions.Len() >= int(broadcastTxLimit) {
-				pm.BroadcastTxs(pm.newTransactions)
-				pm.newTransactions = pm.newTransactions[:0]
-				//TODO: adjust sync period
-			}
-			pm.newTxLock.Unlock()
-
-		case <-pm.txsSub.Err():
-			return
-		}
-	}
-}
-
-func (pm *ProtocolManager) txBroadcastLoopLegacy() {
-	for {
-		select {
-		case ev := <-pm.txsCh:
-			pm.dumpTxs(ev.Txs)
-			pm.BroadcastTxs(ev.Txs)
-
-		// Err() channel will be closed when unsubscribing.
-		case <-pm.txsSub.Err():
-			return
-		}
-	}
-}
-
-func (pm *ProtocolManager) txBroadcastLoop() {
-	var total int
-
-	for {
-		select {
-		case <-pm.txSyncTimer.C:
-			//newTransactions := atomic.LoadInt64(&pm.newTransactions)
-			var txs types.Transactions
-			pm.newTxLock.Lock()
-			if pm.newTransactions.Len() > int(broadcastTxLimit) {
-				txs = pm.newTransactions[:broadcastTxLimit]
-				pm.newTransactions = pm.newTransactions[broadcastTxLimit:]
-			} else {
-				txs = append(pm.newTransactions, pm.txpool.SyncLimit(int(broadcastTxLimit)-pm.newTransactions.Len())...)
-				pm.newTransactions = pm.newTransactions[:0]
-			}
-			pm.newTxLock.Unlock()
-
-			//txs := pm.txpool.SyncLimit(int(cmath.Int64Min(newTransactions, broadcastTxLimit)))
-
-			l := txs.Len()
-
-			if l > 0 {
-				total += l
-				log.Trace("dump transactions", "total", total, "count", l)
-				pm.BroadcastTxs(txs)
-			}
-
-			//if l <= broadcastTxLimit/2 {
-			//	waiting += waiting / 2
-			//}
-
-			pm.txSyncTimer.Reset(pm.txSyncPeriod)
-
-		case <-pm.quitSync:
-			return
-		}
-	}
-}
-
-func (pm *ProtocolManager) dumpTxs(txs types.Transactions) {
-	select {
-	case ev := <-pm.txsCh:
-		txs = append(txs, ev.Txs...)
-		if len(txs) >= int(broadcastTxLimit) {
-			return
-		}
-		pm.dumpTxs(txs)
-
-	default:
-		log.Trace("dump transactions from txsCh", "count", txs.Len())
-	}
 }
 
 // NodeInfo represents a short summary of the Ethereum sub-protocol metadata
@@ -1078,23 +907,35 @@ func (pm *ProtocolManager) Pending() (map[common.Address]types.Transactions, err
 	return pm.txpool.Pending()
 }
 
-// Accept PBFT committed block
+// Accept Byzantium consensus committed block
 func (pm *ProtocolManager) Enqueue(id string, block *types.Block) {
 	pm.fetcher.Enqueue(id, block)
 }
 
 func (pm *ProtocolManager) FindPeers(targets map[common.Address]bool) map[common.Address]consensus.Peer {
 	m := make(map[common.Address]consensus.Peer)
-	for _, p := range pm.peers.Peers() {
-		pubKey := p.Node().Pubkey()
-		addr := crypto.PubkeyToAddress(*pubKey)
+	for addr, peer := range pm.peers.PeerWithAddresses() {
 		if targets[addr] {
-			m[addr] = p
+			m[addr] = peer
 		}
 	}
 	return m
 }
 
+func (pm *ProtocolManager) FindRoute(validators []common.Address, myIndex, routeIndex int) map[common.Address]consensus.Peer {
+	pm.blockSyncRouter.Reset(0, validators, myIndex)
+	set := pm.blockSyncRouter.SelectNodes(pm.peers.PeerWithAddresses(), routeIndex)
+	if set == nil {
+		return nil
+	}
+	ret := make(map[common.Address]consensus.Peer, len(set))
+	for addr, peer := range set {
+		ret[addr] = peer
+	}
+	return ret
+}
+
+// Implements cross/trigger/simpletrigger.ProtocolManager
 func (pm *ProtocolManager) AddLocals(txs []*types.Transaction) {
 	for _, v := range txs {
 		pm.txpool.AddLocal(v)

@@ -96,6 +96,18 @@ type testTxPool struct {
 	lock sync.RWMutex // Protects the transaction pool
 }
 
+func (p *testTxPool) AddRemoteSync(*types.Transaction) error {
+	panic("implement me")
+}
+
+func (p *testTxPool) AddRemotesSync([]*types.Transaction) []error {
+	panic("implement me")
+}
+
+func (p *testTxPool) Signer() types.Signer {
+	panic("implement me")
+}
+
 func (p *testTxPool) ValidateBlocks(types.Blocks) {
 	panic("implement me")
 }
