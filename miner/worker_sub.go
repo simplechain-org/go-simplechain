@@ -80,8 +80,8 @@ const (
 	// staleThreshold is the maximum depth of the acceptable stale block.
 	staleThreshold = 7
 
-	defaultMaxBlockTxs   = 15000
-	defaultMinTxsCanSeal = 1000
+	limitMaxBlockTxs = 15000
+	limitMinBlockTxs = 1
 )
 
 // environment is the worker's current environment and holds all of the current state information.
@@ -187,6 +187,7 @@ type worker struct {
 	agents       map[Agent]struct{}
 
 	raftCtx *raftContext
+	pbftCtx *pbftContext
 }
 
 func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus.Engine, eth Backend, mux *event.TypeMux, isLocalBlock func(*types.Block) bool, init bool) *worker {
@@ -215,7 +216,7 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 		agents:             make(map[Agent]struct{}),
 	}
 
-	worker.maxBlockTxs = defaultMaxBlockTxs
+	worker.maxBlockTxs = limitMaxBlockTxs
 
 	// Subscribe NewTxsEvent for tx pool
 	worker.txsSub = eth.TxPool().SubscribeNewTxsEvent(worker.txsCh)
@@ -247,7 +248,9 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 	}
 
 	if pbft, ok := engine.(consensus.Pbft); ok {
-		pbft.SetExecutor(worker)
+		worker.pbftCtx = &pbftContext{maxBlockTxs: limitMaxBlockTxs}
+		pbft.SetSealer(worker)
+		pbft.SetTxPool(eth.TxPool())
 	}
 
 	go worker.mainLoop()
@@ -422,7 +425,7 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 
 		case head := <-w.chainHeadCh:
 			if bft, ok := w.engine.(consensus.Byzantine); ok {
-				if err := bft.NewChainHead(); err != nil {
+				if err := bft.NewChainHead(head.Block); err != nil {
 					log.Warn("new istanbul chain head failed", "error", err.Error())
 				}
 			}
@@ -696,8 +699,7 @@ func (w *worker) resultLoop() {
 			//log.Info("Successfully sealed new block", "number", block.Number(), "sealhash", sealhash, "hash", hash,
 			//	"elapsed", common.PrettyDuration(time.Since(task.createdAt)))
 			log.Warn("Successfully sealed new block", "number", block.Number(), "sealhash", sealhash,
-				"hash", hash, "elapsed", common.PrettyDuration(time.Since(task.createdAt)),
-				"txs", len(block.Transactions()), "diff", block.Difficulty(), "maxBlockTxs", w.maxBlockTxs)
+				"hash", hash, "elapsed", common.PrettyDuration(time.Since(task.createdAt)), "txs", len(block.Transactions()))
 
 			// Adjust maxBlockTxs
 			if w.chainConfig.Clique != nil {
@@ -706,8 +708,8 @@ func (w *worker) resultLoop() {
 					period := int64(time.Second*time.Duration(w.chainConfig.Clique.Period)) * 3 / 2
 					if sealTime-w.lastSealTime > period {
 						atomic.StoreUint64(&w.maxBlockTxs, w.maxBlockTxs/2)
-						if w.maxBlockTxs < defaultMinTxsCanSeal {
-							atomic.StoreUint64(&w.maxBlockTxs, defaultMinTxsCanSeal)
+						if w.maxBlockTxs < limitMinBlockTxs {
+							atomic.StoreUint64(&w.maxBlockTxs, limitMinBlockTxs)
 						}
 
 					} else if block.Transactions().Len() >= int(w.maxBlockTxs) {
@@ -929,8 +931,6 @@ func (w *worker) commitTransactions(txs types.Transactions, coinbase common.Addr
 	return false
 }
 
-var ph *types.Header
-
 // commitNewWork generates several new sealing tasks based on the parent block.
 func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) {
 	w.mu.RLock()
@@ -971,7 +971,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 	if now := time.Now().Unix(); timestamp > now+1 {
 		wait := time.Duration(timestamp-now) * time.Second
 		log.Info("Mining too far in the future", "wait", common.PrettyDuration(wait))
-		time.Sleep(wait)
+		time.Sleep(wait) // TODO-U: wait for timestamp at least 1 seconds, need use ms/us block timestamp ??
 	}
 
 	num := parent.Number()
@@ -1006,7 +1006,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 
 	// commit new byzantium work to pbft engine
 	if _, ok := w.engine.(consensus.Pbft); ok {
-		w.commitByzantium(interrupt, noempty, tstart)
+		w.CommitByzantium(interrupt, noempty, tstart)
 		return
 	}
 
@@ -1040,7 +1040,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 	pending := w.eth.TxPool().PendingLimit(int(w.maxBlockTxs))
 	loadTime := time.Since(start)
 
-	if !noempty && pending == nil {
+	if !noempty && len(pending) == 0 {
 		// Create an empty block based on temporary copied state for sealing in advance without waiting block
 		// execution finished.
 		w.commit(uncles, nil, false, tstart)
