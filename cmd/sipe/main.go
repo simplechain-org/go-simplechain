@@ -163,6 +163,7 @@ var (
 		utils.IstanbulBlockPeriodFlag,
 		utils.PbftRequestTimeoutFlag,
 		utils.PbftBlockPeriodFlag,
+		utils.PbftEnablePartiallyFlag,
 		utils.ConfirmDepthFlag,
 		utils.AnchorSignerFlag,
 		utils.AnchorMaxGasPriceFlag,

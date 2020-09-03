@@ -287,7 +287,7 @@ func makeIstanbulExtra(accs []accounts.Account) ([]byte, error) {
 	}
 	buf.Write(extra[:types.IstanbulExtraVanity])
 
-	ist := &types.IstanbulExtra{
+	ist := &types.ByzantineExtra{
 		Validators:    addresses,
 		Seal:          []byte{},
 		CommittedSeal: [][]byte{},

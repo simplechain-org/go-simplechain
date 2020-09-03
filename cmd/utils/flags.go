@@ -820,6 +820,10 @@ var (
 		Usage: "Default minimum difference between two consecutive block's timestamps in seconds",
 		Value: eth.DefaultConfig.Pbft.BlockPeriod,
 	}
+	PbftEnablePartiallyFlag = cli.BoolFlag{
+		Name:  "pbft.partially",
+		Usage: "Enable send and receive partial block",
+	}
 
 	// Metrics flags
 	MetricsEnabledFlag = cli.BoolFlag{
@@ -1496,6 +1500,9 @@ func setPbft(ctx *cli.Context, cfg *eth.Config) {
 	}
 	if ctx.GlobalIsSet(PbftBlockPeriodFlag.Name) {
 		cfg.Pbft.BlockPeriod = ctx.GlobalUint64(PbftBlockPeriodFlag.Name)
+	}
+	if ctx.GlobalIsSet(PbftEnablePartiallyFlag.Name) {
+		cfg.Pbft.EnablePartially = ctx.GlobalBool(PbftEnablePartiallyFlag.Name)
 	}
 }
 
