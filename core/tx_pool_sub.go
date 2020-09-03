@@ -687,7 +687,7 @@ func (pool *TxPool) preCheck(tx *types.Transaction) error {
 // rules and adheres to some heuristic limits of the local node (price and size).
 func (pool *TxPool) validateTx(tx *types.Transaction /*, local bool*/) error {
 	// Heuristic limit, reject transactions over 32KB to prevent DOS attacks
-	from, err := types.Sender(pool.signer, tx)
+	_, err := types.Sender(pool.signer, tx)
 	if err != nil {
 		return ErrInvalidSender
 	}
@@ -697,11 +697,11 @@ func (pool *TxPool) validateTx(tx *types.Transaction /*, local bool*/) error {
 	// Transactor should have enough funds to cover the costs
 	// cost == V + GP * GL
 	// FIXME: important: statedb should support concurrent-RW，don't lock the pool
-	pool.validatorMu.Lock()
-	defer pool.validatorMu.Unlock()
-	if pool.currentState.GetBalance(from).Cmp(tx.Cost()) < 0 {
-		return ErrInsufficientFunds
-	}
+	//pool.validatorMu.Lock()
+	//defer pool.validatorMu.Unlock()
+	//if pool.currentState.GetBalance(from).Cmp(tx.Cost()) < 0 {
+	//	return ErrInsufficientFunds
+	//}
 	return nil
 }
 
@@ -724,6 +724,25 @@ func (pool *TxPool) ValidateBlocks(blocks types.Blocks) {
 		}
 	}
 	wg.Wait()
+}
+
+func (pool *TxPool) InitPartialBlock(pb *types.PartialBlock) bool {
+	digests := pb.TxDigests()
+	misses := pb.MissedTxs
+	transactions := pb.Transactions()
+
+	for index, hash := range digests {
+		if tx := pool.all.Get(hash); tx != nil {
+			(*transactions)[index] = tx
+		} else {
+			misses = append(misses, types.MissedTx{Hash: hash, Index: uint32(index)})
+		}
+	}
+
+	if len(misses) > 0 {
+		return false
+	}
+	return true
 }
 
 // add validates a transaction and inserts it into the non-executable queue for
@@ -802,6 +821,10 @@ func (pool *TxPool) AddRemote(tx *types.Transaction) error {
 	return pool.add(tx, false, false)
 }
 
+func (pool *TxPool) AddRemoteSync(tx *types.Transaction) error {
+	return pool.add(tx, false, true)
+}
+
 // AddLocals enqueues a batch of transactions into the pool if they are valid,
 // marking the senders as a local ones in the mean time, ensuring they go around
 // the local pricing constraints.
@@ -851,6 +874,10 @@ func (pool *TxPool) Status(hashes []common.Hash) []TxStatus {
 // and nil otherwise.
 func (pool *TxPool) Get(hash common.Hash) *types.Transaction {
 	return pool.all.Get(hash)
+}
+
+func (pool *TxPool) Signer() types.Signer {
+	return pool.signer
 }
 
 // removeTx removes a single transaction from the queue, moving all subsequent
