@@ -728,18 +728,17 @@ func (pool *TxPool) ValidateBlocks(blocks types.Blocks) {
 
 func (pool *TxPool) InitPartialBlock(pb *types.PartialBlock) bool {
 	digests := pb.TxDigests()
-	misses := pb.MissedTxs
 	transactions := pb.Transactions()
 
 	for index, hash := range digests {
 		if tx := pool.all.Get(hash); tx != nil {
 			(*transactions)[index] = tx
 		} else {
-			misses = append(misses, types.MissedTx{Hash: hash, Index: uint32(index)})
+			pb.MissedTxs = append(pb.MissedTxs, types.MissedTx{Hash: hash, Index: uint32(index)})
 		}
 	}
 
-	if len(misses) > 0 {
+	if len(pb.MissedTxs) > 0 {
 		return false
 	}
 	return true

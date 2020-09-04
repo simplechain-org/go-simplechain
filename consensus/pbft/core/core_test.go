@@ -47,9 +47,9 @@ func newTestConclusion() pbft.Conclusion {
 	return makeBlock(1)
 }
 
-func newTestPartialProposal(txs ...*types.Transaction) pbft.Proposal {
-	return types.NewPartialBlock(makeBlock(1, txs...))
-}
+//func newTestPartialProposal(txs ...*types.Transaction) pbft.Proposal {
+//	return types.NewPartialBlock(makeBlock(1, txs...))
+//}
 
 func TestNewRequest(t *testing.T) {
 	testLogger.SetHandler(elog.StdoutHandler)

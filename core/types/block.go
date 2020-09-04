@@ -112,22 +112,6 @@ func (h *Header) Hash() common.Hash {
 	return rlpHash(h)
 }
 
-func RlpPendingHeaderHash(h *Header) common.Hash {
-	return rlpHash([]interface{}{
-		h.ParentHash,
-		h.UncleHash,
-		h.Coinbase,
-		h.TxHash,
-		h.Difficulty,
-		h.Number,
-		h.GasLimit,
-		h.Time,
-		h.Extra,
-		h.MixDigest,
-		h.Nonce,
-	})
-}
-
 func (h *Header) PendingHash() common.Hash {
 	if h.MixDigest == PbftDigest {
 		pendingHeader := PbftPendingHeader(h, true)

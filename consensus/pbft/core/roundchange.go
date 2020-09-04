@@ -62,7 +62,7 @@ func (c *core) sendRoundChange(round *big.Int) {
 	c.broadcast(&message{
 		Code: msgRoundChange,
 		Msg:  payload,
-	})
+	}, true)
 }
 
 func (c *core) handleRoundChange(msg *message, src pbft.Validator) error {

@@ -36,7 +36,7 @@ func (c *core) sendPrepare() {
 	c.broadcast(&message{
 		Code: msgPrepare,
 		Msg:  encodedSubject,
-	})
+	}, true)
 }
 
 func (c *core) handlePrepare(msg *message, src pbft.Validator) error {

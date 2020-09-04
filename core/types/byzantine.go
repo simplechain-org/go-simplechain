@@ -22,6 +22,7 @@ import (
 	"io"
 
 	"github.com/simplechain-org/go-simplechain/common"
+	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/rlp"
 )
 
@@ -139,9 +140,25 @@ func PbftPendingHeader(h *Header, keepSeal bool) *Header {
 	return newHeader
 }
 
+func RlpPendingHeaderHash(h *Header) common.Hash {
+	return rlpHash([]interface{}{
+		h.ParentHash,
+		h.UncleHash,
+		h.Coinbase,
+		h.TxHash,
+		h.Difficulty,
+		h.Number,
+		h.GasLimit,
+		h.Time,
+		h.Extra,
+		h.MixDigest,
+		h.Nonce,
+	})
+}
+
 type PartialBlock struct {
 	Block
-	txs       []common.Hash
+	txs       []common.Hash // tx digests
 	MissedTxs []MissedTx
 }
 
@@ -166,22 +183,26 @@ func (pb *PartialBlock) TxDigests() []common.Hash {
 	return pb.txs
 }
 
-// incursive: return mutable transaction list
+// incursive: Transactions return mutable transaction list
 func (pb *PartialBlock) Transactions() *Transactions {
 	return &pb.transactions
 }
 
+// Completed return the partial block is complete, has no missed txs and contains all txs
 func (pb *PartialBlock) Completed() bool {
-	return len(pb.MissedTxs) == 0
+	return len(pb.MissedTxs) == 0 && len(pb.txs) == pb.transactions.Len()
 }
 
+// FillMissedTxs fill the partial block by response txs, set completed if the block is filled
 func (pb *PartialBlock) FillMissedTxs(txs Transactions) error {
 	if txs.Len() != len(pb.MissedTxs) {
+		log.Warn("Failed to fill missed txs, unmatched size", "num", pb.NumberU64(), "want", len(pb.MissedTxs), "have", txs.Len())
 		return ErrFailToFillPartialMissedTxs
 	}
 	for i, tx := range txs {
 		missed := pb.MissedTxs[i]
 		if tx.Hash() != missed.Hash {
+			log.Warn("Failed to fill missed txs, invalid hash", "num", pb.NumberU64(), "want", missed.Hash, "have", tx.Hash())
 			return ErrFailToFillPartialMissedTxs
 		}
 		pb.transactions[missed.Index] = tx
@@ -191,28 +212,35 @@ func (pb *PartialBlock) FillMissedTxs(txs Transactions) error {
 	return nil
 }
 
-func (pb *PartialBlock) FetchMissedTxs(misses []MissedTx) (Transactions, error) {
-	transactions := pb.transactions
+// FetchMissedTxs fetch request missed tx from block
+func (b *Block) FetchMissedTxs(misses []MissedTx) (Transactions, error) {
+	transactions := b.transactions
 	txSize := transactions.Len()
 	if txSize < len(misses) {
+		log.Warn("Failed to fetch missed txs, unmatched size", "num", b.NumberU64(), "want", len(misses), "have", txSize)
 		return nil, ErrFailToFetchPartialMissedTxs
 	}
 
 	ret := make(Transactions, 0, len(misses))
-	for i, tx := range misses {
-		if i >= txSize {
+	for _, tx := range misses {
+		i := tx.Index
+		if i >= uint32(txSize) {
+			log.Warn("Failed to fetch missed txs, index overflow", "num", b.NumberU64(), "index", i, "txSize", txSize)
 			return nil, ErrFailToFetchPartialMissedTxs
 		}
 		if transactions[i].Hash() != tx.Hash {
+			log.Warn("Failed to fetch missed txs, invalid hash", "num", b.NumberU64(), "want", tx.Hash, "have", transactions[i].Hash())
 			return nil, ErrFailToFetchPartialMissedTxs
 		}
 		ret = append(ret, transactions[i])
 	}
+
+	log.Trace("Fetch missed txs of partial block", "num", b.NumberU64(), "size", ret.Len(), "total", txSize)
 	return ret, nil
 }
 
 func (pb *PartialBlock) String() string {
-	return fmt.Sprintf("Pb{Header: %v}", pb.header)
+	return fmt.Sprintf("pb{Header: %v}", pb.header)
 }
 
 type extPartialBlock struct {

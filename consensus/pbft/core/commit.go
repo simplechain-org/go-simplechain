@@ -47,7 +47,7 @@ func (c *core) broadcastCommit(sub *pbft.Subject) {
 	c.broadcast(&message{
 		Code: msgCommit,
 		Msg:  encodedSubject,
-	})
+	}, true)
 }
 
 func (c *core) handleCommit(msg *message, src pbft.Validator) error {

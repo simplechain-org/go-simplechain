@@ -179,7 +179,10 @@ func (c *core) handleCheckedMsg(msg *message, src pbft.Validator) error {
 		return testBacklog(c.handleRoundChange(msg, src))
 	case msgPartialPreprepare:
 		if c.config.EnablePartially {
-			return testBacklog(c.handlePartialPreprepare(msg, src))
+			//if c.address == src.Address() {
+			//	return testBacklog(c.handlePrepare(msg, src))
+			//}
+			return testBacklog(c.handlePartialPrepare(msg, src))
 		}
 	case msgPartialGetMissedTxs:
 		if c.config.EnablePartially {

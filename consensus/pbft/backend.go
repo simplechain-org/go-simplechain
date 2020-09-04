@@ -39,6 +39,9 @@ type Backend interface {
 	// Broadcast sends a message to other validators by router
 	Broadcast(valSet ValidatorSet, sender common.Address, payload []byte) error
 
+	// Post post a message
+	Post(payload []byte)
+
 	// Send a message to the specific validators
 	SendMsg(val Validators, payload []byte) error
 

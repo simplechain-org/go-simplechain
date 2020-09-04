@@ -70,6 +70,8 @@ func (c *core) checkMessage(msgCode uint64, view *pbft.View) error {
 		// other messages are future messages
 		case msgCode > msgPreprepare && msgCode <= msgRoundChange:
 			return errFutureMessage
+		case msgCode == msgPartialGetMissedTxs:
+			return errFutureMessage
 		}
 		return nil
 	}
@@ -105,6 +107,12 @@ func (c *core) storeBacklog(msg *message, src pbft.Validator) {
 			backlog.Push(msg, toPriority(msg.Code, p.View))
 		}
 		// for msgRoundChange, msgPrepare and msgCommit cases
+	case msgPartialPreprepare:
+		var p *pbft.PartialPreprepare
+		err := msg.Decode(&p)
+		if err == nil {
+			backlog.Push(msg, toPriority(msg.Code, p.View))
+		}
 	default:
 		var p *pbft.Subject
 		err := msg.Decode(&p)
@@ -146,7 +154,13 @@ func (c *core) processBacklog() {
 				if err == nil {
 					view = m.View
 				}
-				// for msgRoundChange, msgPrepare and msgCommit cases
+			// for msgRoundChange, msgPrepare and msgCommit cases
+			case msgPartialPreprepare:
+				var m *pbft.PartialPreprepare
+				err := msg.Decode(&m)
+				if err == nil {
+					view = m.View
+				}
 			default:
 				var sub *pbft.Subject
 				err := msg.Decode(&sub)

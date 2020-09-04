@@ -45,6 +45,8 @@ func New(backend pbft.Backend, config *pbft.Config) Engine {
 		backend:            backend,
 		backlogs:           make(map[common.Address]*prque.Prque),
 		backlogsMu:         new(sync.Mutex),
+		missedReq:          make(map[common.Hash]*prque.Prque),
+		missedReqMu:        new(sync.Mutex),
 		pendingRequests:    prque.New(nil),
 		pendingRequestsMu:  new(sync.Mutex),
 		consensusTimestamp: time.Time{},
@@ -89,6 +91,9 @@ type core struct {
 
 	backlogs   map[common.Address]*prque.Prque
 	backlogsMu *sync.Mutex
+
+	missedReq   map[common.Hash]*prque.Prque
+	missedReqMu *sync.Mutex
 
 	current   *roundState
 	handlerWg *sync.WaitGroup
@@ -153,7 +158,7 @@ func (c *core) finalizeMessage(msg *message) ([]byte, error) {
 	return payload, nil
 }
 
-func (c *core) broadcast(msg *message) {
+func (c *core) broadcast(msg *message, self bool) {
 	logger := c.logger.New("state", c.state)
 
 	payload, err := c.finalizeMessage(msg)
@@ -165,7 +170,10 @@ func (c *core) broadcast(msg *message) {
 	// Broadcast payload
 	if err = c.backend.Broadcast(c.valSet, msg.Address, payload); err != nil {
 		logger.Error("Failed to broadcast message", "msg", msg, "err", err)
-		return
+	}
+	// Post payload
+	if self {
+		c.backend.Post(payload)
 	}
 }
 

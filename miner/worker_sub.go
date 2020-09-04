@@ -248,7 +248,7 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 	}
 
 	if pbft, ok := engine.(consensus.Pbft); ok {
-		worker.pbftCtx = &pbftContext{maxBlockTxs: limitMaxBlockTxs}
+		worker.pbftCtx = &pbftContext{maxBlockTxs: 1000}
 		pbft.SetSealer(worker)
 		pbft.SetTxPool(eth.TxPool())
 	}

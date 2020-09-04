@@ -38,6 +38,8 @@ type Proposal interface {
 	DecodeRLP(s *rlp.Stream) error
 
 	String() string
+
+	FetchMissedTxs(misses []types.MissedTx) (types.Transactions, error)
 }
 
 // Conclusion means executed Proposal
@@ -56,11 +58,10 @@ type PartialProposal interface {
 	Completed() bool // return whether the proposal is completed (no missed txs)
 
 	FillMissedTxs(txs types.Transactions) error
-	FetchMissedTxs(misses []types.MissedTx) (types.Transactions, error)
 }
 
 type Request struct {
-	Proposal Proposal
+	Proposal Proposal // always common proposal (block with all txs)
 }
 
 // View includes a round number and a sequence number.
@@ -138,6 +139,7 @@ func (b *Preprepare) DecodeRLP(s *rlp.Stream) error {
 
 type PartialPreprepare Preprepare
 
+// DecodeRLP implements rlp.Decoder, and load the consensus fields from a RLP stream.
 // Overwrite Decode method for partial block
 func (b *PartialPreprepare) DecodeRLP(s *rlp.Stream) error {
 	var preprepare struct {
@@ -186,6 +188,11 @@ func (b *Subject) String() string {
 type MissedReq struct {
 	View      *View
 	MissedTxs []types.MissedTx
+}
+
+func (b *MissedReq) String() string {
+	return fmt.Sprintf("{View: %v, Missed:%v}", b.View, len(b.MissedTxs))
+
 }
 
 func (b *MissedReq) EncodeRLP(w io.Writer) error {

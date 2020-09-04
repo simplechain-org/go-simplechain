@@ -121,22 +121,27 @@ func (sb *backend) Validators(proposal pbft.Conclusion) pbft.ValidatorSet {
 	//return sb.getValidators(proposal.Number().Uint64(), proposal.PendingHash())
 }
 
-// Broadcast implements pbft.Backend.Broadcast
+// Broadcast send to others. implements pbft.Backend.Broadcast
 func (sb *backend) Broadcast(valSet pbft.ValidatorSet, sender common.Address, payload []byte) error {
-	// send to others
 	//sb.Gossip(valSet, payload)
 	sb.Guidance(valSet, sender, payload)
-	// send to self
+	return nil
+}
+
+// Post send to self
+func (sb *backend) Post(payload []byte) {
 	msg := pbft.MessageEvent{
 		Payload: payload,
 	}
 
 	go sb.pbftEventMux.Post(msg)
-	return nil
 }
 
 func (sb *backend) SendMsg(val pbft.Validators, payload []byte) error {
-	targets := make(map[common.Address]bool)
+	targets := make(map[common.Address]bool, val.Len())
+	for _, v := range val {
+		targets[v.Address()] = true
+	}
 	ps := sb.broadcaster.FindPeers(targets)
 
 	for _, p := range ps {
@@ -301,8 +306,9 @@ func (sb *backend) EventMux() *event.TypeMux {
 }
 
 // Verify implements pbft.Backend.Verify
+// Check if the proposal is a valid block
 func (sb *backend) Verify(proposal pbft.Proposal, checkHeader, checkBody bool) (time.Duration, error) {
-	// Check if the proposal is a valid block
+	// Unpack proposal to raw block
 	var block *types.Block
 	switch pb := proposal.(type) {
 	case *types.Block:

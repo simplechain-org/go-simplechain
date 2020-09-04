@@ -6,7 +6,7 @@ import (
 )
 
 func (c *core) requestMissedTxs(missedTxs []types.MissedTx, val pbft.Validator) {
-	logger := c.logger.New("state", c.state)
+	logger := c.logger.New("state", c.state, "to", val)
 
 	missedReq := &pbft.MissedReq{
 		View:      c.currentView(),
@@ -18,6 +18,8 @@ func (c *core) requestMissedTxs(missedTxs []types.MissedTx, val pbft.Validator) 
 		logger.Error("Failed to encode", "missedReq", missedReq, "err", err)
 		return
 	}
+
+	logger.Trace("[report] requestMissedTxs", "view", missedReq.View, "missed", len(missedTxs))
 
 	c.send(&message{
 		Code: msgPartialGetMissedTxs,
@@ -31,21 +33,32 @@ func (c *core) handleGetMissedTxs(msg *message, src pbft.Validator) error {
 	var missed *pbft.MissedReq
 	err := msg.Decode(&missed)
 	if err != nil {
+		logger.Error("Failed to decode", "err", err)
 		return errFailedDecodePrepare
 	}
 
+	logger.Trace("[report] handleGetMissedTxs", "view", missed.View, "missed", len(missed.MissedTxs))
+
 	if err := c.checkMessage(msgPartialGetMissedTxs, missed.View); err != nil {
+		logFn := logger.Warn
+		switch err {
+		case errOldMessage: //TODO
+			logFn = logger.Trace
+		case errFutureMessage: //TODO
+			logFn = logger.Trace
+		}
+		logFn("GetMissedTxs checkMessage failed", "view", missed.View, "missed", len(missed.MissedTxs), "err", err)
 		return err
 	}
 
-	partial := c.current.PartialProposal()
+	partial := c.current.Proposal()
 	if partial == nil {
-		return nil //TODO: need return a error
+		logger.Warn("nonexistent partial proposal")
+		return nil //TODO: need return a error?
 	}
 
 	txs, err := partial.FetchMissedTxs(missed.MissedTxs)
 	if err != nil {
-		logger.Trace("Failed to fetch", "missedReq", missed, "err", err)
 		return err
 	}
 
@@ -55,12 +68,14 @@ func (c *core) handleGetMissedTxs(msg *message, src pbft.Validator) error {
 }
 
 func (c *core) responseMissedTxs(txs types.Transactions, val pbft.Validator) {
-	logger := c.logger.New("state", c.state)
+	logger := c.logger.New("state", c.state, "to", val)
 
 	missedResp := &pbft.MissedResp{
 		View:   c.currentView(),
 		ReqTxs: txs,
 	}
+
+	logger.Trace("[report] responseMissedTxs", "view", missedResp.View, "missed", len(txs))
 
 	encMissedResp, err := Encode(missedResp)
 	if err != nil {
@@ -83,24 +98,35 @@ func (c *core) handleMissedTxs(msg *message, src pbft.Validator) error {
 		return errFailedDecodePrepare
 	}
 
+	logger.Trace("[report] handleMissedTxs", "view", missed.View)
+
 	if err := c.checkMessage(msgPartialMissedTxs, missed.View); err != nil {
+		logFn := logger.Warn
+		switch err {
+		case errOldMessage: //TODO
+			logFn = logger.Trace
+		case errFutureMessage: //TODO
+			logFn = logger.Trace
+		}
+		logFn("MissedTxs checkMessage failed", "view", missed.View, "missed", len(missed.ReqTxs), "err", err)
 		return err
 	}
 
 	partial := c.current.PartialProposal()
 	if partial == nil {
+		logger.Warn("local partial proposal was lost", "view", missed.View, "Preprepare",c.current.Preprepare)
 		return nil //TODO: need return a error
 	}
 
 	// do not accept completed proposal repeatedly
 	if partial.Completed() {
+		logger.Warn("local partial was already completed", "view", missed.View)
 		return nil
 	}
 
 	if err := partial.FillMissedTxs(missed.ReqTxs); err != nil {
-		logger.Warn("fill missed txs failed", "missedResp", missed, "err", err)
 		return err
 	}
 
-	return c.handlePartialPreprepare2(c.current.Preprepare, src)
+	return c.handlePartialPrepare2(c.current.Preprepare, src)
 }

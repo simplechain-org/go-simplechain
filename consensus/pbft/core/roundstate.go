@@ -110,7 +110,12 @@ func (s *roundState) Proposal() pbft.Proposal {
 	defer s.mu.RUnlock()
 
 	if s.Preprepare != nil {
-		return s.Preprepare.Proposal
+		switch proposal := s.Preprepare.Proposal.(type) {
+		case pbft.PartialProposal:
+			return Partial2Proposal(proposal)
+		case pbft.Proposal:
+			return proposal
+		}
 	}
 
 	return nil
@@ -123,8 +128,11 @@ func (s *roundState) PartialProposal() pbft.PartialProposal {
 	defer s.mu.RUnlock()
 
 	if s.Preprepare != nil {
-		if pp, ok := s.Preprepare.Proposal.(pbft.PartialProposal); ok {
-			return pp
+		switch proposal := s.Preprepare.Proposal.(type) {
+		case pbft.PartialProposal:
+			return proposal
+		case pbft.Proposal:
+			return nil
 		}
 	}
 	return nil
@@ -174,7 +182,6 @@ func (s *roundState) LockHash() {
 	defer s.mu.Unlock()
 
 	if s.Preprepare != nil {
-		//s.lockedHash = s.Preprepare.Proposal.Hash()
 		s.lockedHash = s.Preprepare.Proposal.PendingHash()
 	}
 }
