@@ -61,7 +61,7 @@ type Sealer interface {
 	// Execute block and return executed block
 	Execute(block *types.Block) (*types.Block, error)
 	// Adjust max block txs can seal
-	AdjustMaxBlockTxs(remaining time.Duration, timeout bool)
+	AdjustMaxBlockTxs(remaining time.Duration, blockTxs int, timeout bool)
 }
 
 type TxPool interface {
@@ -73,4 +73,5 @@ type TxPool interface {
 type Peer interface {
 	// Send sends the message to this peer
 	Send(msgcode uint64, data interface{}) error
+	MarkTransaction(hash common.Hash)
 }

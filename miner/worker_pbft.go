@@ -73,11 +73,11 @@ func (w *worker) Execute(block *types.Block) (*types.Block, error) {
 	return block, nil
 }
 
-func (w *worker) AdjustMaxBlockTxs(remaining time.Duration, timeout bool) {
+func (w *worker) AdjustMaxBlockTxs(remaining time.Duration, blockTxs int, timeout bool) {
 	// handle timeout & increase pbftCtx.maxBlockTxs
 	if timeout {
 		atomic.StoreUint64(&w.pbftCtx.maxBlockTxs, math.Uint64Max(w.pbftCtx.maxBlockTxs/2, limitMinBlockTxs))
-	} else if remaining > 0 {
+	} else if remaining > 0 && uint64(blockTxs) >= w.pbftCtx.maxBlockTxs {
 		maxBlockTxs := w.pbftCtx.maxBlockTxs
 		if maxBlockTxs > 1 {
 			atomic.StoreUint64(&w.pbftCtx.maxBlockTxs, math.Uint64Min(maxBlockTxs*3/2, limitMaxBlockTxs))

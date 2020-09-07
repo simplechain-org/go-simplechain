@@ -47,4 +47,6 @@ var (
 	errInvalidSigner = errors.New("message not signed by the sender")
 	// errInvalidPartialProposal
 	errInvalidPartialProposal = errors.New("proposal is not a partial proposal")
+	// errNonexistentProposal
+	errNonexistentProposal = errors.New("proposal is not exist")
 )

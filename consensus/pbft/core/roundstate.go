@@ -19,10 +19,12 @@ package core
 import (
 	"io"
 	"math/big"
+	"runtime/debug"
 	"sync"
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/consensus/pbft"
+	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/rlp"
 )
 
@@ -47,6 +49,7 @@ func newRoundState(view *pbft.View, validatorSet pbft.ValidatorSet, lockedHash c
 type roundState struct {
 	round          *big.Int
 	sequence       *big.Int
+	PartialPrepare *pbft.PartialPreprepare
 	Preprepare     *pbft.Preprepare
 	Prepare        pbft.Conclusion // executed proposal
 	Prepares       *messageSet
@@ -91,6 +94,13 @@ func (s *roundState) Subject() *pbft.Subject {
 	}
 }
 
+func (s *roundState) SetPartialPrepare(preprepare *pbft.PartialPreprepare) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.PartialPrepare = preprepare
+}
+
 func (s *roundState) SetPreprepare(preprepare *pbft.Preprepare) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -110,13 +120,17 @@ func (s *roundState) Proposal() pbft.Proposal {
 	defer s.mu.RUnlock()
 
 	if s.Preprepare != nil {
-		switch proposal := s.Preprepare.Proposal.(type) {
-		case pbft.PartialProposal:
-			return Partial2Proposal(proposal)
-		case pbft.Proposal:
-			return proposal
-		}
+		return s.Preprepare.Proposal
 	}
+	//TODO-D
+	//if s.Preprepare != nil {
+	//	switch proposal := s.Preprepare.Proposal.(type) {
+	//	case pbft.PartialProposal:
+	//		return Partial2Proposal(proposal)
+	//	case pbft.Proposal:
+	//		return proposal
+	//	}
+	//}
 
 	return nil
 }
@@ -127,14 +141,19 @@ func (s *roundState) PartialProposal() pbft.PartialProposal {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	if s.Preprepare != nil {
-		switch proposal := s.Preprepare.Proposal.(type) {
-		case pbft.PartialProposal:
-			return proposal
-		case pbft.Proposal:
-			return nil
-		}
+	if s.PartialPrepare != nil {
+		return s.PartialPrepare.Proposal.(pbft.PartialProposal)
 	}
+
+	//TODO-D
+	//if s.Preprepare != nil {
+	//	switch proposal := s.Preprepare.Proposal.(type) {
+	//	case pbft.PartialProposal:
+	//		return proposal
+	//	case pbft.Proposal:
+	//		return nil
+	//	}
+	//}
 	return nil
 }
 
@@ -214,6 +233,8 @@ func (s *roundState) GetLockedHash() common.Hash {
 // Stream. It is not forbidden to read less or more, but it might
 // be confusing.
 func (s *roundState) DecodeRLP(stream *rlp.Stream) error {
+	log.Error("[debug] decode roundState")
+	debug.PrintStack()
 	var ss struct {
 		Round          *big.Int
 		Sequence       *big.Int

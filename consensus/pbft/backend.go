@@ -59,11 +59,17 @@ type Backend interface {
 	// the time difference of the proposal and current time is also returned.
 	Verify(proposal Proposal, checkHeader, checkBody bool) (time.Duration, error)
 
+	// Execute a proposal by sealer
 	Execute(Proposal) (Conclusion, error)
 
+	// OnTimeout notify the sealer pbft on timeout event
 	OnTimeout()
 
+	// Fill a partial proposal, return whether it is filled and missed transactions
 	FillPartialProposal(proposal PartialProposal) (bool, []types.MissedTx, error)
+
+	// MarkTransactionKnownBy mark transactions are known by validators, do not broadcast again
+	MarkTransactionKnownBy(val Validator, txs types.Transactions)
 
 	// Sign signs input data with the backend's private key
 	Sign([]byte) ([]byte, error)

@@ -198,6 +198,15 @@ func (sb *backend) Guidance(valSet pbft.ValidatorSet, sender common.Address, pay
 	}
 }
 
+func (sb *backend) MarkTransactionKnownBy(val pbft.Validator, txs types.Transactions) {
+	ps := sb.broadcaster.FindPeers(map[common.Address]bool{val.Address(): true})
+	for _, p := range ps {
+		for _, tx := range txs {
+			p.MarkTransaction(tx.Hash())
+		}
+	}
+}
+
 // Broadcast implements pbft.Backend.Gossip
 func (sb *backend) Gossip(valSet pbft.ValidatorSet, payload []byte) {
 	hash := pbft.RLPHash(payload)
@@ -247,12 +256,6 @@ func (sb *backend) Commit(conclusion pbft.Conclusion, commitSeals [][]byte) erro
 		return errInvalidProposal
 	}
 
-	//TODO-D: execute block, pendingBlock需要在handlePreprepare阶段执行，这里仅供测试时使用
-	//block, err := sb.sealer.Execute(block)
-	//if err != nil {
-	//	return err
-	//}
-
 	h := block.Header()
 	// Append commitSeals into extra-data
 	err := writeCommittedSeals(h, commitSeals)
@@ -265,7 +268,7 @@ func (sb *backend) Commit(conclusion pbft.Conclusion, commitSeals [][]byte) erro
 	hTime := time.Unix(int64(h.Time), 0)
 	delay := hTime.Sub(now())
 	if sb.sealer != nil {
-		sb.sealer.AdjustMaxBlockTxs(delay, false)
+		sb.sealer.AdjustMaxBlockTxs(delay, block.Transactions().Len(), false)
 	}
 
 	sb.logger.Trace("[report] pbft consensus seal cost",
@@ -410,7 +413,7 @@ func (sb *backend) Execute(proposal pbft.Proposal) (pbft.Conclusion, error) {
 
 func (sb *backend) OnTimeout() {
 	if sb.sealer != nil {
-		sb.sealer.AdjustMaxBlockTxs(0, true)
+		sb.sealer.AdjustMaxBlockTxs(0, 0, true)
 	}
 }
 

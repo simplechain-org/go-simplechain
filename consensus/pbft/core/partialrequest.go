@@ -51,13 +51,14 @@ func (c *core) handleGetMissedTxs(msg *message, src pbft.Validator) error {
 		return err
 	}
 
-	partial := c.current.Proposal()
-	if partial == nil {
-		logger.Warn("nonexistent partial proposal")
-		return nil //TODO: need return a error?
+	// proposer must have a filled proposal, return if the proposal is not exist
+	proposal := c.current.Proposal()
+	if proposal == nil {
+		logger.Warn("nonexistent completed proposal")
+		return errNonexistentProposal
 	}
 
-	txs, err := partial.FetchMissedTxs(missed.MissedTxs)
+	txs, err := proposal.FetchMissedTxs(missed.MissedTxs)
 	if err != nil {
 		return err
 	}
@@ -82,6 +83,9 @@ func (c *core) responseMissedTxs(txs types.Transactions, val pbft.Validator) {
 		logger.Error("Failed to encode", "missedResp", missedResp, "err", err)
 		return
 	}
+
+	// Mark txs known by val, and do not sync them again
+	c.backend.MarkTransactionKnownBy(val, txs)
 
 	c.send(&message{
 		Code: msgPartialMissedTxs,
@@ -114,7 +118,7 @@ func (c *core) handleMissedTxs(msg *message, src pbft.Validator) error {
 
 	partial := c.current.PartialProposal()
 	if partial == nil {
-		logger.Warn("local partial proposal was lost", "view", missed.View, "Preprepare",c.current.Preprepare)
+		logger.Warn("local partial proposal was lost", "view", missed.View, "Preprepare", c.current.Preprepare)
 		return nil //TODO: need return a error
 	}
 
@@ -128,5 +132,5 @@ func (c *core) handleMissedTxs(msg *message, src pbft.Validator) error {
 		return err
 	}
 
-	return c.handlePartialPrepare2(c.current.Preprepare, src)
+	return c.handlePartialPrepare2(c.current.PartialPrepare.FullPreprepare(), src)
 }

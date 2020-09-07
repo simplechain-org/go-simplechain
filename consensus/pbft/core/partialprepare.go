@@ -5,7 +5,6 @@ import (
 
 	"github.com/simplechain-org/go-simplechain/consensus"
 	"github.com/simplechain-org/go-simplechain/consensus/pbft"
-	"github.com/simplechain-org/go-simplechain/core/types"
 )
 
 func (c *core) sendPartialPrepare(request *pbft.Request, curView *pbft.View) {
@@ -14,7 +13,7 @@ func (c *core) sendPartialPrepare(request *pbft.Request, curView *pbft.View) {
 	// encode proposal partially
 	partialMsg, err := Encode(&pbft.Preprepare{
 		View:     curView,
-		Proposal: Proposal2Partial(request.Proposal, true),
+		Proposal: pbft.Proposal2Partial(request.Proposal, true),
 	})
 
 	// send partial pre-prepare msg to others
@@ -51,7 +50,14 @@ func (c *core) handlePartialPrepare(msg *message, src pbft.Validator) error {
 	logger := c.logger.New("from", src, "state", c.state)
 	c.prepareTimestamp = time.Now()
 
-	preprepare, err := c.checkPreprepareMsg(msg, src, true)
+	var preprepare *pbft.PartialPreprepare
+	err := msg.Decode(&preprepare)
+	if err != nil {
+		logger.Warn("Failed decode partial preprepare", "err", err)
+		return errFailedDecodePreprepare
+	}
+
+	err = c.checkPreprepareMsg(msg, src, preprepare.View)
 	if err != nil {
 		return err
 	}
@@ -60,15 +66,8 @@ func (c *core) handlePartialPrepare(msg *message, src pbft.Validator) error {
 	if duration, err := c.backend.Verify(preprepare.Proposal, true, false); err != nil {
 		// if it's a future block, we will handle it again after the duration
 		if err == consensus.ErrFutureBlock {
-			logger.Info("Proposed block will be handled in the future", "err", err, "duration", duration)
-			// FIXME: judge future block later， not at proposal verifying
-			//c.stopFuturePreprepareTimer()
-			//c.futurePreprepareTimer = time.AfterFunc(duration, func() {
-			//	c.sendEvent(backlogEvent{
-			//		src: src,
-			//		msg: msg,
-			//	})
-			//})
+			logger.Trace("Proposed block will be commited in the future", "err", err, "duration", duration)
+			// wait until block timestamp at commit stage
 		} else {
 			logger.Warn("Failed to verify partial proposal header", "err", err, "duration", duration)
 			c.sendNextRoundChange()
@@ -88,7 +87,7 @@ func (c *core) handlePartialPrepare(msg *message, src pbft.Validator) error {
 
 	// empty block
 	if len(partialProposal.TxDigests()) == 0 {
-		return c.handlePartialPrepare2(preprepare, src)
+		return c.handlePartialPrepare2(preprepare.FullPreprepare(), src)
 	}
 
 	filled, missedTxs, err := c.backend.FillPartialProposal(partialProposal)
@@ -100,11 +99,12 @@ func (c *core) handlePartialPrepare(msg *message, src pbft.Validator) error {
 
 	if filled {
 		// entire the second stage
-		return c.handlePartialPrepare2(preprepare, src)
+		return c.handlePartialPrepare2(preprepare.FullPreprepare(), src)
 
 	} else {
 		// accept partial preprepare
-		c.current.SetPreprepare(preprepare)
+		//c.current.SetPreprepare(preprepare)
+		c.current.SetPartialPrepare(preprepare)
 		// request missedTxs from proposer
 		c.requestMissedTxs(missedTxs, src)
 	}
@@ -122,23 +122,4 @@ func (c *core) handlePartialPrepare2(preprepare *pbft.Preprepare, src pbft.Valid
 		return err //TODO
 	}
 	return c.checkAndAcceptPreprepare(preprepare)
-}
-
-// Partial2Proposal change the common proposal to the partial proposal
-// return nil if proposal to block failed
-func Proposal2Partial(proposal pbft.Proposal, init bool) pbft.PartialProposal {
-	block, ok := proposal.(*types.Block)
-	if !ok {
-		return nil
-	}
-	if !init {
-		return &types.PartialBlock{Block: *block}
-	}
-	return types.NewPartialBlock(block)
-}
-
-// Partial2Proposal trans a partial proposal to the common proposal
-// warning: will panic if proposal is not partial
-func Partial2Proposal(proposal pbft.Proposal) pbft.Proposal {
-	return &proposal.(*types.PartialBlock).Block
 }

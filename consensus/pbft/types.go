@@ -139,6 +139,13 @@ func (b *Preprepare) DecodeRLP(s *rlp.Stream) error {
 
 type PartialPreprepare Preprepare
 
+func (b *PartialPreprepare) FullPreprepare() *Preprepare {
+	return &Preprepare{
+		View:     b.View,
+		Proposal: Partial2Proposal(b.Proposal),
+	}
+}
+
 // DecodeRLP implements rlp.Decoder, and load the consensus fields from a RLP stream.
 // Overwrite Decode method for partial block
 func (b *PartialPreprepare) DecodeRLP(s *rlp.Stream) error {
@@ -234,4 +241,23 @@ func (b *MissedResp) DecodeRLP(s *rlp.Stream) error {
 	}
 	b.View, b.ReqTxs = subject.View, subject.ReqTxs
 	return nil
+}
+
+// Partial2Proposal change the common proposal to the partial proposal
+// return nil if proposal to block failed
+func Proposal2Partial(proposal Proposal, init bool) PartialProposal {
+	block, ok := proposal.(*types.Block)
+	if !ok {
+		return nil
+	}
+	if !init {
+		return &types.PartialBlock{Block: *block}
+	}
+	return types.NewPartialBlock(block)
+}
+
+// Partial2Proposal trans a partial proposal to the common proposal
+// warning: will panic if proposal is not partial
+func Partial2Proposal(proposal Proposal) Proposal {
+	return &proposal.(*types.PartialBlock).Block
 }

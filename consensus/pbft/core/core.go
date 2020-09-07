@@ -344,6 +344,7 @@ func (c *core) updateRoundState(view *pbft.View, validatorSet pbft.ValidatorSet,
 	// Lock only if both roundChange is true and it is locked
 	if roundChange && c.current != nil {
 		if c.current.IsHashLocked() {
+			c.logger.Crit("[debug] update round on locked hash", "view", view)
 			c.current = newRoundState(view, validatorSet, c.current.GetLockedHash(), c.current.Preprepare, c.current.pendingRequest, c.backend.HasBadProposal)
 		} else {
 			c.current = newRoundState(view, validatorSet, common.Hash{}, nil, c.current.pendingRequest, c.backend.HasBadProposal)

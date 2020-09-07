@@ -244,5 +244,5 @@ func (testSealer) Execute(block *types.Block) (*types.Block, error) {
 	return block, nil
 }
 
-func (testSealer) AdjustMaxBlockTxs(remaining time.Duration, timeout bool) {
+func (testSealer) AdjustMaxBlockTxs(time.Duration, int, bool) {
 }

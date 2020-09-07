@@ -164,7 +164,7 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 	//} else {
 	//	return applyCommonTransaction(config, bc, author, gp, statedb, header, tx, usedGas, cfg)
 	//}
-	return applyEmptyTransaction(tx) // used for testing
+	//return applyEmptyTransaction(tx) // used for testing
 	//return applyAccountTransaction(config, gp, statedb, header, tx, usedGas) // used for testing
-	//return applyCommonTransaction(config, bc, author, gp, statedb, header, tx, usedGas, cfg)
+	return applyCommonTransaction(config, bc, author, gp, statedb, header, tx, usedGas, cfg)
 }

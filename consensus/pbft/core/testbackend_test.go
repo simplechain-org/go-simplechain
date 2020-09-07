@@ -97,6 +97,10 @@ func (self *testSystemBackend) Broadcast(valSet pbft.ValidatorSet, sender common
 	return nil
 }
 
+func (self *testSystemBackend) Post(payload []byte) {
+	testLogger.Warn("not sign any data")
+}
+
 func (self *testSystemBackend) Gossip(valSet pbft.ValidatorSet, message []byte) {
 	testLogger.Warn("not sign any data")
 }
@@ -116,6 +120,8 @@ func (self *testSystemBackend) Commit(proposal pbft.Conclusion, seals [][]byte) 
 	go self.events.Post(pbft.FinalCommittedEvent{})
 	return nil
 }
+
+func (self *testSystemBackend) MarkTransactionKnownBy(val pbft.Validator, txs types.Transactions) {}
 
 func (self *testSystemBackend) Verify(proposal pbft.Proposal, _, _ bool) (time.Duration, error) {
 	return 0, nil

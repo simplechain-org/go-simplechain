@@ -58,7 +58,14 @@ func (c *core) handlePreprepare(msg *message, src pbft.Validator) error {
 	logger := c.logger.New("from", src, "state", c.state)
 	c.prepareTimestamp = time.Now()
 
-	preprepare, err := c.checkPreprepareMsg(msg, src, false)
+	var preprepare *pbft.Preprepare
+	err := msg.Decode(&preprepare)
+	if err != nil {
+		logger.Warn("Failed decode preprepare", "err", err)
+		return errFailedDecodePreprepare
+	}
+
+	err = c.checkPreprepareMsg(msg, src, preprepare.View)
 	if err != nil {
 		return err
 	}
@@ -67,15 +74,8 @@ func (c *core) handlePreprepare(msg *message, src pbft.Validator) error {
 	if duration, err := c.backend.Verify(preprepare.Proposal, true, true); err != nil {
 		// if it's a future block, we will handle it again after the duration
 		if err == consensus.ErrFutureBlock {
-			logger.Info("Proposed block will be handled in the future", "err", err, "duration", duration)
-			// FIXME: judge future block later， not at proposal verifying
-			//c.stopFuturePreprepareTimer()
-			//c.futurePreprepareTimer = time.AfterFunc(duration, func() {
-			//	c.sendEvent(backlogEvent{
-			//		src: src,
-			//		msg: msg,
-			//	})
-			//})
+			logger.Trace("Proposed block will be commited in the future", "err", err, "duration", duration)
+			// wait until block timestamp at commit stage
 		} else {
 			logger.Warn("Failed to verify proposal", "err", err, "duration", duration)
 			c.sendNextRoundChange()
@@ -86,32 +86,12 @@ func (c *core) handlePreprepare(msg *message, src pbft.Validator) error {
 	return c.checkAndAcceptPreprepare(preprepare)
 }
 
-func (c *core) checkPreprepareMsg(msg *message, src pbft.Validator, partial bool) (*pbft.Preprepare, error) {
-	logger := c.logger.New("from", src, "state", c.state, "partial", partial)
-
-	// Decode PRE-PREPARE
-	var (
-		preprepare *pbft.Preprepare
-		err        error
-	)
-	// Decode by PartialPreprepare.DecodeRLP if proposal is partial
-	if partial {
-		var partailPreprepare *pbft.PartialPreprepare
-		err = msg.Decode(&partailPreprepare)
-		preprepare = (*pbft.Preprepare)(partailPreprepare)
-	} else {
-		err = msg.Decode(&preprepare)
-	}
-	if err != nil {
-		logger.Warn("Failed decode preprepare", "err", err)
-		return nil, errFailedDecodePreprepare
-	}
-
-	logger.Trace("[report] pbft handle Pre-prepare【1】", "view", preprepare.View, "hash", preprepare.Proposal.PendingHash())
+func (c *core) checkPreprepareMsg(msg *message, src pbft.Validator, view *pbft.View) error {
+	logger := c.logger.New("from", src, "state", c.state, "view", view)
 
 	// Ensure we have the same view with the PRE-PREPARE message
 	// If it is old message, see if we need to broadcast COMMIT
-	if err := c.checkMessage(msg.Code, preprepare.View); err != nil {
+	if err := c.checkMessage(msg.Code, view); err != nil {
 		switch err {
 		case errOldMessage:
 			// Get validator set for the given proposal
@@ -133,17 +113,17 @@ func (c *core) checkPreprepareMsg(msg *message, src pbft.Validator, partial bool
 		case errFutureMessage:
 			//TODO: handle future pre-prepare
 		}
-		logger.Trace("checkMessage failed", "code", msg.Code, "view", preprepare.View)
-		return nil, err
+		logger.Trace("checkMessage failed", "code", msg.Code, "view", view)
+		return err
 	}
 
 	// Check if the message comes from current proposer
 	if !c.valSet.IsProposer(src.Address()) {
 		logger.Warn("Ignore preprepare messages from non-proposer")
-		return nil, errNotFromProposer
+		return errNotFromProposer
 	}
 
-	return preprepare, nil
+	return nil
 }
 
 func (c *core) checkAndAcceptPreprepare(preprepare *pbft.Preprepare) error {
