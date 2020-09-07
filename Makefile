@@ -16,6 +16,11 @@ sipe:
 	@echo "Done building."
 	@echo "Run \"$(GOBIN)/sipe\" to launch sipe."
 
+subsipe:
+	build/env.sh go run build/ci.go install --tags=sub ./cmd/sipe
+	@echo "Done building."
+	@echo "Run \"$(GOBIN)/sipe\" to launch sipe."
+
 swarm:
 	build/env.sh go run build/ci.go install ./cmd/swarm
 	@echo "Done building."
@@ -39,6 +44,9 @@ test: all
 
 lint: ## Run linters.
 	build/env.sh go run build/ci.go lint
+
+sublint: ## Run linters(subchain mode).
+	build/env.sh go run build/ci.go lint --config=.golangci.sub.yml
 
 clean:
 	./build/clean_go_build_cache.sh

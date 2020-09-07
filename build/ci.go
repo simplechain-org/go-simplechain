@@ -203,6 +203,7 @@ func doInstall(cmdline []string) {
 	var (
 		arch = flag.String("arch", "", "Architecture to cross build for")
 		cc   = flag.String("cc", "", "C compiler to cross build with")
+		tags = flag.String("tags", "", "Go Build tags")
 	)
 	flag.CommandLine.Parse(cmdline)
 	env := build.Env()
@@ -232,8 +233,13 @@ func doInstall(cmdline []string) {
 		if runtime.GOARCH == "arm64" {
 			goinstall.Args = append(goinstall.Args, "-p", "1")
 		}
+		// Go build tags
+		if GOTAGS := *tags; GOTAGS != "" {
+			goinstall.Args = append(goinstall.Args, "-tags="+GOTAGS)
+		}
 		goinstall.Args = append(goinstall.Args, "-v")
 		goinstall.Args = append(goinstall.Args, packages...)
+		fmt.Println("goinstall1", goinstall.String())
 		build.MustRun(goinstall)
 		return
 	}
@@ -247,9 +253,17 @@ func doInstall(cmdline []string) {
 
 	// Seems we are cross compiling, work around forbidden GOBIN
 	goinstall := goToolArch(*arch, *cc, "install", buildFlags(env)...)
+	// Go build tags
+	if GOTAGS := *tags; GOTAGS != "" {
+		goinstall.Args = append(goinstall.Args, "-tags="+GOTAGS)
+	}
+
 	goinstall.Args = append(goinstall.Args, "-v")
 	goinstall.Args = append(goinstall.Args, []string{"-buildmode", "archive"}...)
 	goinstall.Args = append(goinstall.Args, packages...)
+
+	fmt.Println("goinstall2", goinstall.String())
+
 	build.MustRun(goinstall)
 
 	if cmds, err := ioutil.ReadDir("cmd"); err == nil {
@@ -347,6 +361,7 @@ func doTest(cmdline []string) {
 // doLint runs golangci-lint on requested packages.
 func doLint(cmdline []string) {
 	var (
+		config   = flag.String("config", ".golangci.yml", "golangci config yml file")
 		cachedir = flag.String("cachedir", "./build/cache", "directory for caching golangci-lint binary.")
 	)
 	flag.CommandLine.Parse(cmdline)
@@ -356,7 +371,7 @@ func doLint(cmdline []string) {
 	}
 
 	linter := downloadLinter(*cachedir)
-	lflags := []string{"run", "--config", ".golangci.yml"}
+	lflags := []string{"run", "--config", *config}
 	build.MustRunCommand(linter, append(lflags, packages...)...)
 	fmt.Println("You have achieved perfection.")
 }
