@@ -13,7 +13,7 @@
 //
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
-//+build !2019
+//+build sub
 
 package core
 
@@ -593,11 +593,7 @@ func (pool *TxPool) SyncLimit(limit int) types.Transactions {
 		}
 		ret = append(ret, tx)
 		//tx.SetSynced(true)
-
-		if len(ret) >= limit {
-			return false
-		}
-		return true
+		return len(ret) < limit
 	})
 
 	go pool.RemoveInvalidTxs(invalid)
@@ -633,10 +629,7 @@ func (pool *TxPool) PendingLimit(limit int) types.Transactions {
 
 		pending = append(pending, tx)
 
-		if len(pending) >= limit {
-			return false
-		}
-		return true
+		return len(pending) < limit
 	})
 	go pool.RemoveInvalidTxs(invalid)
 	return pending
@@ -738,10 +731,7 @@ func (pool *TxPool) InitPartialBlock(pb *types.PartialBlock) bool {
 		}
 	}
 
-	if len(pb.MissedTxs) > 0 {
-		return false
-	}
-	return true
+	return len(pb.MissedTxs) == 0
 }
 
 // add validates a transaction and inserts it into the non-executable queue for

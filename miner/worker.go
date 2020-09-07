@@ -13,7 +13,7 @@
 //
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-simplechain library. If not, see <http://www.gnu.org/licenses/>.
-//+build 2019
+//+build !sub
 
 package miner
 
@@ -403,7 +403,7 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 
 		case head := <-w.chainHeadCh:
 			if ist, ok := w.engine.(consensus.Istanbul); ok {
-				if err := ist.NewChainHead(); err != nil {
+				if err := ist.NewChainHead(head.Block); err != nil {
 					log.Warn("new istanbul chain head failed", "error", err.Error())
 				}
 			}

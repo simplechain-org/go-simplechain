@@ -36,7 +36,7 @@ func TestTreeRouter_SelectNodes(t *testing.T) {
 	testSelectNodes := func(from, to *TreeRouter, expected ...common.Address) map[common.Address]*peer {
 		myIndex := from.myIndex
 		toIndex := to.myIndex
-		selected := to.SelectNodes(connPeers(toIndex), myIndex)
+		selected := to.SelectNodes(connPeers(toIndex), myIndex, true)
 		ok := assert.Equal(t, len(expected), len(selected))
 		for _, addr := range expected {
 			if !assert.NotNil(t, selected[addr]) {

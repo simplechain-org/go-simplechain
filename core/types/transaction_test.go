@@ -20,13 +20,11 @@ import (
 	"bytes"
 	"crypto/ecdsa"
 	"encoding/json"
-	"math/big"
-	"testing"
-	"time"
-
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/rlp"
+	"math/big"
+	"testing"
 )
 
 // The values in those tests are from the Transaction Tests
@@ -59,19 +57,6 @@ func TestTransactionSigHash(t *testing.T) {
 	}
 	if homestead.Hash(rightvrsTx) != common.HexToHash("fe7a79529ed5f7c3375d06b26b186a8644e0e16c373d7a12be41c62d6042b77a") {
 		t.Errorf("RightVRS transaction hash mismatch, got %x", rightvrsTx.Hash())
-	}
-}
-
-func TestTransactionEncode(t *testing.T) {
-	rightvrsTx.SetSynced(true)
-	rightvrsTx.SetImportTime(time.Now().UnixNano())
-	txb, err := rlp.EncodeToBytes(rightvrsTx)
-	if err != nil {
-		t.Fatalf("encode error: %v", err)
-	}
-	should := common.FromHex("f86203018207d094b94f5374fce5edbc8e2a8697c15331677e6ebf0b0a825544801ca098ff921201554726367d2be8c804a7ff89ccf285ebc57dff8ae4c44b9c19ac4aa08887321be575c8095f789dd4c743dfe42c1820f9231f98a962b210e3ac2452a3")
-	if !bytes.Equal(txb, should) {
-		t.Errorf("encoded RLP mismatch, got %x", txb)
 	}
 }
 
@@ -220,25 +205,5 @@ func TestTransactionJSON(t *testing.T) {
 		if tx.ChainId().Cmp(parsedTx.ChainId()) != 0 {
 			t.Errorf("invalid chain id, want %d, got %d", tx.ChainId(), parsedTx.ChainId())
 		}
-	}
-}
-
-func TestTransaction_BlockLimitAndTimestamp(t *testing.T) {
-	tx := NewTransaction(1, common.Address{1}, common.Big0, 1, common.Big2, []byte("abcdef"))
-
-	// set blockLimit
-	tx1 := NewTransaction(1, common.Address{1}, common.Big0, 1, common.Big2, []byte("abcdef"))
-	tx1.SetBlockLimit(100)
-
-	if tx.Hash() == tx1.Hash() {
-		t.Errorf("different blockLimit tx requeire diff hash, got same %v", tx.Hash().String())
-	}
-
-	// set timestamp
-	tx2 := NewTransaction(1, common.Address{1}, common.Big0, 1, common.Big2, []byte("abcdef"))
-	tx2.SetImportTime(time.Now().UnixNano())
-
-	if tx.Hash() != tx2.Hash() {
-		t.Errorf("different timestamp tx requeire same hash, want %v, got %v", tx.Hash().String(), tx2.Hash().String())
 	}
 }

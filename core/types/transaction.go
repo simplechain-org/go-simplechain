@@ -19,62 +19,16 @@ package types
 import (
 	"container/heap"
 	"errors"
-	"io"
-	"math/big"
-	"sync/atomic"
-
 	"github.com/simplechain-org/go-simplechain/common"
-	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/rlp"
+	"io"
+	"math/big"
 )
-
-//go:generate gencodec -type txdata -field-override txdataMarshaling -out gen_tx_json.go
 
 var (
 	ErrInvalidSig = errors.New("invalid transaction v, r, s values")
 )
-
-type Transaction struct {
-	data txdata
-	// caches
-	hash atomic.Value
-	size atomic.Value
-	from atomic.Value
-	// for txpool
-	timestamp int64
-	synced    bool
-	local     bool
-}
-
-type txdata struct {
-	AccountNonce uint64          `json:"nonce"    gencodec:"required"`
-	Price        *big.Int        `json:"gasPrice" gencodec:"required"`
-	GasLimit     uint64          `json:"gas"      gencodec:"required"`
-	Recipient    *common.Address `json:"to"       rlp:"nil"` // nil means contract creation
-	Amount       *big.Int        `json:"value"    gencodec:"required"`
-	Payload      []byte          `json:"input"    gencodec:"required"`
-	BlockLimit   uint64          `json:"blockLimit"    gencodec:"required"`
-
-	// Signature values
-	V *big.Int `json:"v" gencodec:"required"`
-	R *big.Int `json:"r" gencodec:"required"`
-	S *big.Int `json:"s" gencodec:"required"`
-
-	// This is only used when marshaling to JSON.
-	Hash *common.Hash `json:"hash" rlp:"-"`
-}
-
-type txdataMarshaling struct {
-	AccountNonce hexutil.Uint64
-	Price        *hexutil.Big
-	GasLimit     hexutil.Uint64
-	Amount       *hexutil.Big
-	Payload      hexutil.Bytes
-	V            *hexutil.Big
-	R            *hexutil.Big
-	S            *hexutil.Big
-}
 
 func NewTransaction(nonce uint64, to common.Address, amount *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte) *Transaction {
 	return newTransaction(nonce, &to, amount, gasLimit, gasPrice, data)
@@ -184,19 +138,6 @@ func (tx *Transaction) Value() *big.Int    { return new(big.Int).Set(tx.data.Amo
 func (tx *Transaction) Nonce() uint64      { return tx.data.AccountNonce }
 func (tx *Transaction) CheckNonce() bool   { return true }
 
-func (tx *Transaction) SetSender(from atomic.Value) { tx.from = from }
-func (tx *Transaction) GetSender() atomic.Value     { return tx.from }
-
-func (tx *Transaction) BlockLimit() uint64                { return tx.data.BlockLimit }
-func (tx *Transaction) SetBlockLimit(expiredBlock uint64) { tx.data.BlockLimit = expiredBlock }
-
-func (tx *Transaction) IsSynced() bool                { return tx.synced }
-func (tx *Transaction) SetSynced(synced bool)         { tx.synced = synced }
-func (tx *Transaction) IsLocal() bool                 { return tx.local }
-func (tx *Transaction) SetLocal(local bool)           { tx.local = local }
-func (tx *Transaction) ImportTime() int64             { return tx.timestamp }
-func (tx *Transaction) SetImportTime(timestamp int64) { tx.timestamp = timestamp }
-
 // To returns the recipient address of the transaction.
 // It returns nil if the transaction is a contract creation.
 func (tx *Transaction) To() *common.Address {
@@ -243,7 +184,7 @@ func (tx *Transaction) AsMessage(s Signer) (Message, error) {
 		to:         tx.data.Recipient,
 		amount:     tx.data.Amount,
 		data:       tx.data.Payload,
-		checkNonce: false,
+		checkNonce: messageCheckNonce,
 	}
 
 	var err error

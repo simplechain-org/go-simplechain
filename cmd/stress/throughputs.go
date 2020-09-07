@@ -1,10 +1,11 @@
+//+build sub
+
 package main
 
 import (
 	"context"
 	"crypto/ecdsa"
 	"flag"
-	"github.com/Beyond-simplechain/foundation/asio"
 	"log"
 	"math/big"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Beyond-simplechain/foundation/asio"
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/crypto"
@@ -29,6 +31,17 @@ const (
 var txsCount = int64(0)
 
 var sourceKey = "5aedb85503128685e4f92b0cc95e9e1185db99339f9b85125c1e2ddc0f7c4c48"
+
+var senderKeys = []string{
+	"5aedb85503128685e4f92b0cc95e9e1185db99339f9b85125c1e2ddc0f7c4c48",
+	"41a6df5663e5f674baaea1a021cdee1751ca28777e352ed0467fff420017978b",
+	"868d8f8b3d50e2a3ebfd5a08b16d84ee015db519d662bb0e5878388f0c15a6e3",
+	"0x9259787a40ec58154e7e04ae324b965cb4f199b1ef09708319d50ad36fc1cbeb",
+	"0xa42531bd0a7c1df628ab141f3be6086146ed01f74628a467f9f926b3625e17a0",
+	"0x2d396fd91b652c687bc6796932a39f190cf7b4aab26e079f8f28baba9939847e",
+	"0x35daed192142a1b608b60390036e7d3ad11ec6bc2d09182f3192f70ed54d4f2f",
+	"0x6ce1ddaaa7cd15232fd17838ab65b7beb8b6ad8e43be7d61548535b40a2a89b0",
+}
 
 func init() {
 	log.SetFlags(log.Lshortfile | log.LstdFlags)

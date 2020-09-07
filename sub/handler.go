@@ -924,7 +924,7 @@ func (pm *ProtocolManager) FindPeers(targets map[common.Address]bool) map[common
 
 func (pm *ProtocolManager) FindRoute(validators []common.Address, myIndex, routeIndex int) map[common.Address]consensus.Peer {
 	pm.blockSyncRouter.Reset(0, validators, myIndex)
-	set := pm.blockSyncRouter.SelectNodes(pm.peers.PeerWithAddresses(), routeIndex)
+	set := pm.blockSyncRouter.SelectNodes(pm.peers.PeerWithAddresses(), routeIndex, false)
 	if set == nil {
 		return nil
 	}

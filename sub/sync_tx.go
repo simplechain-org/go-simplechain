@@ -32,12 +32,17 @@ func (pm *ProtocolManager) handleTxs(legacy bool) {
 func (pm *ProtocolManager) handleRemoteTxsByRouter(peer *peer, txr *TransactionsWithRoute) {
 	txRouter := pm.txSyncRouter
 	if num := pm.blockchain.CurrentBlock().NumberU64(); num != txRouter.BlockNumber() {
-		validators, myIndex := pm.engine.(consensus.Byzantine).CurrentValidators() //TODO: type assert
+		bft, ok := pm.engine.(consensus.Byzantine)
+		if !ok {
+			log.Warn("handle route tx without byzantine consensus")
+			return
+		}
+		validators, myIndex := bft.CurrentValidators()
 		txRouter.Reset(num, validators, myIndex)
 	}
 
 	routeIndex := txr.RouteIndex
-	selectedNode := pm.txSyncRouter.SelectNodes(pm.peers.PeerWithAddresses(), int(routeIndex))
+	selectedNode := pm.txSyncRouter.SelectNodes(pm.peers.PeerWithAddresses(), int(routeIndex), false)
 	// forward the received txs
 	for _, p := range selectedNode {
 		if p == peer {
@@ -45,8 +50,6 @@ func (pm *ProtocolManager) handleRemoteTxsByRouter(peer *peer, txr *Transactions
 		}
 		p.AsyncSendTransactionsByRouter(txr.Txs, int(routeIndex))
 	}
-
-	//log.Error("[debug] forward remote txs by router", "routeIndex", routeIndex, "myIndex", txRouter.myIndex, "nodes", RouterNodes(selectedNode).String())
 }
 
 func (pm *ProtocolManager) addRemoteTxsByRouter2TxPool(peer *peer, txr *TransactionsWithRoute) {
@@ -137,7 +140,7 @@ func (pm *ProtocolManager) calcTxsWithPeerSetByRouter(txs types.Transactions) (m
 		txRouter.Reset(current, validators, index)
 	}
 	routeIndex := txRouter.MyIndex()
-	selectedNodes := txRouter.SelectNodes(pm.peers.PeerWithAddresses(), routeIndex)
+	selectedNodes := txRouter.SelectNodes(pm.peers.PeerWithAddresses(), routeIndex, true)
 
 	for _, tx := range txs {
 		for _, peer := range selectedNodes {
@@ -219,7 +222,6 @@ func (pm *ProtocolManager) txBroadcastLoop() {
 	for {
 		select {
 		case <-pm.txSyncTimer.C:
-			//newTransactions := atomic.LoadInt64(&pm.newTransactions)
 			var txs types.Transactions
 			pm.newTxLock.Lock()
 			if pm.newTransactions.Len() > int(broadcastTxLimit) {
@@ -231,19 +233,11 @@ func (pm *ProtocolManager) txBroadcastLoop() {
 			}
 			pm.newTxLock.Unlock()
 
-			//txs := pm.txpool.SyncLimit(int(cmath.Int64Min(newTransactions, broadcastTxLimit)))
-
-			l := txs.Len()
-
-			if l > 0 {
+			if l := txs.Len(); l > 0 {
 				total += l
 				log.Trace("dump transactions", "total", total, "count", l)
 				pm.BroadcastTxs(txs)
 			}
-
-			//if l <= broadcastTxLimit/2 {
-			//	waiting += waiting / 2
-			//}
 
 			pm.txSyncTimer.Reset(pm.txSyncPeriod)
 

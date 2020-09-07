@@ -174,7 +174,7 @@ func (chain *SpeculativeChain) removeProposedTxes(block *types.Block) {
 	}
 }
 
-func (chain *SpeculativeChain) __WithoutProposedTxes(addrTxes AddressTxes) AddressTxes {
+func (chain *SpeculativeChain) WithoutProposedTxes2(addrTxes AddressTxes) AddressTxes {
 	newMap := make(AddressTxes)
 
 	for addr, txes := range addrTxes {

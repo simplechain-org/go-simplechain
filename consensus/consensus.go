@@ -15,8 +15,6 @@
 // along with the go-simplechain library. If not, see <http://www.gnu.org/licenses/>.
 
 // Package consensus implements different Ethereum consensus engines.
-//+build 2019
-
 package consensus
 
 import (
@@ -127,8 +125,7 @@ type PoW interface {
 	Hashrate() float64
 }
 
-// Istanbul is a consensus engine to avoid byzantine failure
-type Istanbul interface {
+type Byzantine interface {
 	Engine
 
 	// Start starts the engine
@@ -137,7 +134,27 @@ type Istanbul interface {
 	// Stop stops the engine
 	Stop() error
 
-	SetBroadcaster(broadcaster Broadcaster)
+	// get block validators and self index(return -1 if not a validator) of current blockchain height
+	CurrentValidators() ([]common.Address, int)
+
+	// handle p2p msg, return whether engine was handled
 	HandleMsg(addr common.Address, msg p2p.Msg) (bool, error)
-	NewChainHead() error
+
+	// report new block head is committed to blockchain
+	NewChainHead(block *types.Block) error
+
+	SetBroadcaster(broadcaster Broadcaster)
+}
+
+// Istanbul is a consensus engine to avoid byzantine failure
+type Istanbul interface {
+	Byzantine
+}
+
+type Pbft interface {
+	Byzantine
+
+	SetSealer(sealer Sealer)
+
+	SetTxPool(pool TxPool)
 }

@@ -20,11 +20,12 @@ import (
 	"crypto/ecdsa"
 	"errors"
 	"fmt"
+	"math/big"
+
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/params"
-	"math/big"
 )
 
 var (
@@ -71,9 +72,6 @@ func Sender(signer Signer, tx *Transaction) (common.Address, error) {
 			return sigCache.from, nil
 		}
 	}
-	//if len(tx.data.Payload) == 20+64 {
-	//	return common.BytesToAddress(tx.data.Payload[:20]), nil
-	//}
 	addr, err := signer.Sender(tx)
 	if err != nil {
 		return common.Address{}, err

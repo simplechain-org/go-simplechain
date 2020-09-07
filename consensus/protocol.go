@@ -15,13 +15,12 @@
 // along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
 // Package consensus implements different Ethereum consensus engines.
-//+build 2019
-
 package consensus
 
 import (
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/types"
+	"time"
 )
 
 // Constants to match up protocol versions and messages
@@ -54,10 +53,25 @@ type Broadcaster interface {
 	Enqueue(id string, block *types.Block)
 	// FindPeers retrives peers by addresses
 	FindPeers(map[common.Address]bool) map[common.Address]Peer
+	// FindRoute
+	FindRoute([]common.Address, int, int) map[common.Address]Peer
+}
+
+type Sealer interface {
+	// Execute block and return executed block
+	Execute(block *types.Block) (*types.Block, error)
+	// Adjust max block txs can seal
+	AdjustMaxBlockTxs(remaining time.Duration, blockTxs int, timeout bool)
+}
+
+type TxPool interface {
+	// Init partial block by txpool
+	InitPartialBlock(pBlock *types.PartialBlock) bool
 }
 
 // Peer defines the interface to communicate with peer
 type Peer interface {
 	// Send sends the message to this peer
 	Send(msgcode uint64, data interface{}) error
+	MarkTransaction(hash common.Hash)
 }

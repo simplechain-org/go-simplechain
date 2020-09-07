@@ -35,12 +35,6 @@ type TreeRouter struct {
 	lock sync.RWMutex
 }
 
-//var treeRouterPool = sync.Pool{
-//	New: func() interface{} {
-//		return &TreeRouter{}
-//	},
-//}
-
 func CreateTreeRouter(blockNumber uint64, currentValidators []common.Address, myIndex, width int) *TreeRouter {
 	r := new(TreeRouter)
 	r.treeWidth = width
@@ -48,13 +42,13 @@ func CreateTreeRouter(blockNumber uint64, currentValidators []common.Address, my
 	return r
 }
 
-func (r TreeRouter) BlockNumber() uint64 {
+func (r *TreeRouter) BlockNumber() uint64 {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 	return r.blockNumber
 }
 
-func (r TreeRouter) MyIndex() int {
+func (r *TreeRouter) MyIndex() int {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 	if r.myIndex < 0 {
@@ -69,15 +63,25 @@ func (r *TreeRouter) Reset(blockNumber uint64, currentValidators []common.Addres
 	r.blockNumber, r.currentValidators, r.myIndex = blockNumber, currentValidators, myIndex
 }
 
-func (r *TreeRouter) SelectNodes(peers map[common.Address]*peer, index int) map[common.Address]*peer {
+func (r *TreeRouter) SelectNodes(peers map[common.Address]*peer, index int, start bool) map[common.Address]*peer {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
 	result := make(map[common.Address]*peer)
+	// observe node
 	if r.myIndex < 0 {
-		return peers
-		//TODO: handle observe node. 普通节点广播交易
+		if !start {
+			return result
+		}
+		addr, ok := r.getNodeByIndex(index)
+		if ok && peers[addr] != nil {
+			result[addr] = peers[addr]
+		} else {
+			r.selectChildNodes(result, peers, index, index)
+		}
+		return result
 
+		//	consensus node
 	} else {
 		nodeIndex := r.calcNodeIndex(index)
 		r.selectChildNodes(result, peers, nodeIndex, index)

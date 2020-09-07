@@ -117,7 +117,6 @@ func TestPartialBlock_RLP(t *testing.T) {
 					Recipient:    nil,
 					Amount:       big.NewInt(2),
 					Payload:      nil,
-					BlockLimit:   3,
 				},
 			},
 		},
