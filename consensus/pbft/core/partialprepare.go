@@ -15,6 +15,10 @@ func (c *core) sendPartialPrepare(request *pbft.Request, curView *pbft.View) {
 		View:     curView,
 		Proposal: pbft.Proposal2Partial(request.Proposal, true),
 	})
+	if err != nil {
+		logger.Error("Failed to encode", "view", curView)
+		return
+	}
 
 	// send partial pre-prepare msg to others
 	c.broadcast(&message{
@@ -57,7 +61,7 @@ func (c *core) handlePartialPrepare(msg *message, src pbft.Validator) error {
 		return errFailedDecodePreprepare
 	}
 
-	err = c.checkPreprepareMsg(msg, src, preprepare.View)
+	err = c.checkPreprepareMsg(msg, src, preprepare.View, preprepare.Proposal)
 	if err != nil {
 		return err
 	}
@@ -66,7 +70,7 @@ func (c *core) handlePartialPrepare(msg *message, src pbft.Validator) error {
 	if duration, err := c.backend.Verify(preprepare.Proposal, true, false); err != nil {
 		// if it's a future block, we will handle it again after the duration
 		if err == consensus.ErrFutureBlock {
-			logger.Trace("Proposed block will be commited in the future", "err", err, "duration", duration)
+			logger.Trace("Proposed block will be committed in the future", "err", err, "duration", duration)
 			// wait until block timestamp at commit stage
 		} else {
 			logger.Warn("Failed to verify partial proposal header", "err", err, "duration", duration)

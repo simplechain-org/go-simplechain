@@ -28,10 +28,11 @@ func (c *core) sendCommit() {
 	c.broadcastCommit(sub)
 }
 
-func (c *core) sendCommitForOldBlock(view *pbft.View, digest common.Hash) {
+func (c *core) sendCommitForOldBlock(view *pbft.View, pending, digest common.Hash) {
 	sub := &pbft.Subject{
-		View:   view,
-		Digest: digest,
+		View:    view,
+		Pending: pending,
+		Digest:  digest,
 	}
 	c.broadcastCommit(sub)
 }

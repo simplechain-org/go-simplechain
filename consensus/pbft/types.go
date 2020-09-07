@@ -189,7 +189,7 @@ func (b *Subject) DecodeRLP(s *rlp.Stream) error {
 }
 
 func (b *Subject) String() string {
-	return fmt.Sprintf("{View: %v, Pending:%v, Digest: %v}", b.View, b.Pending, b.Digest.String())
+	return fmt.Sprintf("{View: %v, Pending:%v, Digest: %v}", b.View, b.Pending.String(), b.Digest.String())
 }
 
 type MissedReq struct {

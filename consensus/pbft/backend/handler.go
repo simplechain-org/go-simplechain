@@ -161,5 +161,7 @@ func (sb *backend) NewChainHead(block *types.Block) error {
 		return pbft.ErrStoppedEngine
 	}
 	go sb.pbftEventMux.Post(pbft.FinalCommittedEvent{Committed: block})
+	// add proposal2conclusion mapping
+	sb.proposal2conclusion.Add(block.PendingHash(), block.Hash())
 	return nil
 }

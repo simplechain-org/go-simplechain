@@ -213,10 +213,7 @@ func (pool *testSystemTxPool) InitPartialBlock(pb *types.PartialBlock) bool {
 		}
 	}
 
-	if len(misses) > 0 {
-		return false
-	}
-	return true
+	return len(misses) == 0
 }
 
 // ==============================================

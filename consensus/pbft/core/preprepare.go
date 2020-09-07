@@ -65,7 +65,7 @@ func (c *core) handlePreprepare(msg *message, src pbft.Validator) error {
 		return errFailedDecodePreprepare
 	}
 
-	err = c.checkPreprepareMsg(msg, src, preprepare.View)
+	err = c.checkPreprepareMsg(msg, src, preprepare.View, preprepare.Proposal)
 	if err != nil {
 		return err
 	}
@@ -74,7 +74,7 @@ func (c *core) handlePreprepare(msg *message, src pbft.Validator) error {
 	if duration, err := c.backend.Verify(preprepare.Proposal, true, true); err != nil {
 		// if it's a future block, we will handle it again after the duration
 		if err == consensus.ErrFutureBlock {
-			logger.Trace("Proposed block will be commited in the future", "err", err, "duration", duration)
+			logger.Trace("Proposed block will be committed in the future", "err", err, "duration", duration)
 			// wait until block timestamp at commit stage
 		} else {
 			logger.Warn("Failed to verify proposal", "err", err, "duration", duration)
@@ -86,7 +86,7 @@ func (c *core) handlePreprepare(msg *message, src pbft.Validator) error {
 	return c.checkAndAcceptPreprepare(preprepare)
 }
 
-func (c *core) checkPreprepareMsg(msg *message, src pbft.Validator, view *pbft.View) error {
+func (c *core) checkPreprepareMsg(msg *message, src pbft.Validator, view *pbft.View, proposal pbft.Proposal) error {
 	logger := c.logger.New("from", src, "state", c.state, "view", view)
 
 	// Ensure we have the same view with the PRE-PREPARE message
@@ -95,23 +95,19 @@ func (c *core) checkPreprepareMsg(msg *message, src pbft.Validator, view *pbft.V
 		switch err {
 		case errOldMessage:
 			// Get validator set for the given proposal
-			//valSet := c.backend.ParentValidators(preprepare.Proposal).Copy()
-			//previousProposer := c.backend.GetProposer(preprepare.Proposal.Number().Uint64() - 1)
-			//valSet.CalcProposer(previousProposer, preprepare.View.Round.Uint64())
+			valSet := c.backend.ParentValidators(proposal).Copy()
+			previousProposer := c.backend.GetProposer(proposal.Number().Uint64() - 1)
+			valSet.CalcProposer(previousProposer, view.Round.Uint64())
 			// Broadcast COMMIT if it is an existing block
 			// 1. The proposer needs to be a proposer matches the given (Sequence + Round)
 			// 2. The given block must exist
-			//if valSet.IsProposer(src.Address()) && c.backend.HasPropsal(preprepare.Proposal.PendingHash(), preprepare.Proposal.Number()) {
-			//	c.sendCommitForOldBlock(preprepare.View, preprepare.Proposal.PendingHash())
-			//	return nil
-			//}
-			//FIXME: Proposal只有pendingHash，无法在自身链中找到此proposal对应的区块，故无法处理oldCommit
-			//if valSet.IsProposer(src.Address()) && c.backend.HasPropsal(preprepare.Proposal.Hash(), preprepare.Proposal.Number()) {
-			//	c.sendCommitForOldBlock(preprepare.View, preprepare.Proposal.Hash())
-			//	return nil
-			//}
-		case errFutureMessage:
-			//TODO: handle future pre-prepare
+			if valSet.IsProposer(src.Address()) {
+				commitHash, has := c.backend.HasProposal(proposal.PendingHash(), proposal.Number())
+				if has {
+					c.sendCommitForOldBlock(view, proposal.PendingHash(), commitHash)
+					return nil
+				}
+			}
 		}
 		logger.Trace("checkMessage failed", "code", msg.Code, "view", view)
 		return err

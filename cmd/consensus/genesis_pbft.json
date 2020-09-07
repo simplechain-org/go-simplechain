@@ -4,7 +4,7 @@
     "SingularityBlock": 0,
     "pbft": {
       "epoch": 30000,
-      "policy": 0
+      "policy": 1
     }
   },
   "gasLimit": "0xE0000000",

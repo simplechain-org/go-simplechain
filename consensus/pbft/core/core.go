@@ -37,21 +37,16 @@ import (
 func New(backend pbft.Backend, config *pbft.Config) Engine {
 	//r := metrics.NewRegistry()
 	c := &core{
-		config:             config,
-		address:            backend.Address(),
-		state:              StateAcceptRequest,
-		handlerWg:          new(sync.WaitGroup),
-		logger:             log.New("address", backend.Address()),
-		backend:            backend,
-		backlogs:           make(map[common.Address]*prque.Prque),
-		backlogsMu:         new(sync.Mutex),
-		missedReq:          make(map[common.Hash]*prque.Prque),
-		missedReqMu:        new(sync.Mutex),
-		pendingRequests:    prque.New(nil),
-		pendingRequestsMu:  new(sync.Mutex),
-		consensusTimestamp: time.Time{},
-		roundMeter:         metrics.NewMeter(),
-		sequenceMeter:      metrics.NewMeter(),
+		config:            config,
+		address:           backend.Address(),
+		state:             StateAcceptRequest,
+		handlerWg:         new(sync.WaitGroup),
+		logger:            log.New("address", backend.Address()),
+		backend:           backend,
+		backlogs:          make(map[common.Address]*prque.Prque),
+		backlogsMu:        new(sync.Mutex),
+		pendingRequests:   prque.New(nil),
+		pendingRequestsMu: new(sync.Mutex),
 	}
 
 	c.roundMeter = metrics.NewRegisteredMeter("consensus/pbft/core/round", nil)
@@ -92,9 +87,6 @@ type core struct {
 	backlogs   map[common.Address]*prque.Prque
 	backlogsMu *sync.Mutex
 
-	missedReq   map[common.Hash]*prque.Prque
-	missedReqMu *sync.Mutex
-
 	current   *roundState
 	handlerWg *sync.WaitGroup
 
@@ -103,6 +95,8 @@ type core struct {
 
 	pendingRequests   *prque.Prque
 	pendingRequestsMu *sync.Mutex
+
+	// metrics
 
 	// the meter to record the round change rate
 	roundMeter metrics.Meter
@@ -114,6 +108,9 @@ type core struct {
 
 	preprepareTimer     metrics.Timer
 	preprepareTimestamp time.Time
+
+	executeTimer     metrics.Timer
+	executeTimestamp time.Time
 
 	prepareTimer     metrics.Timer
 	prepareTimestamp time.Time
@@ -344,7 +341,6 @@ func (c *core) updateRoundState(view *pbft.View, validatorSet pbft.ValidatorSet,
 	// Lock only if both roundChange is true and it is locked
 	if roundChange && c.current != nil {
 		if c.current.IsHashLocked() {
-			c.logger.Crit("[debug] update round on locked hash", "view", view)
 			c.current = newRoundState(view, validatorSet, c.current.GetLockedHash(), c.current.Preprepare, c.current.pendingRequest, c.backend.HasBadProposal)
 		} else {
 			c.current = newRoundState(view, validatorSet, common.Hash{}, nil, c.current.pendingRequest, c.backend.HasBadProposal)

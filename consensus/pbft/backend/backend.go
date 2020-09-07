@@ -47,19 +47,21 @@ func New(config *pbft.Config, privateKey *ecdsa.PrivateKey, db ethdb.Database) c
 	recents, _ := lru.NewARC(inmemorySnapshots)
 	recentMessages, _ := lru.NewARC(inmemoryPeers)
 	knownMessages, _ := lru.NewARC(inmemoryMessages)
+	proposal2conclusion, _ := lru.NewARC(inmemoryP2C)
 	backend := &backend{
-		config:         config,
-		pbftEventMux:   new(event.TypeMux),
-		privateKey:     privateKey,
-		address:        crypto.PubkeyToAddress(privateKey.PublicKey),
-		logger:         log.New(),
-		db:             db,
-		commitCh:       make(chan *types.Block, 1),
-		recents:        recents,
-		candidates:     make(map[common.Address]bool),
-		coreStarted:    false,
-		recentMessages: recentMessages,
-		knownMessages:  knownMessages,
+		config:              config,
+		pbftEventMux:        new(event.TypeMux),
+		privateKey:          privateKey,
+		address:             crypto.PubkeyToAddress(privateKey.PublicKey),
+		logger:              log.New(),
+		db:                  db,
+		commitCh:            make(chan *types.Block, 1),
+		recents:             recents,
+		proposal2conclusion: proposal2conclusion,
+		candidates:          make(map[common.Address]bool),
+		coreStarted:         false,
+		recentMessages:      recentMessages,
+		knownMessages:       knownMessages,
 	}
 	backend.core = pc.New(backend, backend.config)
 	return backend
@@ -92,6 +94,8 @@ type backend struct {
 	candidatesLock sync.RWMutex
 	// Snapshots for recent block to speed up reorgs
 	recents *lru.ARCCache
+	// proposal2conclusion store proposedHash to conclusionHash
+	proposal2conclusion *lru.ARCCache
 
 	// event subscription for ChainHeadEvent event
 	broadcaster consensus.Broadcaster
@@ -437,9 +441,14 @@ func (sb *backend) CheckSignature(data []byte, address common.Address, sig []byt
 	return nil
 }
 
-// HasPropsal implements pbft.Backend.HashBlock
-func (sb *backend) HasPropsal(hash common.Hash, number *big.Int) bool {
-	return sb.chain.GetHeader(hash, number.Uint64()) != nil
+// HasProposal implements pbft.Backend.HashBlock
+func (sb *backend) HasProposal(hash common.Hash, number *big.Int) (common.Hash, bool) {
+	cHash, ok := sb.proposal2conclusion.Get(hash)
+	if ok {
+		conclusionHash := cHash.(common.Hash)
+		return conclusionHash, sb.chain.GetHeader(conclusionHash, number.Uint64()) != nil
+	}
+	return common.Hash{}, false
 }
 
 // GetProposer implements pbft.Backend.GetProposer

@@ -34,10 +34,6 @@ func (c *core) handleRequest(request *pbft.Request) error {
 
 	logger.Trace("handleRequest", "number", request.Proposal.Number(), "hash", request.Proposal.PendingHash())
 
-	//if c.config.EnablePartially {
-	//	request.Proposal = Proposal2Partial(request.Proposal, true)
-	//}
-
 	c.current.pendingRequest = request
 	if c.state == StateAcceptRequest {
 		c.sendPreprepare(request)
