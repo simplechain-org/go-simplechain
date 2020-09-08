@@ -31,21 +31,15 @@ import (
 	"github.com/simplechain-org/go-simplechain/log"
 )
 
-type raftContext struct {
-	invalidRaftOrderingChan chan raft.InvalidRaftOrdering
-	speculativeChain        *raft.SpeculativeChain
-	shouldMine              *channels.RingChannel
-}
-
 func (miner *Miner) InvalidRaftOrdering() chan<- raft.InvalidRaftOrdering {
-	return miner.worker.raftCtx.invalidRaftOrderingChan
+	return miner.worker.raftCtx.InvalidRaftOrderingChan
 }
 
 // Notify the minting loop that minting should occur, if it's not already been
 // requested. Due to the use of a RingChannel, this function is idempotent if
 // called multiple times before the minting occurs.
 func (w *worker) requestMinting() {
-	w.raftCtx.shouldMine.In() <- struct{}{}
+	w.raftCtx.ShouldMine.In() <- struct{}{}
 }
 
 func (w *worker) raftLoop() {
@@ -68,7 +62,7 @@ func (w *worker) raftLoop() {
 				w.requestMinting()
 			} else {
 				w.mu.Lock()
-				w.raftCtx.speculativeChain.SetHead(newHeadBlock)
+				w.raftCtx.SpeculativeChain.SetHead(newHeadBlock)
 				w.mu.Unlock()
 			}
 
@@ -77,7 +71,7 @@ func (w *worker) raftLoop() {
 				w.requestMinting()
 			}
 
-		case ev := <-w.raftCtx.invalidRaftOrderingChan:
+		case ev := <-w.raftCtx.InvalidRaftOrderingChan:
 			headBlock := ev.HeadBlock
 			invalidBlock := ev.InvalidBlock
 
@@ -105,7 +99,7 @@ func (w *worker) mintingLoop(recommit time.Duration) {
 		}
 	})
 
-	for range w.raftCtx.shouldMine.Out() {
+	for range w.raftCtx.ShouldMine.Out() {
 		throttledMintNewBlock()
 	}
 }
@@ -114,7 +108,7 @@ func (w *worker) updateSpeculativeChainPerNewHead(newHeadBlock *types.Block) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	w.raftCtx.speculativeChain.Accept(newHeadBlock)
+	w.raftCtx.SpeculativeChain.Accept(newHeadBlock)
 }
 
 func (w *worker) updateSpeculativeChainPerInvalidOrdering(headBlock *types.Block, invalidBlock *types.Block) {
@@ -132,14 +126,14 @@ func (w *worker) updateSpeculativeChainPerInvalidOrdering(headBlock *types.Block
 		return
 	}
 
-	w.raftCtx.speculativeChain.UnwindFrom(invalidHash, headBlock)
+	w.raftCtx.SpeculativeChain.UnwindFrom(invalidHash, headBlock)
 }
 
 func (w *worker) commitRaftWork() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	parent := w.raftCtx.speculativeChain.Head()
+	parent := w.raftCtx.SpeculativeChain.Head()
 
 	tstamp := time.Now().UnixNano()
 	if parentTime := int64(parent.Time()); parentTime >= tstamp {
@@ -168,7 +162,7 @@ func (w *worker) commitRaftWork() {
 		return
 	}
 
-	txs := w.raftCtx.speculativeChain.WithoutProposedTxes2(allTxs)
+	txs := w.raftCtx.SpeculativeChain.WithoutProposedTxes2(allTxs)
 	transactions := types.NewTransactionsByPriceAndNonce(w.current.signer, txs)
 
 	if w.commitTransactions(transactions, w.coinbase, nil) {
@@ -188,7 +182,7 @@ func (w *worker) commitRaftWork() {
 
 	log.Info("Generated next block", "num", block.Number(), "txs", w.current.tcount)
 
-	w.raftCtx.speculativeChain.Extend(block)
+	w.raftCtx.SpeculativeChain.Extend(block)
 
 	w.mux.Post(core.NewMinedBlockEvent{Block: block})
 

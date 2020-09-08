@@ -296,7 +296,8 @@ func (pm *ProtocolManager) removePeer(id string) {
 func (pm *ProtocolManager) Start(maxPeers int) {
 	pm.maxPeers = maxPeers
 
-	pm.handleTxs(false)
+	_, pbft := pm.engine.(consensus.Pbft)
+	pm.handleTxs(pbft)
 
 	if !pm.raftMode {
 		// broadcast mined blocks

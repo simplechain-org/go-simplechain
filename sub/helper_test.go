@@ -113,11 +113,11 @@ func (p *testTxPool) ValidateBlocks(types.Blocks) {
 }
 
 func (p *testTxPool) SyncLimit(int) types.Transactions {
-	panic("implement me")
+	return nil
 }
 
-func (p *testTxPool) SubscribeSyncTxsEvent(chan<- core.NewTxsEvent) event.Subscription {
-	panic("implement me")
+func (p *testTxPool) SubscribeSyncTxsEvent(ch chan<- core.NewTxsEvent) event.Subscription {
+	return p.txFeed.Subscribe(ch)
 }
 
 // AddRemotes appends a batch of transactions to the pool, and notifies any

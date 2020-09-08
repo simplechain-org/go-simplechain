@@ -172,8 +172,8 @@ func (self *testSystemBackend) LastProposal() (pbft.Proposal, pbft.Conclusion, c
 }
 
 // Only block height 5 will return true
-func (self *testSystemBackend) HasPropsal(hash common.Hash, number *big.Int) bool {
-	return number.Cmp(big.NewInt(5)) == 0
+func (self *testSystemBackend) HasProposal(hash common.Hash, number *big.Int) (common.Hash, bool) {
+	return hash, number.Cmp(big.NewInt(5)) == 0
 }
 
 func (self *testSystemBackend) GetProposer(number uint64) common.Address {

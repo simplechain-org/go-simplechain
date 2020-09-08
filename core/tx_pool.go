@@ -1421,8 +1421,8 @@ func (a addressesByHeartbeat) Len() int           { return len(a) }
 func (a addressesByHeartbeat) Less(i, j int) bool { return a[i].heartbeat.Before(a[j].heartbeat) }
 func (a addressesByHeartbeat) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 
-func (pool *TxPool) AddRemoteSync(*types.Transaction) error {
-	panic("AddRemoteSync is not support this pool")
+func (pool *TxPool) AddRemoteSync(tx *types.Transaction) error {
+	return pool.AddRemotesSync(types.Transactions{tx})[0]
 }
 
 func (pool *TxPool) SyncLimit(int) types.Transactions {
@@ -1438,5 +1438,9 @@ func (pool *TxPool) ValidateBlocks(types.Blocks) {
 }
 
 func (pool *TxPool) Signer() types.Signer {
-	panic("Signer is not support this pool")
+	return pool.signer
+}
+
+func (pool *TxPool) InitPartialBlock(*types.PartialBlock) bool {
+	panic("InitPartialBlock is not support this pool")
 }

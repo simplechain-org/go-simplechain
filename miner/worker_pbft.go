@@ -19,20 +19,16 @@ package miner
 
 import (
 	"fmt"
+	"sync/atomic"
+	"time"
+
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/math"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/log"
-	"sync/atomic"
-	"time"
 )
-
-type pbftContext struct {
-	maxBlockTxs  uint64
-	lastSealTime int64
-}
 
 func (w *worker) Execute(block *types.Block) (*types.Block, error) {
 	log.Trace("[debug] Pbft Execute block >>>", "number", block.NumberU64(),
@@ -77,13 +73,13 @@ func (w *worker) Execute(block *types.Block) (*types.Block, error) {
 func (w *worker) AdjustMaxBlockTxs(remaining time.Duration, blockTxs int, timeout bool) {
 	// handle timeout & increase pbftCtx.maxBlockTxs
 	if timeout {
-		atomic.StoreUint64(&w.pbftCtx.maxBlockTxs, math.Uint64Max(w.pbftCtx.maxBlockTxs/2, limitMinBlockTxs))
-	} else if remaining > 0 && uint64(blockTxs) >= w.pbftCtx.maxBlockTxs {
-		maxBlockTxs := w.pbftCtx.maxBlockTxs
+		atomic.StoreUint64(&w.pbftCtx.MaxBlockTxs, math.Uint64Max(w.pbftCtx.MaxBlockTxs/2, limitMinBlockTxs))
+	} else if remaining > 0 && uint64(blockTxs) >= w.pbftCtx.MaxBlockTxs {
+		maxBlockTxs := w.pbftCtx.MaxBlockTxs
 		if maxBlockTxs > 1 {
-			atomic.StoreUint64(&w.pbftCtx.maxBlockTxs, math.Uint64Min(maxBlockTxs*3/2, limitMaxBlockTxs))
+			atomic.StoreUint64(&w.pbftCtx.MaxBlockTxs, math.Uint64Min(maxBlockTxs*3/2, limitMaxBlockTxs))
 		} else {
-			atomic.StoreUint64(&w.pbftCtx.maxBlockTxs, maxBlockTxs+1)
+			atomic.StoreUint64(&w.pbftCtx.MaxBlockTxs, maxBlockTxs+1)
 		}
 	}
 }
@@ -126,31 +122,27 @@ func (w *worker) executeBlock(block *types.Block, statedb *state.StateDB) (*type
 
 }
 
-func (w *worker) CommitByzantium(interrupt *int32, noempty bool, tstart time.Time) {
-	log.Trace("[debug] @@@ Pbft CommitByzantium @@@")
+func (w *worker) commitByzantium(interrupt *int32, noempty bool, tstart time.Time) {
 	// Fill the block with all available pending transactions.
-	//start := time.Now()
-	pending := w.eth.TxPool().PendingLimit(int(w.pbftCtx.maxBlockTxs))
-	//pending := w.eth.TxPool().PendingLimit(100) //TODO: use worker.maxBlockTxs
-	//loadTime := time.Since(start)
+	pending := w.eth.TxPool().PendingLimit(int(w.pbftCtx.MaxBlockTxs))
 
 	if !noempty && len(pending) == 0 {
 		// Create an empty block based on temporary copied state for sealing in advance without waiting block
 		// execution finished.
-		w.commitByzantium(nil, false, tstart)
+		w._commitByzantium(nil, false, tstart)
 	}
 
 	if len(pending) == 0 {
-		//TODO-D: don't need update pending state for unexecuted block
+		//TODO-D: don't need update pending state for pending block
 		//w.updateSnapshot()
 		return
 	}
 
 	w.current.txs = pending
-	w.commitByzantium(w.fullTaskHook, true, tstart)
+	w._commitByzantium(w.fullTaskHook, true, tstart)
 }
 
-func (w *worker) commitByzantium(interval func(), update bool, start time.Time) {
+func (w *worker) _commitByzantium(interval func(), update bool, start time.Time) {
 	block := types.NewBlock(w.current.header, w.current.txs, nil, nil)
 
 	if w.isRunning() {
@@ -160,7 +152,7 @@ func (w *worker) commitByzantium(interval func(), update bool, start time.Time) 
 		select {
 		case w.taskCh <- &task{block: block, createdAt: time.Now()}:
 			log.Info("Commit new byzantium work", "number", block.Number(), "sealhash", w.engine.SealHash(block.Header()),
-				"txs", w.current.tcount, "elapsed", common.PrettyDuration(time.Since(start)), "maxTxsCanSeal", w.pbftCtx.maxBlockTxs)
+				"txs", w.current.tcount, "elapsed", common.PrettyDuration(time.Since(start)), "maxTxsCanSeal", w.pbftCtx.MaxBlockTxs)
 
 		case <-w.exitCh:
 			log.Info("Worker has exited")
@@ -172,33 +164,3 @@ func (w *worker) commitByzantium(interval func(), update bool, start time.Time) 
 		//w.updateSnapshot()
 	}
 }
-
-//func (w *worker) resultLoopByzantium() {
-//	for {
-//		select {
-//		case block := <-w.resultCh:
-//			// Short circuit when receiving empty result.
-//			if block == nil {
-//				continue
-//			}
-//			// Short circuit when receiving duplicate result caused by resubmitting.
-//			if w.chain.HasBlock(block.Hash(), block.NumberU64()) {
-//				continue
-//			}
-//			var (
-//				sealhash = w.engine.SealHash(block.Header())
-//				hash     = block.Hash()
-//			)
-//			w.pendingMu.RLock()
-//			task, exist := w.pendingTasks[sealhash]
-//			w.pendingMu.RUnlock()
-//			if !exist {
-//				log.Error("Block found but no relative pending task", "number", block.Number(), "sealhash", sealhash, "hash", hash)
-//				continue
-//			}
-//
-//		case <-w.exitCh:
-//			return
-//		}
-//	}
-//}
