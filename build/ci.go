@@ -234,9 +234,7 @@ func doInstall(cmdline []string) {
 			goinstall.Args = append(goinstall.Args, "-p", "1")
 		}
 		// Go build tags
-		if GOTAGS := *tags; GOTAGS != "" {
-			goinstall.Args = append(goinstall.Args, "-tags="+GOTAGS)
-		}
+		goinstall.Args = append(goinstall.Args, "-tags="+*tags)
 		goinstall.Args = append(goinstall.Args, "-v")
 		goinstall.Args = append(goinstall.Args, packages...)
 		fmt.Println("goinstall1", goinstall.String())
@@ -254,10 +252,7 @@ func doInstall(cmdline []string) {
 	// Seems we are cross compiling, work around forbidden GOBIN
 	goinstall := goToolArch(*arch, *cc, "install", buildFlags(env)...)
 	// Go build tags
-	if GOTAGS := *tags; GOTAGS != "" {
-		goinstall.Args = append(goinstall.Args, "-tags="+GOTAGS)
-	}
-
+	goinstall.Args = append(goinstall.Args, "-tags="+*tags)
 	goinstall.Args = append(goinstall.Args, "-v")
 	goinstall.Args = append(goinstall.Args, []string{"-buildmode", "archive"}...)
 	goinstall.Args = append(goinstall.Args, packages...)
@@ -334,6 +329,7 @@ func goToolArch(arch string, cc string, subcmd string, args ...string) *exec.Cmd
 func doTest(cmdline []string) {
 	coverage := flag.Bool("coverage", false, "Whether to record code coverage")
 	verbose := flag.Bool("v", false, "Whether to log verbosely")
+	tags := flag.String("tags", "", "go build tags")
 	flag.CommandLine.Parse(cmdline)
 	env := build.Env()
 
@@ -347,6 +343,7 @@ func doTest(cmdline []string) {
 	// and some tests run into timeouts under load.
 	gotest := goTool("test", buildFlags(env)...)
 	gotest.Args = append(gotest.Args, "-p", "1", "-timeout", "5m", "-count=1")
+	gotest.Args = append(gotest.Args, "-tags="+*tags)
 	if *coverage {
 		gotest.Args = append(gotest.Args, "-covermode=atomic", "-cover")
 	}

@@ -42,6 +42,9 @@ ios:
 test: all
 	build/env.sh go run build/ci.go test
 
+subtest: all
+	build/env.sh go run build/ci.go test --tags=sub
+
 lint: ## Run linters.
 	build/env.sh go run build/ci.go lint
 
