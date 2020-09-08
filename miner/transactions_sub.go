@@ -65,7 +65,7 @@ func (w *worker) applyTransactions(interrupt *int32, noempty bool, tstart time.T
 
 	// Fill the block with all available pending transactions.
 	start := time.Now()
-	pending := w.eth.TxPool().PendingLimit(defaultMaxBlockTxs)
+	pending := w.eth.TxPool().PendingLimit(int(DefaultMaxBlockTxs))
 	loadTime := time.Since(start)
 
 	if !noempty && len(pending) == 0 {

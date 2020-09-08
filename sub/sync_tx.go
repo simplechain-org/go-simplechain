@@ -66,7 +66,7 @@ func (pm *ProtocolManager) addRemoteTxsByRouter2TxPool(peer *peer, txr *Transact
 		// remote txs are already synced
 		tx.SetSynced(true)
 		wg.Add(1)
-		pm.parallel.Put(func() error {
+		core.SenderParallel.Put(func() error {
 			_, errs[index] = types.Sender(pm.txpool.Signer(), tx)
 			wg.Done()
 			return nil

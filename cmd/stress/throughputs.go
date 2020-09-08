@@ -12,6 +12,7 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
+	"runtime"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -29,8 +30,6 @@ const (
 )
 
 var txsCount = int64(0)
-
-var sourceKey = "5aedb85503128685e4f92b0cc95e9e1185db99339f9b85125c1e2ddc0f7c4c48"
 
 var senderKeys = []string{
 	"5aedb85503128685e4f92b0cc95e9e1185db99339f9b85125c1e2ddc0f7c4c48",
@@ -59,7 +58,7 @@ func initNonce(seed uint64, count int) []uint64 {
 	return ret
 }
 
-var parallel = asio.NewParallel(1000, 100)
+var parallel = asio.NewParallel(1000, runtime.NumCPU())
 
 var (
 	chainId *uint64
@@ -73,6 +72,7 @@ func main() {
 
 	sendTx := flag.Bool("sendtx", false, "enable only send tx")
 	senderCount := flag.Int("accounts", 4, "the number of sender")
+	senderKey := flag.String("sendkey", senderKeys[0], "sender private key")
 	callcode := flag.Bool("callcode", false, "enable call contract code")
 
 	seed := flag.Uint64("seed", 1, "hash seed")
@@ -88,7 +88,7 @@ func main() {
 	if *sendTx {
 		log.Printf("start send tx: %d accounts", *senderCount)
 
-		privateKey, err := crypto.HexToECDSA(sourceKey)
+		privateKey, err := crypto.HexToECDSA(*senderKey)
 		if err != nil {
 			log.Fatalf(errPrefix+" parse private key: %v", err)
 		}

@@ -215,7 +215,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 
 // for compiler
 func (w *worker) Execute(block *types.Block) (*types.Block, error) {
-	panic("Execute is not support for this worker")
+	return block, nil
 }
 
 func (w *worker) AdjustMaxBlockTxs(remaining time.Duration, blockTxs int, timeout bool) {

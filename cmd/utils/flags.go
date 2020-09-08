@@ -490,6 +490,10 @@ var (
 		Name:  "miner.noverify",
 		Usage: "Disable remote sealing verification",
 	}
+	MinerMaxBlockTxsSealFlag = cli.Uint64Flag{
+		Name:  "miner.maxblocktxs",
+		Usage: "Default max txs one block can seal",
+	}
 	// Account settings
 	UnlockedAccountFlag = cli.StringFlag{
 		Name:  "unlock",
@@ -1482,6 +1486,9 @@ func setMiner(ctx *cli.Context, cfg *miner.Config) {
 	}
 	if ctx.GlobalIsSet(MinerNoVerfiyFlag.Name) {
 		cfg.Noverify = ctx.Bool(MinerNoVerfiyFlag.Name)
+	}
+	if ctx.GlobalIsSet(MinerMaxBlockTxsSealFlag.Name) {
+		miner.DefaultMaxBlockTxs = ctx.GlobalUint64(MinerMaxBlockTxsSealFlag.Name)
 	}
 }
 

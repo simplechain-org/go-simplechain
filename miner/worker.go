@@ -82,10 +82,11 @@ const (
 	staleThreshold = 7
 
 	// for subchain-mode txpool
-	defaultMaxBlockTxs = 1000
 	limitMaxBlockTxs   = 15000
 	limitMinBlockTxs   = 1
 )
+
+var DefaultMaxBlockTxs uint64 = 1000
 
 // environment is the worker's current environment and holds all of the current state information.
 type environment struct {
@@ -247,7 +248,7 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 	}
 
 	if bft, ok := engine.(consensus.Pbft); ok {
-		worker.pbftCtx = &pbft.SealContext{MaxBlockTxs: defaultMaxBlockTxs}
+		worker.pbftCtx = &pbft.SealContext{MaxBlockTxs: DefaultMaxBlockTxs}
 		bft.SetSealer(worker)
 		bft.SetTxPool(eth.TxPool())
 	}

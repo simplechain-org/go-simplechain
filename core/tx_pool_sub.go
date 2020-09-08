@@ -25,7 +25,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Beyond-simplechain/foundation/asio"
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"
@@ -209,6 +208,7 @@ type TxPool struct {
 	config      TxPoolConfig
 	chainconfig *params.ChainConfig
 	chain       blockChain
+	gasPrice    *big.Int
 
 	currentState *state.StateDB
 
@@ -226,15 +226,10 @@ type TxPool struct {
 	blockTxCheck *BlockTxChecker
 	validatorMu  sync.RWMutex
 
-	parallel *asio.Parallel
+	//parallel *asio.Parallel
 	syncFeed event.Feed
 	wg       sync.WaitGroup // for shutdown sync
 }
-
-const (
-	parallelTasks   = 10000
-	parallelThreads = 100
-)
 
 // NewTxPool creates a new transaction pool to gather, sort and filter inbound
 // transactions from the network.
@@ -256,8 +251,8 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		//beats:           make(map[common.Address]time.Time),
 		all:         newTxLookup(),
 		chainHeadCh: make(chan ChainHeadEvent, chainHeadChanSize),
-		parallel:    asio.NewParallel(parallelTasks, parallelThreads),
-		//gasPrice:    new(big.Int).SetUint64(config.PriceLimit),
+		//parallel:    asio.NewParallel(parallelTasks, parallelThreads),
+		gasPrice: new(big.Int).SetUint64(config.PriceLimit),
 	}
 	//pool.locals = newAccountSet(pool.signer)
 	//for _, addr := range config.Locals {
@@ -492,7 +487,7 @@ func (pool *TxPool) Stop() {
 
 	// Unsubscribe subscriptions registered from blockchain
 	pool.chainHeadSub.Unsubscribe()
-	pool.parallel.Stop()
+	//pool.parallel.Stop()
 	pool.wg.Wait()
 
 	//if pool.journal != nil {
@@ -702,13 +697,15 @@ func (pool *TxPool) ValidateBlocks(blocks types.Blocks) {
 	var wg sync.WaitGroup
 	for _, block := range blocks {
 		for _, tx := range block.Transactions() {
+			// already check sender by txpool, reuse sender
 			if ptx := pool.all.Get(tx.Hash()); ptx != nil {
 				tx.SetSender(ptx.GetSender())
 
 			} else {
 				transaction := tx // use out-of-range address for parallel invoke
 				wg.Add(1)
-				pool.parallel.Put(func() error {
+				//pool.parallel.Put(func() error {
+				SenderParallel.Put(func() error {
 					defer wg.Done()
 					_, err := types.Sender(pool.signer, transaction)
 					return err
@@ -780,7 +777,8 @@ func (pool *TxPool) add(tx *types.Transaction, local, sync bool) error {
 		return submit()
 	}
 
-	pool.parallel.Put(submit, nil)
+	SenderParallel.Put(submit, nil)
+	//pool.parallel.Put(submit, nil)
 	return nil
 }
 

@@ -1,4 +1,4 @@
-// Copyright 2015 The go-simplechain Authors
+// Copyright 2020 The go-simplechain Authors
 // This file is part of the go-simplechain library.
 //
 // The go-simplechain library is free software: you can redistribute it and/or modify
@@ -18,64 +18,15 @@
 package core
 
 import (
+	"sync"
+
 	"github.com/simplechain-org/go-simplechain/common"
-	"github.com/simplechain-org/go-simplechain/consensus"
 	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/core/vm"
 	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/params"
-	"sync"
 )
-
-// StateProcessor is a basic Processor, which takes care of transitioning
-// state from one point to another.
-//
-// StateProcessor implements Processor.
-type StateProcessor struct {
-	config *params.ChainConfig // Chain configuration options
-	bc     *BlockChain         // Canonical block chain
-	engine consensus.Engine    // Consensus engine used for block rewards
-}
-
-// NewStateProcessor initialises a new StateProcessor.
-func NewStateProcessor(config *params.ChainConfig, bc *BlockChain, engine consensus.Engine) *StateProcessor {
-	return &StateProcessor{
-		config: config,
-		bc:     bc,
-		engine: engine,
-	}
-}
-
-// Process processes the state changes according to the Ethereum rules by running
-// the transaction messages using the statedb and applying any rewards to both
-// the processor (coinbase) and any included uncles.
-//
-// Process returns the receipts and logs accumulated during the process and
-// returns the amount of gas that was used in the process. If any of the
-// transactions failed to execute due to insufficient gas it will return an error.
-func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, error) {
-	var (
-		receipts types.Receipts
-		usedGas  = new(uint64)
-		header   = block.Header()
-		allLogs  []*types.Log
-		gp       = new(GasPool).AddGas(block.GasLimit())
-	)
-
-	// Iterate over and process the individual transactions
-	for i, tx := range block.Transactions() {
-		statedb.Prepare(tx.Hash(), block.Hash(), i)
-		receipt, err := ApplyTransaction(p.config, p.bc, nil, gp, statedb, header, tx, usedGas, cfg)
-		if err != nil {
-			return nil, nil, 0, err
-		}
-		receipts = append(receipts, receipt)
-		allLogs = append(allLogs, receipt.Logs...)
-	}
-	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
-	return receipts, allLogs, *usedGas, p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles(), receipts)
-}
 
 var evmPool = sync.Pool{
 	New: func() interface{} {
@@ -132,6 +83,35 @@ func applyCommonTransaction(config *params.ChainConfig, bc ChainContext, author 
 	return receipt, err
 }
 
+func applyTransactionWithErr(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config) (*types.Receipt, error) {
+	receipt, err := applyCommonTransaction(config, bc, author, gp, statedb, header, tx, usedGas, cfg)
+
+	switch err {
+	// return a failed receipt for vm.Error
+	case vm.ErrOutOfGas,
+		vm.ErrCodeStoreOutOfGas,
+		vm.ErrDepth,
+		vm.ErrTraceLimitReached,
+		vm.ErrInsufficientBalance,
+		vm.ErrContractAddressCollision,
+		vm.ErrNoCompatibleInterpreter,
+		errInsufficientBalanceForGas:
+
+		receipt := types.NewReceipt(nil, true, *usedGas)
+		receipt.TxHash = tx.Hash()
+		// Set the receipt logs and create a bloom for filtering
+		receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
+		receipt.BlockHash = statedb.BlockHash()
+		receipt.BlockNumber = header.Number
+		receipt.TransactionIndex = uint(statedb.TxIndex())
+
+		return receipt, nil
+
+	default:
+		return receipt, err
+	}
+}
+
 func applyEmptyTransaction(tx *types.Transaction) (*types.Receipt, error) {
 	var root []byte
 	receipt := types.NewReceipt(root, false, 0)
@@ -167,5 +147,6 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 	//}
 	//return applyEmptyTransaction(tx) // used for testing
 	//return applyAccountTransaction(config, gp, statedb, header, tx, usedGas) // used for testing
-	return applyCommonTransaction(config, bc, author, gp, statedb, header, tx, usedGas, cfg)
+	//return applyCommonTransaction(config, bc, author, gp, statedb, header, tx, usedGas, cfg)
+	return applyTransactionWithErr(config, bc, author, gp, statedb, header, tx, usedGas, cfg)
 }

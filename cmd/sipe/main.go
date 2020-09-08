@@ -164,6 +164,7 @@ var (
 		utils.PbftRequestTimeoutFlag,
 		utils.PbftBlockPeriodFlag,
 		utils.PbftEnablePartiallyFlag,
+		utils.MinerMaxBlockTxsSealFlag,
 		utils.ConfirmDepthFlag,
 		utils.AnchorSignerFlag,
 		utils.AnchorMaxGasPriceFlag,

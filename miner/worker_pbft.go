@@ -19,11 +19,9 @@ package miner
 
 import (
 	"fmt"
-	"sync/atomic"
 	"time"
 
 	"github.com/simplechain-org/go-simplechain/common"
-	"github.com/simplechain-org/go-simplechain/common/math"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/state"
 	"github.com/simplechain-org/go-simplechain/core/types"
@@ -71,17 +69,17 @@ func (w *worker) Execute(block *types.Block) (*types.Block, error) {
 }
 
 func (w *worker) AdjustMaxBlockTxs(remaining time.Duration, blockTxs int, timeout bool) {
-	// handle timeout & increase pbftCtx.maxBlockTxs
-	if timeout {
-		atomic.StoreUint64(&w.pbftCtx.MaxBlockTxs, math.Uint64Max(w.pbftCtx.MaxBlockTxs/2, limitMinBlockTxs))
-	} else if remaining > 0 && uint64(blockTxs) >= w.pbftCtx.MaxBlockTxs {
-		maxBlockTxs := w.pbftCtx.MaxBlockTxs
-		if maxBlockTxs > 1 {
-			atomic.StoreUint64(&w.pbftCtx.MaxBlockTxs, math.Uint64Min(maxBlockTxs*3/2, limitMaxBlockTxs))
-		} else {
-			atomic.StoreUint64(&w.pbftCtx.MaxBlockTxs, maxBlockTxs+1)
-		}
-	}
+	//TODO: handle timeout & increase pbftCtx.maxBlockTxs
+	//if timeout {
+	//	atomic.StoreUint64(&w.pbftCtx.MaxBlockTxs, math.Uint64Max(w.pbftCtx.MaxBlockTxs/2, limitMinBlockTxs))
+	//} else if remaining > 0 && uint64(blockTxs) >= w.pbftCtx.MaxBlockTxs {
+	//	maxBlockTxs := w.pbftCtx.MaxBlockTxs
+	//	if maxBlockTxs > 1 {
+	//		atomic.StoreUint64(&w.pbftCtx.MaxBlockTxs, math.Uint64Min(maxBlockTxs*3/2, limitMaxBlockTxs))
+	//	} else {
+	//		atomic.StoreUint64(&w.pbftCtx.MaxBlockTxs, maxBlockTxs+1)
+	//	}
+	//}
 }
 
 func (w *worker) FillPartialBlock(pBlock *types.PartialBlock) bool {

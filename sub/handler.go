@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Beyond-simplechain/foundation/asio"
 	"math/big"
 	"sync"
 	"sync/atomic"
@@ -57,8 +56,8 @@ const (
 	// default treeWidth of treeRouter
 	defaultTreeRouterWidth = 3
 	defaultTxSyncPeriod    = time.Millisecond * 100
-	parallelTasks          = 10000
-	parallelThreads        = 100
+	//parallelTasks          = 10000
+	//parallelThreads        = 100
 )
 
 var (
@@ -109,7 +108,7 @@ type ProtocolManager struct {
 
 	raftMode bool
 	engine   consensus.Engine // used for istanbul consensus
-	parallel *asio.Parallel
+	//parallel *asio.Parallel
 
 	// for sync transaction
 	newTransactions types.Transactions
@@ -142,7 +141,7 @@ func NewProtocolManager(config *params.ChainConfig, checkpoint *params.TrustedCh
 		serverPool:  serverPool,
 		raftMode:    config.Raft,
 		engine:      engine,
-		parallel:    asio.NewParallel(parallelTasks, parallelThreads),
+		//parallel:    asio.NewParallel(parallelTasks, parallelThreads),
 	}
 
 	switch bft := manager.engine.(type) {
@@ -297,7 +296,7 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 	pm.maxPeers = maxPeers
 
 	_, pbft := pm.engine.(consensus.Pbft)
-	pm.handleTxs(pbft)
+	pm.handleTxs(!pbft) // use new sync logic for pbft consensus
 
 	if !pm.raftMode {
 		// broadcast mined blocks
