@@ -296,7 +296,3 @@ func TestHandlePreprepareWithLock(t *testing.T) {
 		}
 	}
 }
-
-func TestHandlePartialPreprepare(t *testing.T) {
-
-}

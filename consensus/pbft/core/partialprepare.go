@@ -1,6 +1,7 @@
 package core
 
 import (
+	"github.com/simplechain-org/go-simplechain/log"
 	time "time"
 
 	"github.com/simplechain-org/go-simplechain/consensus"
@@ -10,6 +11,7 @@ import (
 func (c *core) sendPartialPrepare(request *pbft.Request, curView *pbft.View) {
 	logger := c.logger.New("state", c.state)
 
+	record := time.Now()
 	// encode proposal partially
 	partialMsg, err := Encode(&pbft.Preprepare{
 		View:     curView,
@@ -19,6 +21,7 @@ func (c *core) sendPartialPrepare(request *pbft.Request, curView *pbft.View) {
 		logger.Error("Failed to encode", "view", curView)
 		return
 	}
+	log.Report("sendPartialPrepare Encode partially", "cost", time.Since(record))
 
 	// send partial pre-prepare msg to others
 	c.broadcast(&message{
@@ -26,6 +29,7 @@ func (c *core) sendPartialPrepare(request *pbft.Request, curView *pbft.View) {
 		Msg:  partialMsg,
 	}, false)
 
+	record = time.Now()
 	// re-encode proposal completely
 	completeMsg, err := Encode(&pbft.Preprepare{
 		View:     curView,
@@ -35,6 +39,8 @@ func (c *core) sendPartialPrepare(request *pbft.Request, curView *pbft.View) {
 		logger.Error("Failed to encode", "view", curView)
 		return
 	}
+	log.Report("sendPartialPrepare Encode", "cost", time.Since(record))
+
 	// post full pre-prepare msg
 	msg, err := c.finalizeMessage(&message{
 		Code: msgPreprepare,
@@ -53,6 +59,8 @@ func (c *core) sendPartialPrepare(request *pbft.Request, curView *pbft.View) {
 func (c *core) handlePartialPrepare(msg *message, src pbft.Validator) error {
 	logger := c.logger.New("from", src, "state", c.state)
 	c.prepareTimestamp = time.Now()
+
+	log.Report("> handlePartialPrepare")
 
 	var preprepare *pbft.PartialPreprepare
 	err := msg.Decode(&preprepare)
@@ -119,6 +127,7 @@ func (c *core) handlePartialPrepare(msg *message, src pbft.Validator) error {
 // The second stage handle partial Pre-prepare.
 func (c *core) handlePartialPrepare2(preprepare *pbft.Preprepare, src pbft.Validator) error {
 	logger := c.logger.New("from", src, "state", c.state)
+	log.Report("> handlePartialPrepare2")
 	// partial proposal was be filled, check body
 	if _, err := c.backend.Verify(preprepare.Proposal, false, true); err != nil {
 		logger.Warn("Failed to verify partial proposal body", "err", err)

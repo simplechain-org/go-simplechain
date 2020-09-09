@@ -18,10 +18,12 @@ package core
 
 import (
 	"github.com/simplechain-org/go-simplechain/consensus/pbft"
+	"github.com/simplechain-org/go-simplechain/log"
 )
 
 func (c *core) handleRequest(request *pbft.Request) error {
 	logger := c.logger.New("state", c.state, "seq", c.current.sequence)
+	log.Report("> handleRequest")
 
 	if err := c.checkRequestMsg(request); err != nil {
 		if err == errInvalidMessage {

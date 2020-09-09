@@ -275,17 +275,15 @@ func (sb *backend) Commit(conclusion pbft.Conclusion, commitSeals [][]byte) erro
 		sb.sealer.AdjustMaxBlockTxs(delay, block.Transactions().Len(), false)
 	}
 
-	sb.logger.Trace("[report] pbft consensus seal cost",
+	log.Report("pbft consensus seal cost",
 		"num", h.Number, "totalCost", time.Since(sb.sealStart), "execCost", sb.execCost)
 
+	// wait until block timestamp
 	<-time.After(delay)
 
-	//sb.logger.Info("Committed", "address", sb.Address(), "hash", conclusion.Hash(), "number", conclusion.Number().Uint64())
-	sb.logger.Info("Committed", "address", sb.Address(), "number", conclusion.Number().Uint64(),
-		"proposeHash", conclusion.PendingHash(), "hash", conclusion.Hash(), "elapsed", time.Since(hTime))
-
-	//TODO-Translate: 如果本节点正在出块并且是commit的区块，直接提交区块（共识前出块节点已经执行过此区块）
-	// 否则，提交给fetcher，作为同步到的区块执行
+	reportCtx := []interface{}{"number", conclusion.Number().Uint64(),
+		"proposeHash", conclusion.PendingHash(), "hash", conclusion.Hash(), "txs", block.Transactions().Len(),
+		"elapsed", time.Since(hTime)}
 
 	// - if the proposed and committed blocks are the same, send the proposed hash
 	//   to commit channel, which is being watched inside the engine.Seal() function.
@@ -297,13 +295,14 @@ func (sb *backend) Commit(conclusion pbft.Conclusion, commitSeals [][]byte) erro
 	if sb.proposedBlockHash == block.PendingHash() {
 		// feed block hash to Seal() and wait the Seal() result
 		sb.commitCh <- block
-		return nil
-	}
+		reportCtx = append(reportCtx, "proposer", sb.address)
 
-	if sb.broadcaster != nil {
-		log.Trace("[debug] broadcast block ...", "number", block.NumberU64(), "hash", block.Hash())
+	} else if sb.broadcaster != nil {
 		sb.broadcaster.Enqueue(fetcherID, block)
 	}
+
+	sb.logger.Warn("Committed new pbft block", reportCtx...)
+
 	return nil
 }
 

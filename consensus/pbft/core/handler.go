@@ -19,6 +19,7 @@ package core
 import (
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/consensus/pbft"
+	"github.com/simplechain-org/go-simplechain/log"
 )
 
 // Start implements core.Engine.Start
@@ -96,13 +97,13 @@ func (c *core) handleEvents() {
 					c.storeRequestMsg(r)
 				}
 			case pbft.MessageEvent:
-				if sender, err := c.handleMsg(ev.Payload); err == nil {
+				if sender, forward, err := c.handleMsg(ev.Payload); forward && err == nil {
 					//c.backend.Gossip(c.valSet, ev.Payload)
 					c.backend.Guidance(c.valSet, sender, ev.Payload)
 				}
 			case backlogEvent:
 				// No need to check signature for internal messages
-				if err := c.handleCheckedMsg(ev.msg, ev.src); err == nil {
+				if forward, err := c.handleCheckedMsg(ev.msg, ev.src); forward && err == nil {
 					p, err := ev.msg.Payload()
 					if err != nil {
 						c.logger.Warn("Get message payload failed", "err", err)
@@ -136,27 +137,29 @@ func (c *core) sendEvent(ev interface{}) {
 	c.backend.EventMux().Post(ev)
 }
 
-func (c *core) handleMsg(payload []byte) (common.Address, error) {
+func (c *core) handleMsg(payload []byte) (common.Address, bool, error) {
 	logger := c.logger.New()
 
 	// Decode message and check its signature
 	msg := new(message)
 	if err := msg.FromPayload(payload, c.validateFn); err != nil {
 		logger.Error("Failed to decode message from payload", "err", err)
-		return common.Address{}, err
+		return common.Address{}, false, err
 	}
 
 	// Only accept message if the address is valid
 	_, src := c.valSet.GetByAddress(msg.Address)
 	if src == nil {
 		logger.Error("Invalid address in message", "msg", msg)
-		return msg.Address, pbft.ErrUnauthorizedAddress
+		return msg.Address, false, pbft.ErrUnauthorizedAddress
 	}
 
-	return msg.Address, c.handleCheckedMsg(msg, src)
+	forward, err := c.handleCheckedMsg(msg, src)
+
+	return msg.Address, forward, err
 }
 
-func (c *core) handleCheckedMsg(msg *message, src pbft.Validator) error {
+func (c *core) handleCheckedMsg(msg *message, src pbft.Validator) (bool, error) {
 	logger := c.logger.New("address", c.address, "from", src)
 
 	// Store the message if it's a future message
@@ -170,33 +173,39 @@ func (c *core) handleCheckedMsg(msg *message, src pbft.Validator) error {
 
 	switch msg.Code {
 	case msgPreprepare:
-		return testBacklog(c.handlePreprepare(msg, src))
+		// wouldn't forward preprepare message, if node is in partial mode
+		return !c.config.EnablePartially, testBacklog(c.handlePreprepare(msg, src))
+
 	case msgPrepare:
-		return testBacklog(c.handlePrepare(msg, src))
+		return true, testBacklog(c.handlePrepare(msg, src))
+
 	case msgCommit:
-		return testBacklog(c.handleCommit(msg, src))
+		return true, testBacklog(c.handleCommit(msg, src))
+
 	case msgRoundChange:
-		return testBacklog(c.handleRoundChange(msg, src))
+		return true, testBacklog(c.handleRoundChange(msg, src))
+
 	case msgPartialPreprepare:
+		log.Report("> handleCheckedMsg msgPartialPreprepare")
 		if c.config.EnablePartially {
-			//if c.address == src.Address() {
-			//	return testBacklog(c.handlePrepare(msg, src))
-			//}
-			return testBacklog(c.handlePartialPrepare(msg, src))
+			return true, testBacklog(c.handlePartialPrepare(msg, src))
 		}
 	case msgPartialGetMissedTxs:
 		if c.config.EnablePartially {
-			return testBacklog(c.handleGetMissedTxs(msg, src))
+			// wouldn't forward request message
+			return false, testBacklog(c.handleGetMissedTxs(msg, src))
 		}
 	case msgPartialMissedTxs:
 		if c.config.EnablePartially {
-			return testBacklog(c.handleMissedTxs(msg, src))
+			// wouldn't forward response message
+			return false, testBacklog(c.handleMissedTxs(msg, src))
 		}
+
 	default:
 		logger.Error("Invalid message", "msg", msg)
 	}
 
-	return errInvalidMessage
+	return false, errInvalidMessage
 }
 
 func (c *core) handleTimeoutMsg() {

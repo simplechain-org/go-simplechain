@@ -19,11 +19,13 @@ package core
 import (
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/consensus/pbft"
+	"github.com/simplechain-org/go-simplechain/log"
 	"reflect"
 	"time"
 )
 
 func (c *core) sendCommit() {
+	log.Report("> sendCommit")
 	sub := c.current.Subject()
 	c.broadcastCommit(sub)
 }
@@ -75,7 +77,7 @@ func (c *core) handleCommit(msg *message, src pbft.Validator) error {
 
 	c.acceptCommit(msg, src)
 
-	logger.Trace("[report] handle commit", "cost", time.Since(c.commitTimestamp))
+	log.Report("handle commit", "cost", time.Since(c.commitTimestamp), "from", src)
 
 	// Commit the proposal once we have enough COMMIT messages and we are not in the Committed state.
 	//

@@ -18,6 +18,7 @@ package core
 
 import (
 	"github.com/simplechain-org/go-simplechain/consensus/pbft"
+	"github.com/simplechain-org/go-simplechain/log"
 	"reflect"
 	"time"
 )
@@ -25,6 +26,8 @@ import (
 func (c *core) sendPrepare() {
 
 	logger := c.logger.New("state", c.state)
+
+	log.Report("> sendPrepare")
 
 	sub := c.current.Subject()
 
@@ -40,7 +43,7 @@ func (c *core) sendPrepare() {
 }
 
 func (c *core) handlePrepare(msg *message, src pbft.Validator) error {
-	logger := c.logger.New("from", src, "state", c.state)
+	//logger := c.logger.New("from", src, "state", c.state)
 	c.prepareTimestamp = time.Now()
 
 	// Decode PsREPARE message
@@ -65,7 +68,7 @@ func (c *core) handlePrepare(msg *message, src pbft.Validator) error {
 
 	c.acceptPrepare(msg, src)
 
-	logger.Trace("[report] handle prepare", "cost", time.Since(c.prepareTimestamp))
+	log.Report("handle prepare", "cost", time.Since(c.prepareTimestamp), "from", src)
 
 	// Change to Prepared state if we've received enough PREPARE messages or it is locked
 	// and we are in earlier state before Prepared state.
