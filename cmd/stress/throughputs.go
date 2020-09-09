@@ -71,7 +71,7 @@ func main() {
 	tps = flag.Int("tps", -1, "send tps limit, negative is limitless")
 
 	sendTx := flag.Bool("sendtx", false, "enable only send tx")
-	senderCount := flag.Int("accounts", 4, "the number of sender")
+	senderCount := flag.Int("threads", 4, "the number of sender")
 	senderKey := flag.String("sendkey", senderKeys[0], "sender private key")
 	callcode := flag.Bool("callcode", false, "enable call contract code")
 
@@ -129,10 +129,11 @@ func main() {
 	log.Printf("txsCount=%v", txsCount)
 }
 
-func getBlockLimit(ctx context.Context, client *ethclient.Client) uint64 {
+func getBlockLimit(ctx context.Context, client *ethclient.Client, last uint64) uint64 {
 	block, err := client.BlockByNumber(ctx, nil)
 	if err != nil {
-		return 60
+		log.Printf(warnPrefix+"Failed to getBlockLimit: %v", err)
+		return last + 60
 	}
 	return block.NumberU64() + 60
 }
@@ -150,7 +151,7 @@ func throughputs(ctx context.Context, client *ethclient.Client, index int, priva
 
 	var (
 		data       [20 + 64]byte
-		blockLimit = getBlockLimit(ctx, client)
+		blockLimit = getBlockLimit(ctx, client, 0)
 		meterCount = 0
 		i          int
 	)
@@ -162,15 +163,16 @@ func throughputs(ctx context.Context, client *ethclient.Client, index int, priva
 	<-timer.C
 	timer.Reset(10 * time.Minute)
 
-	tpsInterval := 10 * time.Minute
-	if *tps > 0 {
-		tpsInterval = time.Second
-	}
-	tpsTicker := time.NewTicker(tpsInterval)
+	//tpsInterval := 10 * time.Minute
+	//if *tps > 0 {
+	//	tpsInterval = time.Second
+	//}
+	tpsTicker := time.NewTicker(time.Second)
 	defer tpsTicker.Stop()
 
+	noncesLen := len(nonces)
 	for {
-		if i >= len(nonces) {
+		if i >= noncesLen {
 			break
 		}
 
@@ -181,35 +183,41 @@ func throughputs(ctx context.Context, client *ethclient.Client, index int, priva
 			atomic.AddInt64(&txsCount, int64(meterCount))
 			return
 
+		//case <-time.After(10 * time.Second):
+		//	blockLimit += 10
+
 		case <-tpsTicker.C:
-			atomic.AddInt64(&txsCount, int64(meterCount))
-			// statistics throughputs
-			if *tps > 0 && meterCount > *tps {
-				// sleep to cut down throughputs if higher than limit tps
-				time.Sleep(time.Duration(meterCount / *tps) * time.Second)
+			if *tps <= 0 {
+				*tps = len(nonces)
+			}
+			for j := 0; j < *tps && i < noncesLen; j++ {
+				nonce := nonces[i]
+
+				copy(data[20:], new(big.Int).SetUint64(nonce).Bytes())
+				//parallel.Put(func() error {
+				//	sendTransaction(ctx, signer, privateKey, nonce, blockLimit, toAddress, big1, gasLimit, gasPrice, data[:], client)
+				//	return nil
+				//})
+				sendTransaction(ctx, signer, privateKey, nonce, blockLimit, toAddress, big1, gasLimit, gasPrice, data[:], client)
+
+				i++
+				//switch {
+				//if i%10000 == 0 {
+				//	handle pre-prepare = getBlockLimit(ctx, client, blockLimit)
+				//}
+				meterCount++
 			}
 
-			meterCount = 0
-
-		case <-time.After(10 * time.Second):
-			blockLimit += 10
-
-		default:
-			nonce := nonces[i]
-
-			copy(data[20:], new(big.Int).SetUint64(nonce).Bytes())
-			//parallel.Put(func() error {
-			//	sendTransaction(ctx, signer, privateKey, nonce, blockLimit, toAddress, big1, gasLimit, gasPrice, data[:], client)
-			//	return nil
-			//})
-			sendTransaction(ctx, signer, privateKey, nonce, blockLimit, toAddress, big1, gasLimit, gasPrice, data[:], client)
-
-			i++
-			//switch {
-			if i%10000 == 0 {
-				blockLimit = getBlockLimit(ctx, client)
-			}
-			meterCount++
+			blockLimit++
+			//blockLimit = getBlockLimit(ctx, client, blockLimit)
+			//atomic.AddInt64(&txsCount, int64(meterCount))
+			//// statistics throughputs
+			//if *tps > 0 && meterCount > *tps {
+			//	// sleep to cut down throughputs if higher than limit tps
+			//	time.Sleep(time.Duration(meterCount / *tps) * time.Second)
+			//}
+			//
+			//meterCount = 0
 		}
 	}
 }
@@ -231,7 +239,9 @@ func sendTransaction(ctx context.Context, signer types.Signer, key *ecdsa.Privat
 		return
 	}
 	err = client.SendTransaction(ctx, signed)
-	if err != nil {
+	switch err {
+	case nil, context.Canceled:
+	default:
 		log.Printf(warnPrefix+" send tx[hash:%s, nonce:%d]: %v", tx.Hash().String(), tx.Nonce(), err)
 		return
 	}
