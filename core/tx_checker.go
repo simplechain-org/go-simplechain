@@ -112,7 +112,7 @@ func NewBlockTxChecker(bc irreversibleChain) *BlockTxChecker {
 	pool.bc = bc
 	pool.cache = make(map[common.Hash]struct{})
 	pool.blkTxCache = make(map[uint64][]common.Hash)
-	pool.maxBlkLimit = 100
+	pool.maxBlkLimit = 300
 
 	return pool
 }

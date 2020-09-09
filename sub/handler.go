@@ -840,21 +840,8 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
 
-		//log.Error("[debug] receive TransactionRouteMsg", "txs", txr.Txs.Len())
-
 		pm.handleRemoteTxsByRouter(p, txr)
 		pm.addRemoteTxsByRouter2TxPool(p, txr)
-		//TODO-D: handle remote-synced route txs in handle_synctx.go
-		//for i, tx := range txr.Txs {
-		//	// Validate and mark the remote transaction
-		//	if tx == nil {
-		//		return errResp(ErrDecode, "transaction %d is nil", i)
-		//	}
-		//	p.MarkTransaction(tx.Hash())
-		//}
-		//totalMsg += len(txr.Txs)
-		////log.Error("receive tx msg", "total", totalMsg, "txs", len(txs))
-		//pm.AddRemotes(txr.Txs)
 
 	default:
 		return errResp(ErrInvalidMsgCode, "%v", msg.Code)

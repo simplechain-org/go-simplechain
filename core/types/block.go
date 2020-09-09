@@ -21,7 +21,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"github.com/simplechain-org/go-simplechain/log"
 	"io"
 	"math/big"
 	"reflect"
@@ -30,6 +29,7 @@ import (
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
+	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/rlp"
 	"golang.org/x/crypto/sha3"
 )

@@ -546,10 +546,13 @@ func (ps *peerSet) Register(p *peer) error {
 		return errAlreadyRegistered
 	}
 
+	// set peer address mapping, if nodeKey existed
 	pubKey := p.Node().Pubkey()
-	addr := crypto.PubkeyToAddress(*pubKey)
+	if pubKey != nil {
+		addr := crypto.PubkeyToAddress(*pubKey)
+		ps.address[p.id] = addr
+	}
 	ps.peers[p.id] = p
-	ps.address[p.id] = addr
 
 	go p.broadcast()
 

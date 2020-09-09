@@ -18,12 +18,12 @@ package types
 
 import (
 	"bytes"
-	"golang.org/x/crypto/sha3"
 	"sort"
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/rlp"
 	"github.com/simplechain-org/go-simplechain/trie"
+	"golang.org/x/crypto/sha3"
 )
 
 type DerivableList interface {

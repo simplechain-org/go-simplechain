@@ -19,11 +19,12 @@ package types
 import (
 	"container/heap"
 	"errors"
+	"io"
+	"math/big"
+
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/rlp"
-	"io"
-	"math/big"
 )
 
 var (

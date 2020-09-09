@@ -243,3 +243,11 @@ func (c Ctx) toArray() []interface{} {
 
 	return arr
 }
+
+// define report function
+var report = Trace
+
+func Report(msg string, ctx ...interface{}) {
+	msg = "[report] " + msg
+	report(msg, ctx...)
+}

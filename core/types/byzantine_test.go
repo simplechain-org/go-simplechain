@@ -18,13 +18,14 @@ package types
 
 import (
 	"bytes"
+	"math/big"
+	"reflect"
+	"testing"
+
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"github.com/simplechain-org/go-simplechain/rlp"
 	"github.com/stretchr/testify/assert"
-	"math/big"
-	"reflect"
-	"testing"
 )
 
 func TestHeaderHash(t *testing.T) {

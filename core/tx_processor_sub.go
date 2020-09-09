@@ -112,6 +112,9 @@ func applyTransactionWithErr(config *params.ChainConfig, bc ChainContext, author
 	}
 }
 
+/*
+ * TESTING
+ */
 func applyEmptyTransaction(tx *types.Transaction) (*types.Receipt, error) {
 	var root []byte
 	receipt := types.NewReceipt(root, false, 0)
@@ -120,6 +123,9 @@ func applyEmptyTransaction(tx *types.Transaction) (*types.Receipt, error) {
 	return receipt, nil
 }
 
+/*
+ * TESTING
+ */
 func applyAccountTransaction(config *params.ChainConfig, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64) (*types.Receipt, error) {
 	msg, err := tx.AsMessage(types.MakeSigner(config))
 	if err != nil {
@@ -138,13 +144,6 @@ func applyAccountTransaction(config *params.ChainConfig, gp *GasPool, statedb *s
 }
 
 func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config) (*types.Receipt, error) {
-	//to := tx.To()
-	//if to != nil || *to == types.HashTxAddress {
-	//	return applyHashTransaction(tx)
-	//	//return applyHashTransaction2(config, statedb, header, tx)
-	//} else {
-	//	return applyCommonTransaction(config, bc, author, gp, statedb, header, tx, usedGas, cfg)
-	//}
 	//return applyEmptyTransaction(tx) // used for testing
 	//return applyAccountTransaction(config, gp, statedb, header, tx, usedGas) // used for testing
 	//return applyCommonTransaction(config, bc, author, gp, statedb, header, tx, usedGas, cfg)
