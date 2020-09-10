@@ -41,10 +41,11 @@ func (c *core) sendPreprepare(request *pbft.Request) {
 			return
 		}
 
-		preprepare, err := Encode(&pbft.Preprepare{
+		preprepare := pbft.Preprepare{
 			View:     curView,
 			Proposal: request.Proposal,
-		})
+		}
+		preprepareMsg, err := Encode(&preprepare)
 		if err != nil {
 			logger.Error("Failed to encode", "view", curView)
 			return
@@ -52,9 +53,10 @@ func (c *core) sendPreprepare(request *pbft.Request) {
 
 		c.broadcast(&message{
 			Code: msgPreprepare,
-			Msg:  preprepare,
-		}, true)
+			Msg:  preprepareMsg,
+		}, false)
 
+		c.handlePrepare2(&preprepare)
 	}
 }
 
@@ -78,7 +80,11 @@ func (c *core) handlePreprepare(msg *message, src pbft.Validator) error {
 		return err
 	}
 
-	record = time.Now()
+	return c.handlePrepare2(preprepare)
+}
+
+func (c *core) handlePrepare2(preprepare *pbft.Preprepare) error {
+	logger := c.logger.New("state", c.state)
 	// Verify the proposal we received ()
 	if duration, err := c.backend.Verify(preprepare.Proposal, true, true); err != nil {
 		// if it's a future block, we will handle it again after the duration
@@ -91,7 +97,6 @@ func (c *core) handlePreprepare(msg *message, src pbft.Validator) error {
 			return err //TODO
 		}
 	}
-	log.Report("handlePreprepare -> Verify", "cost", time.Since(record), "from", src)
 
 	return c.checkAndAcceptPreprepare(preprepare)
 }

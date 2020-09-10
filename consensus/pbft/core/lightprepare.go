@@ -29,28 +29,34 @@ func (c *core) sendLightPrepare(request *pbft.Request, curView *pbft.View) {
 		Msg:  lightMsg,
 	}, false)
 
-	record = time.Now()
-	// re-encode proposal completely
-	completeMsg, err := Encode(&pbft.Preprepare{
+	//record = time.Now()
+	//// re-encode proposal completely
+	//completeMsg, err := Encode(&pbft.Preprepare{
+	//	View:     curView,
+	//	Proposal: request.Proposal,
+	//})
+	//if err != nil {
+	//	logger.Error("Failed to encode", "view", curView)
+	//	return
+	//}
+	//log.Report("sendLightPrepare Encode", "cost", time.Since(record))
+	//
+	//// post full pre-prepare msg
+	//msg, err := c.finalizeMessage(&message{
+	//	Code: msgPreprepare,
+	//	Msg:  completeMsg,
+	//})
+	//if err != nil {
+	//	logger.Error("Failed to finalize message", "msg", msg, "err", err)
+	//	return
+	//}
+	//c.backend.Post(msg)
+
+	// handle full proposal by self
+	c.handlePrepare2(&pbft.Preprepare{
 		View:     curView,
 		Proposal: request.Proposal,
 	})
-	if err != nil {
-		logger.Error("Failed to encode", "view", curView)
-		return
-	}
-	log.Report("sendLightPrepare Encode", "cost", time.Since(record))
-
-	// post full pre-prepare msg
-	msg, err := c.finalizeMessage(&message{
-		Code: msgPreprepare,
-		Msg:  completeMsg,
-	})
-	if err != nil {
-		logger.Error("Failed to finalize message", "msg", msg, "err", err)
-		return
-	}
-	c.backend.Post(msg)
 }
 
 // The first stage handle light Pre-prepare.

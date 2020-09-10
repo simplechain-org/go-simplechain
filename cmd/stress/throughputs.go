@@ -61,8 +61,9 @@ func initNonce(seed uint64, count int) []uint64 {
 var parallel = asio.NewParallel(1000, runtime.NumCPU())
 
 var (
-	chainId *uint64
-	tps     *int
+	chainId   *uint64
+	tps       *int
+	toAddress common.Address
 )
 
 func main() {
@@ -74,6 +75,7 @@ func main() {
 	senderCount := flag.Int("threads", 4, "the number of sender")
 	senderKey := flag.String("sendkey", senderKeys[0], "sender private key")
 	callcode := flag.Bool("callcode", false, "enable call contract code")
+	to := flag.String("to", "", "tx reception")
 
 	seed := flag.Uint64("seed", 1, "hash seed")
 
@@ -83,6 +85,10 @@ func main() {
 
 	if *callcode {
 
+	}
+
+	if *to != "" {
+		toAddress = common.HexToAddress(*to)
 	}
 
 	if *sendTx {
@@ -146,7 +152,6 @@ func throughputs(ctx context.Context, client *ethclient.Client, index int, priva
 	if err != nil {
 		log.Fatalf(errPrefix+" get gas price: %v", err)
 	}
-	toAddress := common.HexToAddress("0xffd79941b7085805f48ded97298694c6bb950e2c")
 	signer := types.NewEIP155Signer(new(big.Int).SetUint64(*chainId))
 
 	var (

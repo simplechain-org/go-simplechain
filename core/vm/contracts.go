@@ -77,6 +77,12 @@ var PrecompiledContractsIstanbul = map[common.Address]PrecompiledContract{
 	common.BytesToAddress([]byte{9}): &blake2F{},
 }
 
+var VoidAddress = common.BytesToAddress([]byte{0})
+
+var PrecompiledContractsExperiment = map[common.Address]PrecompiledContract{
+	VoidAddress: &void{},
+}
+
 // RunPrecompiledContract runs and evaluates the output of a precompiled contract.
 func RunPrecompiledContract(p PrecompiledContract, input []byte, contract *Contract) (ret []byte, err error) {
 	gas := p.RequiredGas(input)
@@ -85,6 +91,11 @@ func RunPrecompiledContract(p PrecompiledContract, input []byte, contract *Contr
 	}
 	return nil, ErrOutOfGas
 }
+
+type void struct{}
+
+func (c *void) RequiredGas(input []byte) uint64  { return 0 }
+func (c *void) Run(input []byte) ([]byte, error) { return nil, nil }
 
 // ECRECOVER implemented as a native contract.
 type ecrecover struct{}

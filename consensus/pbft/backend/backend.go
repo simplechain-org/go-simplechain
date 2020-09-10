@@ -122,7 +122,6 @@ func (sb *backend) Address() common.Address {
 // Validators implements pbft.Backend.Validators
 func (sb *backend) Validators(proposal pbft.Conclusion) pbft.ValidatorSet {
 	return sb.getValidators(proposal.Number().Uint64(), proposal.Hash())
-	//return sb.getValidators(proposal.Number().Uint64(), proposal.PendingHash())
 }
 
 // Broadcast send to others. implements pbft.Backend.Broadcast
