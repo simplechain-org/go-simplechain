@@ -17,11 +17,11 @@
 package core
 
 import (
-	"github.com/simplechain-org/go-simplechain/log"
 	"time"
 
 	"github.com/simplechain-org/go-simplechain/consensus"
 	"github.com/simplechain-org/go-simplechain/consensus/pbft"
+	"github.com/simplechain-org/go-simplechain/log"
 )
 
 func (c *core) sendPreprepare(request *pbft.Request) {
@@ -36,8 +36,8 @@ func (c *core) sendPreprepare(request *pbft.Request) {
 	if c.current.Sequence().Cmp(request.Proposal.Number()) == 0 && c.IsProposer() {
 		curView := c.currentView()
 
-		if c.config.EnablePartially {
-			c.sendPartialPrepare(request, curView)
+		if c.config.LightMode {
+			c.sendLightPrepare(request, curView)
 			return
 		}
 

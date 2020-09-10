@@ -90,7 +90,7 @@ func TestExtractToIstanbul(t *testing.T) {
 	}
 }
 
-func TestPartialBlock_RLP(t *testing.T) {
+func TestLightBlock_RLP(t *testing.T) {
 	block := Block{
 		header: &Header{
 			ParentHash:  common.Hash{1},
@@ -123,19 +123,19 @@ func TestPartialBlock_RLP(t *testing.T) {
 		},
 	}
 
-	pb := NewPartialBlock(&block)
+	pb := NewLightBlock(&block)
 
 	enc, err := rlp.EncodeToBytes(pb)
 	assert.NoError(t, err)
 
-	var partialBlock PartialBlock
-	if err := rlp.DecodeBytes(enc, &partialBlock); err != nil {
+	var lightBlock LightBlock
+	if err := rlp.DecodeBytes(enc, &lightBlock); err != nil {
 		t.Fatal("decode error: ", err)
 	}
 
-	//fmt.Println(partialBlock.Block)
-	assert.True(t, reflect.DeepEqual(partialBlock.Header(), block.Header()))
-	assert.Nil(t, partialBlock.transactions)
-	assert.Equal(t, block.transactions[0].Hash(), partialBlock.txs[0])
+	//fmt.Println(lightBlock.Block)
+	assert.True(t, reflect.DeepEqual(lightBlock.Header(), block.Header()))
+	assert.Nil(t, lightBlock.transactions)
+	assert.Equal(t, block.transactions[0].Hash(), lightBlock.txs[0])
 
 }

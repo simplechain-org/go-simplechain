@@ -18,11 +18,9 @@ package types
 
 import (
 	"errors"
-	"fmt"
 	"io"
 
 	"github.com/simplechain-org/go-simplechain/common"
-	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/rlp"
 )
 
@@ -38,9 +36,10 @@ var (
 
 	// ErrInvalidByzantineHeaderExtra is returned if the length of extra-data is less than 32 bytes
 	ErrInvalidByzantineHeaderExtra = errors.New("invalid byzantine header extra-data")
-	// ErrFailToFetchPartialMissedTxs is returned if fetch partial block's missed txs failed
-	ErrFailToFetchPartialMissedTxs = errors.New("failed to fetch partial block's missed txs")
-	ErrFailToFillPartialMissedTxs  = errors.New("failed to fill partial block's missed txs")
+	// ErrFailToFetchLightMissedTxs is returned if fetch light block's missed txs failed
+	ErrFailToFetchLightMissedTxs = errors.New("failed to fetch light block's missed txs")
+	// ErrFailToFillLightMissedTxs
+	ErrFailToFillLightMissedTxs  = errors.New("failed to fill light block's missed txs")
 )
 
 type ByzantineExtra struct {
@@ -153,117 +152,5 @@ func RlpPendingHeaderHash(h *Header) common.Hash {
 		h.Extra,
 		h.MixDigest,
 		h.Nonce,
-	})
-}
-
-type PartialBlock struct {
-	Block
-	txs       []common.Hash // tx digests
-	MissedTxs []MissedTx
-}
-
-type MissedTx struct {
-	Hash  common.Hash
-	Index uint32
-}
-
-func NewPartialBlock(block *Block) *PartialBlock {
-	txs := block.Transactions()
-	pb := &PartialBlock{
-		Block: *block,
-		txs:   make([]common.Hash, 0, txs.Len()),
-	}
-	for _, tx := range txs {
-		pb.txs = append(pb.txs, tx.Hash())
-	}
-	return pb
-}
-
-func (pb *PartialBlock) TxDigests() []common.Hash {
-	return pb.txs
-}
-
-// incursive: Transactions return mutable transaction list
-func (pb *PartialBlock) Transactions() *Transactions {
-	return &pb.transactions
-}
-
-// Completed return the partial block is complete, has no missed txs and contains all txs
-func (pb *PartialBlock) Completed() bool {
-	return len(pb.MissedTxs) == 0 && len(pb.txs) == pb.transactions.Len()
-}
-
-// FillMissedTxs fill the partial block by response txs, set completed if the block is filled
-func (pb *PartialBlock) FillMissedTxs(txs Transactions) error {
-	if txs.Len() != len(pb.MissedTxs) {
-		log.Warn("Failed to fill missed txs, unmatched size", "num", pb.NumberU64(), "want", len(pb.MissedTxs), "have", txs.Len())
-		return ErrFailToFillPartialMissedTxs
-	}
-	for i, tx := range txs {
-		missed := pb.MissedTxs[i]
-		if tx.Hash() != missed.Hash {
-			log.Warn("Failed to fill missed txs, invalid hash", "num", pb.NumberU64(), "want", missed.Hash, "have", tx.Hash())
-			return ErrFailToFillPartialMissedTxs
-		}
-		pb.transactions[missed.Index] = tx
-	}
-	// mark completed
-	pb.MissedTxs = nil
-	return nil
-}
-
-// FetchMissedTxs fetch request missed tx from block
-func (b *Block) FetchMissedTxs(misses []MissedTx) (Transactions, error) {
-	transactions := b.transactions
-	txSize := transactions.Len()
-	if txSize < len(misses) {
-		log.Warn("Failed to fetch missed txs, unmatched size", "num", b.NumberU64(), "want", len(misses), "have", txSize)
-		return nil, ErrFailToFetchPartialMissedTxs
-	}
-
-	ret := make(Transactions, 0, len(misses))
-	for _, tx := range misses {
-		i := tx.Index
-		if i >= uint32(txSize) {
-			log.Warn("Failed to fetch missed txs, index overflow", "num", b.NumberU64(), "index", i, "txSize", txSize)
-			return nil, ErrFailToFetchPartialMissedTxs
-		}
-		if transactions[i].Hash() != tx.Hash {
-			log.Warn("Failed to fetch missed txs, invalid hash", "num", b.NumberU64(), "want", tx.Hash, "have", transactions[i].Hash())
-			return nil, ErrFailToFetchPartialMissedTxs
-		}
-		ret = append(ret, transactions[i])
-	}
-
-	log.Trace("Fetch missed txs of partial block", "num", b.NumberU64(), "size", ret.Len(), "total", txSize)
-	return ret, nil
-}
-
-func (pb *PartialBlock) String() string {
-	return fmt.Sprintf("pb{Header: %v}", pb.header)
-}
-
-type extPartialBlock struct {
-	Header *Header
-	Txs    []common.Hash
-}
-
-// DecodeRLP decodes the Ethereum
-func (pb *PartialBlock) DecodeRLP(s *rlp.Stream) error {
-	var eb extPartialBlock
-	//_, size, _ := s.Kind()
-	if err := s.Decode(&eb); err != nil {
-		return err
-	}
-	pb.header, pb.txs = eb.Header, eb.Txs
-	//b.size.Store(common.StorageSize(rlp.ListSize(size)))
-	return nil
-}
-
-// EncodeRLP serializes b into the Ethereum RLP block format.
-func (pb *PartialBlock) EncodeRLP(w io.Writer) error {
-	return rlp.Encode(w, extPartialBlock{
-		Header: pb.header,
-		Txs:    pb.txs,
 	})
 }

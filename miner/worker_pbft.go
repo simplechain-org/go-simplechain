@@ -82,10 +82,6 @@ func (w *worker) AdjustMaxBlockTxs(remaining time.Duration, blockTxs int, timeou
 	//}
 }
 
-func (w *worker) FillPartialBlock(pBlock *types.PartialBlock) bool {
-	return w.eth.TxPool().InitPartialBlock(pBlock)
-}
-
 func (w *worker) executeBlock(block *types.Block, statedb *state.StateDB) (*types.Block, *state.ExecutedEnvironment, error) {
 	var (
 		receipts types.Receipts

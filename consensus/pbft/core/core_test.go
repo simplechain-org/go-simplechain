@@ -17,6 +17,8 @@
 package core
 
 import (
+	"crypto/ecdsa"
+	"github.com/simplechain-org/go-simplechain/crypto"
 	"math/big"
 	"reflect"
 	"testing"
@@ -47,9 +49,29 @@ func newTestConclusion() pbft.Conclusion {
 	return makeBlock(1)
 }
 
-//func newTestPartialProposal(txs ...*types.Transaction) pbft.Proposal {
-//	return types.NewPartialBlock(makeBlock(1, txs...))
-//}
+func newTestLightProposal(txs ...*types.Transaction) pbft.LightProposal {
+	return types.NewLightBlock(makeBlock(1, txs...))
+}
+
+func newTransactions(n int, signer types.Signer, key *ecdsa.PrivateKey) types.Transactions {
+	var txs types.Transactions
+
+	for i := 0; i < n; i++ {
+		tx := types.NewTransaction(uint64(i), common.Address{}, common.Big1, 21000, common.Big1, make([]byte, 64))
+
+		signature, err := crypto.Sign(signer.Hash(tx).Bytes(), key)
+		if err != nil {
+			continue
+		}
+		signed, err := tx.WithSignature(signer, signature)
+		if err != nil {
+			continue
+		}
+		txs = append(txs, signed)
+	}
+
+	return txs
+}
 
 func TestNewRequest(t *testing.T) {
 	testLogger.SetHandler(elog.StdoutHandler)

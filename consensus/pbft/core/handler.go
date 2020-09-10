@@ -173,8 +173,8 @@ func (c *core) handleCheckedMsg(msg *message, src pbft.Validator) (bool, error) 
 
 	switch msg.Code {
 	case msgPreprepare:
-		// wouldn't forward preprepare message, if node is in partial mode
-		return !c.config.EnablePartially, testBacklog(c.handlePreprepare(msg, src))
+		// wouldn't forward preprepare message, if node is in light mode
+		return !c.config.LightMode, testBacklog(c.handlePreprepare(msg, src))
 
 	case msgPrepare:
 		return true, testBacklog(c.handlePrepare(msg, src))
@@ -185,18 +185,18 @@ func (c *core) handleCheckedMsg(msg *message, src pbft.Validator) (bool, error) 
 	case msgRoundChange:
 		return true, testBacklog(c.handleRoundChange(msg, src))
 
-	case msgPartialPreprepare:
-		log.Report("> handleCheckedMsg msgPartialPreprepare")
-		if c.config.EnablePartially {
-			return true, testBacklog(c.handlePartialPrepare(msg, src))
+	case msgLightPreprepare:
+		log.Report("> handleCheckedMsg msgLightPreprepare")
+		if c.config.LightMode {
+			return true, testBacklog(c.handleLightPrepare(msg, src))
 		}
-	case msgPartialGetMissedTxs:
-		if c.config.EnablePartially {
+	case msgGetMissedTxs:
+		if c.config.LightMode {
 			// wouldn't forward request message
 			return false, testBacklog(c.handleGetMissedTxs(msg, src))
 		}
-	case msgPartialMissedTxs:
-		if c.config.EnablePartially {
+	case msgMissedTxs:
+		if c.config.LightMode {
 			// wouldn't forward response message
 			return false, testBacklog(c.handleMissedTxs(msg, src))
 		}

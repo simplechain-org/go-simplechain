@@ -45,8 +45,8 @@ var (
 	// errFailedDecodeMessageSet = errors.New("failed to decode message set")
 	// errInvalidSigner is returned when the message is signed by a validator different than message sender
 	errInvalidSigner = errors.New("message not signed by the sender")
-	// errInvalidPartialProposal
-	errInvalidPartialProposal = errors.New("proposal is not a partial proposal")
+	// errInvalidLightProposal
+	errInvalidLightProposal = errors.New("proposal is not a partial proposal")
 	// errNonexistentProposal
 	errNonexistentProposal = errors.New("proposal is not exist")
 )

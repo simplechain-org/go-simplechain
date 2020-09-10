@@ -319,7 +319,7 @@ func (sb *backend) Verify(proposal pbft.Proposal, checkHeader, checkBody bool) (
 	switch pb := proposal.(type) {
 	case *types.Block:
 		block = pb
-	case *types.PartialBlock:
+	case *types.LightBlock:
 		block = &pb.Block
 	default:
 		sb.logger.Error("Invalid proposal(wrong type)", "proposal", proposal)
@@ -370,8 +370,8 @@ func (sb *backend) VerifyBody(block *types.Block) error {
 	return nil
 }
 
-func (sb *backend) FillPartialProposal(proposal pbft.PartialProposal) (filled bool, missed []types.MissedTx, err error) {
-	block, ok := proposal.(*types.PartialBlock)
+func (sb *backend) FillLightProposal(proposal pbft.LightProposal) (filled bool, missed []types.MissedTx, err error) {
+	block, ok := proposal.(*types.LightBlock)
 	if !ok {
 		sb.logger.Error("Invalid proposal(wrong type), %v", proposal)
 		return false, nil, errInvalidProposal
@@ -384,7 +384,7 @@ func (sb *backend) FillPartialProposal(proposal pbft.PartialProposal) (filled bo
 	// resize block transactions to digests size
 	*block.Transactions() = make(types.Transactions, len(block.TxDigests()))
 	// fill block transactions by txpool
-	filled = sb.txPool.InitPartialBlock(block)
+	filled = sb.txPool.InitLightBlock(block)
 
 	return filled, block.MissedTxs, nil
 }
@@ -394,7 +394,7 @@ func (sb *backend) Execute(proposal pbft.Proposal) (pbft.Conclusion, error) {
 	switch pb := proposal.(type) {
 	case *types.Block:
 		block = pb
-	case *types.PartialBlock:
+	case *types.LightBlock:
 		block = &pb.Block
 	default:
 		sb.logger.Error("Invalid proposal(wrong type)", "proposal", proposal)

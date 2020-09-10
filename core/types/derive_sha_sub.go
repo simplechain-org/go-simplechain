@@ -17,9 +17,5 @@
 
 package types
 
-import "github.com/simplechain-org/go-simplechain/log"
+var DeriveSha = DeriveListSha
 
-func init() {
-	log.Info("Use DeriveListSha for subchain")
-	DeriveSha = DeriveListSha
-}

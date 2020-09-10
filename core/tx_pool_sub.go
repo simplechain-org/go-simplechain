@@ -693,44 +693,6 @@ func (pool *TxPool) validateTx(tx *types.Transaction /*, local bool*/) error {
 	return nil
 }
 
-func (pool *TxPool) ValidateBlocks(blocks types.Blocks) {
-	var wg sync.WaitGroup
-	for _, block := range blocks {
-		for _, tx := range block.Transactions() {
-			// already check sender by txpool, reuse sender
-			if ptx := pool.all.Get(tx.Hash()); ptx != nil {
-				tx.SetSender(ptx.GetSender())
-
-			} else {
-				transaction := tx // use out-of-range address for parallel invoke
-				wg.Add(1)
-				//pool.parallel.Put(func() error {
-				SenderParallel.Put(func() error {
-					defer wg.Done()
-					_, err := types.Sender(pool.signer, transaction)
-					return err
-				}, nil)
-			}
-		}
-	}
-	wg.Wait()
-}
-
-func (pool *TxPool) InitPartialBlock(pb *types.PartialBlock) bool {
-	digests := pb.TxDigests()
-	transactions := pb.Transactions()
-
-	for index, hash := range digests {
-		if tx := pool.all.Get(hash); tx != nil {
-			(*transactions)[index] = tx
-		} else {
-			pb.MissedTxs = append(pb.MissedTxs, types.MissedTx{Hash: hash, Index: uint32(index)})
-		}
-	}
-
-	return len(pb.MissedTxs) == 0
-}
-
 // add validates a transaction and inserts it into the non-executable queue for
 // later pending promotion and execution. If the transaction is a replacement for
 // an already pending or queued one, it overwrites the previous and returns this
@@ -861,10 +823,6 @@ func (pool *TxPool) Status(hashes []common.Hash) []TxStatus {
 // and nil otherwise.
 func (pool *TxPool) Get(hash common.Hash) *types.Transaction {
 	return pool.all.Get(hash)
-}
-
-func (pool *TxPool) Signer() types.Signer {
-	return pool.signer
 }
 
 // removeTx removes a single transaction from the queue, moving all subsequent

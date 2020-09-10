@@ -18,28 +18,14 @@
 package types
 
 import (
-	"math/big"
-	"sync/atomic"
-
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
+	"math/big"
 )
 
 //go:generate gencodec -type txdata -field-override txdataMarshaling -out gen_tx_json_sub.go
 
 const messageCheckNonce = false
-
-type Transaction struct {
-	data txdata
-	// caches
-	hash atomic.Value
-	size atomic.Value
-	from atomic.Value
-	// for txpool
-	timestamp int64
-	synced    bool
-	local     bool
-}
 
 type txdata struct {
 	AccountNonce uint64          `json:"nonce"    gencodec:"required"`
@@ -73,14 +59,3 @@ type txdataMarshaling struct {
 
 func (tx *Transaction) BlockLimit() uint64                { return tx.data.BlockLimit }
 func (tx *Transaction) SetBlockLimit(expiredBlock uint64) { tx.data.BlockLimit = expiredBlock }
-
-func (tx *Transaction) SetSender(from atomic.Value) { tx.from = from }
-func (tx *Transaction) GetSender() atomic.Value     { return tx.from }
-
-// TxPool parameter
-func (tx *Transaction) IsSynced() bool                { return tx.synced }
-func (tx *Transaction) SetSynced(synced bool)         { tx.synced = synced }
-func (tx *Transaction) IsLocal() bool                 { return tx.local }
-func (tx *Transaction) SetLocal(local bool)           { tx.local = local }
-func (tx *Transaction) ImportTime() int64             { return tx.timestamp }
-func (tx *Transaction) SetImportTime(timestamp int64) { tx.timestamp = timestamp }

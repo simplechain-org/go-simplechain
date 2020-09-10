@@ -163,7 +163,7 @@ var (
 		utils.IstanbulBlockPeriodFlag,
 		utils.PbftRequestTimeoutFlag,
 		utils.PbftBlockPeriodFlag,
-		utils.PbftEnablePartiallyFlag,
+		utils.PbftEnableLightFlag,
 		utils.MinerMaxBlockTxsSealFlag,
 		utils.ConfirmDepthFlag,
 		utils.AnchorSignerFlag,

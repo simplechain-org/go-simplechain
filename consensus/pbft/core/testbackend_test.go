@@ -47,14 +47,19 @@ type testSystemBackend struct {
 
 	address common.Address
 	db      ethdb.Database
+	filled  bool
+	txpool  *testSystemTxPool
 }
 
-func (self *testSystemBackend) SendMsg(val pbft.Validators, payload []byte) error {
-	panic("implement me")
-}
+func (self *testSystemBackend) FillLightProposal(proposal pbft.LightProposal) (bool, []types.MissedTx, error) {
+	lb := proposal.(*types.LightBlock)
+	*lb.Transactions() = make(types.Transactions, len(lb.TxDigests()))
 
-func (self *testSystemBackend) FillPartialProposal(proposal pbft.PartialProposal) (bool, []types.MissedTx, error) {
-	panic("implement me")
+	if self.txpool != nil {
+		fiiled := self.txpool.InitLightBlock(lb)
+		return fiiled, lb.MissedTxs, nil
+	}
+	return true, nil, nil
 }
 
 type testCommittedMsgs struct {
@@ -79,12 +84,10 @@ func (self *testSystemBackend) EventMux() *event.TypeMux {
 	return self.events
 }
 
-func (self *testSystemBackend) Send(message []byte, target common.Address) error {
-	testLogger.Info("enqueuing a message...", "address", self.Address())
-	self.sentMsgs = append(self.sentMsgs, message)
-	self.sys.queuedMessage <- pbft.MessageEvent{
+func (self *testSystemBackend) SendMsg(val pbft.Validators, message []byte) error {
+	self.sys.sendMessage <- targetMessage{msg: pbft.MessageEvent{
 		Payload: message,
-	}
+	}, vals: val}
 	return nil
 }
 
@@ -200,30 +203,39 @@ func newTestSystemTxPool(txs ...*types.Transaction) *testSystemTxPool {
 	return pool
 }
 
-func (pool *testSystemTxPool) InitPartialBlock(pb *types.PartialBlock) bool {
+func (pool *testSystemTxPool) AddLocal(tx *types.Transaction) {
+	pool.all[tx.Hash()] = tx
+}
+
+func (pool *testSystemTxPool) InitLightBlock(pb *types.LightBlock) bool {
 	digests := pb.TxDigests()
-	misses := pb.MissedTxs
 	transactions := pb.Transactions()
 
 	for index, hash := range digests {
 		if tx := pool.all[hash]; tx != nil {
 			(*transactions)[index] = tx
 		} else {
-			misses = append(misses, types.MissedTx{Hash: hash, Index: uint32(index)})
+			pb.MissedTxs = append(pb.MissedTxs, types.MissedTx{Hash: hash, Index: uint32(index)})
 		}
 	}
 
-	return len(misses) == 0
+	return len(pb.MissedTxs) == 0
 }
 
 // ==============================================
 //
 // define the struct that need to be provided for integration tests.
 
+type targetMessage struct {
+	msg  pbft.MessageEvent
+	vals pbft.Validators
+}
+
 type testSystem struct {
 	backends []*testSystemBackend
 
 	queuedMessage chan pbft.MessageEvent
+	sendMessage   chan targetMessage
 	quit          chan struct{}
 }
 
@@ -233,6 +245,7 @@ func newTestSystem(n uint64) *testSystem {
 		backends: make([]*testSystemBackend, n),
 
 		queuedMessage: make(chan pbft.MessageEvent),
+		sendMessage:   make(chan targetMessage),
 		quit:          make(chan struct{}),
 	}
 }
@@ -292,6 +305,16 @@ func (t *testSystem) listen() {
 			testLogger.Info("consuming a queue message...")
 			for _, backend := range t.backends {
 				go backend.EventMux().Post(queuedMessage)
+			}
+		case sendMessage := <-t.sendMessage:
+			target := make(map[common.Address]struct{})
+			for _, val := range sendMessage.vals {
+				target[val.Address()] = struct{}{}
+			}
+			for _, backend := range t.backends {
+				if _, ok := target[backend.address]; ok {
+					go backend.EventMux().Post(sendMessage)
+				}
 			}
 		}
 	}

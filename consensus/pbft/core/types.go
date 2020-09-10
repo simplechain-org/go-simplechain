@@ -85,13 +85,13 @@ const (
 	msgCommit      = MsgCode(0x02)
 	msgRoundChange = MsgCode(0x03)
 
-	msgPartialPreprepare   = MsgCode(0x10)
-	msgPartialGetMissedTxs = MsgCode(0x11)
-	msgPartialMissedTxs    = MsgCode(0x12)
+	msgLightPreprepare = MsgCode(0x10)
+	msgGetMissedTxs    = MsgCode(0x11)
+	msgMissedTxs       = MsgCode(0x12)
 )
 
-func isPartialMsg(code uint64) bool {
-	return code >= msgPartialPreprepare && code <= msgPartialMissedTxs
+func isLightProposalMsg(code uint64) bool {
+	return code >= msgLightPreprepare && code <= msgMissedTxs
 }
 
 type message struct {

@@ -63,14 +63,14 @@ func (c *core) checkMessage(msgCode uint64, view *pbft.View) error {
 
 	if c.state == StateAcceptRequest {
 		switch {
-		// unsupported partial messages node
-		case isPartialMsg(msgCode) && !c.config.EnablePartially:
+		// unsupported light messages node
+		case isLightProposalMsg(msgCode) && !c.config.LightMode:
 			return errInvalidMessage
-		// StateAcceptRequest only accepts msgPreprepare or msgPartial*
+		// StateAcceptRequest only accepts msgPreprepare or light proposal messages*
 		// other messages are future messages
 		case msgCode > msgPreprepare && msgCode <= msgRoundChange:
 			return errFutureMessage
-		case msgCode == msgPartialGetMissedTxs:
+		case msgCode == msgGetMissedTxs:
 			return errFutureMessage
 		}
 		return nil
@@ -107,8 +107,8 @@ func (c *core) storeBacklog(msg *message, src pbft.Validator) {
 			backlog.Push(msg, toPriority(msg.Code, p.View))
 		}
 		// for msgRoundChange, msgPrepare and msgCommit cases
-	case msgPartialPreprepare:
-		var p *pbft.PartialPreprepare
+	case msgLightPreprepare:
+		var p *pbft.LightPreprepare
 		err := msg.Decode(&p)
 		if err == nil {
 			backlog.Push(msg, toPriority(msg.Code, p.View))
@@ -155,8 +155,8 @@ func (c *core) processBacklog() {
 					view = m.View
 				}
 			// for msgRoundChange, msgPrepare and msgCommit cases
-			case msgPartialPreprepare:
-				var m *pbft.PartialPreprepare
+			case msgLightPreprepare:
+				var m *pbft.LightPreprepare
 				err := msg.Decode(&m)
 				if err == nil {
 					view = m.View

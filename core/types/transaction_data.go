@@ -18,24 +18,14 @@
 package types
 
 import (
-	"math/big"
-	"sync/atomic"
-
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
+	"math/big"
 )
 
 //go:generate gencodec -type txdata -field-override txdataMarshaling -out gen_tx_json.go
 
 const messageCheckNonce = true
-
-type Transaction struct {
-	data txdata
-	// caches
-	hash atomic.Value
-	size atomic.Value
-	from atomic.Value
-}
 
 type txdata struct {
 	AccountNonce uint64          `json:"nonce"    gencodec:"required"`
@@ -63,13 +53,4 @@ type txdataMarshaling struct {
 	V            *hexutil.Big
 	R            *hexutil.Big
 	S            *hexutil.Big
-}
-
-//TODO: only for code building, panic for wrong build mode
-func (tx *Transaction) SetSynced(bool) {
-	panic("SetSynced is not support for this build mode")
-}
-
-func (tx *Transaction) IsSynced() bool {
-	panic("IsSynced is not support for this build mode")
 }

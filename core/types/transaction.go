@@ -21,6 +21,7 @@ import (
 	"errors"
 	"io"
 	"math/big"
+	"sync/atomic"
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/crypto"
@@ -30,6 +31,18 @@ import (
 var (
 	ErrInvalidSig = errors.New("invalid transaction v, r, s values")
 )
+
+type Transaction struct {
+	data txdata
+	// caches
+	hash atomic.Value
+	size atomic.Value
+	from atomic.Value
+	// for txpool
+	timestamp int64
+	synced    bool
+	local     bool
+}
 
 func NewTransaction(nonce uint64, to common.Address, amount *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte) *Transaction {
 	return newTransaction(nonce, &to, amount, gasLimit, gasPrice, data)
@@ -138,6 +151,17 @@ func (tx *Transaction) GasPrice() *big.Int { return new(big.Int).Set(tx.data.Pri
 func (tx *Transaction) Value() *big.Int    { return new(big.Int).Set(tx.data.Amount) }
 func (tx *Transaction) Nonce() uint64      { return tx.data.AccountNonce }
 func (tx *Transaction) CheckNonce() bool   { return true }
+
+func (tx *Transaction) SetSender(from atomic.Value) { tx.from = from }
+func (tx *Transaction) GetSender() atomic.Value     { return tx.from }
+
+// TxPool parameter
+func (tx *Transaction) IsSynced() bool                { return tx.synced }
+func (tx *Transaction) SetSynced(synced bool)         { tx.synced = synced }
+func (tx *Transaction) IsLocal() bool                 { return tx.local }
+func (tx *Transaction) SetLocal(local bool)           { tx.local = local }
+func (tx *Transaction) ImportTime() int64             { return tx.timestamp }
+func (tx *Transaction) SetImportTime(timestamp int64) { tx.timestamp = timestamp }
 
 // To returns the recipient address of the transaction.
 // It returns nil if the transaction is a contract creation.

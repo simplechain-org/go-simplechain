@@ -306,7 +306,7 @@ var AppHelpFlagGroups = []flagGroup{
 		Flags: []cli.Flag{
 			utils.PbftRequestTimeoutFlag,
 			utils.PbftBlockPeriodFlag,
-			utils.PbftEnablePartiallyFlag,
+			utils.PbftEnableLightFlag,
 		},
 	},
 	{

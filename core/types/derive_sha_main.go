@@ -13,11 +13,9 @@
 //
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-simplechain library. If not, see <http://www.gnu.org/licenses/>.
+//+build !sub
 
-package core
+package types
 
-import "testing"
+var DeriveSha = DeriveLegacySha
 
-func TestHandlePartialPreprepare(t *testing.T) {
-
-}

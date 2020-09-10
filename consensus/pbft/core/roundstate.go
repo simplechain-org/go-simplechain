@@ -49,7 +49,7 @@ func newRoundState(view *pbft.View, validatorSet pbft.ValidatorSet, lockedHash c
 type roundState struct {
 	round          *big.Int
 	sequence       *big.Int
-	PartialPrepare *pbft.PartialPreprepare
+	LightPrepare   *pbft.LightPreprepare
 	Preprepare     *pbft.Preprepare
 	Prepare        pbft.Conclusion // executed proposal
 	Prepares       *messageSet
@@ -94,11 +94,11 @@ func (s *roundState) Subject() *pbft.Subject {
 	}
 }
 
-func (s *roundState) SetPartialPrepare(preprepare *pbft.PartialPreprepare) {
+func (s *roundState) SetLightPrepare(preprepare *pbft.LightPreprepare) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.PartialPrepare = preprepare
+	s.LightPrepare = preprepare
 }
 
 func (s *roundState) SetPreprepare(preprepare *pbft.Preprepare) {
@@ -122,38 +122,18 @@ func (s *roundState) Proposal() pbft.Proposal {
 	if s.Preprepare != nil {
 		return s.Preprepare.Proposal
 	}
-	//TODO-D
-	//if s.Preprepare != nil {
-	//	switch proposal := s.Preprepare.Proposal.(type) {
-	//	case pbft.PartialProposal:
-	//		return Partial2Proposal(proposal)
-	//	case pbft.Proposal:
-	//		return proposal
-	//	}
-	//}
-
 	return nil
 }
 
-// return partial block proposal,
-// return nil if the proposal is not exist or not a partial proposal
-func (s *roundState) PartialProposal() pbft.PartialProposal {
+// return light block proposal,
+// return nil if the proposal is not exist or not a light proposal
+func (s *roundState) LightProposal() pbft.LightProposal {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	if s.PartialPrepare != nil {
-		return s.PartialPrepare.Proposal.(pbft.PartialProposal)
+	if s.LightPrepare != nil {
+		return s.LightPrepare.Proposal.(pbft.LightProposal)
 	}
-
-	//TODO-D
-	//if s.Preprepare != nil {
-	//	switch proposal := s.Preprepare.Proposal.(type) {
-	//	case pbft.PartialProposal:
-	//		return proposal
-	//	case pbft.Proposal:
-	//		return nil
-	//	}
-	//}
 	return nil
 }
 

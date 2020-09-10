@@ -22,7 +22,7 @@ func (c *core) requestMissedTxs(missedTxs []types.MissedTx, val pbft.Validator) 
 	logger.Trace("[report] requestMissedTxs", "view", missedReq.View, "missed", len(missedTxs))
 
 	c.send(&message{
-		Code: msgPartialGetMissedTxs,
+		Code: msgGetMissedTxs,
 		Msg:  encMissedReq,
 	}, pbft.Validators{val})
 }
@@ -39,7 +39,7 @@ func (c *core) handleGetMissedTxs(msg *message, src pbft.Validator) error {
 
 	logger.Trace("[report] handleGetMissedTxs", "view", missed.View, "missed", len(missed.MissedTxs))
 
-	if err := c.checkMessage(msgPartialGetMissedTxs, missed.View); err != nil {
+	if err := c.checkMessage(msgGetMissedTxs, missed.View); err != nil {
 		logFn := logger.Warn
 		switch err {
 		case errOldMessage: //TODO
@@ -88,7 +88,7 @@ func (c *core) responseMissedTxs(txs types.Transactions, val pbft.Validator) {
 	c.backend.MarkTransactionKnownBy(val, txs)
 
 	c.send(&message{
-		Code: msgPartialMissedTxs,
+		Code: msgMissedTxs,
 		Msg:  encMissedResp,
 	}, pbft.Validators{val})
 }
@@ -104,7 +104,7 @@ func (c *core) handleMissedTxs(msg *message, src pbft.Validator) error {
 
 	logger.Trace("[report] handleMissedTxs", "view", missed.View)
 
-	if err := c.checkMessage(msgPartialMissedTxs, missed.View); err != nil {
+	if err := c.checkMessage(msgMissedTxs, missed.View); err != nil {
 		logFn := logger.Warn
 		switch err {
 		case errOldMessage: //TODO
@@ -116,21 +116,21 @@ func (c *core) handleMissedTxs(msg *message, src pbft.Validator) error {
 		return err
 	}
 
-	partial := c.current.PartialProposal()
-	if partial == nil {
-		logger.Warn("local partial proposal was lost", "view", missed.View, "Preprepare", c.current.Preprepare)
+	lp := c.current.LightProposal()
+	if lp == nil {
+		logger.Warn("local light proposal was lost", "view", missed.View, "Preprepare", c.current.Preprepare)
 		return nil //TODO: need return a error
 	}
 
 	// do not accept completed proposal repeatedly
-	if partial.Completed() {
-		logger.Warn("local partial was already completed", "view", missed.View)
+	if lp.Completed() {
+		logger.Warn("local light was already completed", "view", missed.View)
 		return nil
 	}
 
-	if err := partial.FillMissedTxs(missed.ReqTxs); err != nil {
+	if err := lp.FillMissedTxs(missed.ReqTxs); err != nil {
 		return err
 	}
 
-	return c.handlePartialPrepare2(c.current.PartialPrepare.FullPreprepare(), src)
+	return c.handleLightPrepare2(c.current.LightPrepare.FullPreprepare(), src)
 }

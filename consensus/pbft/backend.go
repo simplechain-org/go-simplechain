@@ -65,8 +65,8 @@ type Backend interface {
 	// OnTimeout notify the sealer pbft on timeout event
 	OnTimeout()
 
-	// Fill a partial proposal, return whether it is filled and missed transactions
-	FillPartialProposal(proposal PartialProposal) (bool, []types.MissedTx, error)
+	// Fill a light proposal, return whether it is filled and missed transactions
+	FillLightProposal(proposal LightProposal) (bool, []types.MissedTx, error)
 
 	// MarkTransactionKnownBy mark transactions are known by validators, do not broadcast again
 	MarkTransactionKnownBy(val Validator, txs types.Transactions)

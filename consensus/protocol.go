@@ -65,8 +65,8 @@ type Sealer interface {
 }
 
 type TxPool interface {
-	// Init partial block by txpool
-	InitPartialBlock(pBlock *types.PartialBlock) bool
+	// Init light block by txpool
+	InitLightBlock(pBlock *types.LightBlock) bool
 }
 
 // Peer defines the interface to communicate with peer

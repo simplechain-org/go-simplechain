@@ -49,8 +49,8 @@ type Conclusion interface {
 	Hash() common.Hash
 }
 
-// PartialProposal is a Proposal without tx body
-type PartialProposal interface {
+// LightProposal is a Proposal without tx body
+type LightProposal interface {
 	Proposal
 
 	TxDigests() []common.Hash
@@ -137,21 +137,21 @@ func (b *Preprepare) DecodeRLP(s *rlp.Stream) error {
 	return nil
 }
 
-type PartialPreprepare Preprepare
+type LightPreprepare Preprepare
 
-func (b *PartialPreprepare) FullPreprepare() *Preprepare {
+func (b *LightPreprepare) FullPreprepare() *Preprepare {
 	return &Preprepare{
 		View:     b.View,
-		Proposal: Partial2Proposal(b.Proposal),
+		Proposal: Light2Proposal(b.Proposal),
 	}
 }
 
 // DecodeRLP implements rlp.Decoder, and load the consensus fields from a RLP stream.
-// Overwrite Decode method for partial block
-func (b *PartialPreprepare) DecodeRLP(s *rlp.Stream) error {
+// Overwrite Decode method for light block
+func (b *LightPreprepare) DecodeRLP(s *rlp.Stream) error {
 	var preprepare struct {
 		View     *View
-		Proposal *types.PartialBlock
+		Proposal *types.LightBlock
 	}
 
 	if err := s.Decode(&preprepare); err != nil {
@@ -243,21 +243,21 @@ func (b *MissedResp) DecodeRLP(s *rlp.Stream) error {
 	return nil
 }
 
-// Partial2Proposal change the common proposal to the partial proposal
+// Proposal2Light change the common proposal to the light proposal
 // return nil if proposal to block failed
-func Proposal2Partial(proposal Proposal, init bool) PartialProposal {
+func Proposal2Light(proposal Proposal, init bool) LightProposal {
 	block, ok := proposal.(*types.Block)
 	if !ok {
 		return nil
 	}
 	if !init {
-		return &types.PartialBlock{Block: *block}
+		return &types.LightBlock{Block: *block}
 	}
-	return types.NewPartialBlock(block)
+	return types.NewLightBlock(block)
 }
 
-// Partial2Proposal trans a partial proposal to the common proposal
-// warning: will panic if proposal is not partial
-func Partial2Proposal(proposal Proposal) Proposal {
-	return &proposal.(*types.PartialBlock).Block
+// Light2Proposal trans a light proposal to the common proposal
+// warning: will panic if proposal is not light
+func Light2Proposal(proposal Proposal) Proposal {
+	return &proposal.(*types.LightBlock).Block
 }

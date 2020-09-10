@@ -8,25 +8,25 @@ import (
 	"github.com/simplechain-org/go-simplechain/consensus/pbft"
 )
 
-func (c *core) sendPartialPrepare(request *pbft.Request, curView *pbft.View) {
+func (c *core) sendLightPrepare(request *pbft.Request, curView *pbft.View) {
 	logger := c.logger.New("state", c.state)
 
 	record := time.Now()
-	// encode proposal partially
-	partialMsg, err := Encode(&pbft.Preprepare{
+	// encode light proposal
+	lightMsg, err := Encode(&pbft.Preprepare{
 		View:     curView,
-		Proposal: pbft.Proposal2Partial(request.Proposal, true),
+		Proposal: pbft.Proposal2Light(request.Proposal, true),
 	})
 	if err != nil {
 		logger.Error("Failed to encode", "view", curView)
 		return
 	}
-	log.Report("sendPartialPrepare Encode partially", "cost", time.Since(record))
+	log.Report("sendLightPrepare Encode light", "cost", time.Since(record))
 
-	// send partial pre-prepare msg to others
+	// send light pre-prepare msg to others
 	c.broadcast(&message{
-		Code: msgPartialPreprepare,
-		Msg:  partialMsg,
+		Code: msgLightPreprepare,
+		Msg:  lightMsg,
 	}, false)
 
 	record = time.Now()
@@ -39,7 +39,7 @@ func (c *core) sendPartialPrepare(request *pbft.Request, curView *pbft.View) {
 		logger.Error("Failed to encode", "view", curView)
 		return
 	}
-	log.Report("sendPartialPrepare Encode", "cost", time.Since(record))
+	log.Report("sendLightPrepare Encode", "cost", time.Since(record))
 
 	// post full pre-prepare msg
 	msg, err := c.finalizeMessage(&message{
@@ -53,19 +53,19 @@ func (c *core) sendPartialPrepare(request *pbft.Request, curView *pbft.View) {
 	c.backend.Post(msg)
 }
 
-// The first stage handle partial Pre-prepare.
+// The first stage handle light Pre-prepare.
 // Check message and verify block header, and try fill proposal with sealer.
 // Request missed txs from proposer or enter the second stage for filled proposal.
-func (c *core) handlePartialPrepare(msg *message, src pbft.Validator) error {
+func (c *core) handleLightPrepare(msg *message, src pbft.Validator) error {
 	logger := c.logger.New("from", src, "state", c.state)
 	c.prepareTimestamp = time.Now()
 
-	log.Report("> handlePartialPrepare")
+	log.Report("> handleLightPrepare")
 
-	var preprepare *pbft.PartialPreprepare
+	var preprepare *pbft.LightPreprepare
 	err := msg.Decode(&preprepare)
 	if err != nil {
-		logger.Warn("Failed decode partial preprepare", "err", err)
+		logger.Warn("Failed to decode light preprepare", "err", err)
 		return errFailedDecodePreprepare
 	}
 
@@ -74,14 +74,14 @@ func (c *core) handlePartialPrepare(msg *message, src pbft.Validator) error {
 		return err
 	}
 
-	// Verify the proposal we received, dont check body if we are partial
+	// Verify the proposal we received, dont check body if we are light
 	if duration, err := c.backend.Verify(preprepare.Proposal, true, false); err != nil {
 		// if it's a future block, we will handle it again after the duration
 		if err == consensus.ErrFutureBlock {
 			logger.Trace("Proposed block will be committed in the future", "err", err, "duration", duration)
 			// wait until block timestamp at commit stage
 		} else {
-			logger.Warn("Failed to verify partial proposal header", "err", err, "duration", duration)
+			logger.Warn("Failed to verify light proposal header", "err", err, "duration", duration)
 			c.sendNextRoundChange()
 			return err //TODO
 		}
@@ -91,32 +91,33 @@ func (c *core) handlePartialPrepare(msg *message, src pbft.Validator) error {
 		return nil
 	}
 
-	partialProposal, ok := preprepare.Proposal.(pbft.PartialProposal)
+	lightProposal, ok := preprepare.Proposal.(pbft.LightProposal)
 	if !ok {
-		logger.Warn("Failed resolve proposal as a partial proposal", "view", preprepare.View)
-		return errInvalidPartialProposal
+		logger.Warn("Failed resolve proposal as a light proposal", "view", preprepare.View)
+		return errInvalidLightProposal
 	}
 
 	// empty block
-	if len(partialProposal.TxDigests()) == 0 {
-		return c.handlePartialPrepare2(preprepare.FullPreprepare(), src)
+	if len(lightProposal.TxDigests()) == 0 {
+		return c.handleLightPrepare2(preprepare.FullPreprepare(), src)
 	}
 
-	filled, missedTxs, err := c.backend.FillPartialProposal(partialProposal)
+	filled, missedTxs, err := c.backend.FillLightProposal(lightProposal)
 	if err != nil {
-		logger.Warn("Failed to fill partial proposal", "error", err)
+		logger.Warn("Failed to fill light proposal", "error", err)
 		c.sendNextRoundChange()
 		return err
 	}
 
+	logger.Trace("light block transaction covered", "percent", 100.00-100.00*float64(len(missedTxs))/float64(len(lightProposal.TxDigests())))
+
 	if filled {
 		// entire the second stage
-		return c.handlePartialPrepare2(preprepare.FullPreprepare(), src)
+		return c.handleLightPrepare2(preprepare.FullPreprepare(), src)
 
 	} else {
-		// accept partial preprepare
-		//c.current.SetPreprepare(preprepare)
-		c.current.SetPartialPrepare(preprepare)
+		// accept light preprepare
+		c.current.SetLightPrepare(preprepare)
 		// request missedTxs from proposer
 		c.requestMissedTxs(missedTxs, src)
 	}
@@ -124,13 +125,13 @@ func (c *core) handlePartialPrepare(msg *message, src pbft.Validator) error {
 	return nil
 }
 
-// The second stage handle partial Pre-prepare.
-func (c *core) handlePartialPrepare2(preprepare *pbft.Preprepare, src pbft.Validator) error {
+// The second stage handle light Pre-prepare.
+func (c *core) handleLightPrepare2(preprepare *pbft.Preprepare, src pbft.Validator) error {
 	logger := c.logger.New("from", src, "state", c.state)
-	log.Report("> handlePartialPrepare2")
-	// partial proposal was be filled, check body
+	log.Report("> handleLightPrepare2")
+	// light proposal was be filled, check body
 	if _, err := c.backend.Verify(preprepare.Proposal, false, true); err != nil {
-		logger.Warn("Failed to verify partial proposal body", "err", err)
+		logger.Warn("Failed to verify light proposal body", "err", err)
 		c.sendNextRoundChange()
 		return err //TODO
 	}

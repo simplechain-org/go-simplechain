@@ -1432,15 +1432,3 @@ func (pool *TxPool) SyncLimit(int) types.Transactions {
 func (pool *TxPool) SubscribeSyncTxsEvent(chan<- NewTxsEvent) event.Subscription {
 	panic("SubscribeSyncTxsEvent is not support this pool")
 }
-
-func (pool *TxPool) ValidateBlocks(types.Blocks) {
-	panic("ValidateBlocks is not support this pool")
-}
-
-func (pool *TxPool) Signer() types.Signer {
-	return pool.signer
-}
-
-func (pool *TxPool) InitPartialBlock(*types.PartialBlock) bool {
-	panic("InitPartialBlock is not support this pool")
-}

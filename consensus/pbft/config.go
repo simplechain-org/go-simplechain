@@ -24,17 +24,17 @@ const (
 )
 
 type Config struct {
-	RequestTimeout  uint64         `toml:",omitempty"` // The timeout for each bft round in milliseconds.
-	BlockPeriod     uint64         `toml:",omitempty"` // Default minimum difference between two consecutive block's timestamps in second
-	ProposerPolicy  ProposerPolicy `toml:",omitempty"` // The policy for proposer selection
-	Epoch           uint64         `toml:",omitempty"` // The number of blocks after which to checkpoint and reset the pending votes
-	EnablePartially bool           `toml:",omitempty"` // Enable partial block with tx digests only
+	RequestTimeout uint64         `toml:",omitempty"` // The timeout for each bft round in milliseconds.
+	BlockPeriod    uint64         `toml:",omitempty"` // Default minimum difference between two consecutive block's timestamps in second
+	ProposerPolicy ProposerPolicy `toml:",omitempty"` // The policy for proposer selection
+	Epoch          uint64         `toml:",omitempty"` // The number of blocks after which to checkpoint and reset the pending votes
+	LightMode      bool           `toml:",omitempty"` // Enable receive light block with tx digests only
 }
 
 var DefaultConfig = &Config{
-	RequestTimeout:  3000,
-	BlockPeriod:     1,
-	ProposerPolicy:  RoundRobin,
-	Epoch:           30000,
-	EnablePartially: false,
+	RequestTimeout: 3000,
+	BlockPeriod:    1,
+	ProposerPolicy: RoundRobin,
+	Epoch:          30000,
+	LightMode:      false,
 }

@@ -31,8 +31,6 @@ type DerivableList interface {
 	GetRlp(i int) []byte
 }
 
-var DeriveSha = DeriveLegacySha
-
 type BytesPair struct {
 	Key   []byte `gencodec:"required"`
 	Value []byte `gencodec:"required"`
