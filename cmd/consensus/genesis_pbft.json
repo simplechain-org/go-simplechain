@@ -4,14 +4,27 @@
     "SingularityBlock": 0,
     "pbft": {
       "epoch": 30000,
-      "policy": 0
+      "policy": 1
     }
   },
   "gasLimit": "0xE0000000",
   "difficulty": "0x1",
   "mixHash": "0x72616c6c656c2062797a616e74696e65206661756c7420746f6c6572616e6365",
   "nonce": "0x0",
-  "alloc": {},
+  "alloc": {
+    "E60D800A6204cC85F90D18b278Bf1C6b74bbe0a8": {
+      "balance": "0x21e19e0c9bab2400000"
+    },
+    "b45fd7407cC1d549A0B4597FA9d07014c399Bf7B": {
+      "balance": "0x21e19e0c9bab2400000"
+    },
+    "Ae68AE6fD612b1bf54c5719Be57DeB9BF08ab0aA": {
+      "balance": "0x21e19e0c9bab2400000"
+    },
+    "bD46DDf87a157b0f3667d8D9041AefE8ede4Ddc4": {
+      "balance": "0x21e19e0c9bab2400000"
+    }
+  },
   "coinbase": "0x0000000000000000000000000000000000000000",
   "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
   "timestamp": "0x00"

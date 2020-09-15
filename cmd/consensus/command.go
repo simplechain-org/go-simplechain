@@ -14,6 +14,7 @@ const (
 	DPOS ConsensusType = iota
 	RAFT
 	PBFT
+	POA
 )
 
 var dposCommand = cli.Command{
@@ -28,6 +29,25 @@ var dposCommand = cli.Command{
 			},
 			Action: func(ctx *cli.Context) error {
 				return generate(DPOS, int(ctx.Uint(nFlag.Name)), ctx.StringSlice(ipFlag.Name),
+					ctx.IntSlice(portFlag.Name), ctx.IntSlice(discportFlag.Name), ctx.IntSlice(raftportFlag.Name),
+					ctx.String(nodeDirFlag.Name), ctx.String(genesisFlag.Name))
+			},
+		},
+	},
+}
+
+var poaCommand = cli.Command{
+	Name:  "poa",
+	Usage: "poa consenses",
+	Subcommands: []cli.Command{
+		{
+			Name:  "generate",
+			Usage: "generate poa init file",
+			Flags: []cli.Flag{
+				nFlag, ipFlag, portFlag, discportFlag, raftportFlag, nodeDirFlag, genesisFlag,
+			},
+			Action: func(ctx *cli.Context) error {
+				return generate(POA, int(ctx.Uint(nFlag.Name)), ctx.StringSlice(ipFlag.Name),
 					ctx.IntSlice(portFlag.Name), ctx.IntSlice(discportFlag.Name), ctx.IntSlice(raftportFlag.Name),
 					ctx.String(nodeDirFlag.Name), ctx.String(genesisFlag.Name))
 			},

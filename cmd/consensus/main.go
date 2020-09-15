@@ -29,7 +29,7 @@ var app = cli.NewApp()
 
 func init() {
 	app.Commands = []cli.Command{
-		dposCommand, raftCommand, pbftCommand,
+		dposCommand, raftCommand, pbftCommand, poaCommand,
 	}
 }
 
@@ -56,7 +56,7 @@ func generate(consensus ConsensusType, n int, ips []string, ports []int, discpor
 		if len(ips) != n || len(ports) != n {
 			return fmt.Errorf("istanbul require %d ip, port", n)
 		}
-	case DPOS:
+	case DPOS, POA:
 		//require nothing
 
 	default:
@@ -74,9 +74,9 @@ func generate(consensus ConsensusType, n int, ips []string, ports []int, discpor
 
 		nodeKeys[i] = prikey
 
-		if consensus == DPOS {
-			continue
-		}
+		//if consensus == DPOS || consensus == POA {
+		//	continue
+		//}
 
 		ip := net.ParseIP(ips[i])
 		if ip == nil {
@@ -89,6 +89,7 @@ func generate(consensus ConsensusType, n int, ips []string, ports []int, discpor
 		}
 
 		var discport, raftport int
+		// append raftport to enode key
 		if consensus == RAFT {
 			discport = discports[i]
 			if discport < 0 || discport > 65535 {
@@ -123,14 +124,12 @@ func generate(consensus ConsensusType, n int, ips []string, ports []int, discpor
 		return err
 	}
 
-	if consensus != DPOS {
-		if err := writeNode(nodeKeys, nodeDir); err != nil {
-			return err
-		}
+	if err := writeNode(nodeKeys, nodeDir); err != nil {
+		return err
+	}
 
-		if err := writeEnode(enodes, nodeDir); err != nil {
-			return err
-		}
+	if err := writeEnode(enodes, nodeDir); err != nil {
+		return err
 	}
 
 	return
@@ -143,6 +142,7 @@ const (
 	GenesisDPoSFile = "genesis_dpos.json"
 	GenesisRaftFile = "genesis_raft.json"
 	GenesisPbftFile = "genesis_pbft.json"
+	GenesisPoaFile  = "genesis_poa.json"
 )
 
 func mkdir(dir string) error {
@@ -216,7 +216,7 @@ func writeGenesis(consensus ConsensusType, addresses []accounts.Account, dir, fi
 		return fmt.Errorf("unmarshal genesis file failed, %s", err.Error())
 	}
 
-	if consensus == RAFT || consensus == DPOS || consensus == PBFT {
+	if consensus == RAFT || consensus == DPOS || consensus == PBFT || consensus == POA {
 		for _, addr := range addresses {
 			genesis.Alloc[addr.Address] = core.GenesisAccount{Balance: new(big.Int).Mul(big.NewInt(params.Ether), big.NewInt(1e4))}
 		}
@@ -232,6 +232,9 @@ func writeGenesis(consensus ConsensusType, addresses []accounts.Account, dir, fi
 	case DPOS:
 		GenesisFile = GenesisDPoSFile
 		makeDPoSSigners(&genesis, addresses)
+	case POA:
+		GenesisFile = GenesisPoaFile
+		genesis.ExtraData, err = makePoaExtra(addresses)
 	}
 
 	marshaled, err := json.Marshal(genesis)
@@ -271,6 +274,26 @@ func makeDPoSSigners(genesis *core.Genesis, accs []accounts.Account) {
 	for _, acc := range accs {
 		genesis.Config.DPoS.SelfVoteSigners = append(genesis.Config.DPoS.SelfVoteSigners, common.UnprefixedAddress(acc.Address))
 	}
+}
+
+func makePoaExtra(accs []accounts.Account) ([]byte, error) {
+	var extra []byte
+
+	const (
+		extraVanity = 32                     // Fixed number of extra-data prefix bytes reserved for signer vanity
+		extraSeal   = crypto.SignatureLength // Fixed number of extra-data suffix bytes reserved for signer seal
+	)
+
+	// compensate the lack bytes if header.Extra is not enough IstanbulExtraVanity bytes.
+	if len(extra) < extraVanity {
+		extra = append(extra, bytes.Repeat([]byte{0x00}, extraVanity-len(extra))...)
+	}
+
+	for _, acc := range accs {
+		extra = append(extra, acc.Address[:]...)
+	}
+	extra = append(extra, make([]byte, extraSeal)...)
+	return extra, nil
 }
 
 func makeIstanbulExtra(accs []accounts.Account) ([]byte, error) {
