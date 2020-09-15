@@ -79,7 +79,7 @@ var (
 )
 
 var (
-	evictionInterval    = time.Minute     // Time interval to check for evictable transactions
+	evictionInterval = time.Minute // Time interval to check for evictable transactions
 	//statsReportInterval = 8 * time.Second // Time interval to report transaction pool stats
 )
 
@@ -653,6 +653,9 @@ func (pool *TxPool) preCheck(tx *types.Transaction) error {
 	// transactions but may occur if you create a transaction using the RPC.
 	if tx.Value().Sign() < 0 {
 		return ErrNegativeValue
+	}
+	if pool.gasPrice.Cmp(tx.GasPrice()) > 0 {
+		return ErrUnderpriced
 	}
 	//log.Warn("tx from", from.String())
 	// Ensure the transaction is not duplicate
