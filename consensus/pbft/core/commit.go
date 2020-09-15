@@ -77,7 +77,7 @@ func (c *core) handleCommit(msg *message, src pbft.Validator) error {
 
 	c.acceptCommit(msg, src)
 
-	log.Report("handle commit", "cost", time.Since(c.commitTimestamp), "from", src)
+	//log.Report("handle commit", "cost", time.Since(c.commitTimestamp), "from", src)
 
 	// Commit the proposal once we have enough COMMIT messages and we are not in the Committed state.
 	//

@@ -68,7 +68,7 @@ func (c *core) handlePrepare(msg *message, src pbft.Validator) error {
 
 	c.acceptPrepare(msg, src)
 
-	log.Report("handle prepare", "cost", time.Since(c.prepareTimestamp), "from", src)
+	//log.Report("handle prepare", "cost", time.Since(c.prepareTimestamp), "from", src)
 
 	// Change to Prepared state if we've received enough PREPARE messages or it is locked
 	// and we are in earlier state before Prepared state.

@@ -114,7 +114,7 @@ type txPool interface {
 	// GetLatestNonceFromQueueAndPending.
 	//GetCurrentNonce(address common.Address) uint64
 	Nonce(addr common.Address) uint64
-	ValidateBlocks(types.Blocks)
+	SenderFromBlocks(types.Blocks) error
 
 	Signer() types.Signer
 }

@@ -42,12 +42,10 @@ func (w *worker) Execute(block *types.Block) (*types.Block, error) {
 		return nil, err
 	}
 
-	w.eth.TxPool().ValidateBlocks(types.Blocks{block}) // parallelled tx sender validator
-
-	//receipts, logs, gas, err := w.chain.Processor().Process(block, statedb, *w.chain.GetVMConfig())
-	//if err != nil {
-	//	return nil, err
-	//}
+	err = w.eth.TxPool().SenderFromBlocks(types.Blocks{block}) // check tx sender parallelly
+	if err != nil {
+		return nil, err
+	}
 
 	block, env, err := w.executeBlock(block, statedb)
 	if err != nil {
@@ -117,15 +115,15 @@ func (w *worker) executeBlock(block *types.Block, statedb *state.StateDB) (*type
 }
 
 func (w *worker) commitByzantium(interrupt *int32, noempty bool, tstart time.Time) {
-	log.Report("-----------------------------------------------------------------------")
-	start := time.Now()
-	defer func(start time.Time) {
-		log.Report("commit byzantium seal task", "cost", time.Since(start))
-	}(start)
+	//log.Report("-----------------------------------------------------------------------")
+	//start := time.Now()
+	//defer func(start time.Time) {
+	//	log.Report("commit byzantium seal task", "cost", time.Since(start))
+	//}(start)
 	// Fill the block with all available pending transactions.
 	pending := w.eth.TxPool().PendingLimit(int(w.pbftCtx.MaxBlockTxs))
 
-	log.Report("commitByzantium -> PendingLimit", "cost", time.Since(start))
+	//log.Report("commitByzantium -> PendingLimit", "cost", time.Since(start))
 
 	if !noempty && len(pending) == 0 {
 		// Create an empty block based on temporary copied state for sealing in advance without waiting block
@@ -144,14 +142,14 @@ func (w *worker) commitByzantium(interrupt *int32, noempty bool, tstart time.Tim
 }
 
 func (w *worker) _commitByzantium(interval func(), update bool, start time.Time) {
-	s := time.Now()
-	defer func(s time.Time) {
-		log.Report("_commitByzantium", "cost", time.Since(s))
-	}(s)
+	//s := time.Now()
+	//defer func(s time.Time) {
+	//	log.Report("_commitByzantium", "cost", time.Since(s))
+	//}(s)
 
 	block := types.NewBlock(w.current.header, w.current.txs, nil, nil)
 
-	log.Report("_commitByzantium -> NewBlock -> calcRoot", "cost", time.Since(s))
+	//log.Report("_commitByzantium -> NewBlock -> calcRoot", "cost", time.Since(s))
 
 	if w.isRunning() {
 		if interval != nil {

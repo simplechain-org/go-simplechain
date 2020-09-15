@@ -274,8 +274,8 @@ func (sb *backend) Commit(conclusion pbft.Conclusion, commitSeals [][]byte) erro
 		sb.sealer.AdjustMaxBlockTxs(delay, block.Transactions().Len(), false)
 	}
 
-	log.Report("pbft consensus seal cost",
-		"num", h.Number, "totalCost", time.Since(sb.sealStart), "execCost", sb.execCost)
+	//log.Report("pbft consensus seal cost",
+	//	"num", h.Number, "totalCost", time.Since(sb.sealStart), "execCost", sb.execCost)
 
 	// wait until block timestamp
 	<-time.After(delay)

@@ -21,15 +21,14 @@ import (
 
 	"github.com/simplechain-org/go-simplechain/consensus"
 	"github.com/simplechain-org/go-simplechain/consensus/pbft"
-	"github.com/simplechain-org/go-simplechain/log"
 )
 
 func (c *core) sendPreprepare(request *pbft.Request) {
 	logger := c.logger.New("state", c.state)
 
-	defer func(start time.Time) {
-		log.Report("send pre-prepare", "cost", time.Since(start))
-	}(time.Now())
+	//defer func(start time.Time) {
+	//	log.Report("send pre-prepare", "cost", time.Since(start))
+	//}(time.Now())
 
 	// If I'm the proposer and I have the same sequence with the proposal
 	//log.Error("[debug] is Proposer, send Proposal", "Proposer", c.valSet.GetProposer().Address(), "num", c.current.Sequence())
@@ -65,7 +64,7 @@ func (c *core) handlePreprepare(msg *message, src pbft.Validator) error {
 	logger := c.logger.New("from", src, "state", c.state)
 	c.prepareTimestamp = time.Now()
 
-	record := time.Now()
+	//record := time.Now()
 	var preprepare *pbft.Preprepare
 	err := msg.Decode(&preprepare)
 	if err != nil {
@@ -73,7 +72,7 @@ func (c *core) handlePreprepare(msg *message, src pbft.Validator) error {
 		return errFailedDecodePreprepare
 	}
 
-	log.Report("handlePreprepare -> decode", "cost", time.Since(record), "from", src)
+	//log.Report("handlePreprepare -> decode", "cost", time.Since(record), "from", src)
 
 	err = c.checkPreprepareMsg(msg, src, preprepare.View, preprepare.Proposal)
 	if err != nil {
@@ -139,7 +138,7 @@ func (c *core) checkPreprepareMsg(msg *message, src pbft.Validator, view *pbft.V
 
 func (c *core) checkAndAcceptPreprepare(preprepare *pbft.Preprepare) error {
 	//logger := c.logger.New("state", c.state)
-	record := time.Now()
+	//record := time.Now()
 
 	// only accept pre-prepare at StateAcceptRequest
 	if c.state != StateAcceptRequest {
@@ -170,11 +169,11 @@ func (c *core) checkAndAcceptPreprepare(preprepare *pbft.Preprepare) error {
 	c.acceptPreprepare(preprepare)
 	c.setState(StatePreprepared)
 
-	log.Report("checkAndAcceptPreprepare", "cost", time.Since(record))
+	//log.Report("checkAndAcceptPreprepare", "cost", time.Since(record))
 
-	defer func(accept time.Duration) {
-		log.Report("handle pre-prepare", "acceptCost", accept, "totalCost", time.Since(c.prepareTimestamp))
-	}(time.Since(c.prepareTimestamp))
+	//defer func(accept time.Duration) {
+	//	log.Report("handle pre-prepare", "acceptCost", accept, "totalCost", time.Since(c.prepareTimestamp))
+	//}(time.Since(c.prepareTimestamp))
 
 	// execute proposal and broadcast it
 	if err := c.executePreprepare(preprepare); err != nil {

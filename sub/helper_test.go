@@ -108,7 +108,7 @@ func (p *testTxPool) Signer() types.Signer {
 	panic("implement me")
 }
 
-func (p *testTxPool) ValidateBlocks(types.Blocks) {
+func (p *testTxPool) SenderFromBlocks(types.Blocks) error {
 	panic("implement me")
 }
 

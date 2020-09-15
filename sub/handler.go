@@ -142,7 +142,6 @@ func NewProtocolManager(config *params.ChainConfig, checkpoint *params.TrustedCh
 		serverPool:  serverPool,
 		raftMode:    config.Raft,
 		engine:      engine,
-		//parallel:    asio.NewParallel(parallelTasks, parallelThreads),
 	}
 
 	// ibft or pbft
@@ -224,7 +223,9 @@ func NewProtocolManager(config *params.ChainConfig, checkpoint *params.TrustedCh
 			return 0, nil
 		}
 
-		manager.txpool.ValidateBlocks(blocks)
+		//if err := manager.txpool.SenderFromBlocks(blocks); err != nil {
+		//	log.Warn("Unsynced yet, discarded propagated block", "number", blocks[0].Number(), "hash", blocks[0].Hash())
+		//}
 
 		n, err := manager.blockchain.InsertChain(blocks)
 		if err == nil {

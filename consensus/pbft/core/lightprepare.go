@@ -11,7 +11,7 @@ import (
 func (c *core) sendLightPrepare(request *pbft.Request, curView *pbft.View) {
 	logger := c.logger.New("state", c.state)
 
-	record := time.Now()
+	//record := time.Now()
 	// encode light proposal
 	lightMsg, err := Encode(&pbft.Preprepare{
 		View:     curView,
@@ -21,7 +21,7 @@ func (c *core) sendLightPrepare(request *pbft.Request, curView *pbft.View) {
 		logger.Error("Failed to encode", "view", curView)
 		return
 	}
-	log.Report("sendLightPrepare Encode light", "cost", time.Since(record))
+	//log.Report("sendLightPrepare Encode light", "cost", time.Since(record))
 
 	// send light pre-prepare msg to others
 	c.broadcast(&message{
