@@ -39,7 +39,7 @@ var (
 	// ErrFailToFetchLightMissedTxs is returned if fetch light block's missed txs failed
 	ErrFailToFetchLightMissedTxs = errors.New("failed to fetch light block's missed txs")
 	// ErrFailToFillLightMissedTxs
-	ErrFailToFillLightMissedTxs  = errors.New("failed to fill light block's missed txs")
+	ErrFailToFillLightMissedTxs = errors.New("failed to fill light block's missed txs")
 )
 
 type ByzantineExtra struct {

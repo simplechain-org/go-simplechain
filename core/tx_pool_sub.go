@@ -30,7 +30,6 @@ import (
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/event"
 	"github.com/simplechain-org/go-simplechain/log"
-	"github.com/simplechain-org/go-simplechain/metrics"
 	"github.com/simplechain-org/go-simplechain/params"
 )
 
@@ -81,26 +80,27 @@ var (
 
 var (
 	evictionInterval    = time.Minute     // Time interval to check for evictable transactions
-	statsReportInterval = 8 * time.Second // Time interval to report transaction pool stats
+	//statsReportInterval = 8 * time.Second // Time interval to report transaction pool stats
 )
 
-var (
-	// Metrics for the pending pool
-	pendingDiscardCounter   = metrics.NewRegisteredCounter("txpool/pending/discard", nil)
-	pendingReplaceCounter   = metrics.NewRegisteredCounter("txpool/pending/replace", nil)
-	pendingRateLimitCounter = metrics.NewRegisteredCounter("txpool/pending/ratelimit", nil) // Dropped due to rate limiting
-	pendingNofundsCounter   = metrics.NewRegisteredCounter("txpool/pending/nofunds", nil)   // Dropped due to out-of-funds
-
-	// Metrics for the queued pool
-	queuedDiscardCounter   = metrics.NewRegisteredCounter("txpool/queued/discard", nil)
-	queuedReplaceCounter   = metrics.NewRegisteredCounter("txpool/queued/replace", nil)
-	queuedRateLimitCounter = metrics.NewRegisteredCounter("txpool/queued/ratelimit", nil) // Dropped due to rate limiting
-	queuedNofundsCounter   = metrics.NewRegisteredCounter("txpool/queued/nofunds", nil)   // Dropped due to out-of-funds
-
-	// General tx metrics
-	invalidTxCounter     = metrics.NewRegisteredCounter("txpool/invalid", nil)
-	underpricedTxCounter = metrics.NewRegisteredCounter("txpool/underpriced", nil)
-)
+//TODO: tx monitor
+//var (
+//	// Metrics for the pending pool
+//	pendingDiscardCounter   = metrics.NewRegisteredCounter("txpool/pending/discard", nil)
+//	pendingReplaceCounter   = metrics.NewRegisteredCounter("txpool/pending/replace", nil)
+//	pendingRateLimitCounter = metrics.NewRegisteredCounter("txpool/pending/ratelimit", nil) // Dropped due to rate limiting
+//	pendingNofundsCounter   = metrics.NewRegisteredCounter("txpool/pending/nofunds", nil)   // Dropped due to out-of-funds
+//
+//	// Metrics for the queued pool
+//	queuedDiscardCounter   = metrics.NewRegisteredCounter("txpool/queued/discard", nil)
+//	queuedReplaceCounter   = metrics.NewRegisteredCounter("txpool/queued/replace", nil)
+//	queuedRateLimitCounter = metrics.NewRegisteredCounter("txpool/queued/ratelimit", nil) // Dropped due to rate limiting
+//	queuedNofundsCounter   = metrics.NewRegisteredCounter("txpool/queued/nofunds", nil)   // Dropped due to out-of-funds
+//
+//	// General tx metrics
+//	invalidTxCounter     = metrics.NewRegisteredCounter("txpool/invalid", nil)
+//	underpricedTxCounter = metrics.NewRegisteredCounter("txpool/underpriced", nil)
+//)
 
 // TxStatus is the current status of a transaction as seen by the pool.
 type TxStatus uint

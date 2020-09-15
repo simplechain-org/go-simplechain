@@ -2,16 +2,51 @@ package sub
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
-	"github.com/simplechain-org/go-simplechain/common"
-	"github.com/simplechain-org/go-simplechain/core/types"
+	"io/ioutil"
 	"math/rand"
 	"sync"
+
+	"github.com/simplechain-org/go-simplechain/common"
+	"github.com/simplechain-org/go-simplechain/core/types"
+	"github.com/simplechain-org/go-simplechain/p2p"
 )
 
 type TransactionsWithRoute struct {
 	Txs        types.Transactions
-	RouteIndex uint64
+	RouteIndex uint32
+	msg        *p2p.Msg // message cache
+}
+
+func (tx *TransactionsWithRoute) EncodeMsg(txc types.TransactionCodec) (*p2p.Msg, error) {
+	b, err := txc.EncodeToBytes(tx.Txs)
+	if err != nil {
+		return nil, err
+	}
+	indexBuf := make([]byte, 4)
+	binary.BigEndian.PutUint32(indexBuf, tx.RouteIndex)
+	r := bytes.NewBuffer(append(indexBuf, b...))
+	return &p2p.Msg{Code: TransactionRouteMsg, Size: uint32(r.Len()), Payload: r}, nil
+}
+
+func (tx *TransactionsWithRoute) DecodeMsg(msg *p2p.Msg, txc types.TransactionCodec) error {
+	buf, err := ioutil.ReadAll(msg.Payload)
+	if err != nil {
+		return fmt.Errorf("failed decode route message:%v", err)
+	}
+	if len(buf) <= 4 {
+		return fmt.Errorf("decode buf is less then index size:%v", 4)
+	}
+	index := binary.BigEndian.Uint32(buf[:4])
+	var txs types.Transactions
+	if err := txc.DecodeBytes(buf[4:], &txs); err != nil {
+		return err
+	}
+	tx.RouteIndex = index
+	tx.Txs = txs
+	tx.msg = msg
+	return nil
 }
 
 type RouterNodes map[common.Address]*peer

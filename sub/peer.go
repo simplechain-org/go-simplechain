@@ -19,7 +19,6 @@ package sub
 import (
 	"errors"
 	"fmt"
-	"github.com/simplechain-org/go-simplechain/crypto"
 	"math/big"
 	"sync"
 	"time"
@@ -28,6 +27,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/forkid"
 	"github.com/simplechain-org/go-simplechain/core/types"
+	"github.com/simplechain-org/go-simplechain/crypto"
 	"github.com/simplechain-org/go-simplechain/p2p"
 	"github.com/simplechain-org/go-simplechain/rlp"
 )
@@ -127,7 +127,15 @@ func (p *peer) broadcast() {
 			p.Log().Trace("Broadcast transactions", "count", len(txs))
 
 		case txr := <-p.queuedTxr:
-			if err := p.SendTransactionsByRouter(txr); err != nil {
+			if txr.msg == nil {
+				msg, err := txr.EncodeMsg(txCodec)
+				if err != nil {
+					p.Log().Error("encode transactions message failed", "err", err)
+				}
+				txr.msg = msg
+			}
+			if err := p.rw.WriteMsg(*txr.msg); err != nil {
+				//if err := p.SendTransactionsByRouter(txr); err != nil {
 				p.Log().Error("send transactions failed", "err", err)
 				return
 			}
@@ -228,11 +236,14 @@ func (p *peer) SendTransactions(txs types.Transactions) error {
 // and includes the hashes in its transaction hash set for future reference.
 func (p *peer) SendTransactionsByRouter(txr *TransactionsWithRoute) error {
 	// Mark all the transactions as known, but ensure we don't overflow our limits
-	for _, tx := range txr.Txs {
-		p.knownTxs.Add(tx.Hash())
-	}
-	for p.knownTxs.Cardinality() >= maxKnownTxs {
-		p.knownTxs.Pop()
+	//for _, tx := range txr.Txs {
+	//	p.knownTxs.Add(tx.Hash())
+	//}
+	//for p.knownTxs.Cardinality() >= maxKnownTxs {
+	//	p.knownTxs.Pop()
+	//}
+	if txr.msg != nil {
+		return p.rw.WriteMsg(*txr.msg)
 	}
 	return p2p.Send(p.rw, TransactionRouteMsg, txr)
 }
@@ -256,24 +267,24 @@ func (p *peer) AsyncSendTransactions(txs []*types.Transaction) {
 
 // AsyncSendTransactions queues list of transactions propagation to a remote
 // peer. If the peer's broadcast queue is full, the event is silently dropped.
-func (p *peer) AsyncSendTransactionsByRouter(txs []*types.Transaction, routeIndex int) {
-	if routeIndex < 0 {
-		p.Log().Warn("Unsupported route index in TransactionsByRouter", "index", routeIndex)
-		p.AsyncSendTransactions(txs)
+func (p *peer) AsyncSendTransactionsByRouter(txr *TransactionsWithRoute) {
+	if txr.RouteIndex < 0 {
+		p.Log().Warn("Unsupported route index in TransactionsByRouter", "index", txr.RouteIndex)
+		p.AsyncSendTransactions(txr.Txs)
 		return
 	}
 
 	select {
-	case p.queuedTxr <- &TransactionsWithRoute{Txs: txs, RouteIndex: uint64(routeIndex)}:
+	case p.queuedTxr <- txr:
 		// Mark all the transactions as known, but ensure we don't overflow our limits
-		for _, tx := range txs {
+		for _, tx := range txr.Txs {
 			p.knownTxs.Add(tx.Hash())
 		}
 		for p.knownTxs.Cardinality() >= maxKnownTxs {
 			p.knownTxs.Pop()
 		}
 	default:
-		p.Log().Debug("Dropping transaction propagation", "count", len(txs))
+		p.Log().Debug("Dropping transaction propagation", "count", len(txr.Txs))
 	}
 }
 

@@ -63,6 +63,7 @@ const (
 var (
 	syncChallengeTimeout       = 15 * time.Second // Time allowance for a node to reply to the sync progress challenge
 	broadcastTxLimit     int64 = 1000
+	txCodec                    = &types.OffsetTransactionsCodec{}
 )
 
 func errResp(code errCode, format string, v ...interface{}) error {
@@ -144,17 +145,18 @@ func NewProtocolManager(config *params.ChainConfig, checkpoint *params.TrustedCh
 		//parallel:    asio.NewParallel(parallelTasks, parallelThreads),
 	}
 
-	switch bft := manager.engine.(type) {
-	case consensus.Byzantine:
+	// ibft or pbft
+	if bft, ok := manager.engine.(consensus.Byzantine); ok {
 		bft.SetBroadcaster(manager)
+	}
+
+	// consensus is predictable
+	if pre, ok := manager.engine.(consensus.Predictable); ok {
 		// set validators, create tx sync router
-		validators, idx := bft.CurrentValidators()
+		validators, idx := pre.CurrentValidators()
 		manager.txSyncRouter = CreateTreeRouter(blockchain.CurrentBlock().NumberU64(), validators, idx, defaultTreeRouterWidth)
 		manager.blockSyncRouter = CreateTreeRouter(0, validators, idx, defaultTreeRouterWidth)
 	}
-	//if istanbul, ok := manager.engine.(consensus.Istanbul); ok {
-	//	istanbul.SetBroadcaster(manager)
-	//}
 
 	if mode == downloader.FullSync {
 		// The database seems empty as the current block is the genesis. Yet the fast
@@ -834,11 +836,16 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		if atomic.LoadUint32(&pm.acceptTxs) == 0 {
 			break
 		}
-		// Transactions can be processed, parse all of them and deliver to the pool
-		var txr *TransactionsWithRoute
-		if err := msg.Decode(&txr); err != nil {
+		txr := new(TransactionsWithRoute)
+		if err := txr.DecodeMsg(&msg, txCodec); err != nil {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
+
+		//log.Error("[debug] TransactionRouteMsg txs", "len", txr.Txs.Len(), "N",runtime.GOMAXPROCS(0))
+
+		//if err := msg.Decode(&txr); err != nil {
+		//	return errResp(ErrDecode, "msg %v: %v", msg, err)
+		//}
 
 		pm.handleRemoteTxsByRouter(p, txr)
 		pm.addRemoteTxsByRouter2TxPool(p, txr)

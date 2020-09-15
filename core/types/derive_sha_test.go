@@ -31,7 +31,7 @@ import (
 	"golang.org/x/crypto/sha3"
 )
 
-var parallel = asio.NewParallel(10000, runtime.NumCPU())
+var testParallel = asio.NewParallel(10000, runtime.NumCPU())
 
 func parallelListSha(list DerivableList) (h common.Hash) {
 	l := list.Len()
@@ -41,7 +41,7 @@ func parallelListSha(list DerivableList) (h common.Hash) {
 	wg.Add(l)
 	for i := 0; i < l; i++ {
 		index := i
-		parallel.Put(func() error {
+		testParallel.Put(func() error {
 			defer wg.Done()
 			keybuf := new(bytes.Buffer)
 			rlp.Encode(keybuf, uint(index))

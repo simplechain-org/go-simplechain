@@ -1,13 +1,15 @@
 package sub
 
 import (
-	"sync"
+	"runtime"
 	"time"
 
 	"github.com/simplechain-org/go-simplechain/consensus"
 	"github.com/simplechain-org/go-simplechain/core"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/log"
+
+	"github.com/exascience/pargo/parallel"
 )
 
 func (pm *ProtocolManager) handleTxs(legacy bool) {
@@ -32,12 +34,12 @@ func (pm *ProtocolManager) handleTxs(legacy bool) {
 func (pm *ProtocolManager) handleRemoteTxsByRouter(peer *peer, txr *TransactionsWithRoute) {
 	txRouter := pm.txSyncRouter
 	if num := pm.blockchain.CurrentBlock().NumberU64(); num != txRouter.BlockNumber() {
-		bft, ok := pm.engine.(consensus.Byzantine)
+		pre, ok := pm.engine.(consensus.Predictable)
 		if !ok {
 			log.Warn("handle route tx without byzantine consensus")
 			return
 		}
-		validators, myIndex := bft.CurrentValidators()
+		validators, myIndex := pre.CurrentValidators()
 		txRouter.Reset(num, validators, myIndex)
 	}
 
@@ -48,7 +50,7 @@ func (pm *ProtocolManager) handleRemoteTxsByRouter(peer *peer, txr *Transactions
 		if p == peer {
 			continue
 		}
-		p.AsyncSendTransactionsByRouter(txr.Txs, int(routeIndex))
+		p.AsyncSendTransactionsByRouter(txr)
 	}
 }
 
@@ -56,23 +58,29 @@ func (pm *ProtocolManager) addRemoteTxsByRouter2TxPool(peer *peer, txr *Transact
 	start := time.Now()
 
 	// parallel check sender
-	var (
-		wg   sync.WaitGroup
-		errs = make([]error, txr.Txs.Len())
-	)
-	for i := range txr.Txs {
-		// copy reference from range iterator
-		index, tx := i, txr.Txs[i]
-		// remote txs are already synced
-		tx.SetSynced(true)
-		wg.Add(1)
-		core.SenderParallel.Put(func() error {
-			_, errs[index] = types.Sender(pm.txpool.Signer(), tx)
-			wg.Done()
-			return nil
-		}, nil)
-	}
-	wg.Wait()
+	errs := make([]error, txr.Txs.Len())
+
+	parallel.Range(0, txr.Txs.Len(), runtime.GOMAXPROCS(0), func(low, high int) {
+		for i := low; i < high; i++ {
+			txr.Txs[i].SetSynced(true)
+			_, errs[i] = types.Sender(pm.txpool.Signer(), txr.Txs[i])
+		}
+	})
+
+	//var wg sync.WaitGroup
+	//for i := range txr.Txs {
+	//	// copy reference from range iterator
+	//	index, tx := i, txr.Txs[i]
+	//	// remote txs are already synced
+	//	tx.SetSynced(true)
+	//	wg.Add(1)
+	//	core.SenderParallel.Put(func() error {
+	//		_, errs[index] = types.Sender(pm.txpool.Signer(), tx)
+	//		wg.Done()
+	//		return nil
+	//	}, nil)
+	//}
+	//wg.Wait()
 
 	senderCost := time.Since(start)
 	addTime := time.Now()
@@ -86,8 +94,6 @@ func (pm *ProtocolManager) addRemoteTxsByRouter2TxPool(peer *peer, txr *Transact
 			log.Trace("Failed adding remote tx by router", "hash", txr.Txs[i].Hash(), "err", err, "peer", peer)
 		}
 	}
-	pm.txpool.AddRemotesSync(txr.Txs)
-
 	log.Trace("[report] add remote txs received by router", "size", txr.Txs.Len(),
 		"startTime", start, "senderCost", senderCost, "addCost", time.Since(addTime))
 }
@@ -101,7 +107,7 @@ func (pm *ProtocolManager) BroadcastTxs(txs types.Transactions) {
 		if routeIndex < 0 {
 			peer.AsyncSendTransactions(txs)
 		} else {
-			peer.AsyncSendTransactionsByRouter(txs, routeIndex)
+			peer.AsyncSendTransactionsByRouter(&TransactionsWithRoute{Txs: txs, RouteIndex: uint32(routeIndex)})
 		}
 	}
 }
@@ -136,7 +142,7 @@ func (pm *ProtocolManager) calcTxsWithPeerSetByRouter(txs types.Transactions) (m
 	txRouter := pm.txSyncRouter
 
 	if current := pm.blockchain.CurrentBlock().NumberU64(); current != txRouter.BlockNumber() {
-		validators, index := pm.engine.(consensus.Byzantine).CurrentValidators()
+		validators, index := pm.engine.(consensus.Predictable).CurrentValidators()
 		txRouter.Reset(current, validators, index)
 	}
 	routeIndex := txRouter.MyIndex()

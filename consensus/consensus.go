@@ -134,9 +134,6 @@ type Byzantine interface {
 	// Stop stops the engine
 	Stop() error
 
-	// get block validators and self index(return -1 if not a validator) of current blockchain height
-	CurrentValidators() ([]common.Address, int)
-
 	// handle p2p msg, return whether engine was handled
 	HandleMsg(addr common.Address, msg p2p.Msg) (bool, error)
 
@@ -157,4 +154,9 @@ type Pbft interface {
 	SetSealer(sealer Sealer)
 
 	SetTxPool(pool TxPool)
+}
+
+type Predictable interface {
+	// get block validators and self index(return -1 if not a validator) of current blockchain height
+	CurrentValidators() ([]common.Address, int)
 }
