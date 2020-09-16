@@ -78,7 +78,8 @@ func (c *core) responseMissedTxs(txs types.Transactions, val pbft.Validator) {
 
 	logger.Trace("[report] responseMissedTxs", "view", missedResp.View, "missed", len(txs))
 
-	encMissedResp, err := Encode(missedResp)
+	//encMissedResp, err := Encode(missedResp)
+	encMissedResp, err := missedResp.EncodeOffset()
 	if err != nil {
 		logger.Error("Failed to encode", "missedResp", missedResp, "err", err)
 		return
@@ -96,8 +97,9 @@ func (c *core) responseMissedTxs(txs types.Transactions, val pbft.Validator) {
 func (c *core) handleMissedTxs(msg *message, src pbft.Validator) error {
 	logger := c.logger.New("from", src, "state", c.state)
 
-	var missed *pbft.MissedResp
-	err := msg.Decode(&missed)
+	var missed pbft.MissedResp
+	//err := msg.Decode(&missed)
+	err := missed.DecodeOffset(msg.Msg)
 	if err != nil {
 		return errFailedDecodePrepare
 	}

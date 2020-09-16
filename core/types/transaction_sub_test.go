@@ -4,6 +4,7 @@ package types
 
 import (
 	"bytes"
+	"math/big"
 	"testing"
 	"time"
 
@@ -11,10 +12,22 @@ import (
 	"github.com/simplechain-org/go-simplechain/rlp"
 )
 
+var sTx, _ = NewTransaction(
+	3,
+	common.HexToAddress("b94f5374fce5edbc8e2a8697c15331677e6ebf0b"),
+	big.NewInt(10),
+	2000,
+	big.NewInt(1),
+	common.FromHex("5544"),
+).WithSignature(
+	HomesteadSigner{},
+	common.Hex2Bytes("98ff921201554726367d2be8c804a7ff89ccf285ebc57dff8ae4c44b9c19ac4a8887321be575c8095f789dd4c743dfe42c1820f9231f98a962b210e3ac2452a301"),
+)
+
 func TestTransactionEncode(t *testing.T) {
-	rightvrsTx.SetSynced(true)
-	rightvrsTx.SetImportTime(time.Now().UnixNano())
-	txb, err := rlp.EncodeToBytes(rightvrsTx)
+	sTx.SetSynced(true)
+	sTx.SetImportTime(time.Now().UnixNano())
+	txb, err := rlp.EncodeToBytes(sTx)
 	if err != nil {
 		t.Fatalf("encode error: %v", err)
 	}

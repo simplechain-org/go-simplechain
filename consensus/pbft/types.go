@@ -243,6 +243,38 @@ func (b *MissedResp) DecodeRLP(s *rlp.Stream) error {
 	return nil
 }
 
+var offsetCodec = &types.OffsetTransactionsCodec{}
+
+func (b *MissedResp) EncodeOffset() ([]byte, error) {
+	encTxs, err := offsetCodec.EncodeToBytes(b.ReqTxs)
+	if err != nil {
+		return nil, err
+	}
+	encView, err := rlp.EncodeToBytes(b.View)
+	if err != nil {
+		return nil, err
+	}
+	return append(encTxs, encView...), nil
+}
+
+func (b *MissedResp) DecodeOffset(buf []byte) error {
+	var txs = new(types.Transactions)
+	n, err := offsetCodec.DecodeBytes(buf, txs)
+	if err != nil {
+		return err
+	}
+	if n >= len(buf)-1 {
+		return fmt.Errorf("view info missed")
+	}
+	var view View
+	err = rlp.DecodeBytes(buf[n:], &view)
+	if err != nil {
+		return err
+	}
+	b.View, b.ReqTxs = &view, *txs
+	return nil
+}
+
 // Proposal2Light change the common proposal to the light proposal
 // return nil if proposal to block failed
 func Proposal2Light(proposal Proposal, init bool) LightProposal {

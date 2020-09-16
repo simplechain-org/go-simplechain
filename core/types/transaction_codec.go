@@ -36,7 +36,7 @@ var (
 
 type TransactionCodec interface {
 	EncodeToBytes(txs Transactions) ([]byte, error)
-	DecodeBytes(b []byte, txs *Transactions) error
+	DecodeBytes(b []byte, txs *Transactions) (int, error)
 }
 
 type RlpCodec struct{}
@@ -45,8 +45,8 @@ func (*RlpCodec) EncodeToBytes(txs Transactions) ([]byte, error) {
 	return rlp.EncodeToBytes(txs)
 }
 
-func (*RlpCodec) DecodeBytes(b []byte, txs *Transactions) error {
-	return rlp.DecodeBytes(b, txs)
+func (*RlpCodec) DecodeBytes(b []byte, txs *Transactions) (int, error) {
+	return len(b), rlp.DecodeBytes(b, txs)
 }
 
 type OffsetTransactionsCodec struct {
@@ -131,20 +131,20 @@ func (c OffsetTransactionsCodec) EncodeToBytes(txs Transactions) (ret []byte, er
 }
 
 // DecodeRLP implements TransactionCodec
-func (c OffsetTransactionsCodec) DecodeBytes(b []byte, txs *Transactions) (err error) {
+func (c OffsetTransactionsCodec) DecodeBytes(b []byte, txs *Transactions) (n int, err error) {
 	size := len(b)
 	if size == 0 {
-		return nil
+		return 0, nil
 	}
 
 	if size < OFFLEN {
-		return errInvalidOffset
+		return 0, errInvalidOffset
 	}
 
 	// decode tx count
 	count := binary.BigEndian.Uint32(b[:OFFLEN])
 	if size < OFFLEN*int(count+2) {
-		return errInvalidOffset
+		return 0, errInvalidOffset
 	}
 
 	// decode offsets
@@ -153,7 +153,7 @@ func (c OffsetTransactionsCodec) DecodeBytes(b []byte, txs *Transactions) (err e
 		offsets[i] = binary.BigEndian.Uint32(b[OFFLEN*(i+1) : OFFLEN*(i+2)])
 	}
 	if uint32(size) < offsets[count] {
-		return errInvalidOffset
+		return 0, errInvalidOffset
 	}
 
 	buf := b[OFFLEN*(int(count)+2):]
@@ -165,10 +165,10 @@ func (c OffsetTransactionsCodec) DecodeBytes(b []byte, txs *Transactions) (err e
 			(*txs)[i] = new(Transaction)
 			err := rlp.DecodeBytes(buf[offsets[i]:offsets[i+1]], (*txs)[i])
 			if err != nil {
-				return err
+				return 0, err
 			}
 		}
-		return nil
+		return OFFLEN*(int(count)+2) + int(offsets[count]), nil
 	}
 
 	// else decode parallelly
@@ -187,5 +187,5 @@ func (c OffsetTransactionsCodec) DecodeBytes(b []byte, txs *Transactions) (err e
 		}
 	})
 
-	return err
+	return OFFLEN*(int(count)+2) + int(offsets[count]), err
 }

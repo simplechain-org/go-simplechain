@@ -40,7 +40,7 @@ func (tx *TransactionsWithRoute) DecodeMsg(msg *p2p.Msg, txc types.TransactionCo
 	}
 	index := binary.BigEndian.Uint32(buf[:4])
 	var txs types.Transactions
-	if err := txc.DecodeBytes(buf[4:], &txs); err != nil {
+	if _, err := txc.DecodeBytes(buf[4:], &txs); err != nil {
 		return err
 	}
 	tx.RouteIndex = index

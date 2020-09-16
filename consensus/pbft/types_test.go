@@ -18,7 +18,12 @@ package pbft
 
 import (
 	"math/big"
+	"reflect"
 	"testing"
+
+	"github.com/simplechain-org/go-simplechain/core/types"
+	"github.com/simplechain-org/go-simplechain/crypto"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestViewCompare(t *testing.T) {
@@ -68,4 +73,41 @@ func TestViewCompare(t *testing.T) {
 	if r := srvView.Cmp(tarView); r != -1 {
 		t.Errorf("source(%v) should be smaller than target(%v): have %v, want %v", srvView, tarView, r, -1)
 	}
+}
+
+func TestMissedResp_OffsetEncodeDecode(t *testing.T) {
+	txs := getTransactions(2)
+	view := &View{
+		Sequence: big.NewInt(2),
+		Round:    big.NewInt(2),
+	}
+	resp := MissedResp{view, txs}
+	b, err := resp.EncodeOffset()
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	var newResp MissedResp
+	err = newResp.DecodeOffset(b)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	assert.True(t, reflect.DeepEqual(resp.View, newResp.View))
+	for i, tx := range resp.ReqTxs {
+		assert.Equal(t, txs[i].Hash(), tx.Hash())
+	}
+}
+
+func getTransactions(count int, payload ...byte) types.Transactions {
+	txs := make(types.Transactions, 0, count)
+	for i := 0; i < count; i++ {
+		key, _ := crypto.GenerateKey()
+		addr := crypto.PubkeyToAddress(key.PublicKey)
+		signer := types.NewEIP155Signer(big.NewInt(18))
+		tx, _ := types.SignTx(types.NewTransaction(uint64(i), addr, big.NewInt(int64(i)), uint64(i), big.NewInt(int64(i)), payload), signer, key)
+		txs = append(txs, tx)
+	}
+	return txs
 }

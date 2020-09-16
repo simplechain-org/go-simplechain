@@ -19,9 +19,6 @@ package types
 import (
 	"bytes"
 	"crypto/rand"
-	"encoding/binary"
-	"fmt"
-	"io"
 	"math/big"
 	"testing"
 
@@ -36,7 +33,7 @@ func TestOffsetTransactionsCodec(t *testing.T) {
 		t.Error(err)
 	}
 	var txd Transactions
-	err = codec.DecodeBytes(enc, &txd)
+	_, err = codec.DecodeBytes(enc, &txd)
 	if err != nil {
 		t.Error(err)
 	}
@@ -171,52 +168,4 @@ func getTransactions(count int, payload ...byte) Transactions {
 		txs = append(txs, tx)
 	}
 	return txs
-}
-
-type TestTxr struct {
-	Txs   Transactions
-	Index uint32
-}
-
-func (txr *TestTxr) EncodeRlp(w io.Writer) error {
-	enc, err := (&OffsetTransactionsCodec{}).EncodeToBytes(txr.Txs)
-	if err != nil {
-		return err
-	}
-	buf := make([]byte, 4)
-	binary.BigEndian.PutUint32(buf, txr.Index)
-	_, err = w.Write(buf)
-	if err != nil {
-		return err
-	}
-	_, err = w.Write(enc)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (txr *TestTxr) DecodeRLP(s *rlp.Stream) error {
-	fmt.Println(s.Bytes())
-	fmt.Println(s.Kind())
-	fmt.Println(s.Raw())
-	return nil
-}
-
-func Test_Txr(t *testing.T) {
-	txs := getTransactions(1)
-	txr := TestTxr{txs, 1}
-	b, err := rlp.EncodeToBytes(txr)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fmt.Println(b)
-	b1, _ := OffsetTransactionsCodec{}.EncodeToBytes(txr.Txs)
-	fmt.Println(b1)
-
-	var txr1 TestTxr
-	err = rlp.DecodeBytes(b1, &txr1)
-	if err != nil {
-		t.Fatal(err)
-	}
 }

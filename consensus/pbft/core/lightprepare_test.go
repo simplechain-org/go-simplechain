@@ -122,7 +122,7 @@ OUTER:
 					View:   c.currentView(),
 					ReqTxs: test.expectedRequest.(*types.LightBlock).Block.Transactions(),
 				}
-				encMissedResp, _ := Encode(missedResp)
+				encMissedResp, _ := missedResp.EncodeOffset()
 				msg := &message{
 					Code: msgMissedTxs,
 					Msg:  encMissedResp,
