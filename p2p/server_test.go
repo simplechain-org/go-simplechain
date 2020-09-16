@@ -32,6 +32,8 @@ import (
 	"github.com/simplechain-org/go-simplechain/p2p/enode"
 	"github.com/simplechain-org/go-simplechain/p2p/enr"
 	"golang.org/x/crypto/sha3"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // func init() {
@@ -576,6 +578,37 @@ func TestServerSetupConn(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestServerSetupConn_whenNotInRaftCluster(t *testing.T) {
+	var (
+		clientkey, srvkey = newkey(), newkey()
+		clientpub         = &clientkey.PublicKey
+	)
+
+	clientNode := enode.NewV4(clientpub, nil, 0, 0)
+	srv := &Server{
+		Config: Config{
+			PrivateKey:  srvkey,
+			NoDiscovery: true,
+		},
+		newTransport: func(fd net.Conn) transport { return newTestTransport(clientpub, fd) },
+		log:          log.New(),
+		checkPeerInRaft: func(node *enode.Node) bool {
+			return false
+		},
+	}
+	if err := srv.Start(); err != nil {
+		t.Fatalf("couldn't start server: %v", err)
+	}
+	defer srv.Stop()
+	p1, _ := net.Pipe()
+	err := srv.SetupConn(p1, inboundConn, clientNode)
+
+	assert.IsType(t, &peerError{}, err)
+	perr := err.(*peerError)
+	t.Log(perr.Error())
+	assert.Equal(t, errNotInRaftCluster, perr.code)
 }
 
 type setupTransport struct {

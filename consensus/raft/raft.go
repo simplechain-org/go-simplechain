@@ -64,7 +64,7 @@ func (r *Raft) FinalizeAndAssemble(chain consensus.ChainReader, header *types.He
 	}
 
 	//Sign the block and build the extraSeal struct
-	extraSealBytes := r.buildExtraSeal(headerHash)
+	extraSealBytes := r.BuildExtraSeal(headerHash)
 
 	// add vanity and seal to header
 	// NOTE: leaving vanity blank for now as a space for any future data
@@ -80,7 +80,7 @@ func (r *Raft) FinalizeAndAssemble(chain consensus.ChainReader, header *types.He
 	return block, nil
 }
 
-func (r *Raft) buildExtraSeal(headerHash common.Hash) []byte {
+func (r *Raft) BuildExtraSeal(headerHash common.Hash) []byte {
 	//Sign the headerHash
 	sig, err := crypto.Sign(headerHash.Bytes(), r.nodeKey)
 	if err != nil {

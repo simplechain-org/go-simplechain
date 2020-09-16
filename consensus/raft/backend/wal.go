@@ -40,7 +40,7 @@ func (pm *ProtocolManager) openWAL(maybeRaftSnapshot *raftpb.Snapshot) *wal.WAL 
 	return wal
 }
 
-func (pm *ProtocolManager) replayWAL(maybeRaftSnapshot *raftpb.Snapshot) *wal.WAL {
+func (pm *ProtocolManager) replayWAL(maybeRaftSnapshot *raftpb.Snapshot) (*wal.WAL, []raftpb.Entry) {
 	log.Info("replaying WAL")
 	wal := pm.openWAL(maybeRaftSnapshot)
 
@@ -52,5 +52,5 @@ func (pm *ProtocolManager) replayWAL(maybeRaftSnapshot *raftpb.Snapshot) *wal.WA
 	pm.raftStorage.SetHardState(hardState)
 	pm.raftStorage.Append(entries)
 
-	return wal
+	return wal, entries
 }

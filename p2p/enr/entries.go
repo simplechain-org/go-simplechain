@@ -121,6 +121,10 @@ type RaftPort uint16
 
 func (v RaftPort) ENRKey() string { return "raftport" }
 
+type Hostname string
+
+func (v Hostname) ENRKey() string { return "hostname" }
+
 // IPv4 is the "ip" key, which holds the IP address of the node.
 type IPv4 net.IP
 
