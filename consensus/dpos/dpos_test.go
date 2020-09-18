@@ -22,7 +22,7 @@ import (
 	"github.com/simplechain-org/go-simplechain/common"
 )
 
-func TestAlien_PenaltyTrantor(t *testing.T) {
+func Test_PenaltyTrantor(t *testing.T) {
 	tests := []struct {
 		last    string
 		current string
@@ -147,7 +147,7 @@ func TestAlien_PenaltyTrantor(t *testing.T) {
 	}
 }
 
-func TestAlien_Penalty(t *testing.T) {
+func Test_Penalty(t *testing.T) {
 	tests := []struct {
 		last    string
 		current string

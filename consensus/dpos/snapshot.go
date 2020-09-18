@@ -274,7 +274,7 @@ func (s *Snapshot) apply(headers []*types.Header) (*Snapshot, error) {
 		if err != nil {
 			return nil, err
 		}
-		if coinbase.String() != header.Coinbase.String() {
+		if coinbase != header.Coinbase {
 			return nil, ErrUnauthorized
 		}
 
