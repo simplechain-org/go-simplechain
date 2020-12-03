@@ -100,6 +100,26 @@ func (m *txSortedMap) Forward(threshold uint64) types.Transactions {
 // Filter iterates over the list of transactions and removes all of them for which
 // the specified function evaluates to true.
 func (m *txSortedMap) Filter(filter func(*types.Transaction) bool) types.Transactions {
+	removed := m.filter(filter)
+	// If transactions were removed, the heap and cache are ruined
+	if len(removed) > 0 {
+		m.reheap()
+	}
+	return removed
+}
+
+func (m *txSortedMap) reheap() {
+	*m.index = make([]uint64, 0, len(m.items))
+	for nonce := range m.items {
+		*m.index = append(*m.index, nonce)
+	}
+	heap.Init(m.index)
+	m.cache = nil
+}
+
+// filter is identical to Filter, but **does not** regenerate the heap. This method
+// should only be used if followed immediately by a call to Filter or reheap()
+func (m *txSortedMap) filter(filter func(*types.Transaction) bool) types.Transactions {
 	var removed types.Transactions
 
 	// Collect all the transactions to filter out
@@ -109,14 +129,7 @@ func (m *txSortedMap) Filter(filter func(*types.Transaction) bool) types.Transac
 			delete(m.items, nonce)
 		}
 	}
-	// If transactions were removed, the heap and cache are ruined
 	if len(removed) > 0 {
-		*m.index = make([]uint64, 0, len(m.items))
-		for nonce := range m.items {
-			*m.index = append(*m.index, nonce)
-		}
-		heap.Init(m.index)
-
 		m.cache = nil
 	}
 	return removed
@@ -197,10 +210,7 @@ func (m *txSortedMap) Len() int {
 	return len(m.items)
 }
 
-// Flatten creates a nonce-sorted slice of transactions based on the loosely
-// sorted internal representation. The result of the sorting is cached in case
-// it's requested again before any modifications are made to the contents.
-func (m *txSortedMap) Flatten() types.Transactions {
+func (m *txSortedMap) flatten() types.Transactions {
 	// If the sorting was not cached yet, create and cache it
 	if m.cache == nil {
 		m.cache = make(types.Transactions, 0, len(m.items))
@@ -209,10 +219,26 @@ func (m *txSortedMap) Flatten() types.Transactions {
 		}
 		sort.Sort(types.TxByNonce(m.cache))
 	}
+	return m.cache
+}
+
+// Flatten creates a nonce-sorted slice of transactions based on the loosely
+// sorted internal representation. The result of the sorting is cached in case
+// it's requested again before any modifications are made to the contents.
+func (m *txSortedMap) Flatten() types.Transactions {
+	// If the sorting was not cached yet, create and cache it
+	cache := m.flatten()
 	// Copy the cache to prevent accidental modifications
-	txs := make(types.Transactions, len(m.cache))
-	copy(txs, m.cache)
+	txs := make(types.Transactions, len(cache))
+	copy(txs, cache)
 	return txs
+}
+
+// LastElement returns the last element of a flattened list, thus, the
+// transaction with the highest nonce
+func (m *txSortedMap) LastElement() *types.Transaction {
+	cache := m.flatten()
+	return cache[len(cache)-1]
 }
 
 // txList is a "list" of transactions belonging to an account, sorted by account
@@ -296,20 +322,26 @@ func (l *txList) Filter(costLimit *big.Int, gasLimit uint64) (types.Transactions
 	l.gascap = gasLimit
 
 	// Filter out all the transactions above the account's funds
-	removed := l.txs.Filter(func(tx *types.Transaction) bool { return tx.Cost().Cmp(costLimit) > 0 || tx.Gas() > gasLimit })
+	removed := l.txs.Filter(func(tx *types.Transaction) bool {
+		return tx.Gas() > gasLimit || tx.Cost().Cmp(costLimit) > 0
+	})
 
+	if len(removed) == 0 {
+		return nil, nil
+	}
 	// If the list was strict, filter anything above the lowest nonce
 	var invalids types.Transactions
 
-	if l.strict && len(removed) > 0 {
+	if l.strict {
 		lowest := uint64(math.MaxUint64)
 		for _, tx := range removed {
 			if nonce := tx.Nonce(); lowest > nonce {
 				lowest = nonce
 			}
 		}
-		invalids = l.txs.Filter(func(tx *types.Transaction) bool { return tx.Nonce() > lowest })
+		invalids = l.txs.filter(func(tx *types.Transaction) bool { return tx.Nonce() > lowest })
 	}
+	l.txs.reheap()
 	return removed, invalids
 }
 
@@ -363,6 +395,12 @@ func (l *txList) Flatten() types.Transactions {
 	return l.txs.Flatten()
 }
 
+// LastElement returns the last element of a flattened list, thus, the
+// transaction with the highest nonce
+func (l *txList) LastElement() *types.Transaction {
+	return l.txs.LastElement()
+}
+
 // priceHeap is a heap.Interface implementation over transactions for retrieving
 // price-sorted transactions to discard when the pool fills up.
 type priceHeap []*types.Transaction
@@ -390,6 +428,7 @@ func (h *priceHeap) Pop() interface{} {
 	old := *h
 	n := len(old)
 	x := old[n-1]
+	old[n-1] = nil
 	*h = old[0 : n-1]
 	return x
 }
@@ -494,11 +533,32 @@ func (l *txPricedList) Underpriced(tx *types.Transaction, local *accountSet) boo
 
 // Discard finds a number of most underpriced transactions, removes them from the
 // priced list and returns them for further removal from the entire pool.
-func (l *txPricedList) Discard(count int, local *accountSet) types.Transactions {
-	drop := make(types.Transactions, 0, count) // Remote underpriced transactions to drop
-	save := make(types.Transactions, 0, 64)    // Local underpriced transactions to keep
+func (l *txPricedList) Discard(slots int, local *accountSet) types.Transactions {
+	// If we have some local accountset, those will not be discarded
+	if !local.empty() {
+		// In case the list is filled to the brim with 'local' txs, we do this
+		// little check to avoid unpacking / repacking the heap later on, which
+		// is very expensive
+		discardable := 0
+		for _, tx := range *l.items {
+			if !local.containsTx(tx) {
+				discardable++
+			}
+			if discardable >= slots {
+				break
+			}
+		}
+		if slots > discardable {
+			slots = discardable
+		}
+	}
+	if slots == 0 {
+		return nil
+	}
+	drop := make(types.Transactions, 0, slots)               // Remote underpriced transactions to drop
+	save := make(types.Transactions, 0, len(*l.items)-slots) // Local underpriced transactions to keep
 
-	for len(*l.items) > 0 && count > 0 {
+	for len(*l.items) > 0 && slots > 0 {
 		// Discard stale transactions if found during cleanup
 		tx := heap.Pop(l.items).(*types.Transaction)
 		if l.all.Get(tx.Hash()) == nil {
@@ -510,7 +570,7 @@ func (l *txPricedList) Discard(count int, local *accountSet) types.Transactions 
 			save = append(save, tx)
 		} else {
 			drop = append(drop, tx)
-			count--
+			slots -= numSlots(tx)
 		}
 	}
 	for _, tx := range save {

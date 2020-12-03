@@ -183,7 +183,7 @@ func (s CrossTransactions) GetRlp(i int) []byte {
 	return enc
 }
 
-// TxByPrice implements both the sort and the heap interface, making it useful
+// CTxByPrice implements both the sort and the heap interface, making it useful
 // for all at once sorting as well as individually adding and removing elements.
 type CTxByPrice CrossTransactions
 

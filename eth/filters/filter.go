@@ -174,7 +174,6 @@ func (f *Filter) indexedLogs(ctx context.Context, end uint64) ([]*types.Log, err
 		return nil, err
 	}
 	defer session.Close()
-
 	f.backend.ServiceFilter(ctx, session)
 
 	// Iterate over the matches until exhausted or context closed
@@ -214,7 +213,6 @@ func (f *Filter) indexedLogs(ctx context.Context, end uint64) ([]*types.Log, err
 // iteration and bloom matching.
 func (f *Filter) unindexedLogs(ctx context.Context, end uint64) ([]*types.Log, error) {
 	var logs []*types.Log
-
 	for ; f.begin <= int64(end); f.begin++ {
 		header, err := f.backend.HeaderByNumber(ctx, rpc.BlockNumber(f.begin))
 		if header == nil || err != nil {
