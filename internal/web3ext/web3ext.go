@@ -113,21 +113,6 @@ web3._extend({
 			call: 'cross_syncStore',
 			params: 0,
 		}),
-		new web3._extend.Method({
-			name: 'getTxSign',
-			call: 'cross_getTxSign',
-			params: 1,
-		}),
-		new web3._extend.Method({
-			name: 'importRemoteCtx',
-			call: 'cross_importRemoteCtx',
-			params: 1,
-		}),
-		new web3._extend.Method({
-			name: 'importRemoteRtx',
-			call: 'cross_importRemoteRtx',
-			params: 1,
-		}),
 	],
 	properties: [
 		new web3._extend.Property({
