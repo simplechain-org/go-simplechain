@@ -2207,7 +2207,7 @@ require = (function e(t, n, r) {
      * @return {Boolean}
      */
     var isStrictAddress = function(address) {
-      return /^0x[0-9a-f]{40}$/i.test(address);
+      return /^0x[0-9a-f]{40}$/i.test(address) || /^Si[0-9a-f]{40}$/i.test(address);
     };
 
     /**
@@ -2218,10 +2218,10 @@ require = (function e(t, n, r) {
      * @return {Boolean}
      */
     var isAddress = function(address) {
-      if (!/^(0x)?[0-9a-f]{40}$/i.test(address)) {
+      if (!/^(0x)?[0-9a-f]{40}$/i.test(address) && !/^(Si)?[0-9a-f]{40}$/i.test(address)) {
         // check if it has the basic requirements of an address
         return false;
-      } else if (/^(0x)?[0-9a-f]{40}$/.test(address) || /^(0x)?[0-9A-F]{40}$/.test(address)) {
+      } else if (/^(0x)?[0-9a-f]{40}$/.test(address) || /^(0x)?[0-9A-F]{40}$/.test(address) || /^(Si)?[0-9a-f]{40}$/.test(address) || /^(Si)?[0-9A-F]{40}$/.test(address)) {
         // If it's all small caps or all caps, return true
         return true;
       } else {
@@ -2240,6 +2240,8 @@ require = (function e(t, n, r) {
     var isChecksumAddress = function(address) {
       // Check each case
       address = address.replace('0x', '');
+      address = address.replace('Si', '');
+
       var addressHash = sha3(address.toLowerCase());
 
       for (var i = 0; i < 40; i++) {
