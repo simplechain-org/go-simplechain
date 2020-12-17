@@ -185,6 +185,10 @@ func (miner *Miner) SetEtherbase(addr common.Address) {
 	miner.worker.setEtherbase(addr)
 }
 
+func (miner *Miner) GetCoinBase() common.Address {
+	return miner.coinbase
+}
+
 type Agent interface {
 	DispatchWork(block *types.Block)
 	SubscribeResult(ch chan<- *types.Block)

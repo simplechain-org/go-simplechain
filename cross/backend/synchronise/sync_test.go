@@ -23,15 +23,14 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/Beyond-simplechain/foundation/container"
+	"github.com/Beyond-simplechain/foundation/container/redblacktree"
 	"github.com/simplechain-org/go-simplechain/common"
-	"github.com/simplechain-org/go-simplechain/log"
-
 	cc "github.com/simplechain-org/go-simplechain/cross/core"
 	db "github.com/simplechain-org/go-simplechain/cross/database"
 	"github.com/simplechain-org/go-simplechain/cross/trigger"
+	"github.com/simplechain-org/go-simplechain/log"
 
-	"github.com/Beyond-simplechain/foundation/container"
-	"github.com/Beyond-simplechain/foundation/container/redblacktree"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -289,8 +288,8 @@ func TestSync_Synchronise(t *testing.T) {
 
 	// test busy
 	{
-		store.generate(10, 500)
-		store.generate(11, 500)
+		store.generate(10, 5000)
+		store.generate(11, 5000)
 
 		var wg sync.WaitGroup
 		wg.Add(1)

@@ -461,6 +461,11 @@ func (d *DPoS) verifySeal(chain consensus.ChainReader, header *types.Header, par
 		return err
 	}
 
+	// check the coinbase == signer
+	if signer != header.Coinbase {
+		return ErrUnauthorized
+	}
+
 	if number > d.config.MaxSignerCount {
 		var parent *types.Header
 		if len(parents) > 0 {

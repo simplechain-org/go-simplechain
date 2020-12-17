@@ -27,7 +27,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/simplechain-org/go-simplechain/sub"
 	"html/template"
 	"io/ioutil"
 	"math"
@@ -41,7 +40,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gorilla/websocket"
 	"github.com/simplechain-org/go-simplechain/accounts"
 	"github.com/simplechain-org/go-simplechain/accounts/keystore"
 	"github.com/simplechain-org/go-simplechain/common"
@@ -58,6 +56,9 @@ import (
 	"github.com/simplechain-org/go-simplechain/p2p/enode"
 	"github.com/simplechain-org/go-simplechain/p2p/nat"
 	"github.com/simplechain-org/go-simplechain/params"
+	"github.com/simplechain-org/go-simplechain/sub"
+
+	"github.com/gorilla/websocket"
 )
 
 var (
@@ -264,7 +265,7 @@ func newFaucet(genesis *core.Genesis, port int, enodes []*discv5.Node, network u
 		} else if role.IsSubChain() {
 			return sub.New(ctx, config)
 		} else {
-			return nil,errors.New("role err")
+			return nil, errors.New("role err")
 		}
 	}); err != nil {
 		return nil, err

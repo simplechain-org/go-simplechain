@@ -159,6 +159,9 @@ var (
 		utils.RaftModeFlag,
 		utils.RaftJoinExistingFlag,
 		utils.RaftPortFlag,
+		utils.RaftBlockTimeFlag,
+		utils.RaftDNSEnabledFlag,
+		utils.RaftEmitCheckpointsFlag,
 		utils.IstanbulRequestTimeoutFlag,
 		utils.IstanbulBlockPeriodFlag,
 		utils.ConfirmDepthFlag,
@@ -347,6 +350,7 @@ func sipe(ctx *cli.Context) error {
 // it unlocks any requested accounts, and starts the RPC/IPC interfaces and the
 // miner.
 func startNode(ctx *cli.Context, stack *node.Node) {
+	log.DoEmitCheckpoints = ctx.GlobalBool(utils.RaftEmitCheckpointsFlag.Name)
 	debug.Memsize.Add("node", stack)
 
 	// Start up the node itself

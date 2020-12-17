@@ -2,7 +2,7 @@
 
 [![GoDoc](https://godoc.org/github.com/simplechain-org/go-simplechain?status.svg)](https://godoc.org/github.com/simplechain-org/go-simplechain)
 [![Go Report Card](https://goreportcard.com/badge/github.com/simplechain-org/go-simplechain)](https://goreportcard.com/report/github.com/simplechain-org/go-simplechain)
-[![Build Status](https://travis-ci.org/simplechain-org/go-simplechain.svg?branch=dev)](https://travis-ci.org/simplechain-org/go-simplechain)
+[![Build Status](https://travis-ci.org/simplechain-org/go-simplechain.svg?branch=master)](https://travis-ci.org/simplechain-org/go-simplechain)
 
 
 Official golang implementation of the Simplechain protocol.
@@ -21,11 +21,24 @@ Binary archives are published at https://github.com/simplechain-org/go-simplecha
 
 ## Building the source
 
-Building sipe requires both a Go (version 1.7 or later) and a C compiler.
+Building sipe requires both a Go (version 1.13 or later) and a C compiler.
 You can install them using your favourite package manager.
 Once the dependencies are installed, run
+```bash
+make sipe
+```
+    
+## Run tests
+```bash
+make test
+```
 
-    make sipe
+in additional, blockchain tests of the scrypt consensus, need download simplechain-org/testdata
+
+```bash
+git submodule update --init
+make test
+```
 
 ## Running sipe
 
