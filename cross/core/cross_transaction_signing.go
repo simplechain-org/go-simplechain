@@ -142,7 +142,7 @@ func (s EIP155CtxSigner) Hash(tx *CrossTransaction) (h common.Hash) {
 	b = append(b, tx.Data.CTxId.Bytes()...)
 	b = append(b, tx.Data.TxHash.Bytes()...)
 	b = append(b, tx.Data.From.Bytes()...)
-	b = append(b, tx.Data.To.Bytes()...)
+	//b = append(b, tx.Data.To.Bytes()...)
 	b = append(b, tx.Data.BlockHash.Bytes()...)
 	b = append(b, common.LeftPadBytes(tx.Data.DestinationId.Bytes(), 32)...)
 	b = append(b, common.LeftPadBytes(tx.Data.DestinationValue.Bytes(), 32)...)
