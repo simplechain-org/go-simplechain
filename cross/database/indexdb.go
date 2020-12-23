@@ -125,7 +125,8 @@ func (d *indexDB) Writes(ctxList []*cc.CrossTransactionWithSignatures, replaceab
 		if new.BlockNum < old.BlockNum {
 			return false
 		}
-		if new.Status <= old.Status { //TODO:无法解决同步其他节点时，其他节点回滚的状态
+		//if new.Status <= old.Status { //TODO:无法解决同步其他节点时，其他节点回滚的状态
+		if new.Status < old.Status { //支持管理员替换签名
 			return false
 		}
 		return true
