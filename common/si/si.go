@@ -8,6 +8,11 @@ import (
 	"reflect"
 )
 
+var (
+	ErrEmptyString   = errors.New("empty hex string")
+	ErrMissingPrefix = errors.New("hex string without Si prefix")
+)
+
 const badNibble = ^uint64(0)
 
 func UnmarshalFixedText(typname string, input, out []byte) error {
@@ -33,7 +38,7 @@ func checkText(input []byte, wantPrefix bool) ([]byte, error) {
 		return nil, nil // empty strings are allowed
 	}
 	if bytesHaveSiPrefix(input) || bytesHave0xPrefix(input) {
-		log.Info("bytesHaveSiPrefix","input",string(input))
+		log.Debug("bytesHaveSiPrefix","input",string(input))
 		input = input[2:]
 	} else if wantPrefix {
 		return nil, errors.New("string without Si prefix")
@@ -81,4 +86,22 @@ func isString(input []byte) bool {
 
 func bytesHave0xPrefix(input []byte) bool {
 	return len(input) >= 2 && input[0] == '0' && (input[1] == 'x' || input[1] == 'X')
+}
+
+func Decode(input string) ([]byte, error) {
+	if len(input) == 0 {
+		return nil, ErrEmptyString
+	}
+	if !hasSiPrefix(input) {
+		return nil, ErrMissingPrefix
+	}
+	b, err := hex.DecodeString(input[2:])
+	if err != nil {
+		return nil, err
+	}
+	return b, err
+}
+
+func hasSiPrefix(input string) bool {
+	return len(input) >= 2 && input[0] == 'S' && (input[1] == 'i' || input[1] == 'I')
 }
