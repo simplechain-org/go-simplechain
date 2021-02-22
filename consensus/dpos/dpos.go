@@ -50,10 +50,11 @@ const (
 
 // DPoS delegated-proof-of-stake protocol constants.
 var (
-	totalBlockReward                 = new(big.Int).Mul(big.NewInt(1e+18), big.NewInt(2.5e+8)) // Block reward in wei
-	defaultEpochLength               = uint64(201600)                                          // Default number of blocks after which vote's period of validity, About one week if period is 3
-	defaultBlockPeriod               = uint64(3)                                               // Default minimum difference between two consecutive block's timestamps
-	defaultMaxSignerCount            = uint64(21)                                              //
+	//totalBlockReward                 = new(big.Int).Mul(big.NewInt(1e+18), big.NewInt(2.5e+8)) // Block reward in wei
+	totalBlockReward                 = new(big.Int).Mul(big.NewInt(1e+18), big.NewInt(6.8e+7)) // Block reward in wei
+	defaultEpochLength               = uint64(201600)                                           // Default number of blocks after which vote's period of validity, About one week if period is 3
+	defaultBlockPeriod               = uint64(3)                                                // Default minimum difference between two consecutive block's timestamps
+	defaultMaxSignerCount            = uint64(21)                                               //
 	minVoterBalance                  = new(big.Int).Mul(big.NewInt(100), big.NewInt(1e+18))
 	extraVanity                      = 32                                                    // Fixed number of extra-data prefix bytes reserved for signer vanity
 	extraSeal                        = 65                                                    // Fixed number of extra-data suffix bytes reserved for signer seal
@@ -834,9 +835,16 @@ func (d *DPoS) Close() error {
 func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header, snap *Snapshot, refundGas RefundGas) error {
 	// Calculate the block reword by year
 	blockNumPerYear := secondsPerYear / config.DPoS.Period
-	initSignerBlockReward := new(big.Int).Div(totalBlockReward, big.NewInt(int64(2*blockNumPerYear)))
+	initSignerBlockReward := new(big.Int).Div(totalBlockReward, big.NewInt(int64(2*4*blockNumPerYear)))
 	yearCount := header.Number.Uint64() / blockNumPerYear
-	blockReward := new(big.Int).Rsh(initSignerBlockReward, uint(yearCount))
+	attenuation := yearCount / 4
+	//blockReward := new(big.Int).Rsh(initSignerBlockReward, uint(yearCount))
+	var blockReward *big.Int
+	if attenuation > 0 {
+		blockReward = new(big.Int).Div(initSignerBlockReward, new(big.Int).SetUint64(2*attenuation))
+	} else {
+		blockReward = new(big.Int).Set(initSignerBlockReward)
+	}
 
 	minerReward := new(big.Int).Set(blockReward)
 
