@@ -15,7 +15,7 @@ make sipe
 
 ## Starting node on the main ZSC network
 
-###Init node with Mainnet Genesis, run:
+### Init node with Mainnet Genesis, run:
 ``` 
 sipe --datadir=data --role=subchain init genesis.json
 ```
