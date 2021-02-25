@@ -6,7 +6,7 @@ before:
   - go mod download
 builds:
 - id: sipe-darwin-amd64
-  ldflags: -s -w -X github.com/simplechain-org/go-simplechain.Version={{.Version}} -X github.com/simplechain-org/go-simplechain.BuildDate={{.Date}} -X github.com/simplechain-org/go-simplechain.CommitHash={{ .ShortCommit }}
+  ldflags: -s -w -X github.com/zsc-ZTChain/go-zsc-chain.Version={{.Version}} -X github.com/zsc-ZTChain/go-zsc-chain.BuildDate={{.Date}} -X github.com/zsc-ZTChain/go-zsc-chain.CommitHash={{ .ShortCommit }}
   binary: sipe
   env:
   - CGO_ENABLED=1
@@ -18,7 +18,7 @@ builds:
   goarch:
   - amd64
 - id: sipe-linux-amd64
-  ldflags: -s -w -X github.com/simplechain-org/go-simplechain.Version={{.Version}} -X github.com/simplechain-org/go-simplechain.BuildDate={{.Date}} -X github.com/simplechain-org/go-simplechain.CommitHash={{ .ShortCommit }}
+  ldflags: -s -w -X github.com/zsc-ZTChain/go-zsc-chain.Version={{.Version}} -X github.com/zsc-ZTChain/go-zsc-chain.BuildDate={{.Date}} -X github.com/zsc-ZTChain/go-zsc-chain.CommitHash={{ .ShortCommit }}
   binary: sipe
   env:
   - CGO_ENABLED=1
@@ -29,7 +29,7 @@ builds:
   - amd64
 
 - id: sipe-windows-amd64
-  ldflags: -s -w -X github.com/simplechain-org/go-simplechain.Version={{.Version}} -X github.com/simplechain-org/go-simplechain.BuildDate={{.Date}} -X github.com/simplechain-org/go-simplechain.CommitHash={{ .ShortCommit }}
+  ldflags: -s -w -X github.com/zsc-ZTChain/go-zsc-chain.Version={{.Version}} -X github.com/zsc-ZTChain/go-zsc-chain.BuildDate={{.Date}} -X github.com/zsc-ZTChain/go-zsc-chain.CommitHash={{ .ShortCommit }}
   binary: sipe
   env:
   - CGO_ENABLED=1
