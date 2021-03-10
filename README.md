@@ -69,8 +69,17 @@ genesis.json
    ```
 
 ### Runing node by sipe:
+
+You can choose one of the following modes to start your node
+
+#### Follow node on the main zsc network
 ```shell
 sipe --role=subchain --datadir=data console
+```  
+
+#### Mining node on the main zsc network
+```shell
+sipe --role=subchain --datadir=data --mine --etherbase='<miner account>' --unlock='<miner account>' --password='<password file>' --v5disc console
 ```  
 
 This command will:
@@ -99,6 +108,8 @@ admin.addPeer("enode://34573b2144f9379737b747e31cc35dbd94ff8b108b1789253b60cf16a
 The IPC interface is enabled by default and exposes all the APIs supported by Sipe, whereas the HTTP
 and WS interfaces need to manually be enabled and only expose a subset of APIs due to security reasons.
 These can be turned on/off and configured as you'd expect.
+
+**Warning: do not turn on api options on the mining node!**
 
 HTTP based JSON-RPC API options:
 
