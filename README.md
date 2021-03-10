@@ -78,6 +78,21 @@ sipe --role=subchain --datadir=data console
 ```  
 
 #### Mining node on the main zsc network
+
+`create` a new miner account by using:
+
+```shell
+sipe --datadir=data account new --password='<password file>'
+```
+
+or `import` an existing miner account with private-key file by using:
+
+```shell
+sipe --datadir=data account import '<private-key file>' --password='<password file>'
+```
+
+then start mining node by the account
+
 ```shell
 sipe --role=subchain --datadir=data --mine --etherbase='<miner account>' --unlock='<miner account>' --password='<password file>' --v5disc console
 ```  
