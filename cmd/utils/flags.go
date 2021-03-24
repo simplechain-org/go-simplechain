@@ -185,6 +185,10 @@ var (
 		Name:  "identity",
 		Usage: "Custom node name",
 	}
+	Is0xAddressFlag = cli.BoolFlag{
+		Name:  "is0xAddress",
+		Usage: "Whether to return 0x address",
+	}
 	DocRootFlag = DirectoryFlag{
 		Name:  "docroot",
 		Usage: "Document Root for HTTPClient file scheme",
@@ -1589,6 +1593,7 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 	setLes(ctx, cfg)
 	setAnchorSign(ctx, ks, cfg)
 	setAnchorSync(ctx, cfg)
+	setIs0xAddress(ctx)
 
 	if ctx.GlobalIsSet(SyncModeFlag.Name) {
 		cfg.SyncMode = *GlobalTextMarshaler(ctx, SyncModeFlag.Name).(*downloader.SyncMode)
@@ -2025,4 +2030,8 @@ func setAnchorSync(ctx *cli.Context, cfg *eth.Config) {
 	if ctx.GlobalIsSet(AnchorSyncModeFlag.Name) {
 		cfg.CrossConfig.SyncMode = *GlobalTextMarshaler(ctx, AnchorSyncModeFlag.Name).(*synchronise.SyncMode)
 	}
+}
+
+func setIs0xAddress(ctx *cli.Context) {
+	common.SetIsOxAddress(ctx.GlobalIsSet(Is0xAddressFlag.Name))
 }
