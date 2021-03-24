@@ -168,7 +168,7 @@ var (
 		utils.AnchorSignerFlag,
 		utils.AnchorMaxGasPriceFlag,
 		utils.AnchorSyncModeFlag,
-		utils.IsOxAddressFlag,
+		utils.Is0xAddressFlag,
 	}
 
 	rpcFlags = []cli.Flag{

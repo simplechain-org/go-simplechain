@@ -43,7 +43,7 @@ const (
 var (
 	hashT       = reflect.TypeOf(Hash{})
 	addressT    = reflect.TypeOf(Address{})
-	isOxAddress = false
+	is0xAddress = false
 )
 
 // Hash represents the 32 byte Keccak256 hash of arbitrary data.
@@ -58,7 +58,7 @@ func BytesToHash(b []byte) Hash {
 }
 
 func SetIsOxAddress(s bool) {
-	isOxAddress = s
+	is0xAddress = s
 }
 
 // BigToHash sets byte representation of b to hash.
@@ -257,7 +257,7 @@ func (a Address) Si() string {
 			result[i] -= 32
 		}
 	}
-	if isOxAddress {
+	if is0xAddress {
 		return "0x" + string(result)
 	}
 	return "Si" + string(result)
@@ -280,7 +280,7 @@ func (a *Address) SetBytes(b []byte) {
 
 // MarshalText returns the hex representation of a.
 func (a Address) MarshalText() ([]byte, error) {
-	if isOxAddress {
+	if is0xAddress {
 		return hexutil.Bytes(a[:]).MarshalText()
 	}
 	return si.MarshalText(a[:])
@@ -288,7 +288,7 @@ func (a Address) MarshalText() ([]byte, error) {
 
 // UnmarshalText parses a hash in hex syntax.
 func (a *Address) UnmarshalText(input []byte) error {
-	if isOxAddress {
+	if is0xAddress {
 		return hexutil.UnmarshalFixedText("Address", input, a[:])
 	}
 	return si.UnmarshalFixedText("Si address", input, a[:])
@@ -296,7 +296,7 @@ func (a *Address) UnmarshalText(input []byte) error {
 
 // UnmarshalJSON parses a hash in hex syntax.
 func (a *Address) UnmarshalJSON(input []byte) error {
-	if isOxAddress {
+	if is0xAddress {
 		return hexutil.UnmarshalFixedJSON(addressT, input, a[:])
 	}
 	return si.UnmarshalFixedJSON(addressT, input, a[:])
