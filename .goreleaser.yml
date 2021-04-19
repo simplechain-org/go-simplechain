@@ -3,7 +3,8 @@ env:
 - GO111MODULE=on
 before:
   hooks:
-  - go mod download
+    - go env -w GOPROXY=https://goproxy.cn,direct
+    - go mod download
 builds:
 - id: sipe-darwin-amd64
   ldflags: -s -w -X github.com/zsc-ZTChain/go-zsc-chain.Version={{.Version}} -X github.com/zsc-ZTChain/go-zsc-chain.BuildDate={{.Date}} -X github.com/zsc-ZTChain/go-zsc-chain.CommitHash={{ .ShortCommit }}

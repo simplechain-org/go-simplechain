@@ -157,7 +157,7 @@ func SetupGenesisBlock(db ethdb.Database, genesis *Genesis) (*params.ChainConfig
 
 func SetupGenesisBlockWithOverride(db ethdb.Database, genesis *Genesis, overrideSingularity *big.Int) (*params.ChainConfig, common.Hash, error) {
 	if genesis != nil && genesis.Config == nil {
-		return params.AllScryptProtocolChanges, common.Hash{}, errGenesisNoConfig
+		return params.ZscDPoSProtocolChanges, common.Hash{}, errGenesisNoConfig
 	}
 	// Just commit the new block if there is no stored genesis block.
 	stored := rawdb.ReadCanonicalHash(db, 0)
@@ -219,7 +219,7 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, genesis *Genesis, override
 	// Special case: don't change the existing config of a non-mainnet chain if no new
 	// config is supplied. These chains would get AllProtocolChanges (and a compat error)
 	// if we just continued here.
-	if genesis == nil && stored != params.MainnetGenesisHash {
+	if genesis == nil && stored != params.ZSCGenesisHash {
 		return storedcfg, stored, nil
 	}
 
@@ -335,13 +335,12 @@ func GenesisBlockForTesting(db ethdb.Database, addr common.Address, balance *big
 // DefaultGenesisBlock returns the Ethereum main net genesis block.
 func DefaultGenesisBlock() *Genesis {
 	return &Genesis{
-		Config:     params.MainnetChainConfig,
-		Timestamp:  1546531200,
-		Nonce:      312,
-		ExtraData:  hexutil.MustDecode(SipeGenesisBlockExtraData),
-		GasLimit:   50000,
-		Difficulty: big.NewInt(120000),
-		Alloc:      GenesisAlloc{},
+		Config:     params.ZSCChainConfig,
+		Timestamp:  0x5ca03b40,
+		ExtraData:  hexutil.MustDecode(ZSCGenesisExtra),
+		GasLimit:   0x47b760,
+		Difficulty: big.NewInt(1),
+		Alloc:      ZSCGenesisAlloc,
 	}
 }
 

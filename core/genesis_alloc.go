@@ -16,6 +16,11 @@
 
 package core
 
+import (
+	"github.com/simplechain-org/go-simplechain/common"
+	"github.com/simplechain-org/go-simplechain/common/hexutil"
+)
+
 // Constants containing the genesis allocation of built-in genesis blocks.
 // Their content is an RLP-encoded list of (address, balance) tuples.
 // Use mkalloc.go to create/update them.
@@ -317,3 +322,13 @@ const SipeGenesisBlockExtraData = "0x" +
 	"6874506a305762786a756671754f576152444367344253546731317a3676" +
 	"396f39363535354a544c6c49684f44516843464149516853434549556768" +
 	"4346494951685343454955676843464949516853662f5a"
+
+const ZSCGenesisExtra = "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+
+var ZSCGenesisAlloc = GenesisAlloc{
+	common.HexToAddress("34c97e0ca7677081d8052c2cab9439c73053419f"): GenesisAccount{Balance: hexutil.MustDecodeBig("0x753624645e07ee6a800000")},
+	common.HexToAddress("884e01ac2ca8816c86d1f167524ab192898cdcb1"): GenesisAccount{Balance: hexutil.MustDecodeBig("0x152d02c7e14af6800000")},
+	common.HexToAddress("aca71dbe4ed4fe773fce11e691dd522bbad259e1"): GenesisAccount{Balance: hexutil.MustDecodeBig("0x152d02c7e14af6800000")},
+	common.HexToAddress("c4dd76a86e6f59ac9b461a3c3566646a316d5787"): GenesisAccount{Balance: hexutil.MustDecodeBig("0x152d02c7e14af6800000")},
+}
+

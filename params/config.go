@@ -27,6 +27,7 @@ import (
 
 // Genesis hashes to enforce below configs on.
 var (
+	ZSCGenesisHash     = common.HexToHash("0xef13dd9e226dfe2ff9a93be5ab361a0b114177f05451cf8544d324659643bd98")
 	MainnetGenesisHash = common.HexToHash("0xda24a722f45ce6cb3aa7cb735a14b830869142be54ada9f8e2c27c877def648b")
 	TestnetGenesisHash = common.HexToHash("0xfc26e8a96571fab7c359830a0651bcb442cdd63af5927fb1c74e4dddb7b759ae")
 	FoundationAddress  = common.HexToAddress("0x992ec45ae0d2d2fcf97f4417cfd3f80505862fbc")
@@ -47,11 +48,31 @@ var CheckpointOracles = map[common.Hash]*CheckpointOracleConfig{
 }
 
 var (
-	// MainnetChainConfig is the chain parameters to run a node on the main network.
+	// MainnetChainConfig is the chain parameters to run a node on the simplechain main network.
 	MainnetChainConfig = &ChainConfig{
 		ChainID:          big.NewInt(1),
 		SingularityBlock: big.NewInt(3966693),
 		Scrypt:           new(ScryptConfig),
+	}
+
+	// ZSCChainConfig is the chain parameters to run a node on the zsc main network.
+	ZSCChainConfig = &ChainConfig{
+		ChainID:          big.NewInt(20212),
+		SingularityBlock: big.NewInt(0),
+		DPoS:             ZSCDPoSConfig,
+	}
+
+	ZSCDPoSConfig = &DPoSConfig{
+		Period:           3,
+		Epoch:            201600,
+		MaxSignerCount:   21,
+		MinVoterBalance:  new(big.Int).Mul(big.NewInt(100), big.NewInt(Ether)),
+		GenesisTimestamp: 1613793600,
+		SelfVoteSigners: []common.UnprefixedAddress{
+			common.UnprefixedAddress(common.HexToAddress("c4dd76a86e6f59ac9b461a3c3566646a316d5787")),
+			common.UnprefixedAddress(common.HexToAddress("aca71dbe4ed4fe773fce11e691dd522bbad259e1")),
+			common.UnprefixedAddress(common.HexToAddress("884e01ac2ca8816c86d1f167524ab192898cdcb1")),
+		},
 	}
 
 	// MainnetTrustedCheckpoint contains the light client trusted checkpoint for the main network.
@@ -112,6 +133,7 @@ var (
 	AllCliqueProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, nil, &CliqueConfig{Period: 0, Epoch: 30000}, nil, nil, false, nil}
 
 	AllDPoSProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, nil, nil, nil, &DPoSConfig{Period: 3, Epoch: 30000, MaxSignerCount: 21, MinVoterBalance: new(big.Int).Mul(big.NewInt(10000), big.NewInt(1000000000000000000))}, false, nil}
+	ZscDPoSProtocolChanges = &ChainConfig{big.NewInt(20212), big.NewInt(0), nil, nil, nil, nil, ZSCDPoSConfig, false, nil}
 
 	// AllScryptProtocolChanges contains every protocol change (EIPs) introduced
 	// and accepted by the Ethereum core developers into the Scrypt consensus.

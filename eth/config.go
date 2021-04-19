@@ -63,7 +63,7 @@ var DefaultConfig = Config{
 		Blocks:     20,
 		Percentile: 60,
 	},
-	Role:     common.RoleMainChain,
+	Role:     common.RoleSubChain,
 	Istanbul: *istanbul.DefaultConfig,
 }
 

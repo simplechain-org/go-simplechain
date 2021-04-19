@@ -29,6 +29,15 @@ var MainnetBootnodes = []string{
 	"enode://d10c77cbf098819af74c0afba3bdbb991bb72624b0f92ff7c3e1b7282906bbeac0087e77364b5bcb92ef55193c20641e582196e9763116976d0a44fc1d784ff9@118.31.45.65:30312",   // CN3
 }
 
+// ZSCBootnodes are the enode URLs of the P2P bootstrap nodes running on
+// the main ZSC network.
+var ZSCBootnodes = []string{
+	"enode://e28b5ffc0050c609082fd8c1344fc4dfa567d1da86ddbcb72c82ac16a5524031830afe1a9c049ba229cf71f16f0adb21412f1500c2f7b6e2915ffbd09f821efc@47.243.49.5:30301",
+	"enode://4724cd99789d0681a628841b31e5ceb66de5d9c018d8d322552e13c3c7987d3ebaa937c290b552351073b0da159dc395be7f9e4f5227ac87441895f0c19036a9@8.212.13.203:30301",
+	"enode://34573b2144f9379737b747e31cc35dbd94ff8b108b1789253b60cf16a1cf7cca1bc4c53d21772311e7111625ebdf873635a0c06dcb4d83ee93b04a507dc787ff@8.212.13.180:30301",
+	"enode://08878a3d1ea1bc192e9c7e16bf19ae035d97e4618fc0989ba21a800f99d23346c798a1a2a010f055a52a1701342de1b8fd329cdee0ca698276f20fb013dabdfa@101.132.158.32:30301",
+}
+
 // TestnetBootnodes are the enode URLs of the P2P bootstrap nodes running on the
 // test network.
 var TestnetBootnodes = []string{
