@@ -241,6 +241,8 @@ func (g *Genesis) configOrDefault(ghash common.Hash) *params.ChainConfig {
 	switch {
 	case g != nil:
 		return g.Config
+	case ghash == params.ZSCGenesisHash:
+		return params.ZSCChainConfig
 	case ghash == params.MainnetGenesisHash:
 		return params.MainnetChainConfig
 	case ghash == params.TestnetGenesisHash:
