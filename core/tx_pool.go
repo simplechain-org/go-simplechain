@@ -229,14 +229,15 @@ func (config *TxPoolConfig) sanitize() TxPoolConfig {
 // current state) and future transactions. Transactions move between those
 // two states over time as they are received and processed.
 type TxPool struct {
-	config      TxPoolConfig
-	chainconfig *params.ChainConfig
-	chain       blockChain
-	gasPrice    *big.Int
-	txFeed      event.Feed
-	scope       event.SubscriptionScope
-	signer      types.Signer
-	mu          sync.RWMutex
+	config       TxPoolConfig
+	chainconfig  *params.ChainConfig
+	chain        blockChain
+	gasPrice     *big.Int
+	txFeed       event.Feed
+	scope        event.SubscriptionScope
+	signer       types.Signer
+	signerLocker sync.RWMutex
+	mu           sync.RWMutex
 
 	singularity bool // Fork indicator whether we are in the singularity stage.
 
@@ -260,6 +261,7 @@ type TxPool struct {
 	reorgDoneCh     chan chan struct{}
 	reorgShutdownCh chan struct{}  // requests shutdown of scheduleReorgLoop
 	wg              sync.WaitGroup // tracks loop, scheduleReorgLoop
+	chainID         *big.Int
 }
 
 type txpoolResetRequest struct {
@@ -281,7 +283,7 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		pending:         make(map[common.Address]*txList),
 		queue:           make(map[common.Address]*txList),
 		beats:           make(map[common.Address]time.Time),
-		all:             newTxLookup(), //todo 参数传入
+		all:             newTxLookup(),
 		chainHeadCh:     make(chan ChainHeadEvent, chainHeadChanSize),
 		reqResetCh:      make(chan *txpoolResetRequest),
 		reqPromoteCh:    make(chan *accountSet),
@@ -289,6 +291,7 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		reorgDoneCh:     make(chan chan struct{}),
 		reorgShutdownCh: make(chan struct{}),
 		gasPrice:        new(big.Int).SetUint64(config.PriceLimit),
+		chainID:         chainconfig.ChainID,
 	}
 	pool.locals = newAccountSet(pool.signer)
 	for _, addr := range config.Locals {
@@ -348,8 +351,12 @@ func (pool *TxPool) loop() {
 			if ev.Block != nil {
 				pool.requestReset(head.Header(), ev.Block.Header())
 				head = ev.Block
+				if pool.chainID.Cmp(pool.chainconfig.GetChainID(head.Number())) != 0 {
+					pool.signerLocker.Lock()
+					pool.signer = types.MakeSigner(pool.chainconfig, head.Number())
+					pool.signerLocker.Unlock()
+				}
 			}
-
 		// System shutdown.
 		case <-pool.chainHeadSub.Err():
 			close(pool.reorgShutdownCh)
@@ -542,6 +549,8 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	if pool.currentMaxGas < tx.Gas() {
 		return ErrGasLimit
 	}
+	pool.signerLocker.RLock()
+	defer pool.signerLocker.RUnlock()
 	// Make sure the transaction is signed properly
 	from, err := types.Sender(pool.signer, tx)
 	if err != nil {
@@ -593,7 +602,9 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 		invalidTxMeter.Mark(1)
 		return false, err
 	}
+	pool.signerLocker.RLock()
 	from, _ := types.Sender(pool.signer, tx) // already validated
+	pool.signerLocker.RUnlock()
 	// If the transaction pool is full, discard underpriced transactions
 	if uint64(pool.all.Count()) >= pool.config.GlobalSlots+pool.config.GlobalQueue {
 		// If the new transaction is underpriced, don't accept it
@@ -661,7 +672,9 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 // Note, this method assumes the pool lock is held!
 func (pool *TxPool) enqueueTx(hash common.Hash, tx *types.Transaction) (bool, error) {
 	// Try to insert the transaction into the future queue
+	pool.signerLocker.RLock()
 	from, _ := types.Sender(pool.signer, tx) // already validated
+	pool.signerLocker.RUnlock()
 	if pool.queue[from] == nil {
 		pool.queue[from] = newTxList(false)
 	}
@@ -810,10 +823,12 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local, sync bool) []error {
 	if len(news) == 0 {
 		return errs
 	}
+	pool.signerLocker.RLock()
 	// Cache senders in transactions before obtaining lock (pool.signer is immutable)
 	for _, tx := range news {
 		types.Sender(pool.signer, tx)
 	}
+	pool.signerLocker.RUnlock()
 	// Process all the new transaction and merge any errors into the original slice
 	pool.mu.Lock()
 	newErrs, dirtyAddrs := pool.addTxsLocked(news, local)
@@ -838,7 +853,9 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local, sync bool) []error {
 // addTxsLocked attempts to queue a batch of transactions if they are valid.
 // The transaction pool lock must be held.
 func (pool *TxPool) addTxsLocked(txs []*types.Transaction, local bool) ([]error, *accountSet) {
+	pool.signerLocker.RLock()
 	dirty := newAccountSet(pool.signer)
+	pool.signerLocker.RUnlock()
 	errs := make([]error, len(txs))
 	for i, tx := range txs {
 		replaced, err := pool.add(tx, local)
@@ -860,7 +877,9 @@ func (pool *TxPool) Status(hashes []common.Hash) []TxStatus {
 		if tx == nil {
 			continue
 		}
+		pool.signerLocker.RLock()
 		from, _ := types.Sender(pool.signer, tx) // already validated
+		pool.signerLocker.RUnlock()
 		pool.mu.RLock()
 		if txList := pool.pending[from]; txList != nil && txList.txs.items[tx.Nonce()] != nil {
 			status[i] = TxStatusPending
@@ -888,7 +907,9 @@ func (pool *TxPool) removeTx(hash common.Hash, outofbound bool) {
 	if tx == nil {
 		return
 	}
+	pool.signerLocker.RLock()
 	addr, _ := types.Sender(pool.signer, tx) // already validated during insertion
+	pool.signerLocker.RUnlock()
 
 	// Remove it from the list of known transactions
 	pool.all.Remove(hash)
@@ -1011,7 +1032,9 @@ func (pool *TxPool) scheduleReorgLoop() {
 		case tx := <-pool.queueTxEventCh:
 			// Queue up the event, but don't schedule a reorg. It's up to the caller to
 			// request one later if they want the events sent.
+			pool.signerLocker.RLock()
 			addr, _ := types.Sender(pool.signer, tx)
+			pool.signerLocker.RUnlock()
 			if _, ok := queuedEvents[addr]; !ok {
 				queuedEvents[addr] = newTxSortedMap()
 			}
@@ -1080,6 +1103,7 @@ func (pool *TxPool) runReorg(done chan struct{}, reset *txpoolResetRequest, dirt
 	}
 	pool.mu.Unlock()
 
+	pool.signerLocker.RLock()
 	for _, tx := range promoted {
 		addr, _ := types.Sender(pool.signer, tx)
 		if _, ok := events[addr]; !ok {
@@ -1087,6 +1111,7 @@ func (pool *TxPool) runReorg(done chan struct{}, reset *txpoolResetRequest, dirt
 		}
 		events[addr].Put(tx)
 	}
+	pool.signerLocker.RUnlock()
 	// Notify subsystems for newly added transactions
 	if len(events) > 0 {
 		var txs []*types.Transaction
@@ -1177,7 +1202,9 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 
 	// Inject any transactions discarded due to reorgs
 	log.Debug("Reinjecting stale transactions", "count", len(reinject))
+	pool.signerLocker.RLock()
 	senderCacher.recover(pool.signer, reinject)
+	pool.signerLocker.RUnlock()
 	pool.addTxsLocked(reinject, false)
 
 	// Update all fork indicator by next pending block number.
