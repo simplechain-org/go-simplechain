@@ -273,13 +273,13 @@ type txpoolResetRequest struct {
 func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain blockChain) *TxPool {
 	// Sanitize the input to ensure no vulnerable gas prices are set
 	config = (&config).sanitize()
-
+	chainID:=chainconfig.GetChainID(chain.CurrentBlock().Number())
 	// Create the transaction pool with its initial settings
 	pool := &TxPool{
 		config:          config,
 		chainconfig:     chainconfig,
 		chain:           chain,
-		signer:          types.NewEIP155Signer(chainconfig.ChainID),
+		signer:          types.NewEIP155Signer(chainID),
 		pending:         make(map[common.Address]*txList),
 		queue:           make(map[common.Address]*txList),
 		beats:           make(map[common.Address]time.Time),
@@ -291,7 +291,7 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		reorgDoneCh:     make(chan chan struct{}),
 		reorgShutdownCh: make(chan struct{}),
 		gasPrice:        new(big.Int).SetUint64(config.PriceLimit),
-		chainID:         chainconfig.ChainID,
+		chainID:         chainID,
 	}
 	pool.locals = newAccountSet(pool.signer)
 	for _, addr := range config.Locals {
@@ -352,9 +352,11 @@ func (pool *TxPool) loop() {
 				pool.requestReset(head.Header(), ev.Block.Header())
 				head = ev.Block
 				if pool.chainID.Cmp(pool.chainconfig.GetChainID(head.Number())) != 0 {
+					log.Info("TxPool","update chain pool.chainID",pool.chainID.String()," will",pool.chainconfig.GetChainID(head.Number()))
 					pool.signerLocker.Lock()
 					pool.signer = types.MakeSigner(pool.chainconfig, head.Number())
 					pool.signerLocker.Unlock()
+					pool.chainID=big.NewInt(0).SetBytes(pool.chainconfig.InterconnectChainID.Bytes())
 				}
 			}
 		// System shutdown.
