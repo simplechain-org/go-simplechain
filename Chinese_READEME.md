@@ -75,4 +75,7 @@ https://github.com/zsc-ZTChain/go-zsc-chain/releases/download/v1.0.1/sipe-v1.0.1
 
 执行命令：./sipe attach data/subsipe.ipc 进入控制台后操作如下命令：
 
+```
 enode://aae7b221788933cecea58c76ce51c7b9fb4ebf4dbbeeacfcd22b527a0460c602b99c65d6d31ee08795790f19c432ed9fa023f66424d781ac7a44ca30b8b4526f@47.108.115.210:30307
+
+```
