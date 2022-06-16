@@ -428,3 +428,5 @@ func (c *ChainConfig) Rules(num *big.Int) Rules {
 		IsSingularity: c.IsSingularity(num),
 	}
 }
+
+

@@ -1,18 +1,18 @@
-// Copyright 2016 The go-simplechain Authors
-// This file is part of the go-simplechain library.
+// Copyright 2016 The go-ethereum Authors
+// This file is part of the go-ethereum library.
 //
-// The go-simplechain library is free software: you can redistribute it and/or modify
+// The go-ethereum library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// The go-simplechain library is distributed in the hope that it will be useful,
+// The go-ethereum library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the go-simplechain library. If not, see <http://www.gnu.org/licenses/>.
+// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
 package abi
 
@@ -32,7 +32,7 @@ type Event struct {
 	// the raw name and a suffix will be added in the case of a event overload.
 	//
 	// e.g.
-	// There are two events have same name:
+	// These are two events that have the same name:
 	// * foo(int,int)
 	// * foo(uint,uint)
 	// The event name of the first one wll be resolved as foo while the second one
@@ -42,36 +42,59 @@ type Event struct {
 	RawName   string
 	Anonymous bool
 	Inputs    Arguments
+	str       string
+	// Sig contains the string signature according to the ABI spec.
+	// e.g.	 event foo(uint32 a, int b) = "foo(uint32,int256)"
+	// Please note that "int" is substitute for its canonical representation "int256"
+	Sig string
+	// ID returns the canonical representation of the event's signature used by the
+	// abi definition to identify event names and types.
+	ID common.Hash
+}
+
+// NewEvent creates a new Event.
+// It sanitizes the input arguments to remove unnamed arguments.
+// It also precomputes the id, signature and string representation
+// of the event.
+func NewEvent(name, rawName string, anonymous bool, inputs Arguments) Event {
+	// sanitize inputs to remove inputs without names
+	// and precompute string and sig representation.
+	names := make([]string, len(inputs))
+	types := make([]string, len(inputs))
+	for i, input := range inputs {
+		if input.Name == "" {
+			inputs[i] = Argument{
+				Name:    fmt.Sprintf("arg%d", i),
+				Indexed: input.Indexed,
+				Type:    input.Type,
+			}
+		} else {
+			inputs[i] = input
+		}
+		// string representation
+		names[i] = fmt.Sprintf("%v %v", input.Type, inputs[i].Name)
+		if input.Indexed {
+			names[i] = fmt.Sprintf("%v indexed %v", input.Type, inputs[i].Name)
+		}
+		// sig representation
+		types[i] = input.Type.String()
+	}
+
+	str := fmt.Sprintf("event %v(%v)", rawName, strings.Join(names, ", "))
+	sig := fmt.Sprintf("%v(%v)", rawName, strings.Join(types, ","))
+	id := common.BytesToHash(crypto.Keccak256([]byte(sig)))
+
+	return Event{
+		Name:      name,
+		RawName:   rawName,
+		Anonymous: anonymous,
+		Inputs:    inputs,
+		str:       str,
+		Sig:       sig,
+		ID:        id,
+	}
 }
 
 func (e Event) String() string {
-	inputs := make([]string, len(e.Inputs))
-	for i, input := range e.Inputs {
-		inputs[i] = fmt.Sprintf("%v %v", input.Type, input.Name)
-		if input.Indexed {
-			inputs[i] = fmt.Sprintf("%v indexed %v", input.Type, input.Name)
-		}
-	}
-	return fmt.Sprintf("event %v(%v)", e.RawName, strings.Join(inputs, ", "))
-}
-
-// Sig returns the event string signature according to the ABI spec.
-//
-// Example
-//
-//     event foo(uint32 a, int b) = "foo(uint32,int256)"
-//
-// Please note that "int" is substitute for its canonical representation "int256"
-func (e Event) Sig() string {
-	types := make([]string, len(e.Inputs))
-	for i, input := range e.Inputs {
-		types[i] = input.Type.String()
-	}
-	return fmt.Sprintf("%v(%v)", e.RawName, strings.Join(types, ","))
-}
-
-// ID returns the canonical representation of the event's signature used by the
-// abi definition to identify event names and types.
-func (e Event) ID() common.Hash {
-	return common.BytesToHash(crypto.Keccak256([]byte(e.Sig())))
+	return e.str
 }

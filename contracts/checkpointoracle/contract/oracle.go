@@ -154,8 +154,8 @@ func bindCheckpointOracle(address common.Address, caller bind.ContractCaller, tr
 // sets the output to result. The result type might be a single field for simple
 // returns, a slice of interfaces for anonymous returns and a struct for named
 // returns.
-func (_CheckpointOracle *CheckpointOracleRaw) Call(opts *bind.CallOpts, result interface{}, method string, params ...interface{}) error {
-	return _CheckpointOracle.Contract.CheckpointOracleCaller.contract.Call(opts, result, method, params...)
+func (_CheckpointOracle *CheckpointOracleRaw) Call(opts *bind.CallOpts, result *[]interface{}, method string, params ...interface{}) error {
+	return _CheckpointOracle.Contract.CheckpointOracleCaller.contract.Call(opts,result, method, params...)
 }
 
 // Transfer initiates a plain transaction to move funds to the contract, calling
@@ -173,7 +173,7 @@ func (_CheckpointOracle *CheckpointOracleRaw) Transact(opts *bind.TransactOpts, 
 // sets the output to result. The result type might be a single field for simple
 // returns, a slice of interfaces for anonymous returns and a struct for named
 // returns.
-func (_CheckpointOracle *CheckpointOracleCallerRaw) Call(opts *bind.CallOpts, result interface{}, method string, params ...interface{}) error {
+func (_CheckpointOracle *CheckpointOracleCallerRaw) Call(opts *bind.CallOpts, result *[]interface{}, method string, params ...interface{}) error {
 	return _CheckpointOracle.Contract.contract.Call(opts, result, method, params...)
 }
 
@@ -192,12 +192,16 @@ func (_CheckpointOracle *CheckpointOracleTransactorRaw) Transact(opts *bind.Tran
 //
 // Solidity: function GetAllAdmin() constant returns(address[])
 func (_CheckpointOracle *CheckpointOracleCaller) GetAllAdmin(opts *bind.CallOpts) ([]common.Address, error) {
-	var (
-		ret0 = new([]common.Address)
-	)
-	out := ret0
-	err := _CheckpointOracle.contract.Call(opts, out, "GetAllAdmin")
-	return *ret0, err
+	var out []interface{}
+	err := _CheckpointOracle.contract.Call(opts, &out, "GetAllAdmin")
+
+	if err != nil {
+		return *new([]common.Address), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new([]common.Address)).(*[]common.Address)
+
+	return out0, err
 }
 
 // GetAllAdmin is a free data retrieval call binding the contract method 0x45848dfc.

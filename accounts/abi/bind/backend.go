@@ -1,18 +1,18 @@
-// Copyright 2015 The go-simplechain Authors
-// This file is part of the go-simplechain library.
+// Copyright 2015 The go-ethereum Authors
+// This file is part of the go-ethereum library.
 //
-// The go-simplechain library is free software: you can redistribute it and/or modify
+// The go-ethereum library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// The go-simplechain library is distributed in the hope that it will be useful,
+// The go-ethereum library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the go-simplechain library. If not, see <http://www.gnu.org/licenses/>.
+// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
 package bind
 
@@ -41,7 +41,7 @@ var (
 	ErrNoCodeAfterDeploy = errors.New("no contract code after deployment")
 )
 
-// ContractCaller defines the methods needed to allow operating with contract on a read
+// ContractCaller defines the methods needed to allow operating with a contract on a read
 // only basis.
 type ContractCaller interface {
 	// CodeAt returns the code of the given account. This is needed to differentiate
@@ -58,12 +58,12 @@ type ContractCaller interface {
 type PendingContractCaller interface {
 	// PendingCodeAt returns the code of the given account in the pending state.
 	PendingCodeAt(ctx context.Context, contract common.Address) ([]byte, error)
-	// PendingCallContract executes an simplechain contract call against the pending state.
+	// PendingCallContract executes an Ethereum contract call against the pending state.
 	PendingCallContract(ctx context.Context, call simplechain.CallMsg) ([]byte, error)
 }
 
-// ContractTransactor defines the methods needed to allow operating with contract
-// on a write only basis. Beside the transacting method, the remainder are helpers
+// ContractTransactor defines the methods needed to allow operating with a contract
+// on a write only basis. Besides the transacting method, the remainder are helpers
 // used when the user does not provide some needed values, but rather leaves it up
 // to the transactor to decide.
 type ContractTransactor interface {

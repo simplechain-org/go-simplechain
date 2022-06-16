@@ -1,23 +1,24 @@
-// Copyright 2016 The go-simplechain Authors
-// This file is part of the go-simplechain library.
+// Copyright 2016 The go-ethereum Authors
+// This file is part of the go-ethereum library.
 //
-// The go-simplechain library is free software: you can redistribute it and/or modify
+// The go-ethereum library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// The go-simplechain library is distributed in the hope that it will be useful,
+// The go-ethereum library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the go-simplechain library. If not, see <http://www.gnu.org/licenses/>.
+// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
 package bind_test
 
 import (
 	"context"
+	"errors"
 	"math/big"
 	"testing"
 	"time"
@@ -84,7 +85,7 @@ func TestWaitDeployed(t *testing.T) {
 		select {
 		case <-mined:
 			if err != test.wantErr {
-				t.Errorf("test %q: error mismatch: got %q, want %q", name, err, test.wantErr)
+				t.Errorf("test %q: error mismatch: want %q, got %q", name, test.wantErr, err)
 			}
 			if address != test.wantAddress {
 				t.Errorf("test %q: unexpected contract address %s", name, address.Hex())
@@ -93,4 +94,41 @@ func TestWaitDeployed(t *testing.T) {
 			t.Errorf("test %q: timeout", name)
 		}
 	}
+}
+
+func TestWaitDeployedCornerCases(t *testing.T) {
+	backend := backends.NewSimulatedBackend(
+		core.GenesisAlloc{
+			crypto.PubkeyToAddress(testKey.PublicKey): {Balance: big.NewInt(10000000000)},
+		},
+		10000000,
+	)
+	defer backend.Close()
+
+	// Create a transaction to an account.
+	code := "6060604052600a8060106000396000f360606040526008565b00"
+	tx := types.NewTransaction(0, common.HexToAddress("0x01"), big.NewInt(0), 3000000, big.NewInt(1), common.FromHex(code))
+	tx, _ = types.SignTx(tx, types.HomesteadSigner{}, testKey)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	backend.SendTransaction(ctx, tx)
+	backend.Commit()
+	notContentCreation := errors.New("tx is not contract creation")
+	if _, err := bind.WaitDeployed(ctx, backend, tx); err.Error() != notContentCreation.Error() {
+		t.Errorf("error missmatch: want %q, got %q, ", notContentCreation, err)
+	}
+
+	// Create a transaction that is not mined.
+	tx = types.NewContractCreation(1, big.NewInt(0), 3000000, big.NewInt(1), common.FromHex(code))
+	tx, _ = types.SignTx(tx, types.HomesteadSigner{}, testKey)
+
+	go func() {
+		contextCanceled := errors.New("context canceled")
+		if _, err := bind.WaitDeployed(ctx, backend, tx); err.Error() != contextCanceled.Error() {
+			t.Errorf("error missmatch: want %q, got %q, ", contextCanceled, err)
+		}
+	}()
+
+	backend.SendTransaction(ctx, tx)
+	cancel()
 }

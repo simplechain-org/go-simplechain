@@ -217,3 +217,10 @@ func Exp(base, exponent *big.Int) *big.Int {
 	}
 	return result
 }
+
+// U256Bytes converts a big Int into a 256bit EVM number.
+// This operation is destructive.
+// base ethereum v1.10.3
+func U256Bytes(n *big.Int) []byte {
+	return PaddedBigBytes(U256(n), 32)
+}

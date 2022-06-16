@@ -96,3 +96,29 @@ func Transfer(db vm.StateDB, sender, recipient common.Address, amount *big.Int) 
 	db.SubBalance(sender, amount)
 	db.AddBalance(recipient, amount)
 }
+func NewEVMTxContext(msg Message) vm.TxContext {
+	return vm.TxContext{
+		Origin:   msg.From(),
+		GasPrice: new(big.Int).Set(msg.GasPrice()),
+	}
+}
+// NewEVMBlockContext creates a new context for use in the EVM.
+func NewEVMBlockContext(header *types.Header, chain ChainContext, author *common.Address) vm.BlockContext {
+	// If we don't have an explicit author (i.e. not mining), extract from the header
+	var beneficiary common.Address
+	if author == nil {
+		beneficiary, _ = chain.Engine().Author(header) // Ignore error, we're past header validation
+	} else {
+		beneficiary = *author
+	}
+	return vm.BlockContext{
+		CanTransfer: CanTransfer,
+		Transfer:    Transfer,
+		GetHash:     GetHashFn(header, chain),
+		Coinbase:    beneficiary,
+		BlockNumber: new(big.Int).Set(header.Number),
+		Time:        new(big.Int).SetUint64(header.Time),
+		Difficulty:  new(big.Int).Set(header.Difficulty),
+		GasLimit:    header.GasLimit,
+	}
+}

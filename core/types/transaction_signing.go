@@ -251,3 +251,12 @@ func DeriveChainId(v *big.Int) *big.Int {
 	v = new(big.Int).Sub(v, big.NewInt(35))
 	return v.Div(v, big.NewInt(2))
 }
+
+// LatestSignerForChainID
+// base ethereum v1.10.3
+func LatestSignerForChainID(chainID *big.Int) Signer {
+	if chainID == nil {
+		return HomesteadSigner{}
+	}
+	return NewEIP155Signer(chainID)
+}
