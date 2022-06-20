@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/simplechain-org/go-simplechain/common/si"
 	"math/big"
 	"sync"
 	"time"
@@ -561,15 +560,7 @@ func (args *FilterCriteria) UnmarshalJSON(data []byte) error {
 }
 
 func decodeAddress(s string) (common.Address, error) {
-	//b, err := hexutil.Decode(s)
-	var b []byte
-	var err error
-	if len(s) >= 2 && s[0] == 'S' && (s[1] == 'i' || s[1] == 'I') {
-		b, err = si.Decode(s)
-	}
-	if len(s) >= 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X') {
-		b, err = hexutil.Decode(s)
-	}
+	b, err := hexutil.Decode(s)
 	if err == nil && len(b) != common.AddressLength {
 		err = fmt.Errorf("hex has invalid length %d after decoding; expected %d for address", len(b), common.AddressLength)
 	}

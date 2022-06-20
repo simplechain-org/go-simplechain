@@ -22,7 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/simplechain-org/go-simplechain/common/si"
+
 	"math/big"
 	"math/rand"
 	"reflect"
@@ -272,20 +272,18 @@ func (a *Address) SetBytes(b []byte) {
 
 // MarshalText returns the hex representation of a.
 func (a Address) MarshalText() ([]byte, error) {
-	//return hexutil.Bytes(a[:]).MarshalText()
-	return si.MarshalText(a[:])
+	return hexutil.Bytes(a[:]).MarshalText()
+
 }
 
 // UnmarshalText parses a hash in hex syntax.
 func (a *Address) UnmarshalText(input []byte) error {
-	//return hexutil.UnmarshalFixedText("Address", input, a[:])
-	return si.UnmarshalFixedText("Si address",input, a[:])
+	return hexutil.UnmarshalFixedText("Address", input, a[:])
 }
 
 // UnmarshalJSON parses a hash in hex syntax.
 func (a *Address) UnmarshalJSON(input []byte) error {
-	//return hexutil.UnmarshalFixedJSON(addressT, input, a[:])
-	return si.UnmarshalFixedJSON(addressT, input, a[:])
+	return hexutil.UnmarshalFixedJSON(addressT, input, a[:])
 }
 
 // Scan implements Scanner for database/sql.
