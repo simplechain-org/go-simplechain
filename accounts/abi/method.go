@@ -99,7 +99,7 @@ func NewMethod(name string, rawName string, funType FunctionType, mutability str
 	)
 	if funType == Function {
 		sig = fmt.Sprintf("%v(%v)", rawName, strings.Join(types, ","))
-		id = crypto.Keccak256([]byte(sig))[:4]
+		id = crypto.Sha3Keccak256([]byte(sig))[:4]
 	}
 	// Extract meaningful state mutability of solidity method.
 	// If it's default value, never print it.
