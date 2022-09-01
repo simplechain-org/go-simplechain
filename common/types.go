@@ -28,8 +28,8 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/mixbee/mixbee-crypto/sm3"
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
-	"golang.org/x/crypto/sha3"
 )
 
 // Lengths of hashes and addresses in bytes.
@@ -210,7 +210,7 @@ func (a Address) Hash() Hash { return BytesToHash(a[:]) }
 // Hex returns an EIP55-compliant hex string representation of the address.
 func (a Address) Hex() string {
 	unchecksummed := hex.EncodeToString(a[:])
-	sha := sha3.NewLegacyKeccak256()
+	sha := sm3.New()
 	sha.Write([]byte(unchecksummed))
 	hash := sha.Sum(nil)
 
@@ -234,9 +234,9 @@ func (a Address) String() string {
 	return a.Hex()
 }
 
-func(a Address) Si() string {
+func (a Address) Si() string {
 	unchecksummed := hex.EncodeToString(a[:])
-	sha := sha3.NewLegacyKeccak256()
+	sha := sm3.New()
 	sha.Write([]byte(unchecksummed))
 	hash := sha.Sum(nil)
 

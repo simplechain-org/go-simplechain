@@ -26,10 +26,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/mixbee/mixbee-crypto/sm3"
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
 	"github.com/simplechain-org/go-simplechain/rlp"
-	"golang.org/x/crypto/sha3"
 )
 
 var (
@@ -138,7 +138,7 @@ func (h *Header) SanityCheck() error {
 }
 
 func rlpHash(x interface{}) (h common.Hash) {
-	hw := sha3.NewLegacyKeccak256()
+	hw := sm3.New()
 	rlp.Encode(hw, x)
 	hw.Sum(h[:0])
 	return h

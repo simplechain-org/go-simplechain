@@ -21,11 +21,11 @@ import (
 	"fmt"
 	"math/big"
 
+	"github.com/mixbee/mixbee-crypto/sm3"
 	ethereum "github.com/simplechain-org/go-simplechain"
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/core/types"
 	"github.com/simplechain-org/go-simplechain/event"
-	"golang.org/x/crypto/sha3"
 )
 
 // Account represents an Ethereum account located at a specific location defined
@@ -195,7 +195,7 @@ func TextHash(data []byte) []byte {
 // This gives context to the signed message and prevents signing of transactions.
 func TextAndHash(data []byte) ([]byte, string) {
 	msg := fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(data), string(data))
-	hasher := sha3.NewLegacyKeccak256()
+	hasher := sm3.New()
 	hasher.Write([]byte(msg))
 	return hasher.Sum(nil), msg
 }
