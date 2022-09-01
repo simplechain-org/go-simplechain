@@ -27,7 +27,6 @@ package keystore
 
 import (
 	"bytes"
-	"crypto/aes"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -38,6 +37,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/mixbee/mixbee-crypto/sm4"
 	"github.com/pborman/uuid"
 	"github.com/simplechain-org/go-simplechain/accounts"
 	"github.com/simplechain-org/go-simplechain/common"
@@ -130,11 +130,47 @@ func (ks keyStorePassphrase) StoreKey(filename string, key *Key, auth string) er
 	return os.Rename(tmpName, filename)
 }
 
+func (ks keyStorePassphrase) StoreKeyByCA(key *Key, auth string) (*Key, accounts.Account, error) {
+	var a accounts.Account
+	keyjson, err := EncryptKey(key, auth, ks.scryptN, ks.scryptP)
+	if err != nil {
+		return nil, a, err
+	}
+	key, err = DecryptKey(keyjson, auth)
+	if err != nil {
+		return nil, a, err
+	}
+	a = accounts.Account{
+		Address: key.Address,
+		URL:     accounts.URL{Scheme: KeyStoreScheme, Path: ks.JoinPath(keyFileName(key.Address))},
+	}
+	filename := a.URL.Path
+	// Write into temporary file,use simplechain publickey to generate
+	keyjson, err = EncryptKey(key, auth, ks.scryptN, ks.scryptP)
+	if err != nil {
+		return nil, a, err
+	}
+	tmpName, err := writeTemporaryKeyFile(filename, keyjson)
+	if err != nil {
+		return nil, a, err
+	}
+	return key, a, os.Rename(tmpName, filename)
+}
+
 func (ks keyStorePassphrase) JoinPath(filename string) string {
 	if filepath.IsAbs(filename) {
 		return filename
 	}
 	return filepath.Join(ks.keysDirPath, filename)
+}
+
+func (ks keyStorePassphrase) ReadCert(filename string) ([]byte, error) {
+	filePath := filepath.Join(ks.keysDirPath, filename)
+	fileBytes, err := ioutil.ReadFile(filePath)
+	if err != nil {
+		return nil, err
+	}
+	return fileBytes, nil
 }
 
 // Encryptdata encrypts the data given as 'data' with the password 'auth'.
@@ -150,11 +186,11 @@ func EncryptDataV3(data, auth []byte, scryptN, scryptP int) (CryptoJSON, error) 
 	}
 	encryptKey := derivedKey[:16]
 
-	iv := make([]byte, aes.BlockSize) // 16
+	iv := make([]byte, sm4.BlockSize) // 16
 	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
 		panic("reading from crypto/rand failed: " + err.Error())
 	}
-	cipherText, err := aesCTRXOR(encryptKey, data, iv)
+	cipherText, err := sm4CTRXOR(encryptKey, data, iv)
 	if err != nil {
 		return CryptoJSON{}, err
 	}
@@ -171,7 +207,7 @@ func EncryptDataV3(data, auth []byte, scryptN, scryptP int) (CryptoJSON, error) 
 	}
 
 	cryptoStruct := CryptoJSON{
-		Cipher:       "aes-128-ctr",
+		Cipher:       "sm4-128-ctr",
 		CipherText:   hex.EncodeToString(cipherText),
 		CipherParams: cipherParamsJSON,
 		KDF:          keyHeaderKDF,
@@ -237,7 +273,7 @@ func DecryptKey(keyjson []byte, auth string) (*Key, error) {
 }
 
 func DecryptDataV3(cryptoJson CryptoJSON, auth string) ([]byte, error) {
-	if cryptoJson.Cipher != "aes-128-ctr" {
+	if cryptoJson.Cipher != "sm4-128-ctr" {
 		return nil, fmt.Errorf("cipher not supported: %v", cryptoJson.Cipher)
 	}
 	mac, err := hex.DecodeString(cryptoJson.MAC)
@@ -265,7 +301,7 @@ func DecryptDataV3(cryptoJson CryptoJSON, auth string) ([]byte, error) {
 		return nil, ErrDecrypt
 	}
 
-	plainText, err := aesCTRXOR(derivedKey[:16], cipherText, iv)
+	plainText, err := sm4CTRXOR(derivedKey[:16], cipherText, iv)
 	if err != nil {
 		return nil, err
 	}
@@ -311,7 +347,7 @@ func decryptKeyV1(keyProtected *encryptedKeyJSONV1, auth string) (keyBytes []byt
 		return nil, nil, ErrDecrypt
 	}
 
-	plainText, err := aesCBCDecrypt(crypto.Keccak256(derivedKey[:16])[:16], cipherText, iv)
+	plainText, err := sm4CBCDecrypt(crypto.Keccak256(derivedKey[:16])[:16], cipherText, iv)
 	if err != nil {
 		return nil, nil, err
 	}

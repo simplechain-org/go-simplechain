@@ -17,7 +17,6 @@
 package keystore
 
 import (
-	"crypto/aes"
 	"crypto/cipher"
 	"crypto/sha256"
 	"encoding/hex"
@@ -25,6 +24,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/mixbee/mixbee-crypto/sm4"
 	"github.com/pborman/uuid"
 	"github.com/simplechain-org/go-simplechain/accounts"
 	"github.com/simplechain-org/go-simplechain/crypto"
@@ -78,7 +78,7 @@ func decryptPreSaleKey(fileContent []byte, password string) (key *Key, err error
 	*/
 	passBytes := []byte(password)
 	derivedKey := pbkdf2.Key(passBytes, passBytes, 2000, 16, sha256.New)
-	plainText, err := aesCBCDecrypt(derivedKey, cipherText, iv)
+	plainText, err := sm4CBCDecrypt(derivedKey, cipherText, iv)
 	if err != nil {
 		return nil, err
 	}
@@ -98,24 +98,51 @@ func decryptPreSaleKey(fileContent []byte, password string) (key *Key, err error
 	return key, err
 }
 
-func aesCTRXOR(key, inText, iv []byte) ([]byte, error) {
-	// AES-128 is selected due to size of encryptKey.
-	aesBlock, err := aes.NewCipher(key)
+// func aesCTRXOR(key, inText, iv []byte) ([]byte, error) {
+// 	// AES-128 is selected due to size of encryptKey.
+// 	aesBlock, err := aes.NewCipher(key)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	stream := cipher.NewCTR(aesBlock, iv)
+// 	outText := make([]byte, len(inText))
+// 	stream.XORKeyStream(outText, inText)
+// 	return outText, err
+// }
+
+func sm4CTRXOR(key, inText, iv []byte) ([]byte, error) {
+	// sm4-128 is selected due to size of encryptKey.
+	sm4Block, err := sm4.NewCipher(key)
 	if err != nil {
 		return nil, err
 	}
-	stream := cipher.NewCTR(aesBlock, iv)
+	stream := cipher.NewCTR(sm4Block, iv)
 	outText := make([]byte, len(inText))
 	stream.XORKeyStream(outText, inText)
 	return outText, err
 }
 
-func aesCBCDecrypt(key, cipherText, iv []byte) ([]byte, error) {
-	aesBlock, err := aes.NewCipher(key)
+// func aesCBCDecrypt(key, cipherText, iv []byte) ([]byte, error) {
+// 	aesBlock, err := aes.NewCipher(key)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	decrypter := cipher.NewCBCDecrypter(aesBlock, iv)
+// 	paddedPlaintext := make([]byte, len(cipherText))
+// 	decrypter.CryptBlocks(paddedPlaintext, cipherText)
+// 	plaintext := pkcs7Unpad(paddedPlaintext)
+// 	if plaintext == nil {
+// 		return nil, ErrDecrypt
+// 	}
+// 	return plaintext, err
+// }
+
+func sm4CBCDecrypt(key, cipherText, iv []byte) ([]byte, error) {
+	sm4Block, err := sm4.NewCipher(key)
 	if err != nil {
 		return nil, err
 	}
-	decrypter := cipher.NewCBCDecrypter(aesBlock, iv)
+	decrypter := cipher.NewCBCDecrypter(sm4Block, iv)
 	paddedPlaintext := make([]byte, len(cipherText))
 	decrypter.CryptBlocks(paddedPlaintext, cipherText)
 	plaintext := pkcs7Unpad(paddedPlaintext)
@@ -132,7 +159,7 @@ func pkcs7Unpad(in []byte) []byte {
 	}
 
 	padding := in[len(in)-1]
-	if int(padding) > len(in) || padding > aes.BlockSize {
+	if int(padding) > len(in) || padding > sm4.BlockSize {
 		return nil
 	} else if padding == 0 {
 		return nil
