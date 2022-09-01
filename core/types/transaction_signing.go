@@ -123,7 +123,7 @@ func (s EIP155Signer) Sender(tx *Transaction) (common.Address, error) {
 	}
 	V := new(big.Int).Sub(tx.data.V, s.chainIdMul)
 	V.Sub(V, big8)
-	return RecoverPlain(s.Hash(tx), tx.data.R, tx.data.S, V, true)
+	return sender(tx)
 }
 
 // SignatureValues returns signature values. This signature
@@ -170,7 +170,7 @@ func (hs HomesteadSigner) SignatureValues(tx *Transaction, sig []byte) (r, s, v 
 }
 
 func (hs HomesteadSigner) Sender(tx *Transaction) (common.Address, error) {
-	return RecoverPlain(hs.Hash(tx), tx.data.R, tx.data.S, tx.data.V, true)
+	return sender(tx)
 }
 
 type FrontierSigner struct{}
@@ -206,7 +206,7 @@ func (fs FrontierSigner) Hash(tx *Transaction) common.Hash {
 }
 
 func (fs FrontierSigner) Sender(tx *Transaction) (common.Address, error) {
-	return RecoverPlain(fs.Hash(tx), tx.data.R, tx.data.S, tx.data.V, false)
+	return sender(tx)
 }
 
 // func RecoverPlain(sighash common.Hash, R, S, Vb *big.Int, homestead bool) (common.Address, error) {
