@@ -102,7 +102,6 @@ It is possible to refer to a file containing the message.`,
 	Action: func(ctx *cli.Context) error {
 		addressStr := ctx.Args().First()
 		signatureHex := ctx.Args().Get(1)
-		message := getMessage(ctx, 2)
 
 		if !common.IsHexAddress(addressStr) {
 			utils.Fatalf("Invalid address: %s", addressStr)
@@ -113,7 +112,7 @@ It is possible to refer to a file containing the message.`,
 			utils.Fatalf("Signature encoding is not hexadecimal: %v", err)
 		}
 
-		recoveredPubkey, err := crypto.SigToPub(signHash(message), signature)
+		recoveredPubkey, err := crypto.SigToPub(signature)
 		if err != nil || recoveredPubkey == nil {
 			utils.Fatalf("Signature verification failed: %v", err)
 		}

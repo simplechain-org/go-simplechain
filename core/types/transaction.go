@@ -54,9 +54,10 @@ type txdata struct {
 	Payload      []byte          `json:"input"    gencodec:"required"`
 
 	// Signature values
-	V *big.Int `json:"v" gencodec:"required"`
-	R *big.Int `json:"r" gencodec:"required"`
-	S *big.Int `json:"s" gencodec:"required"`
+	CmprPub []byte   `json:"pub" gencodec:"required"`
+	V       *big.Int `json:"v" gencodec:"required"`
+	R       *big.Int `json:"r" gencodec:"required"`
+	S       *big.Int `json:"s" gencodec:"required"`
 
 	// This is only used when marshaling to JSON.
 	Hash *common.Hash `json:"hash" rlp:"-"`
@@ -68,6 +69,7 @@ type txdataMarshaling struct {
 	GasLimit     hexutil.Uint64
 	Amount       *hexutil.Big
 	Payload      hexutil.Bytes
+	CmprPub      hexutil.Bytes
 	V            *hexutil.Big
 	R            *hexutil.Big
 	S            *hexutil.Big
@@ -253,6 +255,13 @@ func (tx *Transaction) WithSignature(signer Signer, sig []byte) (*Transaction, e
 		time: tx.time,
 	}
 	cpy.data.R, cpy.data.S, cpy.data.V = r, s, v
+
+	pub, e := cmprPub(sig)
+	if e != nil {
+		return nil, e
+	}
+	cpy.data.CmprPub = pub
+
 	return cpy, nil
 }
 

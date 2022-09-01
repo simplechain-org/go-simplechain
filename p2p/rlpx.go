@@ -394,13 +394,7 @@ func (h *encHandshake) handleAuthMsg(msg *authMsgV4, prv *ecdsa.PrivateKey) erro
 		}
 	}
 
-	// Check the signature.
-	token, err := h.staticSharedSecret(prv)
-	if err != nil {
-		return err
-	}
-	signedMsg := xor(token, h.initNonce)
-	remoteRandomPub, err := crypto.Ecrecover(signedMsg, msg.Signature[:])
+	remoteRandomPub, err := crypto.Ecrecover(msg.Signature[:])
 	if err != nil {
 		return err
 	}

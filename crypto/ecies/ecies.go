@@ -39,6 +39,7 @@ import (
 	"hash"
 	"io"
 	"math/big"
+	"reflect"
 )
 
 var (
@@ -119,7 +120,7 @@ func MaxSharedKeyLength(pub *PublicKey) int {
 
 // ECDH key agreement method used to establish secret keys for encryption.
 func (prv *PrivateKey) GenerateShared(pub *PublicKey, skLen, macLen int) (sk []byte, err error) {
-	if prv.PublicKey.Curve != pub.Curve {
+	if !reflect.DeepEqual(prv.PublicKey.Curve, pub.Curve) {
 		return nil, ErrInvalidCurve
 	}
 	if skLen+macLen > MaxSharedKeyLength(pub) {

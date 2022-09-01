@@ -28,14 +28,18 @@ import (
 	"math/big"
 	"os"
 
+	"github.com/mixbee/mixbee-crypto/sm2"
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/math"
+	"github.com/simplechain-org/go-simplechain/crypto/sm"
 	"github.com/simplechain-org/go-simplechain/rlp"
 	"golang.org/x/crypto/sha3"
 )
 
+const SignatureValueLen = 64 + 1
+
 //SignatureLength indicates the byte length required to carry a signature with recovery id.
-const SignatureLength = 64 + 1 // 64 bytes ECDSA signature + 1 byte recovery id
+const SignatureLength = SignatureValueLen + 33 // 64 bytes ECDSA signature + 1 byte recovery id
 
 // RecoveryIDOffset points to the byte offset within the signature that contains the recovery id.
 const RecoveryIDOffset = 64
@@ -44,14 +48,21 @@ const RecoveryIDOffset = 64
 const DigestLength = 32
 
 var (
-	secp256k1N, _  = new(big.Int).SetString("fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141", 16)
-	secp256k1halfN = new(big.Int).Div(secp256k1N, big.NewInt(2))
+	sm2N = new(big.Int).Set(sm2.SM2P256V1().Params().N)
 )
 
-var errInvalidPubkey = errors.New("invalid secp256k1 public key")
+var errInvalidPubkey = errors.New("invalid p256 public key")
+
+func Keccak256(data ...[]byte) []byte {
+	return sm.Sm3(data...)
+}
+
+func Keccak256Hash(data ...[]byte) (h common.Hash) {
+	return sm.Sm3Hash(data...)
+}
 
 // Keccak256 calculates and returns the Keccak256 hash of the input data.
-func Keccak256(data ...[]byte) []byte {
+func Sha3Keccak256(data ...[]byte) []byte {
 	d := sha3.NewLegacyKeccak256()
 	for _, b := range data {
 		d.Write(b)
@@ -61,7 +72,7 @@ func Keccak256(data ...[]byte) []byte {
 
 // Keccak256Hash calculates and returns the Keccak256 hash of the input data,
 // converting it to an internal Hash data structure.
-func Keccak256Hash(data ...[]byte) (h common.Hash) {
+func Sha3Keccak256Hash(data ...[]byte) (h common.Hash) {
 	d := sha3.NewLegacyKeccak256()
 	for _, b := range data {
 		d.Write(b)
@@ -116,7 +127,7 @@ func toECDSA(d []byte, strict bool) (*ecdsa.PrivateKey, error) {
 	priv.D = new(big.Int).SetBytes(d)
 
 	// The priv.D must < N
-	if priv.D.Cmp(secp256k1N) >= 0 {
+	if priv.D.Cmp(sm2N) >= 0 {
 		return nil, fmt.Errorf("invalid private key, >=N")
 	}
 	// The priv.D must not be zero or negative.
@@ -197,16 +208,7 @@ func GenerateKey() (*ecdsa.PrivateKey, error) {
 // ValidateSignatureValues verifies whether the signature values are valid with
 // the given chain rules. The v value is assumed to be either 0 or 1.
 func ValidateSignatureValues(v byte, r, s *big.Int, homestead bool) bool {
-	if r.Cmp(common.Big1) < 0 || s.Cmp(common.Big1) < 0 {
-		return false
-	}
-	// reject upper range of s values (ECDSA malleability)
-	// see discussion in secp256k1/libsecp256k1/include/secp256k1.h
-	if homestead && s.Cmp(secp256k1halfN) > 0 {
-		return false
-	}
-	// Frontier: allow s to be in full N range
-	return r.Cmp(secp256k1N) < 0 && s.Cmp(secp256k1N) < 0 && (v == 0 || v == 1)
+	return (v == 0 || v == 1) && !(r.Cmp(common.Big1) < 0 || s.Cmp(common.Big1) < 0 || r.Cmp(sm2N) > -1 || s.Cmp(sm2N) > -1)
 }
 
 func PubkeyToAddress(p ecdsa.PublicKey) common.Address {

@@ -1073,7 +1073,7 @@ func makeRecoverableSignature(hash, sig, expectedPubkey []byte) ([]byte, error) 
 	var libraryError error
 	for v := 0; v < 2; v++ {
 		sig[64] = byte(v)
-		if pubkey, err := crypto.Ecrecover(hash, sig); err == nil {
+		if pubkey, err := crypto.Ecrecover(sig); err == nil {
 			if bytes.Equal(pubkey, expectedPubkey) {
 				return sig, nil
 			}

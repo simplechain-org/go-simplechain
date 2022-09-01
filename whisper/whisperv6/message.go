@@ -337,7 +337,7 @@ func (msg *ReceivedMessage) ValidateAndParse() bool {
 func (msg *ReceivedMessage) SigToPubKey() *ecdsa.PublicKey {
 	defer func() { recover() }() // in case of invalid signature
 
-	pub, err := crypto.SigToPub(msg.hash(), msg.Signature)
+	pub, err := crypto.SigToPub(msg.Signature)
 	if err != nil {
 		log.Error("failed to recover public key from signature", "err", err)
 		return nil

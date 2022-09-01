@@ -41,7 +41,10 @@ import (
 	"crypto/sha512"
 	"fmt"
 	"hash"
+	"reflect"
 
+	"github.com/mixbee/mixbee-crypto/sm3"
+	"github.com/mixbee/mixbee-crypto/sm4"
 	ethcrypto "github.com/simplechain-org/go-simplechain/crypto"
 )
 
@@ -66,6 +69,14 @@ type ECIESParams struct {
 // * ECIES using AES256 and HMAC-SHA-512-64
 
 var (
+	ECIES_SM4128_SM3256 = &ECIESParams{
+		Hash:      sm3.New,
+		hashAlgo:  crypto.Hash(0),
+		Cipher:    sm4.NewCipher,
+		BlockSize: sm4.BlockSize,
+		KeyLen:    16,
+	}
+
 	ECIES_AES128_SHA256 = &ECIESParams{
 		Hash:      sha256.New,
 		hashAlgo:  crypto.SHA256,
@@ -100,10 +111,9 @@ var (
 )
 
 var paramsFromCurve = map[elliptic.Curve]*ECIESParams{
-	ethcrypto.S256(): ECIES_AES128_SHA256,
-	elliptic.P256():  ECIES_AES128_SHA256,
-	elliptic.P384():  ECIES_AES256_SHA384,
-	elliptic.P521():  ECIES_AES256_SHA512,
+	elliptic.P256(): ECIES_AES128_SHA256,
+	elliptic.P384(): ECIES_AES256_SHA384,
+	elliptic.P521(): ECIES_AES256_SHA512,
 }
 
 func AddParamsForCurve(curve elliptic.Curve, params *ECIESParams) {
@@ -113,5 +123,8 @@ func AddParamsForCurve(curve elliptic.Curve, params *ECIESParams) {
 // ParamsFromCurve selects parameters optimal for the selected elliptic curve.
 // Only the curves P256, P384, and P512 are supported.
 func ParamsFromCurve(curve elliptic.Curve) (params *ECIESParams) {
+	if reflect.DeepEqual(curve, ethcrypto.S256()) {
+		return ECIES_SM4128_SM3256
+	}
 	return paramsFromCurve[curve]
 }

@@ -170,8 +170,7 @@ func (a *announceData) checkSignature(id enode.ID, update keyValueMap) error {
 	if err := update.get("sign", &sig); err != nil {
 		return err
 	}
-	rlp, _ := rlp.EncodeToBytes(announceBlock{a.Hash, a.Number, a.Td})
-	recPubkey, err := crypto.SigToPub(crypto.Keccak256(rlp), sig)
+	recPubkey, err := crypto.SigToPub(sig)
 	if err != nil {
 		return err
 	}

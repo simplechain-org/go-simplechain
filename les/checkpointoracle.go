@@ -128,9 +128,9 @@ func (reg *checkpointOracle) verifySigners(index uint64, hash [32]byte, signatur
 		//     hash = keccak256(checkpoint_index, section_head, cht_root, bloom_root)
 		buf := make([]byte, 8)
 		binary.BigEndian.PutUint64(buf, index)
-		data := append([]byte{0x19, 0x00}, append(reg.config.Address.Bytes(), append(buf, hash[:]...)...)...)
+
 		signatures[i][64] -= 27 // Transform V from 27/28 to 0/1 according to the yellow paper for verification.
-		pubkey, err := crypto.Ecrecover(crypto.Keccak256(data), signatures[i])
+		pubkey, err := crypto.Ecrecover(signatures[i])
 		if err != nil {
 			return false, nil
 		}

@@ -63,7 +63,7 @@ func TestSignHeader(t *testing.T) {
 
 	//Identify who signed it
 	sig := seal.Signature
-	pubKey, err := crypto.SigToPub(headerHash.Bytes(), sig)
+	pubKey, err := crypto.SigToPub(sig)
 	if err != nil {
 		t.Fatalf("Unable to get public key from signature: %s", err.Error())
 	}

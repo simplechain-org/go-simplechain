@@ -28,18 +28,19 @@ import (
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/common/hexutil"
+	"github.com/simplechain-org/go-simplechain/crypto/sm"
 )
 
-var testAddrHex = "970e8128ab834e8eac17ab8e3812f010678cf791"
+var testAddrHex = "d187504d7eef58c1f1d0e72ebd077acfecc9b22e"
 var testPrivHex = "289c2857d4598e37fb9647507e47a309d6133539bf21a8b9cb6df88fd5232032"
 
 // These tests are sanity checks.
 // They should ensure that we don't e.g. use Sha3-224 instead of Sha3-256
 // and that the sha3 library uses keccak-f permutation.
-func TestKeccak256Hash(t *testing.T) {
+func TestSm3Hash(t *testing.T) {
 	msg := []byte("abc")
-	exp, _ := hex.DecodeString("4e03657aea45a94fc7d47ba826c8d667c0d1e6e33a64a036ec44f58fa12d6c45")
-	checkhash(t, "Sha3-256-array", func(in []byte) []byte { h := Keccak256Hash(in); return h[:] }, msg, exp)
+	exp, _ := hex.DecodeString("66c7f0f462eeedd9d1f2d46bdc10e4e24167c4875cf2f7a2297da02b8f4ba8e0")
+	checkhash(t, "sm3-256-array", func(in []byte) []byte { h := sm.Sm3(in); return h[:] }, msg, exp)
 }
 
 func TestToECDSAErrors(t *testing.T) {
@@ -54,7 +55,7 @@ func TestToECDSAErrors(t *testing.T) {
 func BenchmarkSha3(b *testing.B) {
 	a := []byte("hello world")
 	for i := 0; i < b.N; i++ {
-		Keccak256(a)
+		sm.Sm3(a)
 	}
 }
 
@@ -69,13 +70,14 @@ func TestUnmarshalPubkey(t *testing.T) {
 	}
 
 	var (
-		enc, _ = hex.DecodeString("04760c4460e5336ac9bbd87952a3c7ec4363fc0a97bd31c86430806e287b437fd1b01abc6e1db640cf3106b520344af1d58b00b57823db3e1407cbc433e1b6d04d")
+		enc, _ = hex.DecodeString("04a5f2bf056176d0feed127fdf4efa264b620e5026daab779c084e257db0f78520bf2fcf6b2e82180b7b825cabe45bca8441b7f0942b07f1f2c89f78e5b0f46075")
 		dec    = &ecdsa.PublicKey{
 			Curve: S256(),
-			X:     hexutil.MustDecodeBig("0x760c4460e5336ac9bbd87952a3c7ec4363fc0a97bd31c86430806e287b437fd1"),
-			Y:     hexutil.MustDecodeBig("0xb01abc6e1db640cf3106b520344af1d58b00b57823db3e1407cbc433e1b6d04d"),
+			X:     hexutil.MustDecodeBig("0xa5f2bf056176d0feed127fdf4efa264b620e5026daab779c084e257db0f78520"),
+			Y:     hexutil.MustDecodeBig("0xbf2fcf6b2e82180b7b825cabe45bca8441b7f0942b07f1f2c89f78e5b0f46075"),
 		}
 	)
+	t.Log(hex.EncodeToString(FromECDSAPub(dec)))
 	key, err = UnmarshalPubkey(enc)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -89,12 +91,13 @@ func TestSign(t *testing.T) {
 	key, _ := HexToECDSA(testPrivHex)
 	addr := common.HexToAddress(testAddrHex)
 
-	msg := Keccak256([]byte("foo"))
+	t.Log(hex.EncodeToString(PubkeyToAddress(key.PublicKey).Bytes()))
+	msg := sm.Sm3([]byte("foo"))
 	sig, err := Sign(msg, key)
 	if err != nil {
 		t.Errorf("Sign error: %s", err)
 	}
-	recoveredPub, err := Ecrecover(msg, sig)
+	recoveredPub, err := Ecrecover(sig)
 	if err != nil {
 		t.Errorf("ECRecover error: %s", err)
 	}
@@ -105,7 +108,7 @@ func TestSign(t *testing.T) {
 	}
 
 	// should be equal to SigToPub
-	recoveredPub2, err := SigToPub(msg, sig)
+	recoveredPub2, err := SigToPub(sig)
 	if err != nil {
 		t.Errorf("ECRecover error: %s", err)
 	}
@@ -134,9 +137,9 @@ func TestNewContractAddress(t *testing.T) {
 	caddr0 := CreateAddress(addr, 0)
 	caddr1 := CreateAddress(addr, 1)
 	caddr2 := CreateAddress(addr, 2)
-	checkAddr(t, common.HexToAddress("333c3310824b7c685133f2bedb2ca4b8b4df633d"), caddr0)
-	checkAddr(t, common.HexToAddress("8bda78331c916a08481428e4b07c96d3e916d165"), caddr1)
-	checkAddr(t, common.HexToAddress("c9ddedf451bc62ce88bf9292afb13df35b670699"), caddr2)
+	checkAddr(t, common.HexToAddress("4586ec217f498047d998cdfe2b2178e75dea8f9f"), caddr0)
+	checkAddr(t, common.HexToAddress("1f9c0fba8f9154f5ad7fe4da9f447b50b4ade9b9"), caddr1)
+	checkAddr(t, common.HexToAddress("ee2b90774dcbd6ca67f29b801111e842412ba26f"), caddr2)
 }
 
 func TestLoadECDSAFile(t *testing.T) {
@@ -183,7 +186,7 @@ func TestValidateSignatureValues(t *testing.T) {
 	minusOne := big.NewInt(-1)
 	one := common.Big1
 	zero := common.Big0
-	secp256k1nMinus1 := new(big.Int).Sub(secp256k1N, common.Big1)
+	secp256k1nMinus1 := new(big.Int).Sub(sm2N, common.Big1)
 
 	// correct v,r,s
 	check(true, 0, one, one)
@@ -210,9 +213,9 @@ func TestValidateSignatureValues(t *testing.T) {
 	// correct sig with max r,s
 	check(true, 0, secp256k1nMinus1, secp256k1nMinus1)
 	// correct v, combinations of incorrect r,s at upper limit
-	check(false, 0, secp256k1N, secp256k1nMinus1)
-	check(false, 0, secp256k1nMinus1, secp256k1N)
-	check(false, 0, secp256k1N, secp256k1N)
+	check(false, 0, sm2N, secp256k1nMinus1)
+	check(false, 0, secp256k1nMinus1, sm2N)
+	check(false, 0, sm2N, sm2N)
 
 	// current callers ensures r,s cannot be negative, but let's test for that too
 	// as crypto package could be used stand-alone
@@ -239,7 +242,7 @@ func TestPythonIntegration(t *testing.T) {
 	kh := "289c2857d4598e37fb9647507e47a309d6133539bf21a8b9cb6df88fd5232032"
 	k0, _ := HexToECDSA(kh)
 
-	msg0 := Keccak256([]byte("foo"))
+	msg0 := sm.Sm3([]byte("foo"))
 	sig0, _ := Sign(msg0, k0)
 
 	msg1 := common.FromHex("00000000000000000000000000000000")

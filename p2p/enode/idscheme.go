@@ -71,7 +71,7 @@ func (V4ID) Verify(r *enr.Record, sig []byte) error {
 
 	h := sha3.NewLegacyKeccak256()
 	rlp.Encode(h, r.AppendElements(nil))
-	if !crypto.VerifySignature(entry, h.Sum(nil), sig) {
+	if !crypto.VerifySignature(h.Sum(nil), sig) {
 		return enr.ErrInvalidSig
 	}
 	return nil

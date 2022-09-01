@@ -24,7 +24,6 @@ import (
 
 	"github.com/simplechain-org/go-simplechain/common"
 	"github.com/simplechain-org/go-simplechain/crypto"
-	"github.com/simplechain-org/go-simplechain/log"
 	"github.com/simplechain-org/go-simplechain/params"
 )
 
@@ -210,33 +209,41 @@ func (fs FrontierSigner) Sender(tx *Transaction) (common.Address, error) {
 	return RecoverPlain(fs.Hash(tx), tx.data.R, tx.data.S, tx.data.V, false)
 }
 
-func RecoverPlain(sighash common.Hash, R, S, Vb *big.Int, homestead bool) (common.Address, error) {
-	if Vb.BitLen() > 8 {
-		log.Info("recoverPlain", "hash", sighash.String())
-		return common.Address{}, ErrInvalidSig
+// func RecoverPlain(sighash common.Hash, R, S, Vb *big.Int, homestead bool) (common.Address, error) {
+// 	if Vb.BitLen() > 8 {
+// 		log.Info("recoverPlain", "hash", sighash.String())
+// 		return common.Address{}, ErrInvalidSig
+// 	}
+// 	V := byte(Vb.Uint64() - 27)
+// 	if !crypto.ValidateSignatureValues(V, R, S, homestead) {
+// 		log.Info("recoverPlain2", "hash", sighash.String())
+// 		return common.Address{}, ErrInvalidSig
+// 	}
+// 	// encode the signature in uncompressed format
+// 	r, s := R.Bytes(), S.Bytes()
+// 	sig := make([]byte, crypto.SignatureLength)
+// 	copy(sig[32-len(r):32], r)
+// 	copy(sig[64-len(s):64], s)
+// 	sig[64] = V
+// 	// recover the public key from the signature
+// 	pub, err := crypto.Ecrecover(sig)
+// 	if err != nil {
+// 		return common.Address{}, err
+// 	}
+// 	if len(pub) == 0 || pub[0] != 4 {
+// 		return common.Address{}, errors.New("invalid public key")
+// 	}
+// 	var addr common.Address
+// 	copy(addr[:], crypto.Keccak256(pub[1:])[12:])
+// 	return addr, nil
+// }
+
+func sender(tx *Transaction) (common.Address, error) {
+	pub, e := crypto.DecompressPubkey(tx.data.CmprPub)
+	if e != nil {
+		return common.Address{}, e
 	}
-	V := byte(Vb.Uint64() - 27)
-	if !crypto.ValidateSignatureValues(V, R, S, homestead) {
-		log.Info("recoverPlain2", "hash", sighash.String())
-		return common.Address{}, ErrInvalidSig
-	}
-	// encode the signature in uncompressed format
-	r, s := R.Bytes(), S.Bytes()
-	sig := make([]byte, crypto.SignatureLength)
-	copy(sig[32-len(r):32], r)
-	copy(sig[64-len(s):64], s)
-	sig[64] = V
-	// recover the public key from the signature
-	pub, err := crypto.Ecrecover(sighash[:], sig)
-	if err != nil {
-		return common.Address{}, err
-	}
-	if len(pub) == 0 || pub[0] != 4 {
-		return common.Address{}, errors.New("invalid public key")
-	}
-	var addr common.Address
-	copy(addr[:], crypto.Keccak256(pub[1:])[12:])
-	return addr, nil
+	return crypto.PubkeyToAddress(*pub), nil
 }
 
 // deriveChainId derives the chain id from the given v parameter
@@ -259,4 +266,13 @@ func LatestSignerForChainID(chainID *big.Int) Signer {
 		return HomesteadSigner{}
 	}
 	return NewEIP155Signer(chainID)
+}
+
+func cmprPub(sig []byte) ([]byte, error) {
+	if len(sig) != crypto.SignatureLength {
+		panic(fmt.Sprintf("wrong size for signature: got %d, want %d", len(sig), crypto.SignatureLength))
+	}
+	pub := make([]byte, crypto.CompressPubkeyLen)
+	copy(pub, sig[crypto.SignatureValueLen:])
+	return pub, nil
 }
