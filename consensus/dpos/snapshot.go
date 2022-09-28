@@ -21,6 +21,7 @@ package dpos
 import (
 	"encoding/json"
 	"errors"
+	"github.com/simplechain-org/go-simplechain/log"
 	"math/big"
 	"sort"
 	"time"
@@ -568,6 +569,10 @@ func (s *Snapshot) updateSnapshotByVotes(votes []Vote, headerNumber *big.Int) {
 func (s *Snapshot) updateSnapshotByMPVotes(votes []PredecessorVoter) {
 	for _, txVote := range votes {
 		if lastVote, ok := s.Votes[txVote.Voter]; ok {
+			if s.Tally[lastVote.Candidate] == nil {
+				log.Warn("wired candidate", "addr", lastVote.Candidate)
+				continue
+			}
 			s.Tally[lastVote.Candidate].Sub(s.Tally[lastVote.Candidate], lastVote.Stake)
 			s.Tally[lastVote.Candidate].Add(s.Tally[lastVote.Candidate], txVote.Stake)
 			s.Votes[txVote.Voter] = &Vote{Voter: txVote.Voter, Candidate: lastVote.Candidate, Stake: txVote.Stake}
