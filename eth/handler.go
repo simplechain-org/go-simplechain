@@ -301,6 +301,8 @@ func (pm *ProtocolManager) Stop() {
 	// will exit when they try to register.
 	pm.peers.Close()
 
+	pm.downloader.Terminate()
+
 	// Wait for all peer handler goroutines and the loops to come down.
 	pm.wg.Wait()
 
